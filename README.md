@@ -2,24 +2,24 @@
 
 在 Zotero 内与文献对话、翻译选文、解读图片，并生成带原文定位的文献解析。完整客户端以 MIT 开源，同时支持 **BYOK** 和 **连接攻玉**，两种方式使用同一份安装包。
 
-首个开源版本为 **0.3.1**，对齐商业插件的当前开发版本。仓库只包含 Zotero 客户端，不包含攻玉主应用、服务端或服务凭据。攻玉账号服务仍按其账号权限、订阅及积分规则提供。
+当前版本为 **0.4.0**，保留官网 0.3.2 的完整客户端功能，并完善默认模型、订阅提示及插件身份迁移；具体差异见 [更新说明](CHANGELOG.md)。仓库只包含 Zotero 客户端，不包含攻玉主应用、服务端或服务凭据。攻玉账号服务仍按其账号权限、订阅及积分规则提供。
 
 ## 安装
 
-1. 从本仓库的 Releases 下载 `jadense-in-zotero-v0.3.1.xpi`，或按下方步骤自行构建。当前仓库准备的是首版本地候选包，尚未公开发布。
+1. 从本仓库的 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 下载 `jadense-in-zotero-v0.4.0.xpi`，或按下方步骤自行构建。安装过旧 `.com` ID 版本时，先在插件管理器中禁用旧 Jadense 插件。
 2. 在 Zotero 的插件管理器中选择「从文件安装插件」，选择 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，选择所需 AI 通道。
 
 Manifest 声明兼容 Zotero 8.0 至 10.0.*；原生功能主要在 Zotero 10.0.1 验证。自动识图需要 Zotero 10.0.1+ 的普通 PDF 视图与可用的原生裁图能力，旧版本或无 SDT 的 PDF 不提供相同的自动识别能力。
 
-插件 ID 保持 `jadense-in-zotero@jadense.com`，与已有商业安装共享本地偏好和历史。安装开源包会更新同一插件，不产生第二个插件。自动更新继续读取 [攻玉官方更新源](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)，GitHub Releases 提供同一制品的下载渠道。
+插件 ID 为 `jadense-in-zotero@jadense.cn`。官网 0.3.2 使用旧 `.com` ID，两者不会自动覆盖升级，不能同时启用；请先禁用旧插件再手动安装新版。新版沿用原有本地偏好命名空间与历史保存位置，不要删除 Zotero profile。插件仍读取 [攻玉官方更新源](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)，但 GitHub 发布不修改该更新清单，不能据此假设官网已提供新版自动更新。
 
 ## 使用 BYOK
 
-1. 在工作台齿轮「设置 → AI 配置」添加 Provider，选择 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议，填写 Base URL 和自己的 API Key。
+1. 在工作台齿轮「设置 → BYOK」添加 Provider，选择 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议，填写 Base URL 和自己的 API Key。
 2. 为 Provider 添加模型，填写模型 ID，并按服务商要求设置输出上限；可使用连接测试检查配置。
-3. 将普通对话和翻译的通道切换为 BYOK，并选择模型。BYOK 直接请求配置的 Provider，无需攻玉账号。
-4. 「文献解析 → 解析配置」有独立模型选择；如需解析也使用 BYOK，请在此明确选择保存的模型。
+3. 在「设置 → 功能配置」分别为 AI 对话、实时翻译、文献解析和图片解读选择 BYOK 模型。BYOK 直接请求配置的 Provider，无需攻玉账号。
+4. 「文献解析 → 解析配置」与功能配置共用解析模型选择；对话输入框也可切换当前功能的模型。
 
 Provider/模型配置保存在本机 Zotero profile。更换或删除模型不会自动把失败请求改投其他 Provider。默认 AI 通道仍为攻玉，首次使用 BYOK 需要主动切换。
 
@@ -27,14 +27,16 @@ Provider/模型配置保存在本机 Zotero profile。更换或删除模型不�
 
 1. 在 [攻玉](https://jadense.cn) 的「设置 → 集成 → 连接 Jadense in Zotero」创建令牌。
 2. 在插件「连接攻玉 → 连接配置」粘贴攻玉插件令牌并保存连接；插件使用内置的攻玉站点地址。
-3. 「用户信息」显示账号、订阅、积分来源及签到；对话可跟随攻玉账号设置或选择可访问的模型。
+3. 「用户信息」显示账号、订阅、积分来源及签到；在功能配置中选择账号可访问的模型。新配置默认使用 `deepseek-v4-flash-vision-exp`，已有明确模型、路由和 BYOK 选择保持不变。
 4. 「文献同步」选择攻玉收藏夹及是否包含 PDF，再上传 Zotero 当前选中条目或收藏夹。上传始终使用攻玉连接，与 BYOK 通道独立。
 
 旧令牌可能缺少积分权限，账号卡片会提示更新令牌；其他已获授权功能继续可用。上传是 Zotero → 攻玉的单向操作，元数据和 PDF 分别报告结果。
 
+受限模型会显示「需升级」及所需订阅档位。遇到模型订阅限制时，请更换可用模型或升级订阅；充值积分不会解锁受限模型。旧版已保存 GLM 具体模型的用户需要主动更换，升级不会覆盖该选择。
+
 ## 阅读与解析
 
-- 「对话」支持关联 Zotero 文献、PDF 和选文；会话与文字历史保存在本地。
+- 「对话」支持关联 Zotero 文献、PDF 和选文，并可上传、粘贴或拖入 PNG/JPEG 图片；会话、文字历史和图片附件保存在本地。
 - PDF 工具条可提问、解析、翻译或引用选文。解析独立保存总结和可恢复笔记，并写入 Zotero 原生批注，不覆盖人工批注。
 - 选文后按 `Ctrl+Alt+T`（macOS：`⌘+Alt+T`）翻译；文章与本句语言可分别设置，历史保留准确页码。
 - 图片悬停识别或 `Ctrl+Alt+S`（macOS：`⌘+Alt+S`）手动截图后，可开启新对话或追加到当前对话。快捷键可在设置中修改。
@@ -43,13 +45,13 @@ Provider/模型配置保存在本机 Zotero profile。更换或删除模型不�
 
 | 操作 | 数据去向 |
 | --- | --- |
-| 保存设置、对话、翻译和解析历史 | 本机 Zotero profile；API Key 和攻玉令牌也保存在该 profile，不能把它当作公开文件分享 |
+| 保存设置、对话、图片附件、翻译和解析历史 | 本机 Zotero profile；API Key 和攻玉令牌也保存在该 profile，不能把它当作公开文件分享 |
 | BYOK 对话、翻译、解析或图片解读 | 所选 Provider 接收请求中的文本、文献上下文及按需图片；BYOK Key 用于该 Provider 的认证 |
-| 攻玉 AI 功能 | 攻玉接收临时 Chat 请求及所需上下文，使用用户令牌鉴权；客户端不创建 Webapp 持久对话，但服务端仍按其规则处理请求、计费和运行记录 |
+| 攻玉 AI 功能 | 攻玉接收临时 Chat 请求及所需上下文，附带插件版本与功能类型供问题定位，使用用户令牌鉴权；客户端不创建 Webapp 持久对话，但服务端仍按其规则处理请求、计费和运行记录 |
 | 文献同步 | 显式上传所选元数据；仅在选择包含 PDF 时上传本地 PDF |
 | 插件自动更新 | Zotero 请求官网更新清单及安装包 |
 
-图片上下文只在当前工作台会话中保留，不写入文字历史；关闭窗口后丢失。已关联 PDF 的可提取文字可能成为 AI 请求上下文。配置攻玉连接后，账号卡片等功能可以独立请求攻玉，切换 BYOK 并不代表整个插件不再访问攻玉。
+图片显示在对应消息中，支持点击放大；关闭并重新打开后仍可查看，并携带最近一张可读取图片继续追问。每条消息可新附一张图片，需要支持图片输入的模型；旧版本未保存的图片不能自动恢复。已关联 PDF 的可提取文字可能成为 AI 请求上下文。配置攻玉连接后，账号卡片等功能可以独立请求攻玉，切换 BYOK 并不代表整个插件不再访问攻玉。
 
 ## 独立开发与验证
 
@@ -62,9 +64,9 @@ pnpm run lint
 pnpm run build
 ```
 
-`build` 包含类型检查、打包和制品校验，产物位于 `release/zotero/v0.3.1/`：
+`build` 包含类型检查、打包和制品校验，产物位于 `release/zotero/v0.4.0/`：
 
-- `jadense-in-zotero-v0.3.1.xpi`
+- `jadense-in-zotero-v0.4.0.xpi`
 - `release-metadata.json`
 - `SHA256SUMS`
 

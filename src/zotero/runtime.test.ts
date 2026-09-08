@@ -637,12 +637,14 @@ describe("Jadense connection preferences", () => {
 
     expect(readConnection(zotero).baseUrl).toBe("https://jadense.cn")
 
-    prefs.set("extensions.jadenseInZotero.baseUrl", "https://app.jadense.com/")
+    prefs.set("extensions.jadenseInZotero.baseUrl", "https://retired.example.invalid/")
     expect(readConnection(zotero).baseUrl).toBe("https://jadense.cn")
     expect(prefs.get("extensions.jadenseInZotero.baseUrl")).toBe("https://jadense.cn")
 
-    prefs.set("extensions.jadenseInZotero.baseUrl", "https://staging.jadense.com/")
-    expect(readConnection(zotero).baseUrl).toBe("https://staging.jadense.com")
+    prefs.set("extensions.jadenseInZotero.baseUrl", "https://staging.jadense.cn/")
+    expect(readConnection(zotero).baseUrl).toBe("https://staging.jadense.cn")
+    prefs.set("extensions.jadenseInZotero.baseUrl", "http://localhost:3000/")
+    expect(readConnection(zotero).baseUrl).toBe("http://localhost:3000")
   })
 
   it("normalizes connection values and clears an empty default folder", () => {

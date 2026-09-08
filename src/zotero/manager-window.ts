@@ -3,7 +3,7 @@ import type { ZoteroLike } from "./runtime"
 import { chromeContentUrl } from "./chrome-registration"
 import type { ReaderAction } from "./reader-tools"
 
-export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "settings"
+export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings"
 
 export const JADENSE_MANAGER_WINDOW_NAME = "jadense-in-zotero-manager"
 export const JADENSE_MANAGER_RESOURCE = "manager.xhtml"

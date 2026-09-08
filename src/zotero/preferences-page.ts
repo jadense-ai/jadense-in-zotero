@@ -1,3 +1,4 @@
+/** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
 import {
   clearConnection,
   favoriteFolderOptionLabel,
@@ -21,12 +22,16 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import {
+  AI_FEATURES,
+  featureModelSelectionKey,
+  featureModelSelectionFromKey,
+  readFeatureModelSelection,
+  saveFeatureModelSelection,
+  type AiFeature,
   clearByokConfig,
   deleteByokModel,
   deleteByokProvider,
-  readAiRoute,
   readByokSettings,
-  saveAiRoute,
   saveByokModel,
   saveByokProvider,
   selectByokModel,
@@ -34,6 +39,8 @@ import {
   type ByokModel,
   type ByokProvider,
 } from "./ai-settings"
+import { JadenseApiClient, type JadenseChatModelCatalog } from "@/jadense/api"
+import { buildFeatureModelSelectOptions } from "./ai-model-select"
 import { createJdxSelect, type JdxSelect } from "./custom-select"
 import {
   applyStrings,
@@ -47,8 +54,6 @@ import {
 declare const Zotero: ZoteroLike
 
 const IDS = {
-  routeJadense: "jadense-in-zotero-route-jadense",
-  routeByok: "jadense-in-zotero-route-byok",
   connectionStatus: "jadense-in-zotero-connection-status",
   connectionStatusText: "jadense-in-zotero-connection-status-text",
   connectionUpdated: "jadense-in-zotero-connection-updated",
@@ -93,8 +98,8 @@ const IDS = {
 type ConnectionState = "unconfigured" | "checking" | "connected" | "failed"
 
 type PreferenceElements = {
-  routeJadense: HTMLButtonElement
-  routeByok: HTMLButtonElement
+  featureModels: Record<AiFeature, JdxSelect>
+  featureModelStatus: HTMLElement
   connectionStatus: HTMLElement
   connectionStatusText: HTMLElement
   connectionUpdated: HTMLElement
@@ -143,9 +148,11 @@ function element<T extends HTMLElement>(id: string) {
 }
 
 function readElements(): PreferenceElements {
+  const strings = selectPreferencesStrings(Zotero.locale)
+  const labels = { chat: strings.featureChatLabel, translation: strings.featureTranslationLabel, analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
-    routeJadense: element<HTMLButtonElement>(IDS.routeJadense),
-    routeByok: element<HTMLButtonElement>(IDS.routeByok),
+    featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), { searchPlaceholder: strings.featureModelSearch, ariaLabel: labels[feature] })])) as Record<AiFeature, JdxSelect>,
+    featureModelStatus: element("jadense-in-zotero-feature-model-status"),
     connectionStatus: element(IDS.connectionStatus),
     connectionStatusText: element(IDS.connectionStatusText),
     connectionUpdated: element(IDS.connectionUpdated),
@@ -268,6 +275,7 @@ async function saveTokenFromEdit(elements: PreferenceElements, strings: Preferen
   elements.tokenSave.disabled = true
   try {
     saveConnection(Zotero, { token })
+    void refreshFeatureModelCatalog(elements)
     exitTokenEdit(elements)
     renderTokenDisplay(elements, strings)
     setStatus(elements.status, strings.tokenSaved, "success")
@@ -331,13 +339,47 @@ function updateByokEndpoint(elements: PreferenceElements) {
   elements.byokEndpoint.textContent = byokEndpoint(currentByokProtocol(elements), elements.byokBaseUrl.value)
 }
 
-function renderAiRoute(elements: PreferenceElements) {
-  const route = readAiRoute(Zotero)
-  elements.routeJadense.setAttribute("aria-pressed", String(route === "jadense"))
-  elements.routeByok.setAttribute("aria-pressed", String(route === "byok"))
+let featureModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
+let featureCatalogGeneration = 0
+
+function renderFeatureModels(elements: PreferenceElements) {
+  for (const feature of AI_FEATURES) {
+    const selection = readFeatureModelSelection(Zotero, feature)
+    elements.featureModels[feature].setOptions(buildFeatureModelSelectOptions(Zotero, featureModelCatalog, selection, !Zotero.locale?.toLowerCase().startsWith("zh")), featureModelSelectionKey(selection))
+  }
+}
+
+/** 目录只用于展示；加载失败保留已有选择与 BYOK，旧账号响应不得污染新连接。 */
+async function refreshFeatureModelCatalog(elements: PreferenceElements) {
+  const strings = selectPreferencesStrings(Zotero.locale)
+  const connection = readConnection(Zotero)
+  const generation = ++featureCatalogGeneration
+  featureModelCatalog = { options: [], defaultSelection: null }
+  renderFeatureModels(elements)
+  if (!connection.token) {
+    setStatus(elements.featureModelStatus, strings.featureModelConnect)
+    return
+  }
+  setStatus(elements.featureModelStatus, strings.featureModelLoading)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15_000)
+  try {
+    const ownerWindow = Zotero.getMainWindow?.()
+    const catalog = await new JadenseApiClient({ ...connection, fetchImpl: ownerWindow?.fetch.bind(ownerWindow) }).getChatModels(controller.signal)
+    if (generation !== featureCatalogGeneration) return
+    featureModelCatalog = catalog
+    setStatus(elements.featureModelStatus, strings.featureModelReady)
+  } catch {
+    if (generation !== featureCatalogGeneration) return
+    setStatus(elements.featureModelStatus, strings.featureModelUnavailable)
+  } finally {
+    clearTimeout(timeout)
+    if (generation === featureCatalogGeneration) renderFeatureModels(elements)
+  }
 }
 
 function renderByokConfig(elements: PreferenceElements, strings: PreferencesStrings) {
+  renderFeatureModels(elements)
   const settings = readByokSettings(Zotero)
   const provider = settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
   const models = settings.models.filter((model) => model.providerId === provider.id)
@@ -369,7 +411,7 @@ function byokProviderDraft(elements: PreferenceElements): ByokProvider {
   const stored = settings.providers.find((provider) => provider.id === settings.activeProviderId) ?? settings.providers[0]
   return {
     id: stored.id,
-    name: elements.byokProviderName.value.trim() || "Custom Provider",
+    name: elements.byokProviderName.value.trim() || "自定义提供商",
     protocol: currentByokProtocol(elements),
     baseUrl: elements.byokBaseUrl.value,
     apiKey: elements.byokKeyInput.value.trim() || stored.apiKey,
@@ -384,7 +426,7 @@ function byokModelDraft(elements: PreferenceElements): ByokModel {
   return {
     id: stored?.id ?? createByokId("byok-model"),
     providerId: settings.activeProviderId,
-    name: elements.byokModelName.value.trim() || elements.byokModel.value.trim() || "Unnamed model",
+    name: elements.byokModelName.value.trim() || elements.byokModel.value.trim() || "未命名模型",
     model: elements.byokModel.value,
     ...(Number.isSafeInteger(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
@@ -433,7 +475,7 @@ export function initJadensePreferencesPage() {
   const elements = readElements()
   renderHelpSteps(elements, strings)
   renderTokenDisplay(elements, strings)
-  renderAiRoute(elements)
+  void refreshFeatureModelCatalog(elements)
   renderByokConfig(elements, strings)
   elements.includePdf.checked = readCollectionUploadIncludePdfDefault(Zotero)
 
@@ -494,6 +536,7 @@ export function initJadensePreferencesPage() {
 
   elements.disconnect.addEventListener("click", () => {
     clearConnection(Zotero)
+    void refreshFeatureModelCatalog(elements)
     exitTokenEdit(elements)
     renderTokenDisplay(elements, strings)
     renderConnectionStatus(elements, strings, "unconfigured")
@@ -504,13 +547,15 @@ export function initJadensePreferencesPage() {
     setStatus(elements.status, strings.disconnected, "success")
   })
 
-  elements.routeJadense.addEventListener("click", () => {
-    saveAiRoute(Zotero, "jadense")
-    renderAiRoute(elements)
-  })
-  elements.routeByok.addEventListener("click", () => {
-    saveAiRoute(Zotero, "byok")
-    renderAiRoute(elements)
+  for (const feature of AI_FEATURES) elements.featureModels[feature].onChange(value => {
+    try {
+      saveFeatureModelSelection(Zotero, feature, featureModelSelectionFromKey(value))
+      renderFeatureModels(elements)
+      setStatus(elements.featureModelStatus, strings.featureModelSaved, "success")
+    } catch (error) {
+      renderFeatureModels(elements)
+      setStatus(elements.featureModelStatus, error instanceof Error ? error.message : strings.unexpectedError, "error")
+    }
   })
   let previousByokProtocol = currentByokProtocol(elements)
   elements.byokProviderSelect.onChange((providerId) => {

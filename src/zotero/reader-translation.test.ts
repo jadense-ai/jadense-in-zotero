@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { TRANSLATION_HISTORY_PREF_KEY, readTranslationHistory } from "@/chat/translation-history"
 import { defaultByokConfig } from "@/chat/byok-chat"
-import { saveAiRoute, saveByokConfig } from "./ai-settings"
+import { saveAiRoute, saveByokConfig, saveFeatureModelSelection } from "./ai-settings"
 import { translateReaderSelection } from "./reader-translation"
 import { ARTICLE_TRANSLATION_LANGUAGES_PREF_PREFIX, readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 import type { ZoteroLike } from "./runtime"
@@ -35,6 +35,37 @@ function readerSourceItems(): NonNullable<ZoteroLike["Items"]> {
 }
 
 describe("reader translation runtime", () => {
+  it.each(["AI_MODEL_SELECTION_PLAN_REQUIRED", "AI_USER_ROUTE_PLAN_REQUIRED"])("explains %s from the sending endpoint without retries or catalog dependency", async code => {
+    const values = new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-token"]])
+    const zotero = zoteroWithPreferences(values, readerSourceItems())
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL) => new Response(JSON.stringify({ code, error: "Request rejected" }), { status: 403 }))
+    await expect(translateReaderSelection({ zotero, fetchImpl, action: { kind: "translate", itemID: 17, text: "Sentence" } })).rejects.toThrow("当前订阅不支持所选模型或路由。请在「设置 → 功能配置」更换可用模型")
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("/api/chat")
+    expect(values.has(TRANSLATION_HISTORY_PREF_KEY)).toBe(false)
+  })
+
+  it.each([{ kind: "model", modelId: "translation-model" }, { kind: "route", routeTier: "standard" }] as const)("dispatches its own Jadense $kind without inheriting Chat", async selection => {
+    const values = new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-token"]])
+    const zotero = zoteroWithPreferences(values, readerSourceItems())
+    saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "missing-chat-model" })
+    saveFeatureModelSelection(zotero, "translation", { route: "jadense", selection })
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(
+      'data: {"type":"text-delta","delta":"译文"}\n\ndata: {"type":"finish"}\n\n', { status: 200 }))
+    await translateReaderSelection({ zotero, fetchImpl, action: { kind: "translate", itemID: 17, text: "Sentence" } })
+    const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))
+    expect(body).toMatchObject(selection.kind === "model" ? { modelId: "translation-model" } : { routeTier: "standard" })
+    expect(body).not.toHaveProperty(selection.kind === "model" ? "routeTier" : "modelId")
+  })
+
+  it("does not dispatch a deleted translation model or fall back to the working Chat model", async () => {
+    const zotero = zoteroWithPreferences(new Map([["extensions.jadenseInZotero.token", "synthetic-token"]]), readerSourceItems())
+    saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "deleted" })
+    const fetchImpl = vi.fn()
+    await expect(translateReaderSelection({ zotero, fetchImpl, action: { kind: "translate", itemID: 17, text: "Sentence" } })).rejects.toThrow("已删除或配置不完整")
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it("uses an isolated AI request and archives source/result without creating chat history", async () => {
     const values = new Map<string, unknown>([
       ["extensions.jadenseInZotero.token", "test-token"],
@@ -64,7 +95,8 @@ describe("reader translation runtime", () => {
     })
     expect(onTextDelta).toHaveBeenLastCalledWith("译文")
     const body = JSON.parse(String((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]?.body))
-    expect(body).toMatchObject({ temporary: true, agentId: "browser-extension" })
+    expect(body).toMatchObject({ temporary: true, agentId: "browser-extension", modelId: "deepseek-v4-flash-vision-exp", clientContext: { version: expect.any(String), feature: "translation" } })
+    expect(body).not.toHaveProperty("routeTier")
     expect(body.messages).toHaveLength(1)
     expect(JSON.stringify(body.messages)).toContain("源语言：英文")
     expect(JSON.stringify(body.messages)).toContain("翻译为简体中文")
@@ -81,6 +113,7 @@ describe("reader translation runtime", () => {
       ...defaultByokConfig(), protocol: "openai-chat-completions",
       baseUrl: "https://provider.test/v1", apiKey: "fixture-key", model: "fixture-model",
     })
+    if (route === "byok") saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "default-model" })
     await writeArticleTranslationLanguages(zotero, 17, { sourceLanguage: "de", targetLanguage: "ja" })
     const fetchImpl = vi.fn(async () => new Response(route === "byok"
       ? 'data: {"choices":[{"delta":{"content":"译文"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'

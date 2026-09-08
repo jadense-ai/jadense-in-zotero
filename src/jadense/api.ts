@@ -51,6 +51,7 @@ type JadenseChatModelOptionBase = {
   description: string
   locked: boolean
   lockReason?: string
+  minimumPlanCode?: string
   sortOrder?: number
 }
 
@@ -81,6 +82,13 @@ export class JadenseApiError extends Error {
     this.code = input.code ?? null
     this.body = input.body
   }
+}
+
+/** 模型与路由订阅拒绝共用恢复指引；令牌、积分和 BYOK 错误保持各自语义。 */
+export function jadenseModelSubscriptionErrorMessage(error: unknown): string | null {
+  if (!(error instanceof JadenseApiError)) return null
+  if (!["AI_MODEL_SELECTION_PLAN_REQUIRED", "AI_USER_ROUTE_PLAN_REQUIRED"].includes(error.code?.toUpperCase() ?? "")) return null
+  return "当前订阅不支持所选模型或路由。请在「设置 → 功能配置」更换可用模型，或升级订阅后重试。充值积分不会解除此限制。"
 }
 
 function nonEmptyText(value: unknown) {
@@ -182,6 +190,7 @@ function parseChatModelOption(value: unknown): JadenseChatModelOption | null {
     description: nonEmptyText(row.description) ?? "",
     locked: row.locked === true,
     ...(nonEmptyText(row.lockReason) ? { lockReason: nonEmptyText(row.lockReason)! } : {}),
+    ...(nonEmptyText(row.minimumPlanCode) ? { minimumPlanCode: nonEmptyText(row.minimumPlanCode)! } : {}),
     ...(finiteNumber(row.sortOrder) !== null ? { sortOrder: finiteNumber(row.sortOrder)! } : {}),
   }
   const routeTier = nonEmptyText(row.routeTier)

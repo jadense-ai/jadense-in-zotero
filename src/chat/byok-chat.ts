@@ -69,17 +69,17 @@ export function validateByokConfig(input: ByokConfig): ByokConfig {
   try {
     parsed = new URL(baseUrl)
   } catch {
-    throw new Error("请输入有效的 BYOK API Base URL。")
+    throw new Error("请输入有效的 BYOK API 基础地址。")
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("BYOK API Base URL 仅支持 HTTP 或 HTTPS。")
+    throw new Error("BYOK API 基础地址仅支持 HTTP 或 HTTPS。")
   }
   const apiKey = input.apiKey.trim()
-  if (!apiKey) throw new Error("请填写 BYOK API Key。")
+  if (!apiKey) throw new Error("请填写 BYOK API 密钥。")
   const model = input.model.trim()
-  if (!model) throw new Error("请填写 BYOK 模型名称。")
+  if (!model) throw new Error("请填写 BYOK 模型 ID。")
   if (!Number.isSafeInteger(input.maxOutputTokens) || input.maxOutputTokens <= 0) {
-    throw new Error("最大输出 token 必须是正整数。")
+    throw new Error("最大输出量（词元） 必须是正整数。")
   }
   return { protocol: input.protocol, baseUrl, apiKey, model, maxOutputTokens: input.maxOutputTokens }
 }
@@ -144,7 +144,7 @@ export async function consumeByokStream(
       ? "BYOK 输出未完整结束，未写入 PDF 批注。请重试。"
       : "BYOK 连接意外结束，未写入 PDF 批注。请重试。"
     : kind === "truncated"
-      ? "BYOK 输出因 Provider 限制被截断。请提高输出上限后重试。"
+      ? "BYOK 输出因提供商限制被截断。请提高输出上限后重试。"
       : "BYOK 连接在成功结束事件前意外中断。请重试。")
 
   const append = (delta: unknown) => {
@@ -172,7 +172,7 @@ export async function consumeByokStream(
       if (!object(parsed)) return
       event = parsed as JsonObject
     } catch {
-      throw new Error("BYOK Provider 返回了无法解析的流事件。")
+      throw new Error("BYOK 提供商返回了无法解析的流事件。")
     }
 
     const errorMessage = providerErrorMessage(event)

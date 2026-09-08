@@ -11,12 +11,7 @@ import {
 } from "@/chat/paper-analysis-history"
 import { buildPaperAnalysisPrompt, formatPaperAnalysis, parsePaperAnalysis } from "@/chat/paper-analysis"
 import { TemporaryChatClient, type TemporaryChatSendInput } from "@/chat/temporary-chat"
-import {
-  readPaperAnalysisModelSelection,
-  readByokConfigForModel,
-  readByokSettings,
-  type PaperAnalysisModelSelection,
-} from "./ai-settings"
+import { featureModelState, type PaperAnalysisModelSelection } from "./ai-settings"
 import { readPdfForAnalysis, saveAnalysisAnnotations, type PdfAnalysisSnapshot, type SavedAnalysisAnnotations, type ZoteroReaderHost } from "./reader-tools"
 import { readConnection, type ZoteroLike } from "./runtime"
 
@@ -79,34 +74,7 @@ function analysisCitation(snapshot: PdfAnalysisSnapshot) {
 
 /** 独立模型失效时不回退，避免把文献发送到用户未选择的隐私或计费目的地。 */
 export function paperAnalysisModelState(zotero: ZoteroLike, invalidJadenseToken: string | null = null): PaperAnalysisModelState {
-  const selection = readPaperAnalysisModelSelection(zotero)
-  if (selection.route === "jadense") {
-    const token = readConnection(zotero).token
-    const invalid = Boolean(token && invalidJadenseToken === token)
-    return {
-      selection,
-      label: "攻玉",
-      ready: Boolean(token) && !invalid,
-      issue: token
-        ? invalid ? "攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。" : ""
-        : "请先在「连接攻玉」中配置攻玉令牌。",
-    }
-  }
-
-  const settings = readByokSettings(zotero)
-  const model = settings.models.find((entry) => entry.id === selection.modelId)
-  const provider = model ? settings.providers.find((entry) => entry.id === model.providerId) : undefined
-  const config = readByokConfigForModel(zotero, selection.modelId)
-  const label = model
-    ? `BYOK · ${provider?.name || "Provider"} / ${model.name || model.model || "未命名模型"}`
-    : "BYOK · 已失效模型"
-  return {
-    selection,
-    label,
-    ready: Boolean(config),
-    issue: config ? "" : "已选择的 BYOK 模型已删除或配置不完整；请在解析配置中重新选择，或前往设置修复。",
-    ...(config ? { config } : {}),
-  }
+  return featureModelState(zotero, "analysis", invalidJadenseToken)
 }
 
 function defaultServices(zotero: PaperAnalysisZotero, fetchImpl: typeof fetch): PaperAnalysisRunnerServices {
@@ -119,7 +87,7 @@ function defaultServices(zotero: PaperAnalysisZotero, fetchImpl: typeof fetch): 
         return new ByokChatClient({ config: model.config!, fetchImpl }).send(input)
       }
       const connection = readConnection(zotero)
-      return new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, fetchImpl }).send(input)
+      return new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl }).send({ ...input, clientFeature: "analysis" })
     },
   }
 }

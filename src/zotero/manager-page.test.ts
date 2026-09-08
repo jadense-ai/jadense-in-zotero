@@ -9,6 +9,47 @@ import { normalizeChatSources } from "@/chat/research-context"
 import type { TranslationRecord } from "@/chat/translation-history"
 import { JadenseApiError, type JadenseChatModelCatalog } from "@/jadense/api"
 import type { ZoteroLike } from "./runtime"
+import { wireGuideNavigation } from "./manager-page"
+
+describe("built-in getting started guide", () => {
+  it("switches one chapter at a time with clicks and vertical keyboard navigation without a host", () => {
+    const panels = Array.from({ length: 4 }, () => ({ hidden: false }))
+    const tabs = panels.map(() => {
+      const listeners: Record<string, (event: { key?: string; preventDefault: () => void }) => void> = {}
+      return {
+        tabIndex: 0,
+        attributes: {} as Record<string, string>,
+        setAttribute(key: string, value: string) { this.attributes[key] = value },
+        addEventListener: (name: string, listener: typeof listeners[string]) => { listeners[name] = listener },
+        focus: vi.fn(),
+        listeners,
+      }
+    })
+    const section = { scrollTop: 200, querySelectorAll: (selector: string) => selector === '[role="tab"]' ? tabs : panels }
+    wireGuideNavigation(section as unknown as HTMLElement)
+    const expectSelected = (index: number) => {
+      expect(panels.map(panel => panel.hidden)).toEqual(panels.map((_, i) => i !== index))
+      expect(tabs.map(tab => tab.tabIndex)).toEqual(tabs.map((_, i) => i === index ? 0 : -1))
+      expect(tabs.map(tab => tab.attributes["aria-selected"])).toEqual(tabs.map((_, i) => String(i === index)))
+      expect(section.scrollTop).toBe(0)
+    }
+    expectSelected(0)
+    tabs[1]!.listeners.click!({ preventDefault: vi.fn() })
+    expectSelected(1)
+    for (const [current, key, next] of [[1, "ArrowDown", 2], [2, "End", 3], [3, "ArrowDown", 0], [0, "ArrowUp", 3], [3, "Home", 0]] as const) {
+      section.scrollTop = 200
+      const preventDefault = vi.fn()
+      tabs[current]!.listeners.keydown!({ key, preventDefault })
+      expectSelected(next)
+      expect(tabs[next]!.focus).toHaveBeenCalled()
+      expect(preventDefault).toHaveBeenCalled()
+    }
+    const preventDefault = vi.fn()
+    tabs[0]!.listeners.keydown!({ key: "Tab", preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expectSelected(0)
+  })
+})
 
 function fakeZotero(input: {
   token?: string
@@ -51,16 +92,15 @@ describe("Jadense chat model selector", () => {
     defaultSelection: { kind: "route", routeTier: "standard" },
   }
 
-  it("groups the Webapp-owned default, routes, and direct models with useful details", () => {
+  it("groups routes and direct models without an account-default option", () => {
     const options = buildJadenseChatModelSelectOptions(catalog, { kind: "model", modelId: "glm-5" })
     expect(options.map(option => [option.value, option.group])).toEqual([
-      ["default", "系统默认"],
-      ["route:standard", "智能路由"],
-      ["model:glm-5", "平台模型"],
-      ["model:locked", "平台模型"],
+      ["route:standard", "攻玉智能路由"],
+      ["model:glm-5", "攻玉内置模型"],
+      ["model:locked", "攻玉内置模型"],
     ])
-    expect(options[2]).toMatchObject({ description: "长文模型 · 支持：文本、图片", meta: "1.25x", disabled: false })
-    expect(options[3]).toMatchObject({ description: "高阶模型 · 需要升级", disabled: true })
+    expect(options[1]).toMatchObject({ description: "长文模型 · 支持：文本、图片", meta: "1.25x", disabled: false })
+    expect(options[2]).toMatchObject({ label: "Locked（需升级）", description: "需要升级 · 高阶模型", meta: "需升级订阅", disabled: true })
   })
 
   it("keeps a stale explicit choice visible and blocks only that selection", () => {
@@ -71,8 +111,31 @@ describe("Jadense chat model selector", () => {
       disabled: true,
     })
     expect(jadenseChatModelSelectionIssue(catalog, selection)).toContain("已不可用")
-    expect(jadenseChatModelSelectionIssue(catalog, { kind: "default" })).toBe("")
-    expect(jadenseChatModelSelectionIssue(catalog, { kind: "model", modelId: "locked" })).toBe("需要升级")
+    expect(jadenseChatModelSelectionIssue(catalog, { kind: "default" })).toContain("已不可用")
+    expect(jadenseChatModelSelectionIssue(catalog, { kind: "model", modelId: "locked" })).toContain("需要升级")
+    expect(jadenseChatModelSelectionIssue(catalog, { kind: "model", modelId: "locked" })).toContain("请更换可用模型")
+  })
+
+  it("shows minimum plans and a visible locked selection in Chinese and English", () => {
+    const paidCatalog: JadenseChatModelCatalog = { options: [
+      { kind: "model", modelId: "paid", displayName: "Paid", description: "", minimumPlanCode: "go", locked: true, capabilities: [], consumptionMultiplier: 1.5 },
+      { kind: "route", routeTier: "premium", displayName: "Premium", description: "", minimumPlanCode: "pro", locked: false },
+    ], defaultSelection: null }
+    const chinese = buildJadenseChatModelSelectOptions(paidCatalog, { kind: "model", modelId: "paid" })
+    expect(chinese[0]).toMatchObject({ label: "Paid（需升级）", meta: "需 GO · 1.50x", disabled: true })
+    expect(chinese[0].description).toContain("当前订阅不支持")
+    expect(chinese[1]).toMatchObject({ label: "Premium", description: "最低订阅：PRO", disabled: false })
+    const english = buildJadenseChatModelSelectOptions(paidCatalog, undefined, true)
+    expect(english[0]).toMatchObject({ label: "Paid (upgrade required)", meta: "Requires GO · 1.50x", disabled: true })
+    expect(english[1].description).toBe("Minimum subscription: PRO")
+  })
+
+  it.each(["AI_MODEL_SELECTION_PLAN_REQUIRED", "AI_USER_ROUTE_PLAN_REQUIRED"])("explains %s when a send is rejected after catalog loading", code => {
+    const message = friendlyChatError(new JadenseApiError({ status: 403, code, body: "", message: "request rejected" }))
+    expect(message).toContain("当前订阅不支持")
+    expect(message).toContain("设置 → 功能配置")
+    expect(message).toContain("充值积分不会解除")
+    expect(message).not.toContain("重新生成 Zotero 令牌")
   })
 })
 
@@ -191,7 +254,7 @@ describe("reader document conversation lifecycle", () => {
     expect(turn.prompt).toContain("文献：A useful paper")
     expect(turn.prompt).toContain("页码：4")
     expect(turn.prompt).toContain("图注：Figure 2. Treatment response over time.")
-    expect(turn.prompt).toContain("附件：已附图（仅在当前窗口保留）")
+    expect(turn.prompt).toContain("附件：已附图")
     expect(turn.session.sources.map((source) => source.kind)).toEqual(["item", "file"])
     expect(turn.session.sources[1]?.text).toBe("Extracted PDF body")
     expect(turn.prompt).not.toContain(dataUrl)
@@ -279,7 +342,9 @@ describe("reader document conversation lifecycle", () => {
     const send = manager.match(/async function sendChatMessage[\s\S]*?\/\*\* 独立解析/)?.[0] ?? ""
     expect(send).toContain("figureChatContexts.get(session.id)")
     expect(send).toContain("buildFigureInterpretationRequest(prepared.requestText, figureContext)")
-    expect(send).toContain("images: [figureContext.image]")
+    expect(send).toContain("images: [requestImage]")
+    expect(send).toContain("readChatImage(latestAttachment)")
+    expect(send).toContain("image: storedImage.attachment")
     expect(manager).toContain("figureChatContexts.delete(state.activeSessionId)")
     expect(manager).toContain("figureChatContexts.clear()")
     expect(manager).toContain("injected.actions = undefined")
@@ -549,8 +614,8 @@ describe("manager page state", () => {
 
     expect(xhtml).toContain('id="jadense-manager-sidebar-toggle"')
     expect(xhtml).toContain('aria-controls="jadense-manager-sidebar"')
-    expect(xhtml.match(/class="jdx-manager-nav-icon(?: [^"]+)?"/g)).toHaveLength(5)
-    expect(xhtml.match(/class="jdx-manager-nav-label"/g)).toHaveLength(4)
+    expect(xhtml.match(/class="jdx-manager-nav-icon(?: [^"]+)?"/g)).toHaveLength(6)
+    expect(xhtml.match(/class="jdx-manager-nav-label"/g)).toHaveLength(5)
     expect(xhtml).toContain('id="jadense-manager-nav-translations"')
     expect(xhtml).toContain('id="jadense-manager-section-translations"')
     expect(xhtml).toContain('id="jadense-manager-nav-analysis"')
@@ -648,7 +713,7 @@ describe("manager page state", () => {
 
   it("renders analysis titles as native accessible buttons backed by exact local PDF navigation", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const renderer = manager.match(/function renderPaperAnalysisHistory[\s\S]*?\n}\n\nexport function activeAiState/)?.[0] ?? ""
+    const renderer = manager.match(/function renderPaperAnalysisHistory[\s\S]*?\n}\n\n\/\*\* 有图片上下文/)?.[0] ?? ""
     expect(renderer).toContain('create("button", "jdx-analysis-title")')
     expect(renderer).toContain('title.type = "button"')
     expect(renderer).toContain('title.setAttribute("aria-label"')
@@ -725,7 +790,7 @@ describe("manager page state", () => {
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(1)
     expect(xhtml).not.toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
-    for (const name of ["ai", "shortcuts"]) {
+    for (const name of ["features", "shortcuts", "ai"]) {
       expect(xhtml).toContain(`id="jadense-settings-tab-${name}"`)
       expect(xhtml).toContain(`id="jadense-settings-panel-${name}"`)
     }
@@ -737,8 +802,8 @@ describe("manager page state", () => {
     }
     expect(xhtml).toContain('id="jadense-shortcut-status"')
     expect(xhtml.match(/data-connection-section=/g)).toHaveLength(5)
-    expect(xhtml).toContain('id="jadense-manager-route-jadense"')
-    expect(xhtml).toContain('id="jadense-manager-route-byok"')
+    expect(xhtml).not.toContain("AI 请求通道")
+    for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-feature-${feature}-model"`)
     expect(xhtml).toContain('id="jadense-manager-byok-key-mask"')
     expect(xhtml).toContain('id="jadense-manager-byok-provider-select"')
     expect(xhtml).toContain('id="jadense-manager-byok-provider-save"')
@@ -841,7 +906,7 @@ describe("manager page state", () => {
       expect(smoke).toContain(endpoint)
     }
     expect(preview).toContain("fixtureAccount.signedToday = true")
-    expect(smoke).toContain('report.checks.push("manager-ai-settings-byok"')
+    expect(smoke).toContain('"manager-ai-settings-byok"')
     expect(smoke).toContain('"shortcut-settings-light-dark-compact"')
     expect(smoke).toContain('"manager-account-points-check-in"')
   })

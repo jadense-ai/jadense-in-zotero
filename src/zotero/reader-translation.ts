@@ -1,19 +1,19 @@
 /**
  * 阅读器选文翻译运行时。
- * 上游接收本地选区，下游按当前 AI 通道生成译文并写入独立翻译历史。
+ * 上游接收本地选区，下游按独立翻译模型生成译文并写入独立翻译历史。
  */
-import { ByokChatClient, byokConfigurationIssue } from "@/chat/byok-chat"
+import { ByokChatClient } from "@/chat/byok-chat"
 import { buildTranslationPrompt } from "@/chat/paper-analysis"
 import { normalizeTranslationLanguages, translationLanguageLabel } from "@/chat/translation-languages"
 import { TemporaryChatClient } from "@/chat/temporary-chat"
-import { JadenseApiError } from "@/jadense/api"
+import { JadenseApiError, jadenseModelSubscriptionErrorMessage } from "@/jadense/api"
 import {
   appendTranslationRecord,
   type TranslationRecord,
   type TranslationPreferenceStore,
 } from "@/chat/translation-history"
 import { collectSourceForItem } from "./research-context"
-import { readAiRoute, readByokConfig } from "./ai-settings"
+import { featureModelState } from "./ai-settings"
 import { readConnection, type ZoteroLike } from "./runtime"
 import { readArticleTranslationLanguages } from "./translation-settings"
 import type { ReaderAction } from "./reader-tools"
@@ -24,12 +24,14 @@ function createId(prefix: string) {
 }
 
 function translationPreferences(zotero: ZoteroLike): TranslationPreferenceStore {
-  if (!zotero.Prefs) throw new Error("当前 Zotero profile 不支持本地翻译存储。")
+  if (!zotero.Prefs) throw new Error("当前 Zotero 无法保存本地翻译历史。")
   return zotero.Prefs
 }
 
 function friendlyTranslationError(error: unknown) {
   const message = error instanceof Error ? error.message : "翻译生成失败，请稍后重试。"
+  const subscriptionIssue = jadenseModelSubscriptionErrorMessage(error)
+  if (subscriptionIssue) return subscriptionIssue
   if (error instanceof JadenseApiError && error.code?.toUpperCase() === "POINTS_INSUFFICIENT") {
     return "当前可用积分不足。请打开「连接攻玉」签到领积分或补充积分后重试。"
   }
@@ -53,15 +55,9 @@ export async function translateReaderSelection(input: {
   ).catch(() => null)
   const title = source?.parentItem?.title ?? source?.title
   const citation = source?.citation
-  const route = readAiRoute(input.zotero)
+  const model = featureModelState(input.zotero, "translation")
+  if (!model.ready) throw new Error(model.issue)
   const connection = readConnection(input.zotero)
-  const byok = readByokConfig(input.zotero)
-  if (route === "byok") {
-    const issue = byokConfigurationIssue(byok)
-    if (issue) throw new Error(issue)
-  } else if (!connection.token) {
-    throw new Error("请先在「连接攻玉」中配置攻玉令牌。")
-  }
   if (!source || source.kind !== "file" || source.itemID !== input.action.itemID) {
     throw new Error("无法确认当前 PDF 附件身份；本次翻译未发送，也不会写入历史。")
   }
@@ -70,13 +66,14 @@ export async function translateReaderSelection(input: {
     await readArticleTranslationLanguages(input.zotero, input.action.itemID),
   )
 
-  const client = route === "byok"
-    ? new ByokChatClient({ config: byok, fetchImpl: input.fetchImpl })
-    : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, fetchImpl: input.fetchImpl })
+  const client = model.route === "byok"
+    ? new ByokChatClient({ config: model.config!, fetchImpl: input.fetchImpl })
+    : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: input.fetchImpl })
   const id = createId("translation")
   let translatedText = ""
   try {
     translatedText = await client.send({
+      clientFeature: "translation",
       clientRequestId: createId("request"),
       conversationId: id,
       messages: [{

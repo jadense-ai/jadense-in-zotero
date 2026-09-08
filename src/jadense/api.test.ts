@@ -1,8 +1,27 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { JadenseApiClient, JadenseApiError, parseJadenseChatModelCatalog } from "./api"
+import { JadenseApiClient, JadenseApiError, jadenseModelSubscriptionErrorMessage, parseJadenseChatModelCatalog } from "./api"
 
 describe("JadenseApiClient", () => {
+  it("preserves optional subscription requirements without inferring locks or rejecting future fields", () => {
+    const catalog = parseJadenseChatModelCatalog({ options: [
+      { kind: "model", modelId: "paid", displayName: "Paid", minimumPlanCode: " go ", locked: true, lockReason: "需要 GO", future: true },
+      { kind: "route", routeTier: "premium", displayName: "Premium", minimumPlanCode: "future-plan", locked: false },
+      { kind: "model", modelId: "basic", displayName: "Basic", minimumPlanCode: null, locked: false },
+    ] })
+    expect(catalog.options).toHaveLength(3)
+    expect(catalog.options[0]).toMatchObject({ minimumPlanCode: "go", locked: true, lockReason: "需要 GO" })
+    expect(catalog.options[1]).toMatchObject({ minimumPlanCode: "future-plan", locked: false })
+    expect(catalog.options[2]).not.toHaveProperty("minimumPlanCode")
+  })
+
+  it("does not confuse subscription restrictions with missing token scopes, points or BYOK errors", () => {
+    for (const code of ["POINTS_INSUFFICIENT", "insufficient_scope", "AI_MODEL_SELECTION_UNAVAILABLE"]) {
+      expect(jadenseModelSubscriptionErrorMessage(new JadenseApiError({ code, status: 403, body: "", message: "original" }))).toBeNull()
+    }
+    expect(jadenseModelSubscriptionErrorMessage(Object.assign(new Error("BYOK rejected"), { code: "AI_MODEL_SELECTION_PLAN_REQUIRED" }))).toBeNull()
+  })
+
   it("loads the shared route/model catalog with temporary-chat bearer auth", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       options: [

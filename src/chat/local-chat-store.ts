@@ -4,6 +4,7 @@
  */
 
 import { normalizeChatSources, type ChatSource } from "./research-context"
+import { normalizeLocalChatImage, type LocalChatImage } from "./image-input"
 import { normalizeResearchMessageContext, type ResearchMessageContext } from "./research-presentation"
 
 export const LOCAL_CHAT_PREF_KEY = "extensions.jadenseInZotero.localChatState"
@@ -24,6 +25,7 @@ export type LocalChatMessage = {
   createdAt: string
   status: LocalChatMessageStatus
   research?: ResearchMessageContext
+  image?: LocalChatImage
 }
 
 export type LocalChatSession = {
@@ -100,6 +102,7 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
   const createdAt = timestamp(row.createdAt)
   if (!id || !role || !createdAt) return null
   const research = normalizeResearchMessageContext(row.research)
+  const image = normalizeLocalChatImage(row.image)
   return {
     id,
     role,
@@ -107,6 +110,7 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
     createdAt,
     status: status(row.status),
     ...(research ? { research } : {}),
+    ...(image ? { image } : {}),
   }
 }
 
@@ -270,6 +274,7 @@ export function appendLocalChatMessage(
   state.sessions = state.sessions.map((session) => {
     if (session.id !== sessionId) return session
     const research = normalizeResearchMessageContext(input.research)
+    const image = normalizeLocalChatImage(input.image)
     const message: LocalChatMessage = {
       id: input.id,
       role: input.role,
@@ -277,6 +282,7 @@ export function appendLocalChatMessage(
       createdAt: input.createdAt,
       status: input.status ?? "complete",
       ...(research ? { research } : {}),
+      ...(image ? { image } : {}),
     }
     return {
       ...session,

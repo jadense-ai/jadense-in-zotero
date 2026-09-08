@@ -1,6 +1,6 @@
 /**
- * Zotero profile 中的 AI 通道与 BYOK Provider / Model 配置所有权。
- * v2 把请求目标和模型目录分开保存；读取兼容 v1 扁平配置并忽略未知附加字段。
+ * Zotero 本地功能模型选择与 BYOK 提供商、模型目录。
+ * 旧通道仅用于升级迁移；功能偏好与目录编辑独立，兼容未知附加字段。
  */
 import {
   DEFAULT_BYOK_MAX_OUTPUT_TOKENS,
@@ -13,7 +13,7 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import type { JadenseChatSelection } from "@/jadense/api"
-import type { ZoteroLike } from "./runtime"
+import { readConnection, type ZoteroLike } from "./runtime"
 
 const PREF_AI_ROUTE = "extensions.jadenseInZotero.aiRoute"
 const PREF_BYOK_CONFIG = "extensions.jadenseInZotero.byokConfig"
@@ -22,9 +22,23 @@ export const PAPER_ANALYSIS_MODEL_PREF_KEY = "extensions.jadenseInZotero.paperAn
 
 export type AiRoute = "jadense" | "byok"
 
-export type PaperAnalysisModelSelection =
-  | { route: "jadense" }
+export type FeatureModelSelection =
+  | { route: "jadense"; selection?: JadenseChatSelection }
   | { route: "byok"; modelId: string }
+
+export type PaperAnalysisModelSelection = FeatureModelSelection
+
+export const AI_FEATURES = ["chat", "translation", "analysis", "figure"] as const
+export type AiFeature = typeof AI_FEATURES[number]
+export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
+  chat: "AI 对话", translation: "实时翻译", analysis: "文献解析", figure: "图片解读",
+}
+export const FEATURE_MODEL_PREF_KEYS: Record<AiFeature, string> = {
+  chat: "extensions.jadenseInZotero.chatModel",
+  translation: "extensions.jadenseInZotero.translationModel",
+  analysis: PAPER_ANALYSIS_MODEL_PREF_KEY,
+  figure: "extensions.jadenseInZotero.figureModel",
+}
 
 export type ByokProvider = {
   id: string
@@ -94,7 +108,7 @@ function normalizeProvider(value: unknown): ByokProvider | null {
   const protocol = isByokProtocol(row.protocol) ? row.protocol : DEFAULT_BYOK_PROTOCOL
   return {
     id,
-    name: text(row.name) || "Custom Provider",
+    name: text(row.name) || "自定义提供商",
     protocol,
     baseUrl: trimBaseUrl(text(row.baseUrl)) || defaultByokBaseUrl(protocol),
     apiKey: text(row.apiKey),
@@ -113,7 +127,7 @@ function normalizeModel(value: unknown, providerIds: Set<string>): ByokModel | n
   return {
     id,
     providerId,
-    name: text(row.name) || model || "Unnamed model",
+    name: text(row.name) || model || "未命名模型",
     model,
     ...(contextWindow ? { contextWindow } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),
@@ -147,7 +161,7 @@ function migrateLegacy(row: Record<string, unknown>): ByokSettings {
   const provider: ByokProvider = {
     id: "default-provider",
     name: configuredBaseUrl && configuredBaseUrl !== defaultByokBaseUrl(protocol)
-      ? "Custom Provider"
+      ? "自定义提供商"
       : protocol === "anthropic-messages" ? "Anthropic" : "OpenAI",
     protocol,
     baseUrl: configuredBaseUrl || defaultByokBaseUrl(protocol),
@@ -178,23 +192,26 @@ export function saveAiRoute(zotero: ZoteroLike, route: AiRoute) {
   zotero.Prefs?.set(PREF_AI_ROUTE, route)
 }
 
-function normalizeJadenseChatSelection(value: unknown): JadenseChatSelection {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { kind: "default" }
+const DEFAULT_JADENSE_MODEL = { kind: "model", modelId: "deepseek-v4-flash-vision-exp" } as const
+
+/** 缺省与旧版账号默认选择统一到具体模型；是否已连接仍由功能运行状态判断。 */
+export function normalizeJadenseChatSelection(value: unknown): Exclude<JadenseChatSelection, { kind: "default" }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return DEFAULT_JADENSE_MODEL
   const row = value as Record<string, unknown>
   const routeTier = text(row.routeTier)
   const modelId = text(row.modelId)
   if (row.kind === "route" && routeTier) return { kind: "route", routeTier }
   if (row.kind === "model" && modelId) return { kind: "model", modelId }
-  return { kind: "default" }
+  return DEFAULT_JADENSE_MODEL
 }
 
-/** 缺省值不向服务端指定模型，继续沿用账号在 Webapp 中保存的选择。 */
+/** 读取旧偏好用于功能迁移，保留具体选择并替换已移除的账号默认选项。 */
 export function readJadenseChatSelection(zotero: ZoteroLike): JadenseChatSelection {
   try {
     const raw = prefString(zotero, JADENSE_CHAT_MODEL_PREF_KEY)
-    return raw ? normalizeJadenseChatSelection(JSON.parse(raw)) : { kind: "default" }
+    return raw ? normalizeJadenseChatSelection(JSON.parse(raw)) : DEFAULT_JADENSE_MODEL
   } catch {
-    return { kind: "default" }
+    return DEFAULT_JADENSE_MODEL
   }
 }
 
@@ -205,9 +222,8 @@ export function saveJadenseChatSelection(zotero: ZoteroLike, selection: JadenseC
 }
 
 export function jadenseChatSelectionKey(selection: JadenseChatSelection) {
-  if (selection.kind === "route") return `route:${selection.routeTier}`
-  if (selection.kind === "model") return `model:${selection.modelId}`
-  return "default"
+  const normalized = normalizeJadenseChatSelection(selection)
+  return normalized.kind === "route" ? `route:${normalized.routeTier}` : `model:${normalized.modelId}`
 }
 
 export function jadenseChatSelectionFromKey(value: string): JadenseChatSelection {
@@ -215,43 +231,89 @@ export function jadenseChatSelectionFromKey(value: string): JadenseChatSelection
   const id = parts.join(":").trim()
   if (kind === "route" && id) return { kind, routeTier: id }
   if (kind === "model" && id) return { kind, modelId: id }
-  return { kind: "default" }
+  return DEFAULT_JADENSE_MODEL
 }
 
-function normalizePaperAnalysisModelSelection(value: unknown): PaperAnalysisModelSelection | null {
+function normalizeFeatureModelSelection(value: unknown): FeatureModelSelection | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const row = value as Record<string, unknown>
-  if (row.route === "jadense") return { route: "jadense" }
-  const modelId = text(row.modelId)
-  return row.route === "byok" && modelId ? { route: "byok", modelId } : null
-}
-
-function inheritedPaperAnalysisModelSelection(zotero: ZoteroLike): PaperAnalysisModelSelection {
-  if (readAiRoute(zotero) === "jadense") return { route: "jadense" }
-  return { route: "byok", modelId: readByokSettings(zotero).activeModelId }
-}
-
-/** 未设置或损坏时继承全局通道；有效的独立选择不会因模型失效而被改写。 */
-export function readPaperAnalysisModelSelection(zotero: ZoteroLike): PaperAnalysisModelSelection {
-  try {
-    const raw = prefString(zotero, PAPER_ANALYSIS_MODEL_PREF_KEY)
-    if (!raw) return inheritedPaperAnalysisModelSelection(zotero)
-    return normalizePaperAnalysisModelSelection(JSON.parse(raw)) ?? inheritedPaperAnalysisModelSelection(zotero)
-  } catch {
-    return inheritedPaperAnalysisModelSelection(zotero)
+  if (row.route === "jadense") {
+    const selection = normalizeJadenseChatSelection(row.selection)
+    return { route: "jadense", selection }
   }
+  // 保留升级时尚未配置模型的 BYOK 目的地，不自动改发攻玉。
+  return row.route === "byok" ? { route: "byok", modelId: text(row.modelId) } : null
 }
 
-/** 只写文献解析自己的选择，不联动全局 AI route 或 BYOK active model。 */
-export function savePaperAnalysisModelSelection(
-  zotero: ZoteroLike,
-  selection: PaperAnalysisModelSelection,
-): PaperAnalysisModelSelection {
-  const normalized = normalizePaperAnalysisModelSelection(selection)
-  // 请求路由完整性：BYOK 必须指向明确 modelId，不能把半有效目标写入配置。
-  if (!normalized) throw new Error("文献解析的 BYOK 模型不能为空。")
-  zotero.Prefs?.set(PAPER_ANALYSIS_MODEL_PREF_KEY, JSON.stringify(normalized))
+function storedFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature) {
+  try { return normalizeFeatureModelSelection(JSON.parse(prefString(zotero, FEATURE_MODEL_PREF_KEYS[feature]))) }
+  catch { return null }
+}
+
+/** 在首次读取或目录编辑前固定旧配置；迁移保存失败不影响原有请求能力。 */
+export function initializeFeatureModelSelections(zotero: ZoteroLike) {
+  const inherited: FeatureModelSelection = readAiRoute(zotero) === "byok"
+    ? { route: "byok", modelId: readByokSettings(zotero).activeModelId }
+    : { route: "jadense" }
+  const selections = {} as Record<AiFeature, FeatureModelSelection>
+  for (const feature of AI_FEATURES) {
+    const stored = storedFeatureModelSelection(zotero, feature)
+    const legacyChat = (feature === "chat" || feature === "figure") && inherited.route === "jadense"
+      ? { ...inherited, selection: readJadenseChatSelection(zotero) } : inherited
+    selections[feature] = stored ?? normalizeFeatureModelSelection(legacyChat)!
+    if (!stored) {
+      try { zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(selections[feature])) }
+      catch { /* 旧偏好仍可在本次请求中使用。 */ }
+    }
+  }
+  return selections
+}
+
+export function readFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
+  return storedFeatureModelSelection(zotero, feature) ?? initializeFeatureModelSelections(zotero)[feature]
+}
+
+/** 选择只写所属功能；不改变 BYOK 编辑器当前项或其他功能。 */
+export function saveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature, selection: FeatureModelSelection) {
+  const normalized = normalizeFeatureModelSelection(selection)
+  // 目的地完整性：不能把不完整的显式选择默认成另一个提供商。
+  if (!normalized || (normalized.route === "byok" && !normalized.modelId)) throw new Error("BYOK 模型不能为空。")
+  initializeFeatureModelSelections(zotero)
+  zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(normalized))
   return normalized
+}
+
+export function readPaperAnalysisModelSelection(zotero: ZoteroLike) {
+  return readFeatureModelSelection(zotero, "analysis")
+}
+
+export function savePaperAnalysisModelSelection(zotero: ZoteroLike, selection: PaperAnalysisModelSelection) {
+  return saveFeatureModelSelection(zotero, "analysis", selection)
+}
+
+export function featureModelSelectionKey(selection: FeatureModelSelection) {
+  return selection.route === "byok" ? `byok:${selection.modelId}` : jadenseChatSelectionKey(selection.selection ?? { kind: "default" })
+}
+
+export function featureModelSelectionFromKey(value: string): FeatureModelSelection {
+  return value.startsWith("byok:") ? { route: "byok", modelId: value.slice(5) }
+    : { route: "jadense", selection: jadenseChatSelectionFromKey(value) }
+}
+
+/** 所选模型失效只影响所属功能，不跨提供商回退；目录加载不参与运行时准入。 */
+export function featureModelState(zotero: ZoteroLike, feature: AiFeature, invalidToken: string | null = null) {
+  const selection = readFeatureModelSelection(zotero, feature)
+  if (selection.route === "jadense") {
+    const token = readConnection(zotero).token
+    const invalid = Boolean(token && token === invalidToken)
+    return { selection, route: selection.route, ready: Boolean(token) && !invalid, label: "攻玉", issue: token
+      ? invalid ? "攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。" : ""
+      : "请先在「连接攻玉」中配置攻玉令牌。" }
+  }
+  const config = readByokConfigForModel(zotero, selection.modelId)
+  return { selection, route: selection.route, ready: Boolean(config), label: config ? `BYOK · ${config.model}` : "BYOK · 已失效模型",
+    issue: config ? "" : `已选择的 BYOK 模型已删除或配置不完整；请在「设置 → 功能配置」中重新选择${AI_FEATURE_LABELS[feature]}模型，或前往 BYOK 修复。`,
+    ...(config ? { config } : {}) }
 }
 
 export function readByokSettings(zotero: ZoteroLike): ByokSettings {
@@ -269,6 +331,7 @@ export function readByokSettings(zotero: ZoteroLike): ByokSettings {
 }
 
 function persist(zotero: ZoteroLike, settings: ByokSettings) {
+  initializeFeatureModelSelections(zotero)
   const canonical = normalizeV2(settings as unknown as Record<string, unknown>)
   zotero.Prefs?.set(PREF_BYOK_CONFIG, JSON.stringify(canonical))
   return canonical
@@ -310,7 +373,7 @@ export function saveByokProvider(zotero: ZoteroLike, input: ByokProvider) {
   if (pristineDefault && input.id !== "default-provider") settings.providers = []
   const existing = settings.providers.find((provider) => provider.id === input.id)
   const provider = normalizeProvider({ ...input, apiKey: input.apiKey.trim() || existing?.apiKey || "" })
-  if (!provider) throw new Error("Provider ID 不能为空。")
+  if (!provider) throw new Error("提供商 ID 不能为空。")
   const index = settings.providers.findIndex((item) => item.id === provider.id)
   if (index >= 0) settings.providers[index] = provider
   else settings.providers.push(provider)
@@ -326,7 +389,7 @@ export function saveByokProvider(zotero: ZoteroLike, input: ByokProvider) {
 export function saveByokModel(zotero: ZoteroLike, input: ByokModel) {
   const settings = readByokSettings(zotero)
   const model = normalizeModel(input, new Set(settings.providers.map((provider) => provider.id)))
-  if (!model) throw new Error("模型必须关联已保存的 Provider。")
+  if (!model) throw new Error("模型必须关联已保存的提供商。")
   const index = settings.models.findIndex((item) => item.id === model.id)
   if (index >= 0) settings.models[index] = model
   else settings.models.push(model)
@@ -389,7 +452,7 @@ export function saveByokConfig(zotero: ZoteroLike, input: ByokConfig) {
   saveByokModel(zotero, {
     id: existingModel?.id ?? "default-model",
     providerId: provider.id,
-    name: existingModel?.name || input.model.trim() || "Unnamed model",
+    name: existingModel?.name || input.model.trim() || "未命名模型",
     model: input.model,
     ...(existingModel?.contextWindow ? { contextWindow: existingModel.contextWindow } : {}),
     maxOutputTokens: positiveInteger(input.maxOutputTokens) ?? DEFAULT_BYOK_MAX_OUTPUT_TOKENS,
@@ -398,5 +461,6 @@ export function saveByokConfig(zotero: ZoteroLike, input: ByokConfig) {
 }
 
 export function clearByokConfig(zotero: ZoteroLike) {
+  initializeFeatureModelSelections(zotero)
   zotero.Prefs?.clear(PREF_BYOK_CONFIG)
 }

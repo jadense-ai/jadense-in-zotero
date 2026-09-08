@@ -12,7 +12,7 @@ import {
   validateInstalledSmokeLog,
 } from "../../scripts/smoke-installed-xpi.mjs"
 
-const pluginId = "jadense-in-zotero@jadense.com"
+const pluginId = "jadense-in-zotero@jadense.cn"
 
 function passingLogLines() {
   return [
