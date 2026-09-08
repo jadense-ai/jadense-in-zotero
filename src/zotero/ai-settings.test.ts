@@ -46,9 +46,9 @@ describe("AI route settings", () => {
     expect(readAiRoute(zotero)).toBe("jadense")
   })
 
-  it("keeps the legacy Webapp-owned default and stores an explicit Jadense route or model", () => {
+  it("defaults to DeepSeek V4 Flash Vision Exp and stores an explicit Jadense route or model", () => {
     const zotero = fakeZotero()
-    expect(readJadenseChatSelection(zotero)).toEqual({ kind: "default" })
+    expect(readJadenseChatSelection(zotero)).toEqual({ kind: "model", modelId: "deepseek-v4-flash-vision-exp" })
 
     saveJadenseChatSelection(zotero, { kind: "route", routeTier: "premium" })
     expect(readJadenseChatSelection(zotero)).toEqual({ kind: "route", routeTier: "premium" })
@@ -66,8 +66,8 @@ describe("AI route settings", () => {
     })
     expect(readJadenseChatSelection(zotero)).toEqual({ kind: "model", modelId: "model-a" })
     zotero.Prefs?.set(JADENSE_CHAT_MODEL_PREF_KEY, '{"kind":"route","routeTier":')
-    expect(readJadenseChatSelection(zotero)).toEqual({ kind: "default" })
-    expect(jadenseChatSelectionFromKey("model:")).toEqual({ kind: "default" })
+    expect(readJadenseChatSelection(zotero)).toEqual({ kind: "model", modelId: "deepseek-v4-flash-vision-exp" })
+    expect(jadenseChatSelectionFromKey("model:")).toEqual({ kind: "model", modelId: "deepseek-v4-flash-vision-exp" })
   })
 })
 
@@ -81,6 +81,8 @@ describe("paper analysis model settings", () => {
     saveByokModel(zotero, { id: "model", providerId: "provider", name: "Model", model: "model-name" })
     saveAiRoute(zotero, "byok")
 
+    // 模拟旧版尚无功能偏好的存量配置。
+    zotero.Prefs?.clear(PAPER_ANALYSIS_MODEL_PREF_KEY)
     expect(readPaperAnalysisModelSelection(zotero)).toEqual({ route: "byok", modelId: "model" })
     zotero.Prefs?.set(PAPER_ANALYSIS_MODEL_PREF_KEY, '{"route":"byok","modelId":')
     expect(readPaperAnalysisModelSelection(zotero)).toEqual({ route: "byok", modelId: "model" })
@@ -219,7 +221,7 @@ describe("BYOK profile settings", () => {
     })
     const settings = readByokSettings(zotero)
     expect(settings.providers).toEqual([{
-      id: "default-provider", name: "Custom Provider", protocol: "openai-chat-completions",
+      id: "default-provider", name: "自定义提供商", protocol: "openai-chat-completions",
       baseUrl: "https://gateway.example/v1", apiKey: "secret",
     }])
     expect(settings.models).toEqual([{

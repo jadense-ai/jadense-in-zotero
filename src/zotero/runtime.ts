@@ -15,11 +15,6 @@ const PREF_COLLECTION_UPLOAD_INCLUDE_PDF = "extensions.jadenseInZotero.collectio
 const PREF_FAVORITE_FOLDERS_CACHE = "extensions.jadenseInZotero.favoriteFoldersCache"
 const SYNC_MAPPING_VERSION = 2
 export const DEFAULT_BASE_URL = "https://jadense.cn"
-const LEGACY_PRODUCTION_BASE_URLS = new Set([
-  "https://app.jadense.com",
-  "https://jadense.com",
-  "https://www.jadense.com",
-])
 const ZOTERO_IMPORT_BATCH_SIZE = 100
 
 export type JadenseConnection = {
@@ -250,9 +245,10 @@ function normalizeBaseUrl(value: string) {
 
 function migrateBaseUrl(value: string) {
   const normalized = normalizeBaseUrl(value)
-  return LEGACY_PRODUCTION_BASE_URLS.has(normalized.toLowerCase())
-    ? DEFAULT_BASE_URL
-    : normalized
+  // 正式连接使用内置主域；只保留显式的本机开发和国内预发覆盖，旧生产设置自然回到主域。
+  if (!normalized || /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(normalized)
+    || normalized.toLowerCase() === "https://staging.jadense.cn") return normalized
+  return DEFAULT_BASE_URL
 }
 
 function emptySyncMappings(): SyncMappingState {

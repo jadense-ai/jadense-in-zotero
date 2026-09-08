@@ -53,7 +53,7 @@ type BootstrapData = {
   resourceURI?: { spec?: string }
 }
 
-const DEFAULT_PLUGIN_ID = "jadense-in-zotero@jadense.com"
+const DEFAULT_PLUGIN_ID = "jadense-in-zotero@jadense.cn"
 const SMOKE_OPEN_MANAGER_PREF = "extensions.jadenseInZotero.smokeOpenManager"
 
 let pluginContext: BootstrapPluginContext = {

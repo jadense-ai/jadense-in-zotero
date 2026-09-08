@@ -237,7 +237,7 @@ function installPreviewHost() {
       } else if (action === "annotation-fail") {
         failNextAnnotation = true
         status = "下一条模拟原生批注将失败；其他批注和可读备份应保留。"
-      } else if (["normal", "fail", "slow", "malformed", "stream-cut"].includes(action)) {
+      } else if (["normal", "fail", "subscription", "slow", "malformed", "stream-cut"].includes(action)) {
         nextMode = action
         status = "已设置下一次假 AI 行为；请在 Manager 发送问题、解析或翻译。"
       } else if (action === "hide") {
@@ -263,7 +263,7 @@ const controls = `<details id="fixture-controls">
     <button type="button" data-fixture="attach">模拟阅读器提问</button><button type="button" data-fixture="analyze">模拟阅读器解析</button>
     <button type="button" data-fixture="quote">模拟阅读器引用</button><button type="button" data-fixture="translate">模拟阅读器翻译</button>
     <button type="button" data-fixture="malformed">下一次解析 JSON 缺尾括号</button><button type="button" data-fixture="stream-cut">下一次流中断</button><button type="button" data-fixture="annotation-fail">下一条批注保存失败</button>
-    <button type="button" data-fixture="normal">假 AI：正常</button><button type="button" data-fixture="fail">下一次 AI 失败</button><button type="button" data-fixture="slow">下一次慢生成（可停止）</button><button type="button" data-fixture="reset">重置模拟数据</button><button type="button" data-fixture="hide">隐藏验收栏（刷新恢复）</button>
+    <button type="button" data-fixture="normal">假 AI：正常</button><button type="button" data-fixture="fail">下一次 AI 失败</button><button type="button" data-fixture="subscription">下一次订阅不足</button><button type="button" data-fixture="slow">下一次慢生成（可停止）</button><button type="button" data-fixture="reset">重置模拟数据</button><button type="button" data-fixture="hide">隐藏验收栏（刷新恢复）</button>
   </div><p id="fixture-state" role="status"></p>
   <details><summary>查看模拟原生批注</summary><pre id="fixture-annotations"></pre></details>
 </details>`
@@ -306,6 +306,11 @@ async function serveChat(request, response) {
   let body
   try { body = JSON.parse(raw) } catch { response.writeHead(400); response.end("Fixture expected JSON"); return }
   const mode = request.headers["x-jadense-fixture-mode"]
+  if (mode === "subscription") {
+    response.writeHead(403, { "content-type": "application/json; charset=utf-8" })
+    response.end(JSON.stringify({ code: "AI_MODEL_SELECTION_PLAN_REQUIRED", error: "当前计划暂不支持直接选择该模型。" }))
+    return
+  }
   if (mode === "fail") {
     response.writeHead(503, { "content-type": "application/json; charset=utf-8" })
     response.end(JSON.stringify({ error: "【假 AI】模拟生成失败；没有调用外网模型，请重新发送。" }))
@@ -352,6 +357,7 @@ const server = http.createServer(async (request, response) => {
         options: [
           { kind: "route", routeTier: "standard", displayName: "标准", description: "根据任务自动选择模型", sortOrder: 10, minimumPlanCode: null, locked: false },
           { kind: "route", routeTier: "premium", displayName: "高阶", description: "优先使用高阶模型", sortOrder: 20, minimumPlanCode: "pro", locked: false },
+          { kind: "model", modelId: "deepseek-v4-flash-vision-exp", displayName: "DeepSeek V4 Flash Vision Exp", description: "插件默认模型", locked: false, capabilities: ["text", "imageInput"], consumptionMultiplier: 1 },
           { kind: "model", modelId: "synthetic-platform-model", displayName: "Synthetic Research", description: "适合长文研究", sortOrder: 30, minimumPlanCode: null, locked: false, capabilities: ["text", "imageInput"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 1.25 },
           { kind: "model", modelId: "locked-model", displayName: "受限模型", description: "用于验收锁定态", sortOrder: 40, minimumPlanCode: "max", locked: true, lockReason: "升级后可直接选择。", capabilities: ["text"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 2 },
         ],

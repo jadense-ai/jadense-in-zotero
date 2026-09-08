@@ -5,6 +5,7 @@
 import { buildSourceContext, type ChatSource } from "./research-context"
 import type { ChatImageInput } from "./image-input"
 import { readJadenseApiError, type JadenseChatSelection } from "@/jadense/api"
+import { version as clientVersion } from "../../package.json"
 
 export type { ChatImageInput } from "./image-input"
 
@@ -22,6 +23,7 @@ export type TemporaryChatClientOptions = {
 }
 
 export type TemporaryChatSendInput = {
+  clientFeature?: "chat" | "translation" | "analysis" | "figure"
   clientRequestId: string
   conversationId: string
   messages: TemporaryChatMessage[]
@@ -194,6 +196,7 @@ export class TemporaryChatClient {
         temporary: true,
         temporaryConversationId: input.conversationId,
         agentId: "browser-extension",
+        clientContext: { version: clientVersion, feature: input.clientFeature ?? "chat" },
         clientRequestId: input.clientRequestId,
         messages: temporaryChatMessages(input.messages, input.sources, input.images),
         ...jadenseChatSelectionBody(this.selection),

@@ -61,6 +61,18 @@ function structured(summary = "总结") {
 }
 
 describe("independent paper analysis", () => {
+  it.each([{ kind: "default" }, { kind: "model", modelId: "analysis-model" }, { kind: "route", routeTier: "premium" }] as const)("dispatches the exact Jadense analysis selection $kind", async selection => {
+    const { zotero } = fakeZotero({ token: "synthetic-token", analysisModel: { route: "jadense", selection } })
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(
+      `data: ${JSON.stringify({ type: "text-delta", delta: structured() })}\n\ndata: {"type":"finish"}\n\n`, { status: 200 }))
+    await runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl, signal: new AbortController().signal,
+      services: { readPdf: async () => snapshot(), saveAnnotations: async () => emptySaved() } })
+    const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))
+    expect(body.clientContext).toEqual({ version: expect.any(String), feature: "analysis" })
+    expect(body).toMatchObject(selection.kind === "route" ? { routeTier: "premium" } : { modelId: selection.kind === "model" ? "analysis-model" : "deepseek-v4-flash-vision-exp" })
+    expect(body).not.toHaveProperty(selection.kind === "route" ? "modelId" : "routeTier")
+  })
+
   it("backs up readable analysis before writing annotations and updates the same record without touching Chat", async () => {
     const { zotero, values } = fakeZotero({ token: "jdx_token" })
     values.set("extensions.jadenseInZotero.localChatState", "unchanged-chat")

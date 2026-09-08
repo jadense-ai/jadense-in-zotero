@@ -21,10 +21,10 @@ describe("preferences pane markup", () => {
     expect(xhtml).not.toContain('id="jadense-in-zotero-save"')
   })
 
-  it("presents one route selector and exactly two semantic settings sections", () => {
-    expect(xhtml).toContain('id="jadense-in-zotero-route-jadense"')
-    expect(xhtml).toContain('id="jadense-in-zotero-route-byok"')
-    expect(xhtml.match(/data-settings-section=/g)).toHaveLength(2)
+  it("presents independent feature models with connection and BYOK sections", () => {
+    expect(xhtml).not.toContain('id="jadense-in-zotero-route-jadense"')
+    for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-in-zotero-feature-${feature}-model"`)
+    expect(xhtml.match(/data-settings-section=/g)).toHaveLength(3)
     expect(xhtml).toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-key-mask"')

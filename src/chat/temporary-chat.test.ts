@@ -10,6 +10,7 @@ import {
   type TemporaryChatMessage,
 } from "./temporary-chat"
 import { JadenseApiError } from "@/jadense/api"
+import { version as packageVersion } from "../../package.json"
 
 function streamResponse(lines: string[]) {
   const encoder = new TextEncoder()
@@ -91,8 +92,18 @@ describe("temporary Zotero chat", () => {
       temporary: true,
       temporaryConversationId: "session-1",
       agentId: "browser-extension",
+      clientContext: { version: packageVersion, feature: "chat" },
       clientRequestId: "request-1",
       messages: [{ id: "message-1", role: "user", parts: [{ type: "text", text: "问题" }] }],
+    })
+  })
+
+  it.each(["chat", "translation", "analysis", "figure"] as const)("reports %s with the packaged release version without changing the agent", async clientFeature => {
+    const fetchImpl = vi.fn().mockResolvedValue(streamResponse(["data: [DONE]\n\n"]))
+    const client = new TemporaryChatClient({ baseUrl: "https://jadense.cn", token: "synthetic-token", fetchImpl })
+    await client.send({ clientRequestId: "request", conversationId: "local", messages: [], clientFeature })
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({
+      agentId: "browser-extension", clientContext: { version: packageVersion, feature: clientFeature },
     })
   })
 
@@ -152,6 +163,7 @@ describe("temporary Zotero chat", () => {
       temporary: true,
       temporaryConversationId: "local-source-session",
       agentId: "browser-extension",
+      clientContext: { version: packageVersion, feature: "chat" },
       clientRequestId: "request-source",
     })
     expect(payload).not.toHaveProperty("sources")

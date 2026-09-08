@@ -44,10 +44,19 @@ export async function copyTextToClipboard(zotero: ZoteroLike | null, text: strin
 }
 
 export type PreferencesStrings = {
+  featureConfigTitle: string
+  featureChatLabel: string
+  featureTranslationLabel: string
+  featureAnalysisLabel: string
+  featureFigureLabel: string
+  featureModelSearch: string
+  featureModelConnect: string
+  featureModelLoading: string
+  featureModelReady: string
+  featureModelUnavailable: string
+  featureModelSaved: string
+
   note: string
-  routeLabel: string
-  routeJadense: string
-  routeByok: string
   jadenseSectionTitle: string
   jadenseSectionNote: string
   connectionTitle: string
@@ -127,10 +136,19 @@ export type PreferencesStrings = {
 }
 
 const ZH_STRINGS: PreferencesStrings = {
-  note: "选择 AI 请求通道，并分别管理攻玉上传连接与本地 BYOK Provider。",
-  routeLabel: "AI 请求通道",
-  routeJadense: "攻玉",
-  routeByok: "BYOK",
+  featureConfigTitle: "功能配置",
+  featureChatLabel: "AI 对话",
+  featureTranslationLabel: "实时翻译",
+  featureAnalysisLabel: "文献解析",
+  featureFigureLabel: "图片解读",
+  featureModelSearch: "搜索模型或提供商",
+  featureModelConnect: "连接攻玉后可加载内置模型；BYOK 模型可独立使用。",
+  featureModelLoading: "正在加载攻玉模型；BYOK 模型仍可选择。",
+  featureModelReady: "选择后自动保存，各功能互不影响。",
+  featureModelUnavailable: "攻玉模型目录暂不可用；可继续使用当前选择或 BYOK 模型。",
+  featureModelSaved: "模型选择已保存。",
+
+  note: "为各项 AI 功能选择模型，并管理攻玉连接与 BYOK 提供商。",
   jadenseSectionTitle: "连接攻玉",
   jadenseSectionNote: "攻玉令牌只用于攻玉聊天与上传；上传始终通过攻玉完成。",
   connectionTitle: "连接",
@@ -165,60 +183,69 @@ const ZH_STRINGS: PreferencesStrings = {
   helpSteps: [
     "打开攻玉客户端并登录,进入「设置中心」。",
     "在「集成」区域找到「连接 Jadense in Zotero」。",
-    "输入令牌名称并选择有效期(30 / 90 / 365 天),点击「生成 Token」。",
+    "输入令牌名称并选择有效期(30 / 90 / 365 天),点击「生成令牌」。",
     "立即复制生成的令牌——明文只显示一次——然后粘贴到上方的「令牌」中。",
   ],
   helpNote: "令牌只保存在这台电脑的 Zotero 中;遗失或过期时,回到攻玉设置中心重新生成即可。",
   byokSectionTitle: "BYOK 配置",
-  byokSectionNote: "先配置 Provider，再为它维护模型目录。聊天、翻译和论文解析会从当前 Zotero 客户端直接请求 Provider，不经过攻玉服务器。",
-  byokProviderTitle: "Provider",
-  byokProviderSelectLabel: "当前 Provider",
+  byokSectionNote: "先配置提供商，再为它维护模型目录。聊天、翻译和论文解析会从当前 Zotero 客户端直接请求提供商，不经过攻玉服务器。",
+  byokProviderTitle: "提供商",
+  byokProviderSelectLabel: "当前提供商",
   byokProviderNameLabel: "显示名称",
   byokProviderNew: "新增",
   byokProviderDelete: "删除",
-  byokProviderSave: "保存 Provider",
+  byokProviderSave: "保存提供商",
   byokProtocolLabel: "协议",
-  byokBaseUrlLabel: "API Base URL",
+  byokBaseUrlLabel: "API 基础地址",
   byokEndpointLabel: "请求地址",
-  byokSavedKeyLabel: "已保存 Key",
-  byokKeyLabel: "API Key（留空保留旧 Key）",
-  byokKeyPlaceholder: "输入新 Key 以保存或测试",
+  byokSavedKeyLabel: "已保存密钥",
+  byokKeyLabel: "API 密钥（留空保留旧密钥）",
+  byokKeyPlaceholder: "输入新密钥 以保存或测试",
   byokModelCatalogTitle: "模型目录",
-  byokModelCatalogNote: "显示名称只用于界面；Model ID 会原样发送给 Provider。",
+  byokModelCatalogNote: "显示名称只用于界面；模型 ID 会原样发送给提供商。",
   byokModelSelectLabel: "当前模型",
   byokModelSelectPlaceholder: "选择模型",
   byokModelEmpty: "尚未添加模型",
   byokModelNameLabel: "显示名称",
-  byokModelLabel: "Model ID",
+  byokModelLabel: "模型 ID",
   byokModelPlaceholder: "例如 mimo-v2.5",
   byokContextWindowLabel: "上下文窗口（可选）",
   byokModelNew: "添加模型",
   byokModelDelete: "删除",
-  byokMaxTokensLabel: "最大输出 token",
-  byokWarning: "Key 和关联文献内容会直接发送到当前请求地址。测试配置会发起最多 3000 token 的真实请求，可能产生费用。",
+  byokMaxTokensLabel: "最大输出量（词元）",
+  byokWarning: "密钥和关联文献内容会直接发送到当前请求地址。测试配置会发起最多 3000 个词元的真实请求，可能产生费用。",
   byokClear: "清除 BYOK",
   byokTest: "测试配置",
   byokSave: "保存模型",
   byokSaved: "BYOK 配置已保存；保存操作未联网。",
-  byokNewProviderName: "新 Provider",
+  byokNewProviderName: "新提供商",
   byokNewModelName: "新模型",
-  byokProviderAdded: "已添加 Provider；请填写并保存连接信息。",
-  byokProviderDeleted: "Provider 及其模型已删除。",
-  byokProviderSaved: "Provider 已保存；保存操作未联网。",
-  byokModelAdded: "已添加模型；请填写 Model ID 后保存。",
+  byokProviderAdded: "已添加提供商；请填写并保存连接信息。",
+  byokProviderDeleted: "提供商及其模型已删除。",
+  byokProviderSaved: "提供商已保存；保存操作未联网。",
+  byokModelAdded: "已添加模型；请填写模型 ID 后保存。",
   byokModelDeleted: "模型已删除。",
   byokModelSaved: "模型已保存；保存操作未联网。",
-  byokCleared: "BYOK 配置已清除，攻玉连接和当前通道未改变。",
-  byokTesting: "正在发送最多 3000 token 的测试请求…",
+  byokCleared: "BYOK 配置已清除，攻玉连接与各功能的模型选择未改变。",
+  byokTesting: "正在发送最多 3000 个词元的测试请求…",
   byokTestSucceeded: "测试成功。表单未保存，也未写入聊天历史。",
   unexpectedError: "操作失败,请重试。",
 }
 
 const EN_STRINGS: PreferencesStrings = {
-  note: "Choose the AI request route and manage the Jadense upload connection and local BYOK provider separately.",
-  routeLabel: "AI request route",
-  routeJadense: "Jadense",
-  routeByok: "BYOK",
+  featureConfigTitle: "Feature settings",
+  featureChatLabel: "AI Chat",
+  featureTranslationLabel: "Translation",
+  featureAnalysisLabel: "Literature analysis",
+  featureFigureLabel: "Image interpretation",
+  featureModelSearch: "Search models or providers",
+  featureModelConnect: "Connect Jadense to load built-in models. BYOK works independently.",
+  featureModelLoading: "Loading Jadense models. BYOK models remain selectable.",
+  featureModelReady: "Selections save automatically and apply to each feature independently.",
+  featureModelUnavailable: "The Jadense catalog is unavailable. Your saved selection and BYOK remain usable.",
+  featureModelSaved: "Model selection saved.",
+
+  note: "Choose a model for each AI feature and manage the Jadense connection and BYOK providers.",
   jadenseSectionTitle: "Connect Jadense",
   jadenseSectionNote: "The Jadense token is used for Jadense chat and uploads. Uploads always use Jadense.",
   connectionTitle: "Connection",
@@ -296,7 +323,7 @@ const EN_STRINGS: PreferencesStrings = {
   byokModelAdded: "Model added. Enter its Model ID and save.",
   byokModelDeleted: "Model deleted.",
   byokModelSaved: "Model saved. No network request was made.",
-  byokCleared: "BYOK configuration cleared. The Jadense connection and current route were not changed.",
+  byokCleared: "BYOK configuration cleared. The Jadense connection and feature selections were not changed.",
   byokTesting: "Sending a real test request capped at 3,000 tokens…",
   byokTestSucceeded: "Test succeeded. The form was not saved and chat history was unchanged.",
   unexpectedError: "Something went wrong. Please try again.",

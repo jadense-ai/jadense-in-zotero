@@ -288,6 +288,40 @@ textarea {
   line-height: 1.2;
 }
 
+/* 上手指南沿用工作台主题：内置目录保持可见，正文按章节阅读，不依赖外部页面。 */
+.jdx-guide-header { padding: 12px 8px 20px; }
+.jdx-guide-header h2 { margin: 0 0 8px; }
+.jdx-guide-header p { margin: 0; color: var(--jdx-muted); }
+.jdx-guide-layout { display: grid; grid-template-columns: 172px minmax(0, 760px); align-items: start; gap: clamp(20px, 3vw, 44px); }
+.jdx-guide-sidebar { position: sticky; top: 0; padding: 16px 10px; border-radius: 8px; background: var(--jdx-sidebar); }
+.jdx-guide-eyebrow { margin: 0 0 12px; color: var(--jdx-muted); font-size: 11px; letter-spacing: 0.04em; }
+.jdx-guide-sidebar > .jdx-guide-eyebrow { padding-inline: 10px; }
+.jdx-guide-tabs { display: grid; gap: 5px; }
+.jdx-guide-tabs button { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 9px 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--jdx-text); text-align: left; cursor: pointer; }
+.jdx-guide-tabs button > span { color: var(--jdx-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.jdx-guide-tabs button:hover { background: var(--jdx-subtle); }
+.jdx-guide-tabs button[aria-selected="true"] { background: var(--jdx-surface); border-color: var(--jdx-line); box-shadow: inset 3px 0 var(--jdx-green); font-weight: 600; }
+.jdx-guide-tabs button:focus-visible, .jdx-guide-chapter:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 2px; }
+.jdx-guide-content { min-width: 0; padding: 0 8px 32px 0; font-size: 13px; line-height: 1.85; overflow-wrap: anywhere; }
+.jdx-guide-setup { padding-bottom: 20px; margin-bottom: 26px; border-bottom: 1px solid var(--jdx-line); color: var(--jdx-muted); }
+.jdx-guide-setup strong { color: var(--jdx-text); font-size: 12px; }
+.jdx-guide-setup p { margin: 6px 0 0; font-size: 12px; }
+.jdx-guide-chapter[hidden] { display: none; }
+.jdx-guide-chapter h3 { margin: 0 0 10px; font-size: 24px; line-height: 1.35; }
+.jdx-guide-chapter h4 { margin: 26px 0 10px; font-size: 14px; }
+.jdx-guide-chapter p { margin: 0 0 12px; }
+.jdx-guide-chapter .jdx-guide-lead { color: var(--jdx-muted); font-size: 14px; }
+.jdx-guide-chapter ol, .jdx-guide-chapter ul { padding-left: 22px; margin: 0 0 14px; }
+.jdx-guide-chapter li { padding-left: 4px; margin-bottom: 8px; }
+.jdx-guide-chapter li::marker { color: var(--jdx-muted); }
+.jdx-guide-chapter kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--jdx-line); border-radius: 4px; background: var(--jdx-sidebar); font: inherit; font-size: 11px; }
+.jdx-guide-note { padding: 12px 14px; border-left: 2px solid var(--jdx-line-strong); background: var(--jdx-sidebar); color: var(--jdx-muted); font-size: 12px; }
+@media (max-width: 900px) {
+  .jdx-guide-layout { grid-template-columns: 142px minmax(0, 1fr); gap: 18px; }
+  .jdx-guide-sidebar { padding-inline: 6px; }
+  .jdx-guide-tabs button { gap: 8px; }
+}
+
 .jdx-manager-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
@@ -1392,6 +1426,11 @@ button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
 .jdx-chat-compose-field:focus-within { border-color: var(--jdx-green); outline: 2px solid rgb(22 207 140 / 0.18); outline-offset: 1px; }
 /* 提示可换行，发送/停止始终并排留在底栏。 */
 .jdx-chat-composer-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 0 8px 8px 12px; }
+.jdx-chat-compose-field { container-type: inline-size; }
+@container (max-width: 540px) {
+  .jdx-chat-composer-footer { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .jdx-chat-composer-actions { justify-content: flex-end; }
+}
 .jdx-chat-composer-meta { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .jdx-chat-model-select { width: min(210px, 48%); flex: 0 1 210px; }
 .jdx-chat-model-select .jdx-select-trigger { min-height: 30px; border-color: transparent; background: var(--jdx-subtle); font-size: 11px; font-weight: 650; }
@@ -1587,3 +1626,25 @@ button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
 @media (max-width: 820px) {
   .jdx-analysis-record > header { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
+
+/* 功能选择保持平铺；窄窗口上下排列，避免长模型名称挤压说明。 */
+.jdx-feature-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 40%); align-items: center; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--jdx-line); }
+.jdx-feature-model-row h3 { margin: 0 0 6px; font-size: 14px; }
+.jdx-feature-model-row p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--jdx-muted); }
+.jdx-feature-model-row > div { min-width: 0; }
+@media (max-width: 820px) { .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+
+.jdx-feature-model-row .jdx-manager-inline-status { min-height: 0; margin-top: 8px; color: var(--jdx-red); }
+.jdx-feature-model-row .jdx-manager-inline-status:empty { display: none; }
+/* 图片附件独立于 Markdown，仅显示用户明确提供并保存在本机的图片。 */
+.jdx-chat-image-preview { display: flex; align-items: center; gap: 8px; padding: 10px; min-width: 0; }
+.jdx-chat-image-preview[hidden] { display: none; }
+.jdx-chat-image-preview img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; }
+.jdx-chat-image-preview span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.jdx-chat-image-preview button { flex-shrink: 0; }
+.jdx-chat-message-image { display: grid; gap: 6px; margin-top: 10px; min-width: 0; }
+.jdx-chat-message-image > button { padding: 0; border: 0; background: transparent; cursor: zoom-in; text-align: left; width: fit-content; max-width: 100%; }
+.jdx-chat-message-image img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; border-radius: 8px; }
+.jdx-chat-message-image > button[aria-expanded="true"] { cursor: zoom-out; }
+.jdx-chat-message-image > button[aria-expanded="true"] img { max-height: none; }
+.jdx-chat-message-image > span { font-size: 12px; overflow-wrap: anywhere; opacity: .75; }

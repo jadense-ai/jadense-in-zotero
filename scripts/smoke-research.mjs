@@ -179,6 +179,7 @@ async function startStub() {
           options: [
             { kind: "route", routeTier: "standard", displayName: "标准", description: "根据任务自动选择模型", sortOrder: 10, minimumPlanCode: null, locked: false },
             { kind: "route", routeTier: "premium", displayName: "高阶", description: "优先使用高阶模型", sortOrder: 20, minimumPlanCode: "pro", locked: false },
+            { kind: "model", modelId: "deepseek-v4-flash-vision-exp", displayName: "DeepSeek V4 Flash Vision Exp", description: "插件默认模型", locked: false, capabilities: ["text", "imageInput"], consumptionMultiplier: 1 },
             { kind: "model", modelId: "synthetic-platform-model", displayName: "Synthetic Research", description: "适合长文研究", sortOrder: 30, minimumPlanCode: null, locked: false, capabilities: ["text", "imageInput"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 1.25 },
             { kind: "model", modelId: "locked-model", displayName: "受限模型", description: "示例不可用模型", sortOrder: 40, minimumPlanCode: "max", locked: true, lockReason: "升级后可直接选择。", capabilities: ["text"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 2 },
           ],
@@ -339,9 +340,18 @@ async function startStub() {
       let markdownStream = false
       let figureStream = false
       const followUpFigure = prompt.includes(FIGURE_FOLLOWUP_PROMPT)
-      if (latestFiles.length) {
-        if ("modelId" in payload || "routeTier" in payload) {
-          throw new Error("Default Jadense Chat unexpectedly overrode the account model setting")
+      if (latestFiles[0]?.name === "synthetic-upload.png") {
+        if (latestFiles.length !== 1 || allFiles.length !== 1 || !/^data:image\/png;base64,/.test(latestFiles[0].url)) {
+          throw new Error("Uploaded image was not projected exactly once onto the latest user message")
+        }
+        if (!prompt.includes("不可信引用材料")) throw new Error("Uploaded image lost the untrusted-reference boundary")
+        const previous = requests.find(entry => entry.kind === "image-upload")
+        if (previous && previous.dataUrlLength !== latestFiles[0].url.length) throw new Error("Reloaded upload changed image bytes")
+        requests.push({ kind: previous ? "image-upload-followup" : "image-upload", dataUrlLength: latestFiles[0].url.length })
+        output = "SYNTHETIC_IMAGE_UPLOAD_VERIFIED"
+      } else if (latestFiles.length) {
+        if (payload.modelId !== "deepseek-v4-flash-vision-exp" || "routeTier" in payload) {
+          throw new Error("Default Jadense Chat did not explicitly select deepseek-v4-flash-vision-exp")
         }
         if (latestFiles.length !== 1 || allFiles.length !== 1) throw new Error("Figure Chat did not attach exactly one ephemeral image to the latest user message")
         const image = latestFiles[0]
@@ -966,13 +976,19 @@ async function runHarness(config) {
       && firstFigureUser?.text.includes("请解读这张图片。")
       && firstFigureUser.text.includes("文献：Synthetic research smoke paper")
       && firstFigureUser.text.includes(`图注：${config.figureCaption}`)
-      && firstFigureUser.text.includes("附件：已附图（仅在当前窗口保留）"),
+      && firstFigureUser.text.includes("附件：已附图"),
     "Figure action did not create the expected dedicated visible conversation")
     assert(currentSession().sources.some((source) => source.kind === "item" && source.itemID === parent.id)
       && currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id
         && config.sentences.flat().some((sentence) => source.text.includes(sentence))),
     "New figure conversation did not automatically associate the literature and extracted PDF text")
     assert(!JSON.stringify(localState()).includes("data:image/"), "Figure data URL leaked into persisted local Chat state")
+    const figureMessageImage = await waitFor(() => {
+      const image = manager.document.querySelector(`[data-message-id="${firstFigureUser.id}"] .jdx-chat-message-image img`)
+      return image?.naturalWidth > 0 ? image : null
+    }, "figure image rendered in its user message")
+    const fixtureImageDataUrl = figureMessageImage.src
+    assert(firstFigureUser.image?.origin === "figure", "Figure message did not persist its local attachment reference")
     const figureFollowupInput = manager.document.getElementById("jadense-chat-input")
     figureFollowupInput.value = config.figureFollowupPrompt
     figureFollowupInput.dispatchEvent(new manager.Event("input", Components.utils.cloneInto({ bubbles: true }, manager)))
@@ -994,7 +1010,9 @@ async function runHarness(config) {
       && currentSession().title === figureSessionTitle
       && JSON.stringify(currentSession().sources) === figureSources,
     "Appending a figure changed the current conversation identity, title, or sources")
-    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-follows-account")
+    await waitFor(() => Array.from(manager.document.querySelectorAll('.jdx-chat-message-image img')).filter(image => image.naturalWidth > 0).length === 2,
+      "both figure messages retain their own image")
+    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-deepseek-v4-flash-vision-exp")
 
     await stage("reader-question-new-conversation")
     toolbarButton("attach").click()
@@ -1387,6 +1405,9 @@ async function runHarness(config) {
     manager.document.getElementById("jadense-manager-nav-settings").click()
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-settings").hidden, "Manager settings section")
     manager.document.getElementById("jadense-settings-tab-ai").click()
+    const featureTab = manager.document.getElementById("jadense-settings-tab-features")
+    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "功能配置 / 快捷键设置 / BYOK", "Feature settings tab labels/order changed")
+    assert(!manager.document.getElementById("jadense-manager-route-byok"), "Obsolete global channel is still visible")
     const byokBaseUrl = manager.document.getElementById("jadense-manager-byok-base-url")
     const byokKey = manager.document.getElementById("jadense-manager-byok-key-input")
     const byokModel = manager.document.getElementById("jadense-manager-byok-model")
@@ -1404,7 +1425,7 @@ async function runHarness(config) {
     await waitFor(() => manager.document.getElementById("jadense-manager-byok-status").dataset.kind === "success", "BYOK form save")
     const settingsSections = Array.from(manager.document.querySelectorAll("[data-settings-section]"))
     assert(settingsSections.length === 1 && settingsSections[0].dataset.settingsSection === "byok",
-      "Manager AI settings no longer keeps the route and BYOK configuration together")
+      "Manager BYOK settings lost the provider catalog")
     const settingsGear = manager.document.querySelector("#jadense-manager-nav-settings svg.jdx-manager-settings-gear")
     assert(settingsGear?.querySelector("path") && settingsGear.querySelector("circle")
       && settingsGear.getBoundingClientRect().width > 0, "Manager settings navigation is missing the visible gear icon")
@@ -1424,6 +1445,19 @@ async function runHarness(config) {
     await screenshot("manager-shortcut-settings-dark", manager)
     themeToggle.click()
     manager.document.getElementById("jadense-settings-tab-ai").click()
+    featureTab.click()
+    for (const feature of ["chat", "translation", "analysis", "figure"]) {
+      const control = manager.document.getElementById(`jadense-feature-${feature}-model`)
+      control.querySelector(".jdx-select-trigger").click()
+      const options = Array.from(control.querySelectorAll('[role="option"]'))
+      assert(options.some(option => option.textContent.includes("Synthetic Model")) && options.some(option => option.textContent.includes("Synthetic Research")), "Feature selector must offer both model sources: " + feature)
+      control.querySelector(".jdx-select-trigger").click()
+    }
+    await screenshot("manager-feature-models-light", manager)
+    themeToggle.click()
+    await screenshot("manager-feature-models-dark", manager)
+    themeToggle.click()
+    manager.document.getElementById("jadense-settings-tab-ai").click()
     const settingsChromeWidth = manager.outerWidth - manager.innerWidth
     const settingsChromeHeight = manager.outerHeight - manager.innerHeight
     manager.resizeTo(760 + settingsChromeWidth, 620 + settingsChromeHeight)
@@ -1432,6 +1466,9 @@ async function runHarness(config) {
     const compactSettingsRect = settingsSections[0].getBoundingClientRect()
     assert(compactSettingsRect.width <= settingsScroller.clientWidth, "Compact Manager BYOK settings overflowed")
     await screenshot("manager-settings-compact", manager)
+    featureTab.click()
+    assert(manager.document.documentElement.scrollWidth <= manager.innerWidth + 2, "Compact feature settings widened the document")
+    await screenshot("manager-feature-models-compact", manager)
     manager.document.getElementById("jadense-settings-tab-shortcuts").click()
     const shortcutPanelBounds = manager.document.getElementById("jadense-settings-panel-shortcuts").getBoundingClientRect()
     assert(shortcutPanelBounds.width <= settingsScroller.clientWidth
@@ -1446,16 +1483,17 @@ async function runHarness(config) {
     const preferencesWindow = await waitFor(() => findWindowContaining("jadense-in-zotero-preferences-pane"), "native Jadense Preferences")
     await waitFor(() => preferencesWindow.document.getElementById("jadense-in-zotero-byok-save"), "native BYOK Preferences controls")
     const preferenceSections = Array.from(preferencesWindow.document.querySelectorAll("[data-settings-section]"))
-    assert(preferenceSections.length === 2
+    await waitFor(() => preferencesWindow.getComputedStyle(preferenceSections[0]).display === "grid", "native Preferences stylesheet")
+    assert(preferenceSections.length === 3
       && preferenceSections[1].getBoundingClientRect().top > preferenceSections[0].getBoundingClientRect().bottom,
-    "Native Preferences is not a two-section single-column layout")
+    "Native Preferences lost feature, connection, or BYOK sections")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-byok-endpoint").textContent.endsWith("/chat/completions"),
       "Native Preferences did not share the saved BYOK endpoint")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-token-edit-row").hidden
       && preferencesWindow.document.querySelector(".jdx-pref-checkbox span").textContent.trim(),
     "Native Preferences did not preserve hidden edit state or option copy")
     await screenshot("native-preferences-jadense", preferencesWindow)
-    preferenceSections[1].scrollIntoView({ block: "start" })
+    preferenceSections[2].scrollIntoView({ block: "start" })
     await Zotero.Promise.delay(150)
     await screenshot("native-preferences-byok", preferencesWindow)
     const savedByokBeforeTest = Zotero.Prefs.get("extensions.jadenseInZotero.byokConfig")
@@ -1490,7 +1528,7 @@ async function runHarness(config) {
     await waitFor(() => manager.document.getElementById("jadense-manager-account-balance").textContent === "38 积分"
       && manager.document.getElementById("jadense-manager-account-check-in").textContent === "今日已签到",
     "Manager check-in status refresh")
-    report.checks.push("manager-ai-settings-byok", "manager-settings-gear-icon", "manager-settings-light-dark", "shortcut-settings-light-dark-compact", "manager-connection-workbench", "manager-account-points-check-in", "native-preferences-shared-byok", "byok-test-unsaved-3000-token-no-history")
+    report.checks.push("feature-models-both-sources", "feature-models-light-dark-compact", "manager-ai-settings-byok", "manager-settings-gear-icon", "manager-settings-light-dark", "shortcut-settings-light-dark-compact", "manager-connection-workbench", "manager-account-points-check-in", "native-preferences-shared-byok", "byok-test-unsaved-3000-token-no-history")
 
     await stage("manager-synthetic-literature-upload")
     const mainPane = Zotero.getMainWindow().ZoteroPane
@@ -1564,7 +1602,7 @@ async function runHarness(config) {
     const analysisModelSelect = manager.document.getElementById("jadense-analysis-model-select")
     analysisModelSelect.querySelector(".jdx-select-trigger").click()
     const analysisModelOption = Array.from(analysisModelSelect.querySelectorAll('[role="option"]'))
-      .find((option) => option.textContent.includes("Synthetic Provider / Synthetic Model"))
+      .find((option) => option.textContent.includes("Synthetic Model") && option.textContent.includes("Synthetic Provider"))
     assert(analysisModelOption, "Analysis configuration does not list the saved Provider / model")
     analysisModelOption.click()
     await waitFor(() => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.paperAnalysisModel")).modelId === selectedAnalysisModel.id
@@ -1600,8 +1638,11 @@ async function runHarness(config) {
     report.checks.push("analysis-stale-byok-zero-request", "analysis-model-independent-save", "analysis-specific-byok", "analysis-config-history-light-dark-compact")
 
     manager.document.getElementById("jadense-manager-nav-settings").click()
-    manager.document.getElementById("jadense-manager-route-byok").click()
-    assert(Zotero.Prefs.get("extensions.jadenseInZotero.aiRoute") === "byok", "Manager route control did not persist BYOK")
+    manager.document.getElementById("jadense-settings-tab-features").click()
+    const featureChatSelect = manager.document.getElementById("jadense-feature-chat-model")
+    featureChatSelect.querySelector(".jdx-select-trigger").click()
+    Array.from(featureChatSelect.querySelectorAll('[role="option"]')).find(option => option.textContent.includes("Synthetic Model")).click()
+    assert(JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).modelId === selectedAnalysisModel.id, "Feature model control did not persist BYOK")
     manager.document.getElementById("jadense-manager-nav-chat").click()
     manager.document.getElementById("jadense-chat-new-session").click()
     const byokInput = manager.document.getElementById("jadense-chat-input")
@@ -1611,7 +1652,9 @@ async function runHarness(config) {
     manager.document.getElementById("jadense-chat-send").click()
     await waitFor(() => completed().some((message) => message.text === config.byokMarker), "direct BYOK response")
     manager.document.getElementById("jadense-manager-nav-settings").click()
-    manager.document.getElementById("jadense-manager-route-jadense").click()
+    manager.document.getElementById("jadense-settings-tab-features").click()
+    featureChatSelect.querySelector(".jdx-select-trigger").click()
+    Array.from(featureChatSelect.querySelectorAll('[role="option"]')).find(option => option.textContent.includes("DeepSeek V4 Flash Vision Exp")).click()
     manager.document.getElementById("jadense-manager-nav-chat").click()
     const researchSessionButton = Array.from(manager.document.querySelectorAll(".jdx-chat-session-button"))
       .find((candidate) => candidate.dataset.sessionId === sessionBeforeControls)
@@ -1624,12 +1667,23 @@ async function runHarness(config) {
     const chatModelSelect = manager.document.getElementById("jadense-chat-model-select")
     await waitFor(() => chatModelSelect?.dataset.status === "ready", "Jadense model catalog")
     const chatModelTrigger = chatModelSelect.querySelector(".jdx-select-trigger")
-    assert(chatModelTrigger.textContent.includes("跟随攻玉设置") && !chatModelTrigger.disabled,
-      "Chat model selector did not preserve the account-default fallback")
+    assert(chatModelTrigger.textContent.includes("DeepSeek V4 Flash Vision Exp") && !chatModelTrigger.disabled,
+      "Chat model selector did not select DeepSeek V4 Flash Vision Exp")
     chatModelTrigger.click()
     const chatModelSearch = chatModelSelect.querySelector(".jdx-select-search")
     assert(chatModelSearch && chatModelSelect.querySelectorAll(".jdx-select-group").length === 3,
       "Chat model selector lost search or Webapp-style grouping")
+    assert(!chatModelSelect.textContent.includes("跟随攻玉设置"), "Removed account-default option is still visible")
+    const lockedChatModel = Array.from(chatModelSelect.querySelectorAll('[role="option"]'))
+      .find((option) => option.textContent.includes("受限模型"))
+    assert(lockedChatModel?.getAttribute("aria-disabled") === "true"
+      && lockedChatModel.textContent.includes("需升级") && lockedChatModel.textContent.includes("需 MAX")
+      && lockedChatModel.textContent.includes("升级后可直接选择"), "Locked model lost its subscription tier or recovery reason")
+    lockedChatModel.click()
+    assert(JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "deepseek-v4-flash-vision-exp",
+      "Clicking a subscription-locked model changed the saved selection")
+    await screenshot("manager-model-subscription", manager)
+    report.checks.push("jadense-model-subscription-lock")
     chatModelSearch.value = "Synthetic"
     chatModelSearch.dispatchEvent(new manager.Event("input", Components.utils.cloneInto({ bubbles: true }, manager)))
     const chatModelOption = Array.from(chatModelSelect.querySelectorAll('[role="option"]'))
@@ -1637,7 +1691,7 @@ async function runHarness(config) {
     assert(chatModelOption && chatModelOption.textContent.includes("图片") && chatModelOption.textContent.includes("1.25x"),
       `Chat model search lost capabilities or consumption metadata: ${chatModelOption?.textContent ?? "missing option"}`)
     chatModelOption.click()
-    await waitFor(() => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.jadenseChatModel")).modelId === "synthetic-platform-model",
+    await waitFor(() => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "synthetic-platform-model",
       "persisted Jadense Chat model")
     report.checks.push("jadense-chat-model-catalog", "jadense-chat-model-search", "jadense-chat-model-selection")
     const input = manager.document.getElementById("jadense-chat-input")
@@ -1891,6 +1945,90 @@ async function runHarness(config) {
     report.checks.push("article-language-autosave", "article-language-inherited-by-next-selection", "article-language-reader-reopen")
 
     report.annotationCount = 2
+    await stage("chat-image-upload-and-reload")
+    manager.document.getElementById("jadense-manager-nav-chat").click()
+    manager.document.getElementById("jadense-chat-new-session").click()
+    const uploadSessionID = currentSession().id
+    const uploadBlob = await manager.fetch(fixtureImageDataUrl).then(response => response.blob())
+    const uploadFile = new manager.File(manager.Array.of(uploadBlob), "synthetic-upload.png", Components.utils.cloneInto({ type: "image/png" }, manager))
+    const selectImage = (mode = "file") => {
+      const transfer = new manager.DataTransfer()
+      transfer.items.add(uploadFile)
+      if (mode === "paste") {
+        const event = new manager.ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true })
+        // Gecko 的合成 ClipboardEvent 不接收文件列表；仅给 fixture 事件提供合成剪贴板，仍走真实 Manager listener。
+        Object.defineProperty(event, "clipboardData", { value: transfer })
+        assert(event.clipboardData?.files.length === 1, "Synthetic paste event lost its image FileList")
+        manager.document.getElementById("jadense-chat-input").dispatchEvent(event)
+        assert(event.defaultPrevented, "Image paste handler did not consume the synthetic clipboard event")
+        return
+      }
+      if (mode === "drop") {
+        const event = new manager.DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true })
+        Object.defineProperty(event, "dataTransfer", { value: transfer })
+        manager.document.getElementById("jadense-chat-workbench").dispatchEvent(event)
+        return
+      }
+      const input = manager.document.getElementById("jadense-chat-image-input")
+      input.files = transfer.files
+      input.dispatchEvent(new manager.Event("change", Components.utils.cloneInto({ bubbles: true }, manager)))
+    }
+    selectImage()
+    await waitFor(() => managerIdle() && manager.document.querySelector('#jadense-chat-image-preview img')?.naturalWidth > 0, "upload preview")
+    manager.document.getElementById("jadense-chat-new-session").click()
+    assert(manager.document.getElementById("jadense-chat-image-preview").hidden, "Image draft leaked into another conversation")
+    manager.document.querySelector(`[data-session-id="${uploadSessionID}"]`).click()
+    await waitFor(() => manager.document.querySelector('#jadense-chat-image-preview img')?.naturalWidth > 0, "image draft restored after session switch")
+    manager.document.querySelector('#jadense-chat-image-preview button').click()
+    assert(manager.document.getElementById("jadense-chat-image-preview").hidden && manager.document.getElementById("jadense-chat-send").disabled,
+      "Removing an image draft did not restore empty composer state")
+    selectImage("paste")
+    await waitFor(() => managerIdle() && manager.document.querySelector('#jadense-chat-image-preview img')?.naturalWidth > 0, "pasted image preview")
+    manager.document.querySelector('#jadense-chat-image-preview button').click()
+    selectImage("drop")
+    await waitFor(() => managerIdle() && !manager.document.getElementById("jadense-chat-send").disabled, "image-only send enabled")
+    await screenshot("manager-image-upload-preview", manager)
+    manager.document.getElementById("jadense-chat-send").click()
+    await waitFor(() => managerIdle() && currentSession().messages.some(message => message.text === "SYNTHETIC_IMAGE_UPLOAD_VERIFIED"), "image-only response")
+    const uploadedMessage = currentSession().messages.find(message => message.image)
+    assert(uploadedMessage.image.origin === "upload", "Upload did not persist its own image reference")
+    const oldImageDocument = manager.document
+    manager.location.reload()
+    await waitFor(() => manager.document !== oldImageDocument && manager.document.querySelector('.jdx-chat-message-image img')?.naturalWidth > 0, "uploaded image after reload")
+    manager.document.getElementById("jadense-manager-nav-chat").click()
+    assert(currentSession().id === uploadSessionID && !JSON.stringify(localState()).includes("data:image/"), "Image reload changed history or embedded image bytes")
+    const imageButton = manager.document.querySelector('.jdx-chat-message-image button')
+    imageButton.click()
+    assert(imageButton.getAttribute("aria-expanded") === "true", "Message image could not be expanded")
+    imageButton.click()
+    const followup = manager.document.getElementById("jadense-chat-input")
+    followup.value = "继续解读这张图片"
+    followup.dispatchEvent(new manager.Event("input", Components.utils.cloneInto({ bubbles: true }, manager)))
+    manager.document.getElementById("jadense-chat-send").click()
+    await waitFor(() => managerIdle() && currentSession().messages.filter(message => message.text === "SYNTHETIC_IMAGE_UPLOAD_VERIFIED").length === 2, "reloaded image follow-up")
+    await screenshot("manager-image-upload-history", manager)
+    // 同一轮重开后读取原有两张阅读器图片，验证它们也使用持久化附件显示。
+    manager.document.querySelector(`[data-session-id="${figureSessionId}"]`).click()
+    await waitFor(() => Array.from(manager.document.querySelectorAll('.jdx-chat-message-image img')).filter(image => image.naturalWidth > 0).length === 2, "figure images after reload")
+    await screenshot("manager-figure-image-history", manager)
+    if (config.screenshots) {
+      manager.resizeTo(760, 620)
+      await waitFor(() => manager.innerWidth <= 780, "compact image conversation")
+      for (const theme of ["light", "dark"]) {
+        if (manager.document.documentElement.dataset.theme !== theme) manager.document.getElementById("jadense-manager-theme-toggle").click()
+        assert(manager.document.documentElement.scrollWidth <= manager.innerWidth + 2, "Image history widened the compact Manager")
+        const sendBounds = manager.document.getElementById("jadense-chat-send").getBoundingClientRect()
+        assert(sendBounds.right <= manager.innerWidth && sendBounds.bottom <= manager.innerHeight, "Image composer hid Send in compact mode")
+        await screenshot(`manager-image-history-compact-${theme}`, manager)
+      }
+    }
+    // 只移除隔离 profile 内这个合成附件，确认缺图不会令整段历史消失。
+    await IOUtils.remove(PathUtils.join(PathUtils.profileDir, "jadense-chat-images", `${firstFigureUser.image.id}.txt`))
+    const beforeMissingImageReload = manager.document
+    manager.location.reload()
+    await waitFor(() => manager.document !== beforeMissingImageReload && manager.document.querySelector(`[data-message-id="${firstFigureUser.id}"] .jdx-chat-message-image`)?.textContent.includes("图片不可用"), "missing image local fallback")
+    assert(currentSession().messages.length > 2, "Missing image removed readable conversation history")
+    report.checks.push("chat-image-upload-preview-remove", "chat-image-draft-session-isolation", "chat-image-paste-drop", "chat-image-only-send", "chat-image-message-expand", "chat-image-history-reload", "chat-image-reloaded-followup", "figure-images-history-reload", "missing-image-history-fallback")
     report.assistantMessages = completed().length
     report.state = "passed"
     report.stage = "complete"
@@ -2059,6 +2197,8 @@ async function main() {
       || stub.requests.filter((request) => request.kind === "manual-capture").length !== 1
       || stub.requests.filter((request) => request.kind === "manual-capture-current").length !== 1
       || stub.requests.filter((request) => request.kind === "byok-direct").length !== 1
+      || stub.requests.filter((request) => request.kind === "image-upload").length !== 1
+      || stub.requests.filter((request) => request.kind === "image-upload-followup").length !== 1
       || stub.requests.filter((request) => request.kind === "byok-test").length !== 1) {
       throw new Error("Expected three Jadense analyses, one selected-BYOK analysis, three translations, one Markdown, three SDT and two manual-capture Figure Chat requests, one direct BYOK Chat, and one BYOK test request")
     }

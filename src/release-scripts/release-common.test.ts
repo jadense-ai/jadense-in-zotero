@@ -12,7 +12,7 @@ function releaseFacts(overrides: Record<string, unknown> = {}) {
       homepage_url: "https://jadense.cn",
       applications: {
         zotero: {
-          id: "jadense-in-zotero@jadense.com",
+          id: "jadense-in-zotero@jadense.cn",
           update_url: "https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json",
           strict_min_version: "8.0",
           strict_max_version: "*",
@@ -29,7 +29,7 @@ describe("buildManifest", () => {
       version: "0.1.1",
       applications: {
         zotero: {
-          id: "jadense-in-zotero@jadense.com",
+          id: "jadense-in-zotero@jadense.cn",
           update_url: "https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json",
           strict_min_version: "8.0",
           strict_max_version: "*",

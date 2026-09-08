@@ -18,42 +18,6 @@
   gap: 14px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-route-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-#jadense-in-zotero-preferences-pane .jdx-pref-route-row > .jdx-pref-field-label {
-  color: CanvasText;
-}
-
-#jadense-in-zotero-preferences-pane .jdx-pref-segmented {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid #cfd9d4;
-  border-radius: 7px;
-}
-
-#jadense-in-zotero-preferences-pane .jdx-pref-segmented button {
-  min-height: 30px;
-  border: 0;
-  border-radius: 0;
-  padding: 5px 14px;
-}
-
-#jadense-in-zotero-preferences-pane .jdx-pref-segmented button + button {
-  border-left: 1px solid #cfd9d4;
-}
-
-#jadense-in-zotero-preferences-pane .jdx-pref-segmented button[aria-pressed="true"] {
-  background: #d4fae8;
-  color: #0f694a;
-  font-weight: 650;
-}
-
 /* 卡片:显示与编辑分离的容器,每个关注点一张卡 */
 #jadense-in-zotero-preferences-pane .jdx-pref-card {
   display: grid;
