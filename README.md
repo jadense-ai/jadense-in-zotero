@@ -82,13 +82,15 @@ pnpm run preview:research
 
 ## 同步与发布
 
+贡献、PR 合并规则、CI 触发条件和 GitHub 草稿 Release 的完整操作流程见 [贡献与 GitHub 发布指南](CONTRIBUTING.md)。`main` 上的改动都经过 PR 与 `verify`，由维护者审阅后 squash merge。
+
 当前商业插件目录是开发上游。本仓库是通过明确文件白名单导出的独立仓库，维护者在私有主仓库使用 `scripts/local/sync-zotero-opensource.mjs` 预览、`--write` 同步、`--check` 核对。该工具不属于插件运行依赖；公开仓库可以独立开发与构建。公开侧代码修改需先回到上游再同步，避免覆盖独立改动。
 
 公开侧 README、安全说明和 `.github/` 由本仓库维护；同步不复制主仓库历史、环境文件、profile 或旧发布目录。修改打包依赖时需同步更新 `THIRD_PARTY_NOTICES.md`。
 
-CI 在 PR 和推送时运行完整检查。推送与 `package.json` 版本一致的 `v*` 标签后，工作流创建 **草稿 Release**，附一份 XPI、元数据和 SHA-256。核对并完成隔离 Zotero 冒烟后再公开草稿。官网使用这份已验证 XPI，不另行构建“商业包”。GitHub 自带的 Source code 归档对应公开标签源码。
+CI 在指向 `main` 的 PR、主分支推送和手动运行时执行完整检查。推送与 `package.json` 版本一致、且目标提交已包含在 `main` 的稳定 `vX.Y.Z` 标签后，工作流创建 **草稿 Release**，附同一次构建的一份 XPI、元数据和 SHA-256。维护者下载草稿制品，完成隔离 Zotero 安装、功能及适用的升级冒烟后人工公开；手动运行只验证，不创建 Release。GitHub 自带的 Source code 归档对应公开标签源码。
 
-发布流程使用 GitHub 为当前仓库提供的短期 `GITHUB_TOKEN`，不需要攻玉服务凭据；只有草稿发布任务获得 `contents: write`。参见 [GitHub 权限说明](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) 和 [草稿 Release 命令](https://cli.github.com/manual/gh_release_create)。已有同版本发布资产不覆盖；如需更换已正式发布的字节，应提升版本后重新发布。GitHub 发布不会自动更新攻玉官网的发布记录。
+发布流程使用 GitHub 为当前仓库提供的短期 `GITHUB_TOKEN`，不需要攻玉服务凭据；只有草稿发布任务获得 `contents: write`。参见 [GitHub 权限说明](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) 和 [草稿 Release 命令](https://cli.github.com/manual/gh_release_create)。同名 Release 已存在时停止，不覆盖附件；公开后由 Release immutability 锁定标签和制品。如需更换已正式发布的字节，应提升版本后重新发布。官网发布与自动更新不属于本 GitHub 流程。
 
 ## 许可证
 

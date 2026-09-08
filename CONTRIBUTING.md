@@ -1,0 +1,93 @@
+# 贡献与 GitHub 发布
+
+本仓库可以独立开发和构建，无需私有主应用、数据库、账号令牌或 `.env`。GitHub PR 与 Release 按本文执行；官网发布和自动更新不属于此流程。
+
+## 提交 PR
+
+使用 `.node-version` 中的 Node 版本和 `packageManager` 中的 pnpm 版本：
+
+Windows 初次克隆建议使用 `git -c core.autocrlf=false clone https://github.com/jadense-ai/jadense-in-zotero.git` 保留仓库的 LF 换行；部分现有源码匹配测试依赖 LF。无需修改全局 Git 配置。
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm test
+node --test .github/scripts/release.test.mjs
+pnpm run lint
+pnpm run build
+```
+
+`build` 已包含类型检查、XPI 打包和制品校验。运行功能测试位于 `src/`，GitHub 发布边界测试位于 `.github/scripts/`；后者只使用临时 Git 仓库和模拟发布命令。
+
+1. 从最新 `main` 创建短期功能分支；外部贡献者使用 fork，PR 的目标分支为 `main`。
+2. 一份 PR 解决一个明确问题，说明修改前后的行为、验证结果，以及兼容性或用户数据影响。推荐标题前缀 `feat`、`fix`、`docs`、`test`、`ci`、`chore`，不强制格式检查。
+3. UI 修改提供去除个人信息的截图。涉及阅读器、批注、本地历史或升级的修改，补充实际 Zotero/操作系统版本及针对性验证；没有环境时明确尚未验证的范围。
+4. 普通 PR 不改版本号，不提交 `build/`、`release/`、生成的 `manifest.json`、profile、日志或凭据。升级打包依赖时同步更新 `THIRD_PARTY_NOTICES.md`。
+5. 维护者解决评审讨论、确保分支与最新 `main` 同步且 `verify` 成功后 squash merge。只保留 `main` 作为长期开发分支，合并后删除功能分支。
+
+当前采用单维护者规则：所有改动经过 PR，强制批准人数为 0；外部 PR 仍由维护者审阅后合并。没有自动合并、强制 CODEOWNERS 审批、提交签名或日常管理员绕过。安全问题按 [SECURITY.md](SECURITY.md) 私下报告。
+
+## 维护者：上游回流
+
+现有商业插件目录继续作为开发上游。外部 PR 通过公开 CI 和评审后，维护者将同一补丁回流私有上游并完成相关验证，再合并公开 PR，拉取公开结果并核对两侧受管文件一致。保留原作者署名和公开 PR 关联；贡献者不需要私有仓库权限。
+
+内部开发通过白名单同步形成公开 PR，也经过相同检查。同步冲突必须先协调代码，不能强制覆盖公开侧贡献。受管内容一致后，维护者运行现有同步工具的 `--write` 刷新本地摘要，再以 `--check` 确认无差异。
+
+README、本文、SECURITY 和 `.github/` 在公开仓库独立维护；CI 流程脚本放在 `.github/scripts/`，不进入插件 XPI，也不纳入上游源码同步白名单。
+
+## CI 与仓库设置
+
+| 触发 | 行为 |
+| --- | --- |
+| PR → `main` | 冻结安装、测试、发布边界测试、lint、build；`verify` 是合并必过检查 |
+| 推送到 `main` | 验证实际合并结果 |
+| 推送 `v*` 标签 | 验证稳定版本、标签来源，构建后创建草稿 Release |
+| `workflow_dispatch` | 只验证并上传 Actions 制品，即使选择标签也不创建 Release |
+
+`verify` 超时 20 分钟，`draft-release` 超时 10 分钟。新 PR 提交取消同 PR 旧检查；标签运行按标签串行，不取消已在进行的发布。Actions 制品保留 30 天。Node/pnpm 使用项目固定版本，Actions 固定完整 commit SHA；更新 Actions 时必须核验上游仓库的目标提交。
+
+仓库设置作为本流程的一部分维护：
+
+- 只允许 squash merge；自动删除合并分支，关闭自动合并。
+- `main`：必须 PR、GitHub Actions 来源的 `verify` 成功、最新主分支基线、所有讨论解决、线性历史；批准人数为 0，禁止强推和删除，无绕过人员。
+- `v*`：创建规则只允许 `jadense-ai`；另一个无绕过规则禁止更新和删除，避免创建权限同时取得修改权限。
+- 启用 Release immutability：公开后锁定标签及附件。
+
+默认 `GITHUB_TOKEN` 只有 `contents: read`；仅草稿发布 job 获得 `contents: write`。使用 GitHub 托管 runner，不向外部 PR 提供 PAT、生产服务凭据或自托管执行环境。运行不可信 PR 不使用 `pull_request_target`。
+
+## 发布正式版本
+
+本流程只接受稳定版本 `X.Y.Z` 和对应 `vX.Y.Z` 标签；不支持 beta/rc。修复增加 patch，新增功能增加 minor；0.x 阶段的不兼容变化增加 minor 并说明迁移要求。不同 XPI 字节不得重复使用已公开版本号。
+
+1. 创建发布 PR，集中修改 `package.json` 版本和相关版本说明。依赖发生变化时更新锁文件；清楚列出新增、修复、兼容范围及升级注意事项。
+2. 正常合并发布 PR，并确认 `main` CI 成功。维护者在最新 `main` 的预定提交创建并推送标签；以下 `0.3.2` 仅为示例，必须替换为发布 PR 中的实际版本：
+
+   ```powershell
+   git switch main
+   git pull --ff-only
+   git tag -a v0.3.2 -m "Jadense in Zotero v0.3.2"
+   git push origin refs/tags/v0.3.2
+   ```
+
+3. 工作流要求标签与包版本精确一致，且提交已包含在 `origin/main` 历史中。`verify` 只构建一次；`draft-release` 下载同次运行的制品，重新检查哈希和元数据后创建草稿，附以下三个文件：
+
+   - `jadense-in-zotero-vX.Y.Z.xpi`
+   - `release-metadata.json`
+   - `SHA256SUMS`
+
+4. 从草稿下载这三个文件。使用标签对应的源码和测试脚本，先将 XPI 的 SHA-256 与 `SHA256SUMS` 核对，再对下载的 XPI 进行原生验收，不能重新构建后替代：
+
+   ```powershell
+   Get-FileHash ./candidate/jadense-in-zotero-v0.3.2.xpi -Algorithm SHA256
+   Get-Content ./candidate/SHA256SUMS
+   pnpm run smoke:installed -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi
+   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi
+   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi --upgrade-from ./previous/jadense-in-zotero-v0.3.1.xpi
+   ```
+
+   路径和版本均替换为实际值。升级测试只用于存在同插件身份的上一正式版时；首版或身份不同则在验收记录填写不适用及原因，不将冷启动当作升级验证。冒烟使用临时 profile、合成数据和模拟接口，不上传真实用户资料或凭据。
+
+5. 补齐草稿中的实际 Zotero/操作系统版本、功能限制和升级注意事项，确认附件齐全。Manifest 兼容范围不能代替实测记录。GitHub 自动生成的变更记录也需维护者核对；所有验收项完成后在 GitHub 人工公开草稿。
+
+同名草稿或正式 Release 已存在时，工作流明确停止，不覆盖、删除或自动重新上传。只读查询或创建命令失败也不自动重试写入；网络中断可能已经留下部分草稿附件，应先检查远端状态。修复草稿只能补齐原 Actions 运行的已验证制品；若原制品已过期或无法确认一致性，使用新版本，不重打旧标签。公开后需要更换任何制品时必须增加版本号。
+
+创建草稿及公开 Release 都不会执行官网发布或修改自动更新配置。
