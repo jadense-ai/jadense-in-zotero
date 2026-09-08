@@ -1,0 +1,37 @@
+{
+  "name": "jadense-in-zotero",
+  "version": "0.3.1",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "npm run typecheck && npm run release:package && npm run release:verify",
+    "lint": "eslint .",
+    "release:package": "node ./scripts/build.mjs",
+    "release:verify": "node ./scripts/verify-release.mjs",
+    "smoke:installed": "node ./scripts/smoke-installed-xpi.mjs",
+    "smoke:research": "node ./scripts/smoke-research.mjs",
+    "preview:research": "node ./scripts/preview-research.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^20.19.33",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0",
+    "jszip": "^3.10.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "katex": "0.16.47",
+    "markdown-it": "15.0.1"
+  }
+}

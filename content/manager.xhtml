@@ -1,0 +1,450 @@
+<?xml version="1.0"?>
+<html id="jadense-manager-document" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jadense in Zotero</title>
+    <link rel="stylesheet" href="manager.css" />
+    <script defer="defer" src="manager.js"></script>
+  </head>
+  <body>
+    <main id="jadense-manager-shell" class="jdx-manager-shell">
+      <aside id="jadense-manager-sidebar" class="jdx-manager-sidebar">
+        <div class="jdx-manager-brand">
+          <img src="icons/logo-padded.png" alt="攻玉" width="28" height="27" />
+          <button id="jadense-manager-sidebar-toggle" class="jdx-manager-sidebar-toggle" type="button" aria-expanded="true" aria-controls="jadense-manager-sidebar" title="收起导航">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5 4.5 8 9 12.5M13 3.5 8.5 8l4.5 4.5"/></svg>
+          </button>
+        </div>
+        <nav class="jdx-manager-nav" aria-label="Jadense sections">
+          <button id="jadense-manager-nav-chat" type="button" role="tab" aria-controls="jadense-manager-section-chat" aria-label="对话" title="对话">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.7h10a1.3 1.3 0 0 1 1.3 1.3v6a1.3 1.3 0 0 1-1.3 1.3H8.2l-3.4 2.5v-2.5H3a1.3 1.3 0 0 1-1.3-1.3v-6A1.3 1.3 0 0 1 3 2.7z"/></svg>
+            <span class="jdx-manager-nav-label">对话</span>
+          </button>
+          <button id="jadense-manager-nav-translations" type="button" role="tab" aria-controls="jadense-manager-section-translations" aria-label="翻译历史" title="翻译历史">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h7M5.5 1.8V3M3.2 3c0 3 2.7 5.2 5.3 5.8M8.2 3c0 2.8-2.4 5.1-5.2 6M9.5 13.5l2.2-5.8 2.3 5.8M10.3 11.5h2.9"/></svg>
+            <span class="jdx-manager-nav-label">翻译历史</span>
+          </button>
+          <button id="jadense-manager-nav-analysis" type="button" role="tab" aria-controls="jadense-manager-section-analysis" aria-label="文献解析" title="文献解析">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h7l3 3v8H3zM10 2.5v3h3M5.5 8h5M5.5 10.5h4"/></svg>
+            <span class="jdx-manager-nav-label">文献解析</span>
+          </button>
+          <button id="jadense-manager-nav-migrate" type="button" role="tab" aria-controls="jadense-manager-section-migrate" aria-label="连接攻玉" title="连接攻玉">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 9.8 9.8 6.2M5.1 11.9l-1 1a2.1 2.1 0 0 1-3-3l2.6-2.6a2.1 2.1 0 0 1 3 0M10.9 4.1l1-1a2.1 2.1 0 1 1 3 3l-2.6 2.6a2.1 2.1 0 0 1-3 0"/></svg>
+            <span class="jdx-manager-nav-label">连接攻玉</span>
+          </button>
+        </nav>
+        <div class="jdx-manager-sidebar-footer" role="group" aria-label="面板操作">
+          <span id="jadense-manager-connection-status" class="jdx-manager-connection-status" role="status" tabindex="0" title="未连接攻玉" aria-label="未连接攻玉" data-kind="idle"></span>
+          <button id="jadense-manager-theme-toggle" class="jdx-manager-icon-button jdx-manager-theme-toggle" type="button" aria-pressed="false" aria-label="切换主题" title="切换为深色模式">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-theme-icon jdx-manager-theme-icon-moon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 9.4A5.4 5.4 0 0 1 6.6 2.8a5.4 5.4 0 1 0 6.6 6.6z"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-theme-icon jdx-manager-theme-icon-sun" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1"/></svg>
+          </button>
+          <button id="jadense-manager-nav-settings" class="jdx-manager-icon-button" type="button" role="tab" aria-controls="jadense-manager-section-settings" aria-label="设置" title="设置">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon jdx-manager-settings-gear" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 3-.6 2.2-1.8 1-2.2-.6-2.5 4.3L4 11.5v2L2.4 15l2.5 4.3 2.2-.6 1.8 1 .6 2.3h5l.6-2.3 1.8-1 2.2.6 2.5-4.3-1.6-1.5v-2l1.6-1.6-2.5-4.3-2.2.6-1.8-1L14.5 3z"/><circle cx="12" cy="12.5" r="3.3"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <section class="jdx-manager-content">
+        <section id="jadense-manager-section-chat" class="jdx-manager-section jdx-chat-section" role="tabpanel" aria-labelledby="jadense-manager-nav-chat">
+          <div id="jadense-chat-workbench" class="jdx-chat-workbench">
+            <aside id="jadense-chat-sessions" class="jdx-chat-sessions" aria-label="对话列表">
+              <button id="jadense-chat-new-session" class="jdx-manager-primary" type="button">新建对话</button>
+              <div id="jadense-chat-session-list" class="jdx-chat-session-list" role="list"></div>
+              <button id="jadense-chat-delete-session" class="jdx-manager-danger" type="button">删除当前对话</button>
+            </aside>
+            <div class="jdx-chat-main">
+              <div class="jdx-chat-toolbar" role="group" aria-label="对话面板">
+                <button id="jadense-chat-sessions-toggle" type="button" aria-expanded="true" aria-controls="jadense-chat-sessions" aria-label="收起对话列表" title="收起对话列表">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M7 3v14M4.5 7h.5M4.5 10h.5"/></svg>
+                  <span>对话列表</span>
+                </button>
+                <button id="jadense-chat-details-toggle" type="button" aria-expanded="true" aria-controls="jadense-chat-source-panel" aria-label="收起对话详情" title="收起对话详情">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M12 3v14M14.5 7h.5M14.5 10h.5"/></svg>
+                  <span>对话详情</span><span id="jadense-chat-details-count" class="jdx-chat-details-count">0</span>
+                </button>
+              </div>
+              <div class="jdx-chat-reading">
+                <div id="jadense-chat-message-list" class="jdx-chat-message-list" role="log" aria-live="polite" tabindex="0" aria-label="对话消息记录"></div>
+                <button id="jadense-chat-latest" class="jdx-chat-latest" type="button" hidden="hidden">↓ 回到最新</button>
+                <div id="jadense-chat-dock" class="jdx-chat-dock">
+                  <div id="jadense-chat-status" class="jdx-manager-inline-status" role="status"></div>
+                  <form id="jadense-chat-form" class="jdx-chat-composer">
+                    <div class="jdx-chat-compose-field">
+                      <textarea id="jadense-chat-input" rows="2" maxlength="20000" aria-label="对话消息" aria-describedby="jadense-chat-compose-hint" placeholder="向攻玉提问…"></textarea>
+                      <div class="jdx-chat-composer-footer">
+                        <div class="jdx-chat-composer-meta">
+                          <div id="jadense-chat-model-select" class="jdx-chat-model-select"></div>
+                          <small id="jadense-chat-compose-hint">Ctrl / ⌘ + Enter 发送 · Enter 换行</small>
+                        </div>
+                        <div class="jdx-chat-composer-actions">
+                          <button id="jadense-chat-stop" type="button" hidden="hidden">停止</button>
+                          <button id="jadense-chat-send" class="jdx-manager-primary" type="submit">发送</button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <aside id="jadense-chat-source-panel" class="jdx-chat-source-panel" aria-label="对话详情">
+              <div class="jdx-chat-details-heading">
+                <strong>对话详情</strong>
+                <button id="jadense-chat-details-stop" class="jdx-chat-details-stop" type="button" title="停止当前操作" hidden="hidden">停止</button>
+                <button id="jadense-chat-details-close" class="jdx-manager-icon-button" type="button" aria-label="收起对话详情" title="收起对话详情" aria-controls="jadense-chat-source-panel">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m8 5 5 5-5 5"/></svg>
+                </button>
+              </div>
+              <div class="jdx-chat-tools" role="toolbar" aria-label="关联资源">
+                <button id="jadense-chat-attach-items" type="button" title="从 Zotero 资料库选择文献，关联引用信息和摘要">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h5a2 2 0 0 1 2 2v12a3 3 0 0 0-3-2H4zM11 5a2 2 0 0 1 2-2h3v12h-2a3 3 0 0 0-3 2"/></svg>
+                  <span>关联条目</span>
+                </button>
+                <button id="jadense-chat-attach-files" type="button" title="从 Zotero 资料库选择附件，或选择文献关联其 PDF 文件">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H5v14h10V7zM11 3v4h4M7 10h6M7 13h4"/></svg>
+                  <span>关联文件</span>
+                </button>
+              </div>
+              <div class="jdx-chat-source-summary"><span id="jadense-chat-source-count">关联资源</span><small id="jadense-chat-source-summary">仅用于当前对话</small></div>
+              <div id="jadense-chat-sources" class="jdx-chat-sources" aria-label="对话关联来源"></div>
+              <p class="jdx-chat-source-privacy">可拖入 Zotero 条目或附件。移除仅解除当前对话关联。<br/>发送时提供元数据与提取文本，不上传原文件。</p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="jadense-manager-section-translations" class="jdx-manager-section" role="tabpanel" aria-labelledby="jadense-manager-nav-translations" hidden="hidden">
+          <header class="jdx-manager-section-header">
+            <div>
+              <h2>翻译历史</h2>
+              <p>阅读器中的选文与译文只保存在这台电脑上，不会写入对话记录。</p>
+            </div>
+            <button id="jadense-translation-history-refresh" type="button">刷新</button>
+          </header>
+          <div id="jadense-translation-history" class="jdx-translation-history" aria-live="polite"></div>
+          <div id="jadense-translation-history-status" class="jdx-manager-inline-status" role="status"></div>
+        </section>
+
+        <section id="jadense-manager-section-analysis" class="jdx-manager-section jdx-analysis-section" role="tabpanel" aria-labelledby="jadense-manager-nav-analysis" hidden="hidden">
+          <header class="jdx-manager-section-header">
+            <div>
+              <h2>文献解析</h2>
+              <p>独立解析当前阅读器中的文献；解析总结只保存在这台电脑上，不会写入对话记录。</p>
+            </div>
+          </header>
+          <div id="jadense-analysis-tabs" class="jdx-tabs" role="tablist" aria-label="文献解析页面">
+            <button id="jadense-analysis-tab-history" type="button" role="tab" aria-selected="true" aria-controls="jadense-analysis-panel-history" tabindex="0">解析历史</button>
+            <button id="jadense-analysis-tab-config" type="button" role="tab" aria-selected="false" aria-controls="jadense-analysis-panel-config" tabindex="-1">解析配置</button>
+          </div>
+          <section id="jadense-analysis-panel-history" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-history">
+            <div class="jdx-analysis-run">
+              <div id="jadense-analysis-status" class="jdx-manager-inline-status" role="status">从 PDF 阅读器工具栏点击“解析”，即可开始独立文献解析。</div>
+              <button id="jadense-analysis-stop" type="button" hidden="hidden">停止</button>
+            </div>
+            <div class="jdx-analysis-history-heading">
+              <h3>解析记录</h3>
+              <button id="jadense-analysis-history-refresh" type="button">刷新</button>
+            </div>
+            <div id="jadense-analysis-history" class="jdx-analysis-history" aria-live="polite"></div>
+          </section>
+          <section id="jadense-analysis-panel-config" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-config" hidden="hidden">
+            <div class="jdx-manager-settings-card jdx-analysis-config-card">
+              <div class="jdx-manager-settings-card-header">
+                <h3>解析模型</h3>
+                <p>此选择只用于文献解析，不会修改对话或翻译使用的 AI 通道。</p>
+              </div>
+              <label class="jdx-manager-field">
+                <span>当前解析模型</span>
+                <div id="jadense-analysis-model-select"></div>
+              </label>
+              <div id="jadense-analysis-model-status" class="jdx-manager-inline-status" role="status"></div>
+              <div class="jdx-manager-actions jdx-manager-actions-end">
+                <button id="jadense-analysis-open-settings" type="button">管理 Provider 与模型</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="jadense-manager-section-migrate" class="jdx-manager-section" role="tabpanel" aria-labelledby="jadense-manager-nav-migrate" hidden="hidden">
+          <header class="jdx-manager-section-header">
+            <div>
+              <h2>连接攻玉</h2>
+              <p>连接攻玉账号后，可以在 Zotero 中使用 AI 对话、每日签到领积分，并把文献上传到攻玉收藏夹。连接信息只保存在这台电脑上。</p>
+            </div>
+          </header>
+
+          <div id="jadense-connection-tabs" class="jdx-tabs" role="tablist" aria-label="连接攻玉分区">
+            <button id="jadense-connection-tab-config" type="button" role="tab" aria-selected="true" aria-controls="jadense-connection-panel-config" tabindex="0">连接配置</button>
+            <button id="jadense-connection-tab-account" type="button" role="tab" aria-selected="false" aria-controls="jadense-connection-panel-account" tabindex="-1">用户信息</button>
+            <button id="jadense-connection-tab-sync" type="button" role="tab" aria-selected="false" aria-controls="jadense-connection-panel-sync" tabindex="-1">文献同步</button>
+          </div>
+
+          <section id="jadense-connection-panel-config" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-config">
+            <section class="jdx-manager-settings-card jdx-connection-config-card" data-connection-section="configuration">
+              <div class="jdx-manager-settings-card-header">
+                <h3>攻玉令牌</h3>
+                <p>粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
+              </div>
+              <div class="jdx-manager-form">
+                <div id="jadense-manager-token-display" class="jdx-manager-token-row">
+                  <span class="jdx-manager-field-label">攻玉令牌</span>
+                  <code id="jadense-manager-token-mask" class="jdx-manager-token-mask"></code>
+                  <span class="jdx-manager-token-actions">
+                    <button id="jadense-manager-token-copy" type="button">复制</button>
+                    <button id="jadense-manager-token-edit" type="button">编辑</button>
+                  </span>
+                </div>
+                <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
+                  <span class="jdx-manager-field-label">攻玉令牌</span>
+                  <input id="jadense-manager-token-input" type="password" autocomplete="off" placeholder="粘贴新的攻玉令牌" />
+                  <span class="jdx-manager-token-actions">
+                    <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary">保存</button>
+                    <button id="jadense-manager-token-cancel" type="button">取消</button>
+                  </span>
+                </div>
+              </div>
+              <p class="jdx-manager-settings-note">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
+              <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
+              <div class="jdx-manager-actions jdx-manager-actions-end">
+                <button id="jadense-manager-open-integrations" type="button">生成 / 更新令牌</button>
+                <button id="jadense-manager-disconnect" type="button" class="jdx-manager-danger">断开连接</button>
+              </div>
+            </section>
+          </section>
+
+          <section id="jadense-connection-panel-account" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-account" hidden="hidden">
+            <div class="jdx-manager-connection-grid">
+              <section class="jdx-manager-settings-card" data-connection-section="account">
+                <div class="jdx-manager-settings-card-header jdx-manager-account-header">
+                  <div>
+                    <h3>账号资料</h3>
+                    <p>当前令牌对应的攻玉账号与订阅方案。</p>
+                  </div>
+                  <div class="jdx-manager-actions jdx-manager-account-header-actions">
+                    <button id="jadense-manager-account-refresh" type="button">刷新</button>
+                  </div>
+                </div>
+                <dl class="jdx-manager-summary jdx-manager-account-summary">
+                  <div><dt>账号</dt><dd id="jadense-manager-account-name">—</dd></div>
+                  <div><dt>订阅方案</dt><dd id="jadense-manager-account-plan">—</dd></div>
+                </dl>
+                <div id="jadense-manager-account-profile-status" class="jdx-manager-inline-status jdx-manager-account-inline-status" role="status"></div>
+              </section>
+
+              <section class="jdx-manager-settings-card" data-connection-section="points">
+                <div class="jdx-manager-settings-card-header">
+                  <h3>积分与签到</h3>
+                  <p>积分用于攻玉 AI 对话与文献解析，每天签到可免费领取。</p>
+                </div>
+                <dl class="jdx-manager-summary jdx-manager-account-summary">
+                  <div><dt>可用积分</dt><dd id="jadense-manager-account-balance">—</dd></div>
+                  <div><dt>积分来源</dt><dd id="jadense-manager-account-source">—</dd></div>
+                  <div id="jadense-manager-account-fallback-row" hidden="hidden"><dt>个人备用积分</dt><dd id="jadense-manager-account-fallback">—</dd></div>
+                  <div><dt>今日签到奖励</dt><dd id="jadense-manager-account-reward">—</dd></div>
+                  <div><dt>连续签到</dt><dd id="jadense-manager-account-streak">—</dd></div>
+                </dl>
+                <div id="jadense-manager-account-status" class="jdx-manager-inline-status jdx-manager-account-inline-status" role="status"></div>
+                <div class="jdx-manager-actions">
+                  <button id="jadense-manager-account-check-in" type="button" class="jdx-manager-primary">立即签到</button>
+                  <button id="jadense-manager-open-check-in" type="button">打开签到页</button>
+                  <button id="jadense-manager-open-billing" type="button">订阅与用量</button>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="jadense-connection-panel-sync" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-sync" hidden="hidden">
+            <section class="jdx-manager-settings-card" data-connection-section="sync-target">
+              <div class="jdx-manager-settings-card-header">
+                <h3>同步到哪里</h3>
+                <p>选择一个攻玉收藏夹作为保存位置，上传后可在攻玉网页端阅读和管理这些文献。</p>
+              </div>
+              <div class="jdx-manager-form">
+                <div class="jdx-manager-folder-row">
+                  <label class="jdx-manager-field">
+                    <span>保存到攻玉收藏夹</span>
+                    <div id="jadense-manager-folder-select"></div>
+                  </label>
+                  <button id="jadense-manager-migrate-load-folders" type="button">刷新收藏夹</button>
+                </div>
+                <label class="jdx-manager-checkbox">
+                  <input id="jadense-manager-include-pdf" type="checkbox" />
+                  <span>上传文献时一并上传可读取的 PDF 全文</span>
+                </label>
+              </div>
+            </section>
+
+            <section class="jdx-manager-settings-card" data-connection-section="upload">
+              <div class="jdx-manager-settings-card-header">
+                <h3>上传文献</h3>
+                <p>把 Zotero 中选中的文献上传到攻玉收藏夹。上传是单向的，不会修改或删除 Zotero 中的任何内容。</p>
+              </div>
+              <div class="jdx-manager-block jdx-manager-upload-selection">
+                <h3>Zotero 主窗口中的选择</h3>
+                <dl class="jdx-manager-summary">
+                  <div>
+                    <dt>收藏夹</dt>
+                    <dd id="jadense-manager-collection-summary"></dd>
+                  </div>
+                  <div>
+                    <dt>条目</dt>
+                    <dd id="jadense-manager-item-summary"></dd>
+                  </div>
+                </dl>
+                <ul id="jadense-manager-migration-issues" class="jdx-manager-issues"></ul>
+              </div>
+              <div class="jdx-manager-actions">
+                <button id="jadense-manager-preview-collection" type="button">预览收藏夹内容</button>
+                <button id="jadense-manager-export-items" type="button">上传选中条目</button>
+                <button id="jadense-manager-export-collection" type="button" class="jdx-manager-primary">上传整个收藏夹</button>
+              </div>
+              <pre id="jadense-manager-migration-status" class="jdx-manager-log" role="status"></pre>
+            </section>
+          </section>
+        </section>
+
+        <section id="jadense-manager-section-settings" class="jdx-manager-section" role="tabpanel" aria-labelledby="jadense-manager-nav-settings" hidden="hidden">
+          <header class="jdx-manager-section-header">
+            <div>
+              <h2>设置</h2>
+              <p>管理 AI 请求通道、BYOK 配置与阅读器快捷键。</p>
+            </div>
+          </header>
+
+          <div id="jadense-settings-tabs" class="jdx-tabs" role="tablist" aria-label="设置分区">
+            <button id="jadense-settings-tab-ai" type="button" role="tab" aria-controls="jadense-settings-panel-ai" aria-selected="true">AI 配置</button>
+            <button id="jadense-settings-tab-shortcuts" type="button" role="tab" aria-controls="jadense-settings-panel-shortcuts" aria-selected="false" tabindex="-1">快捷键设置</button>
+          </div>
+          <section id="jadense-settings-panel-ai" role="tabpanel" aria-labelledby="jadense-settings-tab-ai">
+          <div class="jdx-manager-route-row">
+            <span class="jdx-manager-field-label">AI 请求通道</span>
+            <div class="jdx-manager-segmented" role="group" aria-label="AI 请求通道">
+              <button id="jadense-manager-route-jadense" type="button" aria-pressed="true">攻玉</button>
+              <button id="jadense-manager-route-byok" type="button" aria-pressed="false">BYOK</button>
+            </div>
+          </div>
+
+          <div class="jdx-manager-settings-grid">
+            <section class="jdx-manager-settings-card" data-settings-section="byok">
+              <div class="jdx-manager-settings-card-header">
+                <h3>BYOK 配置</h3>
+                <p>先配置 Provider，再为它维护模型目录。Key、消息与关联文献会从本机直接发送到 Provider，不经过攻玉服务器。</p>
+              </div>
+              <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-provider-heading">
+                <div class="jdx-manager-byok-panel-header">
+                  <h4 id="jadense-manager-provider-heading">Provider</h4>
+                  <div class="jdx-manager-actions">
+                    <button id="jadense-manager-byok-provider-new" type="button">新增</button>
+                    <button id="jadense-manager-byok-provider-delete" type="button" class="jdx-manager-danger">删除</button>
+                  </div>
+                </div>
+                <label class="jdx-manager-field">
+                  <span>当前 Provider</span>
+                  <div id="jadense-manager-byok-provider-select"></div>
+                </label>
+                <label class="jdx-manager-field">
+                  <span>显示名称</span>
+                  <input id="jadense-manager-byok-provider-name" type="text" autocomplete="off" placeholder="例如 mimo" />
+                </label>
+                <label class="jdx-manager-field">
+                  <span>协议</span>
+                  <div id="jadense-manager-byok-protocol"></div>
+                </label>
+                <label class="jdx-manager-field">
+                  <span>API Base URL</span>
+                  <input id="jadense-manager-byok-base-url" type="url" autocomplete="off" />
+                </label>
+                <div class="jdx-manager-byok-endpoint-row">
+                  <span>请求地址</span>
+                  <code id="jadense-manager-byok-endpoint"></code>
+                </div>
+                <div class="jdx-manager-byok-key-summary">
+                  <span class="jdx-manager-field-label">已保存 API Key</span>
+                  <code id="jadense-manager-byok-key-mask" class="jdx-manager-token-mask"></code>
+                </div>
+                <label class="jdx-manager-field">
+                  <span>替换 API Key</span>
+                  <input id="jadense-manager-byok-key-input" type="password" autocomplete="off" placeholder="留空则保留已保存的 Key" />
+                </label>
+                <div class="jdx-manager-actions jdx-manager-actions-end">
+                  <button id="jadense-manager-byok-provider-save" type="button" class="jdx-manager-primary">保存 Provider</button>
+                </div>
+              </div>
+              <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading">
+                <div class="jdx-manager-byok-panel-header">
+                  <div>
+                    <h4 id="jadense-manager-model-heading">模型目录</h4>
+                    <p>显示名称只用于界面；Model ID 会原样发送给 Provider。</p>
+                  </div>
+                  <div class="jdx-manager-actions">
+                    <button id="jadense-manager-byok-model-new" type="button">添加模型</button>
+                    <button id="jadense-manager-byok-model-delete" type="button" class="jdx-manager-danger">删除</button>
+                  </div>
+                </div>
+                <label class="jdx-manager-field">
+                  <span>当前模型</span>
+                  <div id="jadense-manager-byok-model-select"></div>
+                </label>
+                <label class="jdx-manager-field">
+                  <span>显示名称</span>
+                  <input id="jadense-manager-byok-model-name" type="text" autocomplete="off" placeholder="例如 MiMo 2.5" />
+                </label>
+                <label class="jdx-manager-field">
+                  <span>Model ID</span>
+                  <input id="jadense-manager-byok-model" type="text" autocomplete="off" placeholder="例如 mimo-v2.5" />
+                </label>
+                <div class="jdx-manager-byok-metrics">
+                  <label class="jdx-manager-field">
+                    <span>上下文窗口（可选）</span>
+                    <input id="jadense-manager-byok-context-window" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 1000000" />
+                  </label>
+                  <label class="jdx-manager-field">
+                    <span>最大输出 token</span>
+                    <input id="jadense-manager-byok-max-output-tokens" type="number" min="1" step="1" inputmode="numeric" />
+                  </label>
+                </div>
+                <div class="jdx-manager-actions jdx-manager-actions-end">
+                  <button id="jadense-manager-byok-test" type="button">测试当前表单</button>
+                  <button id="jadense-manager-byok-save" type="button" class="jdx-manager-primary">保存模型</button>
+                </div>
+              </div>
+              <p class="jdx-manager-settings-note">更改当前 Provider 的协议或 Base URL 会继续复用它已保存的 Key。请确认目标可信；测试会使用未保存表单发起一次最多 3000 token 的真实请求，可能计费。</p>
+              <div id="jadense-manager-byok-status" class="jdx-manager-inline-status" role="status"></div>
+              <div class="jdx-manager-actions jdx-manager-actions-end">
+                <button id="jadense-manager-byok-clear" type="button" class="jdx-manager-danger">清除 BYOK</button>
+              </div>
+            </section>
+          </div>
+          </section>
+          <section id="jadense-settings-panel-shortcuts" class="jdx-shortcut-settings" role="tabpanel" aria-labelledby="jadense-settings-tab-shortcuts" hidden="hidden">
+            <p class="jdx-manager-settings-note" id="jadense-shortcut-help">点击快捷键输入框并按下新组合键，再点击「保存」。快捷键在 PDF 阅读器中生效。</p>
+            <div class="jdx-shortcut-row">
+              <label class="jdx-manager-field" for="jadense-shortcut-capture-input">
+                <span>PDF截图快捷键</span>
+                <small id="jadense-shortcut-capture-help">拖动框选图片范围，确认后选择解读方式。</small>
+                <input id="jadense-shortcut-capture-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-capture-help jadense-shortcut-help" />
+              </label>
+              <div class="jdx-manager-actions">
+                <button id="jadense-shortcut-capture-save" type="button" class="jdx-manager-primary">保存</button>
+                <button id="jadense-shortcut-capture-reset" type="button">恢复默认</button>
+                <button id="jadense-shortcut-capture-disable" type="button">停用</button>
+              </div>
+            </div>
+            <div class="jdx-shortcut-row">
+              <label class="jdx-manager-field" for="jadense-shortcut-translate-input">
+                <span>翻译快捷键</span>
+                <small id="jadense-shortcut-translate-help">选中 PDF 文字后，按快捷键打开翻译浮窗。</small>
+                <input id="jadense-shortcut-translate-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-translate-help jadense-shortcut-help" />
+              </label>
+              <div class="jdx-manager-actions">
+                <button id="jadense-shortcut-translate-save" type="button" class="jdx-manager-primary">保存</button>
+                <button id="jadense-shortcut-translate-reset" type="button">恢复默认</button>
+                <button id="jadense-shortcut-translate-disable" type="button">停用</button>
+              </div>
+            </div>
+            <div id="jadense-shortcut-status" class="jdx-manager-inline-status" role="status"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+node_modules/
+.npm-cache/
+build/
+release/
+manifest.json
+.env
+.env.*
+*.log
+coverage/
+screenshots/
+reports/
+profile/
+profiles/
+.DS_Store

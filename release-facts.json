@@ -1,0 +1,25 @@
+{
+  "manifest": {
+    "manifest_version": 2,
+    "name": "Jadense in Zotero",
+    "description": "Local AI chat, PDF figure interpretation, structured annotations, reader translation, and Zotero-to-Jadense upload.",
+    "homepage_url": "https://jadense.cn",
+    "icons": {
+      "48": "content/icons/logo-padded.png"
+    },
+    "applications": {
+      "zotero": {
+        "id": "jadense-in-zotero@jadense.com",
+        "update_url": "https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json",
+        "strict_min_version": "8.0",
+        "strict_max_version": "10.0.*"
+      }
+    }
+  },
+  "release": {
+    "artifact_slug": "jadense-in-zotero",
+    "output_dir": "release/zotero",
+    "default_build_mode": "production",
+    "zip_entry_timestamp": "1980-01-01T00:00:00.000Z"
+  }
+}

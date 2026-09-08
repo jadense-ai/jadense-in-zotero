@@ -1,0 +1,1589 @@
+:root {
+  color-scheme: light;
+  --jdx-background: #ffffff;
+  --jdx-sidebar: #f7f8f5;
+  --jdx-text: #111510;
+  --jdx-muted: #53625a;
+  --jdx-subtle: #f1f4ef;
+  --jdx-line: #d9e2dd;
+  --jdx-line-strong: #b9c7c0;
+  --jdx-green: #16cf8c;
+  --jdx-green-deep: #0f7c56;
+  --jdx-red: #b42318;
+  --jdx-blue: #2f66c5;
+  --jdx-surface: #ffffff;
+  --jdx-surface-sunken: #fbfcfb;
+  --jdx-active-bg: #d4fae8;
+  --jdx-active-text: #07351f;
+  --jdx-press-bg: #e6ece8;
+  --jdx-hover-line: #96aaa0;
+  --jdx-placeholder: #9aa8a1;
+  --jdx-popup-shadow: 0 6px 18px rgb(17 21 16 / 0.12), 0 1px 4px rgb(17 21 16 / 0.08);
+}
+
+/* 深色主题:由 manager-page.ts 按 Zotero 首选项写入 data-theme,保持绿灰镀铬的设计方向。 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --jdx-background: #151916;
+  --jdx-sidebar: #1a201c;
+  --jdx-text: #e4eae6;
+  --jdx-muted: #9aa8a1;
+  --jdx-subtle: #232b26;
+  --jdx-line: #303a34;
+  --jdx-line-strong: #42504a;
+  --jdx-green-deep: #4fe3ab;
+  --jdx-red: #f5a097;
+  --jdx-surface: #202723;
+  --jdx-surface-sunken: #1b211e;
+  --jdx-active-bg: #0f2e21;
+  --jdx-active-text: #8ff0c8;
+  --jdx-press-bg: #2b342f;
+  --jdx-hover-line: #55645d;
+  --jdx-placeholder: #66766d;
+  --jdx-popup-shadow: 0 6px 18px rgb(0 0 0 / 0.5), 0 1px 4px rgb(0 0 0 / 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+window,
+html,
+body {
+  min-width: 760px;
+  min-height: 620px;
+  margin: 0;
+  color: var(--jdx-text);
+  background: var(--jdx-background);
+  font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+head {
+  display: none;
+}
+
+body {
+  display: block;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.jdx-manager-shell {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  height: 100vh;
+  min-height: 620px;
+  overflow: hidden;
+  transition: grid-template-columns 0.18s ease;
+}
+
+/* 侧边栏与主体不设分界线，用灰绿色块与白色画布的明度差自然分层。 */
+.jdx-manager-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  padding: 18px 14px;
+  background: var(--jdx-sidebar);
+}
+
+.jdx-manager-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jdx-manager-brand img {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.jdx-manager-section h2,
+.jdx-manager-block h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.jdx-manager-section-header p {
+  margin: 2px 0 0;
+  color: var(--jdx-muted);
+  font-size: 12px;
+}
+
+.jdx-manager-nav {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.jdx-manager-nav button,
+.jdx-manager-actions button,
+.jdx-manager-folder-row button,
+.jdx-manager-token-actions button,
+.jdx-manager-segmented button {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--jdx-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jdx-manager-nav button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.jdx-manager-nav-icon {
+  flex: 0 0 auto;
+}
+
+.jdx-manager-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdx-manager-sidebar-toggle {
+  display: flex;
+  flex: 0 0 auto;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px;
+  color: var(--jdx-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jdx-manager-sidebar-toggle:hover {
+  color: var(--jdx-text);
+  background: var(--jdx-subtle);
+}
+
+.jdx-manager-sidebar-toggle svg {
+  transition: transform 0.18s ease;
+}
+
+.jdx-manager-nav button[data-active="true"],
+.jdx-manager-icon-button[data-active="true"] {
+  background: var(--jdx-active-bg);
+  color: var(--jdx-active-text);
+  font-weight: 650;
+}
+
+.jdx-manager-content {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 18px 18px;
+}
+
+/* 底部操作始终留在导航栏内；收起时纵向排列，不占用正文高度。 */
+.jdx-manager-sidebar-footer {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.jdx-manager-connection-status {
+  display: flex;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  margin-right: auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.jdx-manager-connection-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--jdx-placeholder);
+}
+
+.jdx-manager-connection-status[data-kind="success"]::before { background: var(--jdx-green); }
+.jdx-manager-connection-status[data-kind="error"]::before { background: var(--jdx-red); }
+.jdx-manager-connection-status[data-kind="checking"]::before { background: var(--jdx-muted); box-shadow: 0 0 0 3px var(--jdx-subtle); }
+
+/* 浅色态显示月亮（点击进入深色），深色态显示太阳。 */
+.jdx-manager-icon-button {
+  display: flex;
+  flex: 0 0 auto;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px;
+  color: var(--jdx-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jdx-manager-icon-button:hover {
+  color: var(--jdx-text);
+  background: var(--jdx-subtle);
+}
+
+.jdx-manager-theme-toggle .jdx-manager-theme-icon-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .jdx-manager-theme-toggle .jdx-manager-theme-icon-sun {
+  display: block;
+}
+
+:root[data-theme="dark"] .jdx-manager-theme-toggle .jdx-manager-theme-icon-moon {
+  display: none;
+}
+
+.jdx-manager-section {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 非聊天页面直接滚动整个 section；为系统滚动条保留固定槽位和内容间距。 */
+.jdx-manager-section:not(.jdx-chat-section) {
+  scrollbar-gutter: stable;
+  padding-right: 12px;
+}
+
+.jdx-manager-section[hidden] {
+  display: none;
+}
+
+.jdx-manager-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.jdx-manager-section h2 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.jdx-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
+  gap: 12px;
+}
+
+.jdx-manager-block {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  border: 1px solid var(--jdx-line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--jdx-surface);
+}
+
+.jdx-manager-block h3 {
+  font-size: 13px;
+}
+
+.jdx-manager-summary {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.jdx-manager-summary div {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 28px;
+  align-items: center;
+  border-bottom: 1px solid var(--jdx-line);
+  padding-bottom: 7px;
+}
+
+.jdx-manager-summary div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.jdx-manager-summary dt {
+  color: var(--jdx-muted);
+  font-size: 12px;
+}
+
+.jdx-manager-summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.jdx-manager-issues {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--jdx-muted);
+}
+
+.jdx-manager-form {
+  display: grid;
+  gap: 12px;
+  max-width: 680px;
+}
+
+.jdx-manager-connection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+/* 连接攻玉的 tab 面板纵向堆叠卡片；配置卡内容较少，限制宽度避免表单被拉宽。 */
+.jdx-connection-panel {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.jdx-connection-panel[hidden] {
+  display: none;
+}
+
+.jdx-connection-config-card {
+  max-width: 720px;
+}
+
+.jdx-manager-upload-selection {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.jdx-manager-route-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--jdx-line);
+  padding-bottom: 14px;
+}
+
+.jdx-manager-route-row > .jdx-manager-field-label {
+  font-weight: 650;
+}
+
+.jdx-manager-segmented {
+  display: inline-flex;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 7px;
+  padding: 2px;
+  background: var(--jdx-subtle);
+}
+
+.jdx-manager-segmented button {
+  min-width: 72px;
+  min-height: 28px;
+  padding: 4px 12px;
+}
+
+.jdx-manager-segmented button[aria-pressed="true"] {
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  box-shadow: 0 1px 2px rgb(17 21 16 / 0.08);
+  font-weight: 700;
+}
+
+.jdx-manager-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.jdx-manager-account-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jdx-manager-account-header-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.jdx-manager-account-summary div {
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.jdx-manager-account-summary [hidden] {
+  display: none;
+}
+
+.jdx-manager-account-inline-status {
+  min-height: 20px;
+  margin-top: 0;
+}
+
+.jdx-manager-settings-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid var(--jdx-line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--jdx-surface);
+}
+
+.jdx-manager-settings-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.jdx-manager-settings-card-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.jdx-manager-settings-card-header p,
+.jdx-manager-settings-note {
+  margin: 0;
+  color: var(--jdx-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.jdx-manager-byok-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border-top: 1px solid var(--jdx-line);
+  padding: 12px 0 0;
+  background: transparent;
+}
+
+.jdx-manager-byok-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.jdx-manager-byok-panel-header h4,
+.jdx-manager-byok-panel-header p {
+  margin: 0;
+}
+
+.jdx-manager-byok-panel-header h4 { font-size: 13px; }
+.jdx-manager-byok-panel-header p { margin-top: 3px; color: var(--jdx-muted); font-size: 11px; }
+
+.jdx-manager-byok-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.jdx-manager-byok-endpoint-row,
+.jdx-manager-byok-key-summary {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--jdx-text);
+  font-weight: 650;
+}
+
+.jdx-manager-byok-endpoint-row code {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 6px 9px;
+  background: var(--jdx-subtle);
+  color: var(--jdx-muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdx-manager-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--jdx-text);
+  font-weight: 650;
+}
+
+.jdx-manager-field span,
+.jdx-manager-checkbox span {
+  overflow-wrap: anywhere;
+}
+
+.jdx-manager-field input {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  font-weight: 400;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.jdx-manager-field input:hover {
+  border-color: var(--jdx-hover-line);
+}
+
+.jdx-manager-field input:focus {
+  border-color: var(--jdx-green);
+  outline: 2px solid rgb(22 207 140 / 0.18);
+  outline-offset: 0;
+}
+
+.jdx-manager-field input::placeholder {
+  color: var(--jdx-placeholder);
+}
+
+/* 令牌行:显示态(掩码 + 复制/编辑)与编辑态(输入 + 保存/取消)互斥切换 */
+.jdx-manager-token-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.jdx-manager-token-row[hidden] { display: none; }
+
+.jdx-manager-token-row .jdx-manager-field-label {
+  flex: 0 0 auto;
+  font-weight: 650;
+  color: var(--jdx-text);
+}
+
+.jdx-manager-token-mask {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: var(--jdx-subtle);
+  color: var(--jdx-text);
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdx-manager-token-mask[data-empty="true"] {
+  color: var(--jdx-muted);
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+.jdx-manager-token-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.jdx-manager-token-actions button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.jdx-manager-token-row input {
+  flex: 1;
+  min-height: 34px;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  font-weight: 400;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.jdx-manager-token-row input:hover {
+  border-color: var(--jdx-hover-line);
+}
+
+.jdx-manager-token-row input:focus {
+  border-color: var(--jdx-green);
+  outline: 2px solid rgb(22 207 140 / 0.18);
+  outline-offset: 0;
+}
+
+.jdx-manager-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.jdx-manager-checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-weight: 650;
+}
+
+.jdx-manager-checkbox input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  accent-color: var(--jdx-green);
+}
+
+/* 自研下拉组件：不透明白底弹出层，绕开 Zotero 原生 menupopup 的透明渲染。 */
+.jdx-select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.jdx-select-trigger {
+  display: flex;
+  min-height: 34px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.jdx-select-trigger:hover:not(:disabled) {
+  border-color: var(--jdx-hover-line);
+}
+
+.jdx-select-trigger:focus-visible,
+.jdx-select[data-open="true"] .jdx-select-trigger {
+  border-color: var(--jdx-green);
+  outline: 2px solid rgb(22 207 140 / 0.18);
+  outline-offset: 0;
+}
+
+.jdx-select-trigger:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.jdx-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdx-select-value[data-placeholder="true"] {
+  color: var(--jdx-muted);
+}
+
+.jdx-select-chevron {
+  flex: 0 0 auto;
+  color: var(--jdx-muted);
+  transition: transform 0.15s ease;
+}
+
+.jdx-select[data-open="true"] .jdx-select-chevron {
+  transform: rotate(180deg);
+}
+
+.jdx-select-popup {
+  position: fixed;
+  z-index: 100;
+  display: none;
+  overflow-y: auto;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--jdx-surface);
+  box-shadow: var(--jdx-popup-shadow);
+}
+
+.jdx-select[data-open="true"] .jdx-select-popup {
+  display: block;
+}
+
+.jdx-select-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jdx-select-search {
+  display: block;
+  width: calc(100% - 8px);
+  min-height: 32px;
+  margin: 0 4px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--jdx-line);
+  border-radius: 0;
+  padding: 5px 4px;
+  color: var(--jdx-text);
+  background: transparent;
+  font: inherit;
+}
+
+.jdx-select-search:focus {
+  outline: 0;
+  border-bottom-color: var(--jdx-green);
+}
+
+.jdx-select-group {
+  padding: 7px 8px 3px;
+  color: var(--jdx-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.jdx-select-option {
+  min-height: 28px;
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--jdx-text);
+  cursor: pointer;
+}
+
+.jdx-select-option-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.jdx-select-option-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdx-select-option-meta {
+  flex: 0 0 auto;
+  color: var(--jdx-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jdx-select-option-description {
+  display: block;
+  margin-top: 2px;
+  color: var(--jdx-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.jdx-select-option[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.jdx-select-option[data-active="true"] {
+  background: var(--jdx-subtle);
+}
+
+.jdx-select-option[aria-selected="true"] {
+  color: var(--jdx-green-deep);
+  font-weight: 650;
+}
+
+.jdx-select-option[aria-selected="true"][data-active="true"] {
+  background: var(--jdx-active-bg);
+}
+
+.jdx-select-empty {
+  padding: 6px 8px;
+  color: var(--jdx-muted);
+}
+
+.jdx-manager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.jdx-manager-actions-end {
+  justify-content: flex-end;
+}
+
+.jdx-manager-actions button:not(.jdx-manager-primary):hover:not(:disabled),
+.jdx-manager-folder-row button:hover:not(:disabled),
+.jdx-manager-nav button:hover:not(:disabled),
+.jdx-manager-token-actions button:not(.jdx-manager-primary):hover:not(:disabled),
+.jdx-chat-sessions button:not(.jdx-manager-primary):hover:not(:disabled),
+.jdx-chat-composer button:not(.jdx-manager-primary):hover:not(:disabled) {
+  background: var(--jdx-subtle);
+}
+
+.jdx-manager-actions button:focus-visible,
+.jdx-manager-folder-row button:focus-visible,
+.jdx-manager-nav button:focus-visible,
+.jdx-tabs button:focus-visible,
+.jdx-translation-title:focus-visible,
+.jdx-analysis-title:focus-visible,
+.jdx-chat-sessions > button:focus-visible,
+.jdx-chat-composer button:focus-visible,
+.jdx-manager-sidebar-toggle:focus-visible,
+.jdx-manager-icon-button:focus-visible,
+.jdx-manager-connection-status:focus-visible,
+.jdx-manager-token-actions button:focus-visible,
+.jdx-manager-segmented button:focus-visible,
+.jdx-chat-session-button:focus-visible {
+  border-color: var(--jdx-green);
+  outline: 2px solid rgb(22 207 140 / 0.18);
+  outline-offset: 0;
+}
+
+.jdx-manager-actions button:active:not(:disabled),
+.jdx-manager-folder-row button:active:not(:disabled),
+.jdx-manager-nav button:active:not(:disabled) {
+  background: var(--jdx-press-bg);
+}
+
+.jdx-manager-actions button:disabled,
+.jdx-manager-folder-row button:disabled,
+.jdx-manager-nav button:disabled,
+.jdx-manager-token-actions button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.jdx-manager-actions .jdx-manager-primary,
+.jdx-manager-primary {
+  border-color: var(--jdx-green);
+  background: var(--jdx-green);
+  color: #07351f;
+  font-weight: 700;
+}
+
+.jdx-manager-actions .jdx-manager-primary:hover,
+.jdx-manager-primary:hover {
+  border-color: #0fac73;
+  background: #22d997;
+}
+
+.jdx-manager-shell button.jdx-manager-danger {
+  color: var(--jdx-red);
+}
+
+.jdx-manager-log,
+.jdx-manager-inline-status {
+  min-height: 40px;
+  margin: 12px 0 0;
+  color: var(--jdx-muted);
+  white-space: pre-wrap;
+}
+
+.jdx-manager-log {
+  max-height: 210px;
+  overflow: auto;
+  border: 1px solid var(--jdx-line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--jdx-surface-sunken);
+}
+
+.jdx-manager-log[data-kind="success"],
+.jdx-manager-inline-status[data-kind="success"] {
+  color: var(--jdx-green-deep);
+}
+
+.jdx-manager-log[data-kind="error"],
+.jdx-manager-inline-status[data-kind="error"] {
+  color: var(--jdx-red);
+}
+
+.jdx-chat-section {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.jdx-chat-workbench {
+  display: grid;
+  position: relative;
+  --jdx-chat-sessions-width: 190px;
+  --jdx-chat-details-width: 292px;
+  grid-template-columns: var(--jdx-chat-sessions-width) minmax(0, 1fr) var(--jdx-chat-details-width);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--jdx-line);
+  border-radius: 8px;
+  background: var(--jdx-surface);
+}
+
+/* 对话列表与消息区同样用色块分层：灰绿衬底直接贴白底，不再画分界线。 */
+.jdx-chat-sessions {
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  padding: 10px;
+  background: var(--jdx-sidebar);
+}
+
+.jdx-chat-sessions > button,
+.jdx-chat-composer button,
+.jdx-chat-details-stop,
+.jdx-chat-toolbar button,
+.jdx-chat-tools button {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--jdx-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jdx-chat-session-list {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.jdx-chat-session-button {
+  width: 100%;
+  min-height: 34px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--jdx-muted);
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jdx-chat-session-button[data-active="true"] {
+  color: var(--jdx-active-text);
+  background: var(--jdx-active-bg);
+  font-weight: 650;
+}
+
+.jdx-chat-main {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 会话、正文、详情独立滚动；详情不再占用消息区的高度。 */
+.jdx-chat-toolbar,
+.jdx-chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.jdx-chat-toolbar { justify-content: space-between; border-bottom: 1px solid var(--jdx-line); }
+.jdx-chat-toolbar button,
+.jdx-chat-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.jdx-chat-toolbar svg,
+.jdx-chat-tools svg { flex: 0 0 auto; }
+
+.jdx-chat-toolbar button:hover:not(:disabled),
+.jdx-chat-tools button:hover:not(:disabled) {
+  background: var(--jdx-press-bg);
+}
+
+.jdx-chat-toolbar button[aria-expanded="true"] {
+  color: var(--jdx-active-text);
+}
+
+.jdx-chat-details-count { min-width: 18px; padding: 1px 4px; border-radius: 4px; color: var(--jdx-muted); background: var(--jdx-subtle); font-size: 10px; font-variant-numeric: tabular-nums; }
+.jdx-chat-details-count[data-warning="true"] { color: var(--jdx-red); }
+.jdx-chat-workbench[data-sessions-collapsed="true"] { --jdx-chat-sessions-width: 0px; }
+.jdx-chat-workbench[data-details-collapsed="true"] { --jdx-chat-details-width: 0px; }
+.jdx-chat-sessions[hidden], .jdx-chat-source-panel[hidden] { display: none; }
+
+.jdx-chat-source-panel {
+  display: grid;
+  grid-column: 3;
+  grid-row: 1;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--jdx-sidebar);
+}
+
+.jdx-chat-details-heading { display: flex; align-items: center; justify-content: space-between; min-height: 49px; padding: 8px 12px; }
+.jdx-chat-details-heading strong { margin-right: auto; font-size: 13px; font-weight: 600; }
+.jdx-chat-details-stop { font-size: 12px; }
+.jdx-chat-details-stop[hidden] { display: none; }
+.jdx-chat-details-stop:hover { background: var(--jdx-press-bg); }
+.jdx-chat-source-panel .jdx-chat-tools { padding-top: 0; gap: 4px; }
+.jdx-chat-source-panel .jdx-chat-tools button { flex: 1; padding-inline: 6px; }
+.jdx-chat-source-summary {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px 10px;
+  color: var(--jdx-muted);
+  font-size: 12px;
+}
+
+.jdx-chat-source-summary > span { color: var(--jdx-text); font-weight: 550; }
+.jdx-chat-source-summary > small { font-size: 11px; }
+.jdx-chat-source-summary > small[data-warning="true"] { color: var(--jdx-red); }
+.jdx-chat-workbench[data-drag-over="true"] { outline: 2px dashed var(--jdx-green); outline-offset: -3px; }
+
+.jdx-chat-sources {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 10px 10px;
+  overscroll-behavior: contain;
+}
+
+.jdx-chat-source-group { margin-bottom: 8px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-surface); }
+.jdx-chat-source-group > summary { padding: 10px; color: var(--jdx-text); cursor: pointer; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.jdx-chat-source-group-title { vertical-align: middle; display: inline-block; max-width: calc(100% - 18px); line-height: 1.5; }
+.jdx-chat-source-group-actions { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 7px 5px; }
+.jdx-chat-source-group-actions button { min-height: 26px; border: 0; border-radius: 4px; padding: 4px; background: transparent; color: var(--jdx-muted); font-size: 11px; cursor: pointer; }
+.jdx-chat-source-group-actions button:hover:not(:disabled) { background: var(--jdx-press-bg); color: var(--jdx-text); }
+
+.jdx-chat-source {
+  display: grid;
+  grid-template-columns: 21px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border-top: 1px solid var(--jdx-line);
+  padding: 7px;
+}
+
+.jdx-chat-source button {
+  border: 0;
+  border-radius: 3px;
+  min-height: 28px;
+  padding: 3px 5px;
+  color: var(--jdx-text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.jdx-chat-source-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  text-overflow: ellipsis;
+  font-weight: 550;
+}
+
+.jdx-chat-source-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 21px;
+  height: 21px;
+  border: 1px solid var(--jdx-line);
+  border-radius: 4px;
+  color: var(--jdx-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jdx-chat-source-action { min-width: 28px; flex-shrink: 0; }
+.jdx-chat-source-detail { grid-column: 2 / -1; min-width: 0; }
+.jdx-chat-source-state { display: block; color: var(--jdx-muted); font-size: 11px; line-height: 1.5; }
+.jdx-chat-source-citation { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--jdx-muted); font-size: 11px; }
+.jdx-chat-source-quote { margin: 5px 0; border-left: 2px solid var(--jdx-green); padding-left: 8px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.jdx-chat-source button:hover:not(:disabled) {
+  background: var(--jdx-press-bg);
+}
+
+.jdx-chat-source-warning {
+  grid-column: 2 / -1;
+  color: var(--jdx-muted);
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.jdx-chat-source-empty,
+.jdx-chat-source-privacy {
+  margin: 0;
+  color: var(--jdx-muted);
+  font-size: 11px;
+}
+
+.jdx-chat-source-empty { padding: 5px 4px; line-height: 1.6; }
+
+.jdx-chat-source-privacy {
+  border-top: 1px solid var(--jdx-line);
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.jdx-chat-toolbar button:focus-visible,
+.jdx-chat-details-stop:focus-visible,
+.jdx-chat-tools button:focus-visible,
+.jdx-chat-source button:focus-visible,
+.jdx-chat-source-group-actions button:focus-visible,
+.jdx-chat-source-panel summary:focus-visible,
+.jdx-chat-message button:focus-visible,
+.jdx-chat-latest:focus-visible,
+.jdx-chat-empty-connect:focus-visible {
+  outline: 2px solid var(--jdx-green);
+  outline-offset: 2px;
+}
+
+/* 悬浮 Dock 高度由 manager-page.ts 测量写入 --jdx-chat-dock-height，128px 是测量前的兜底值。 */
+.jdx-chat-reading {
+  display: grid;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  --jdx-chat-dock-height: 128px;
+}
+
+.jdx-chat-latest {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: calc(var(--jdx-chat-dock-height) + 12px);
+  min-height: 30px;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 20px;
+  padding: 4px 12px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  font-size: 12px;
+  cursor: pointer;
+}
+.jdx-chat-latest[hidden] { display: none; }
+
+/* 消息列表为悬浮输入 Dock 预留底部空间，末条消息从输入卡片下方滚过而不会被遮住。 */
+.jdx-chat-message-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px 16px calc(var(--jdx-chat-dock-height) + 12px);
+  background: var(--jdx-surface);
+}
+
+.jdx-chat-empty {
+  margin: auto;
+  max-width: 370px;
+  padding: 24px 12px;
+  color: var(--jdx-muted);
+  text-align: center;
+  line-height: 1.75;
+}
+.jdx-chat-empty h3 { margin: 0 0 12px; color: var(--jdx-text); font-size: 18px; font-weight: 600; }
+.jdx-chat-empty p { margin: 8px 0; }
+.jdx-chat-empty-note { font-size: 11px; }
+.jdx-chat-empty-connect { margin-top: 8px; min-height: 32px; padding: 5px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--jdx-active-text); cursor: pointer; }
+.jdx-chat-empty-connect:hover { background: var(--jdx-active-bg); }
+
+.jdx-chat-message {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-width: min(82%, 680px);
+}
+
+.jdx-chat-message[data-role="user"] {
+  justify-self: end;
+}
+
+.jdx-chat-message[data-role="assistant"] { max-width: 100%; width: 100%; }
+.jdx-chat-message-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; }
+.jdx-chat-message-actions { display: flex; gap: 4px; align-items: center; }
+.jdx-chat-message-actions button { min-height: 26px; padding: 2px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--jdx-muted); font-size: 11px; cursor: pointer; }
+.jdx-chat-message-actions button:hover:not(:disabled) { color: var(--jdx-text); background: var(--jdx-press-bg); }
+.jdx-chat-message-actions button:disabled { opacity: 0.4; cursor: default; }
+
+.jdx-chat-message-label {
+  color: var(--jdx-muted);
+  font-size: 11px;
+}
+
+.jdx-chat-message[data-role="user"] .jdx-chat-message-label {
+  text-align: right;
+}
+
+.jdx-chat-message-body {
+  min-width: 0;
+  border: 1px solid var(--jdx-line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* 用户、AI 与解析说明共用文档排版；长代码和表格只在消息内部横向滚动。 */
+.jdx-markdown { min-width: 0; overflow-wrap: anywhere; }
+.jdx-markdown > :first-child { margin-top: 0; }
+.jdx-markdown > :last-child { margin-bottom: 0; }
+.jdx-markdown p { margin: 8px 0; }
+.jdx-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 16px 0 8px; color: inherit; font-size: 1em; line-height: 1.5; font-weight: 650; }
+.jdx-markdown h1 { font-size: 1.35em; }
+.jdx-markdown h2 { font-size: 1.2em; }
+.jdx-markdown h3 { font-size: 1.08em; }
+.jdx-markdown :is(ul, ol) { margin: 8px 0; padding-left: 24px; }
+.jdx-markdown li { margin: 3px 0; }
+.jdx-markdown li > :is(p, ul, ol) { margin: 4px 0; }
+.jdx-markdown blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid var(--jdx-line-strong); color: var(--jdx-muted); }
+.jdx-markdown a { color: var(--jdx-green-deep); text-decoration: underline; text-underline-offset: 3px; }
+.jdx-markdown a:hover { color: var(--jdx-text); }
+.jdx-markdown a:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 3px; border-radius: 2px; }
+.jdx-markdown code { padding: 1px 4px; border-radius: 4px; background: var(--jdx-subtle); font: 0.92em/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; }
+.jdx-markdown pre { max-width: 100%; overflow-x: auto; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-subtle); white-space: pre; overflow-wrap: normal; }
+.jdx-markdown pre code { padding: 0; border-radius: 0; background: transparent; font-size: 12px; }
+.jdx-markdown table { display: block; max-width: 100%; overflow-x: auto; margin: 10px 0; border-collapse: collapse; font-size: 12px; }
+.jdx-markdown :is(th, td) { padding: 6px 10px; border: 1px solid var(--jdx-line); text-align: left; }
+.jdx-markdown th { background: var(--jdx-subtle); font-weight: 600; }
+.jdx-markdown hr { margin: 14px 0; border: 0; border-top: 1px solid var(--jdx-line); }
+.jdx-markdown .katex { font-size: 1.04em; }
+.jdx-markdown .katex-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; margin: 10px 0; padding-block: 2px; }
+.jdx-markdown .jdx-math-error { color: var(--jdx-red); }
+
+/* 解析按文档排版，保留正文、原句、AI 解释和本地页码导航的清楚层次。 */
+.jdx-chat-message[data-research="true"] .jdx-chat-message-body { padding: 14px; white-space: normal; }
+.jdx-chat-message[data-research="true"] .jdx-chat-message-body > .jdx-markdown { margin: 10px 0; }
+.jdx-analysis-heading { margin: 20px 0 8px; color: var(--jdx-text); font-size: 14px; line-height: 1.5; }
+h3.jdx-analysis-heading { margin-top: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--jdx-line); font-size: 16px; }
+.jdx-analysis-heading[style]::before, .jdx-analysis-category::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 2px; background: var(--annotation-color); }
+.jdx-analysis-annotation { margin-top: 12px; border: 1px solid var(--jdx-line); border-radius: 6px; padding: 10px 12px; }
+.jdx-analysis-annotation-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jdx-analysis-category { color: var(--jdx-text); font-size: 12px; font-weight: 600; }
+.jdx-analysis-page { flex-shrink: 0; min-height: 28px; padding: 3px 7px; border: 1px solid var(--jdx-line); border-radius: 4px; font: inherit; font-size: 11px; color: var(--jdx-muted); background: transparent; }
+button.jdx-analysis-page { border-color: transparent; color: var(--jdx-active-text); cursor: pointer; }
+button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
+.jdx-analysis-annotation > blockquote { margin: 9px 0; padding: 4px 0 4px 10px; border-left: 2px solid var(--jdx-line-strong); color: var(--jdx-muted); white-space: pre-wrap; }
+.jdx-analysis-annotation > .jdx-markdown { margin-top: 8px; }
+.jdx-chat-message-body > .jdx-analysis-outcome { padding: 9px 10px; border-radius: 5px; background: var(--jdx-sidebar); font-size: 12px; }
+
+.jdx-chat-message[data-role="user"] .jdx-chat-message-body {
+  border-color: rgb(22 207 140 / 0.35);
+  background: rgb(22 207 140 / 0.1);
+}
+
+.jdx-chat-message[data-status="failed"] .jdx-chat-message-body {
+  border-color: rgb(180 35 24 / 0.22);
+  color: var(--jdx-red);
+  background: rgb(180 35 24 / 0.04);
+}
+.jdx-chat-message[data-stopped="true"] .jdx-chat-message-body { border-color: var(--jdx-line); color: var(--jdx-muted); background: var(--jdx-sidebar); }
+
+/* 悬浮输入 Dock：状态行与输入卡片浮在消息列表上方（Z 轴分层），替代消息区与输入区之间的分界线。
+   Dock 自身不接收指针，消息在卡片之外的区域仍可点选、滚动。 */
+.jdx-chat-dock {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 4px;
+  padding: 0 16px 12px;
+  pointer-events: none;
+}
+
+.jdx-chat-dock .jdx-manager-inline-status {
+  min-height: 22px;
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+/* 状态文字浮在滚动的消息上方，有内容时垫一层模糊底保持可读。 */
+.jdx-chat-dock .jdx-manager-inline-status:not(:empty) {
+  width: fit-content;
+  border-radius: 6px;
+  padding-inline: 8px;
+  background: color-mix(in srgb, var(--jdx-surface) 86%, transparent);
+  backdrop-filter: blur(4px);
+}
+.jdx-chat-dock .jdx-manager-inline-status[data-busy="true"]::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 1.5px solid var(--jdx-line); border-top-color: var(--jdx-green-deep); border-radius: 50%; animation: jdx-working 0.8s linear infinite; }
+@keyframes jdx-working { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .jdx-chat-dock .jdx-manager-inline-status[data-busy="true"]::before { animation: none; } }
+
+/* 输入区无背景、无分界线：整张输入卡片浮在消息列表上方。 */
+.jdx-chat-composer {
+  min-width: 0;
+  margin: 0;
+}
+
+/* 文本与操作共用一层输入边框；卡片恢复指针接收，用既有弹层阴影在消息列表上抬升。 */
+.jdx-chat-compose-field {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 8px;
+  background: var(--jdx-surface);
+  box-shadow: var(--jdx-popup-shadow);
+  pointer-events: auto;
+  transition: border-color 0.12s ease;
+}
+.jdx-chat-compose-field:hover { border-color: var(--jdx-hover-line); }
+.jdx-chat-compose-field:focus-within { border-color: var(--jdx-green); outline: 2px solid rgb(22 207 140 / 0.18); outline-offset: 1px; }
+/* 提示可换行，发送/停止始终并排留在底栏。 */
+.jdx-chat-composer-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 0 8px 8px 12px; }
+.jdx-chat-composer-meta { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.jdx-chat-model-select { width: min(210px, 48%); flex: 0 1 210px; }
+.jdx-chat-model-select .jdx-select-trigger { min-height: 30px; border-color: transparent; background: var(--jdx-subtle); font-size: 11px; font-weight: 650; }
+.jdx-chat-model-select .jdx-select-trigger:hover:not(:disabled) { background: var(--jdx-press-bg); }
+.jdx-chat-compose-field small { min-width: 0; color: var(--jdx-muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.jdx-chat-composer button { min-width: 60px; min-height: 32px; }
+#jadense-chat-stop { font-weight: 600; }
+
+.jdx-chat-composer textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  resize: none;
+  appearance: none;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  padding: 10px 12px;
+  color: var(--jdx-text);
+  background: transparent;
+  line-height: 1.6;
+  overflow-y: auto;
+}
+
+.jdx-chat-composer textarea::placeholder {
+  color: var(--jdx-placeholder);
+}
+
+.jdx-chat-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jdx-chat-sessions .jdx-manager-primary,
+.jdx-chat-composer .jdx-manager-primary {
+  border-color: var(--jdx-green);
+  color: #07351f;
+  background: var(--jdx-green);
+  font-weight: 700;
+}
+
+.jdx-chat-sessions button:disabled,
+.jdx-chat-composer button:disabled,
+.jdx-chat-composer textarea:disabled,
+.jdx-chat-tools button:disabled,
+.jdx-chat-source-group-actions button:disabled,
+.jdx-chat-source button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+/* 小窗口为正文保留空间；来源和长输入各自在内部滚动，操作栏不被推到窗口外。 */
+@media (max-height: 740px) {
+  .jdx-manager-content { padding: 12px 14px 14px; }
+  .jdx-manager-section-header { margin-bottom: 10px; }
+  .jdx-chat-tools { padding: 8px 10px 6px; }
+  .jdx-chat-dock { padding-bottom: 8px; }
+  .jdx-chat-composer textarea { min-height: 56px; padding: 8px 10px; }
+  .jdx-chat-empty { padding: 12px; }
+}
+
+@media (max-width: 820px) {
+  html,
+  body {
+    min-width: 640px;
+  }
+
+  .jdx-manager-shell {
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .jdx-manager-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 1050px) {
+  .jdx-manager-connection-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .jdx-manager-byok-panel-header { align-items: stretch; flex-direction: column; }
+  .jdx-manager-byok-metrics { grid-template-columns: 1fr; }
+}
+
+/* 小屏详情使用可关闭的侧面板，不把消息和输入挤成窄条。 */
+@media (max-width: 1100px) {
+  .jdx-chat-workbench { grid-template-columns: var(--jdx-chat-sessions-width) minmax(0, 1fr); }
+  .jdx-chat-source-panel { position: absolute; grid-area: auto; inset: 0 0 0 auto; z-index: 4; width: min(292px, 90%); box-shadow: -8px 0 24px rgb(0 0 0 / 0.08); }
+}
+
+/* 侧边栏收起为图标窄栏：状态由 manager-page.ts 写入 data-sidebar-collapsed 并持久化到 Zotero 首选项。 */
+.jdx-manager-shell[data-sidebar-collapsed="true"] {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-sidebar {
+  padding: 16px 8px;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-brand {
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-nav button {
+  justify-content: center;
+  padding: 6px 4px;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-nav-label {
+  display: none;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-sidebar-footer {
+  flex-direction: column;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-connection-status {
+  margin-right: 0;
+}
+
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jdx-manager-sidebar-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* 翻译历史与对话生命周期分离：双栏保留原文/译文对应关系，窄窗口自然堆叠。 */
+.jdx-translation-history { display: grid; align-content: start; gap: 12px; min-height: 0; overflow-y: auto; }
+.jdx-translation-empty { margin: auto; max-width: 420px; padding: 48px 20px; color: var(--jdx-muted); text-align: center; }
+.jdx-translation-empty h3 { margin: 0 0 8px; color: var(--jdx-text); font-size: 16px; }
+.jdx-translation-empty p { margin: 0; line-height: 1.7; }
+.jdx-translation-record { border: 1px solid var(--jdx-line); border-radius: 8px; padding: 12px; background: var(--jdx-surface); }
+.jdx-translation-record > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.jdx-translation-title { min-width: 0; overflow: hidden; border: 0; padding: 0; color: var(--jdx-text); background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; cursor: pointer; }
+.jdx-translation-title:hover { color: var(--jdx-green-deep); text-decoration: underline; text-underline-offset: 2px; }
+.jdx-translation-record time, .jdx-translation-meta { color: var(--jdx-muted); font-size: 11px; }
+.jdx-translation-meta { margin: 4px 0 10px; overflow-wrap: anywhere; }
+.jdx-translation-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.jdx-translation-columns > section { min-width: 0; border-radius: 6px; padding: 10px; background: var(--jdx-sidebar); }
+.jdx-translation-columns h4 { margin: 0 0 6px; font-size: 11px; }
+.jdx-translation-source-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.jdx-translation-columns .jdx-markdown { overflow-wrap: anywhere; line-height: 1.7; }
+.jdx-translation-columns .jdx-markdown > :first-child { margin-top: 0; }
+.jdx-translation-columns .jdx-markdown > :last-child { margin-bottom: 0; }
+.jdx-translation-result-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jdx-translation-result-header button { min-height: 26px; padding: 3px 7px; font-size: 11px; }
+@media (max-width: 900px) { .jdx-translation-columns { grid-template-columns: 1fr; } }
+
+/* 顶部书签 tab：文献解析与连接攻玉共用，紧凑窗口也保持可键盘操作。 */
+.jdx-tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 1px solid var(--jdx-line); }
+.jdx-tabs button { position: relative; min-height: 34px; border: 0; padding: 6px 14px; color: var(--jdx-muted); background: transparent; cursor: pointer; }
+.jdx-tabs button[aria-selected="true"] { color: var(--jdx-text); font-weight: 650; }
+.jdx-tabs button[aria-selected="true"]::after { content: ""; position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; background: var(--jdx-green); }
+.jdx-analysis-panel[hidden] { display: none; }
+/* 批注写入独立于可读笔记；原生 details 提供键盘展开，文字不作为 HTML 解释。 */
+.jdx-analysis-notice { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--jdx-muted); font-size: 12px; line-height: 1.7; }
+.jdx-analysis-notes { margin-top: 12px; border-top: 1px solid var(--jdx-line); padding-top: 10px; }
+.jdx-analysis-notes > summary { cursor: pointer; font-size: 13px; color: var(--jdx-text); }
+.jdx-analysis-copy { margin: 12px 0 8px; padding: 5px 9px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-surface); color: var(--jdx-text); cursor: pointer; }
+.jdx-analysis-notes-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.8; user-select: text; }
+/* 快捷键以原生只读输入框录制，窄窗口保留标签、说明与独立保存按钮。 */
+.jdx-shortcut-settings { max-width: 680px; }
+.jdx-shortcut-settings[hidden] { display: none; }
+.jdx-shortcut-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--jdx-line); }
+.jdx-shortcut-row .jdx-manager-field { margin: 0; }
+.jdx-shortcut-row .jdx-manager-field small { color: var(--jdx-muted); font-size: 11px; line-height: 1.6; }
+.jdx-shortcut-row input { max-width: 300px; cursor: pointer; }
+.jdx-shortcut-row input:focus { cursor: text; }
+@media (max-width: 900px) { .jdx-shortcut-row { grid-template-columns: 1fr; gap: 10px; } }
+.jdx-analysis-run { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 8px 10px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-surface-sunken); }
+.jdx-analysis-run .jdx-manager-inline-status { flex: 1 1 auto; min-width: 0; }
+.jdx-analysis-run button { flex: 0 0 auto; min-height: 28px; border: 1px solid var(--jdx-line); border-radius: 6px; padding: 4px 9px; color: var(--jdx-text); background: var(--jdx-surface); cursor: pointer; }
+.jdx-analysis-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.jdx-analysis-history-heading h3 { margin: 0; font-size: 13px; }
+.jdx-analysis-history-heading button { min-height: 28px; border: 1px solid var(--jdx-line); border-radius: 6px; padding: 4px 9px; color: var(--jdx-text); background: var(--jdx-surface); cursor: pointer; }
+.jdx-analysis-history { display: grid; align-content: start; gap: 10px; }
+.jdx-analysis-record { min-width: 0; border: 1px solid var(--jdx-line); border-radius: 8px; padding: 12px; background: var(--jdx-surface); }
+.jdx-analysis-record > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.jdx-analysis-title { min-width: 0; overflow: hidden; border: 0; padding: 0; color: var(--jdx-text); background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 650; cursor: pointer; }
+.jdx-analysis-title:hover { color: var(--jdx-green-deep); text-decoration: underline; text-underline-offset: 2px; }
+.jdx-analysis-record time,
+.jdx-analysis-meta { color: var(--jdx-muted); font-size: 11px; }
+.jdx-analysis-meta { margin: 4px 0 10px; overflow-wrap: anywhere; }
+.jdx-analysis-summary { padding: 10px; border-radius: 6px; background: var(--jdx-sidebar); overflow-wrap: anywhere; line-height: 1.7; }
+.jdx-analysis-summary > :first-child { margin-top: 0; }
+.jdx-analysis-summary > :last-child { margin-bottom: 0; }
+.jdx-analysis-config-card { max-width: 620px; }
+
+@media (max-width: 820px) {
+  .jdx-analysis-record > header { align-items: flex-start; flex-direction: column; gap: 3px; }
+}

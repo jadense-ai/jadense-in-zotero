@@ -1,0 +1,181 @@
+# Jadense in Zotero Design Guide
+
+This document extends root `DESIGN.md` for the Zotero XPI: the independent Manager, compact item-pane panel, native reader tools, and version 0.3.1 PDF figure interaction. The root design system owns palette, typography, borders, and brand usage.
+
+## Design Direction
+
+Jadense in Zotero is a reading, local Chat, figure-interpretation, literature-analysis, and Jadense-account workbench with one-way upload. Use a white canvas, green-gray side chrome, near-black text, thin borders, restrained green state signals, and compact controls.
+
+The plugin has three contextual surfaces:
+
+| Surface | Role | Scope |
+| --- | --- | --- |
+| Jadense Manager window | Primary workbench | Local Chat, translation history, independent literature-analysis history/configuration, linked literature/files, Jadense account/points/check-in, connection settings, upload |
+| Zotero item-pane panel | Lightweight contextual panel | Current item/context status, selected-item export, quick manager entry |
+| Zotero PDF reader | Reading actions | Ask about current document in a new Chat, interpret an SDT-recognized figure in a new or current Chat, analyze in the independent analysis workspace, translate selection, quote selection |
+
+Collection upload remains discoverable through Tools, the collection context menu, and Manager. Reading actions must not require a target Jadense folder.
+
+## Independent Manager Window
+
+The Manager opens from `Tools > Jadense`, Configure, native context menus, reader `提问 / 解析 / 引用`, and the independent figure controls. Reuse the window, not necessarily the conversation: reader `提问` creates a new local conversation named after the current paper; `图片解读（开启新对话）` creates and immediately sends a figure-specific conversation; `图片解读（追加在当前对话）` keeps the active conversation, title, history, and sources; reader `解析` opens the independent analysis workspace and never creates a Chat session or message. Translation remains inside the reader and does not open Manager or create a conversation/server session.
+
+### Layout
+
+- Use a two-column workbench layout: a narrow green-gray navigation rail and a white content canvas.
+- Open the Manager as a non-dialog chrome window (`dialog=no`) with the native titlebar and resize controls. The operating system supplies minimize, maximize/restore, and close buttons; do not duplicate them inside the workbench. Reopening focuses/restores the same Manager and keeps its conversation.
+- Default new windows to a 1360 × 860 content area, bounded by the available screen work area including native window chrome. Do not resize an existing window when it is reopened.
+- Main navigation has `对话 / 翻译历史 / 文献解析 / 连接攻玉`; Settings remains a section with its gear-icon entry in the sidebar footer. Preserve the internal compatibility section value `migrate` for `连接攻玉`, including old upload/context-menu entry URLs.
+- Pin the connection indicator, theme toggle, and Settings button to the sidebar bottom. Theme and Settings use ghost icons with tooltips and accessible names; the footer becomes vertical when the rail is collapsed. Keep the active Settings state visible.
+- Do not add a content-wide status/header strip or a Chat title/description. The workbench starts directly with the conversation layout; account, folder, and upload details belong in `连接攻玉`, not persistent page chrome.
+- Keep section containers flat and bordered; avoid nested cards.
+- Non-Chat Manager sections scroll as a whole and reserve a stable scrollbar gutter plus content inset, so the platform scrollbar never overlays the right edge of a section card.
+- Use stable widths and fixed control heights so status changes do not shift the layout.
+- Prefer dense rows, compact labels, and clear disabled states over explanatory copy.
+- At widths of 820px or less, collapse the main navigation by default unless the user has saved a preference. At heights of 740px or less, reduce chrome/input spacing so messages and Send/Stop remain usable at 760 × 620.
+
+### Chat And Research Tools
+
+- Chat has three independently scrolling regions: the left session list, central message log/composer, and right `对话详情`. Session-list and detail toggles remain available above the message log when their panels are collapsed; persist their choices independently from the main navigation. Default the session list to collapsed at ≤900px and details at ≤1100px unless a preference is saved. At ≤1100px, open details as a closeable side overlay instead of squeezing the message column.
+- Keep `关联条目 / 关联文件` in the detail panel. Both open Zotero's native multi-select library/collection tree, including attachments; do not depend on the main window's current selection. Cancel leaves the conversation unchanged, and confirmation/cancel returns focus to Manager. Dragging native Zotero items anywhere into Chat also adds explicit sources.
+- Group sources under the Zotero bibliographic item: `引用信息`, `PDF 文件`/other attachments, and `引用选文` are distinct children. Keep source numbers from the actual request order, even when grouping changes their visual order. A bare `PDF` title must not become a separate anonymous paper. Each paper group can collapse independently; the list owns its full-height scroll region.
+- Child titles open the exact local source, × removes only that child, and `移除整组` removes all associations under that paper without deleting Zotero content. `定位 Zotero 条目` opens the verified bibliographic item. No `解析文献` or per-file `解析` action belongs in Chat; launch analysis only from the PDF reader, targeting that reader's attachment.
+- Show extraction limits and unreadable files inline. State that sending includes metadata and extracted text, not the original file; locally stored history does not imply offline AI.
+- Quote selected text into the composer with citation/page information and keep any existing draft. Translation defaults to English → Simplified Chinese, streams into a fixed non-modal reader panel, and archives source/result objects in a separate bounded profile-local history. The history page uses a two-column source/result layout that stacks on narrow windows. Each history title is an actionable native-source control: revalidate the saved attachment identity, then open that exact attachment in Zotero Reader at the saved physical page. A display `pageLabel` never substitutes for `pageIndex`; a stale or mismatched identity produces an inline failure for that link only and never falls back to title, path, or web-URL navigation.
+- Disable session switching/deletion while preparing or generating; keep Stop available. While busy, the detail heading also offers Stop so its compact overlay cannot hide the only cancellation control. A failed annotation write retains the AI result and reports partial counts.
+- The detail toggle retains source count and unreadable-file warnings while closed. Rows show extraction state, character count, and a short quote preview. Removing a source moves keyboard focus to a visible adjacent source, a remaining collapsed group summary, or the association control; never focus a hidden child.
+- Render user and AI messages as Markdown, including during streaming: headings, emphasis, nested lists, quotes, fenced/inline code, tables, and web links. Code and tables scroll inside the message without widening the window. Local history and Copy retain the same bounded Markdown source.
+- Disable raw HTML execution and keep active Markdown URLs limited to HTTP(S)/mailto. Open links through Zotero's system-browser entry, never navigate the privileged Manager to model content. Images appear as explicit links, without automatic remote/local resource loading; a formatting failure degrades only the affected message.
+- Reuse message nodes during streaming. Follow new content only while the user remains near the bottom; offer `回到最新` when reading above it.
+- Allow drafting during generation while disabling Send. Show the Ctrl/⌘ + Enter shortcut and respect IME composition. User cancellation is neutral; genuine request/write failures retain error styling. Copy uses the same bounded text shown and saved in the conversation.
+- Preserve unsent drafts per session within the open Manager window. A reader-created conversation starts with an empty draft and no unrelated sources/history; returning to the previous conversation restores its draft. Drafts are not persisted across closing the window.
+- On the Jadense route, place one compact model selector at the left of the composer footer. Mirror the Webapp selector's searchable grouped list: `系统默认`, intelligent routes, and direct models; show description, supported inputs, consumption multiplier, and a disabled lock reason where available. The initial `跟随攻玉设置` choice keeps the Webapp account's full saved Chat model preference authoritative. An explicit choice persists for future Zotero Chat requests and sends exactly one route/model override. Hide the selector on BYOK and disable it during generation; a catalog display failure must not block the default Chat path.
+- The new-conversation figure action creates `图片解读：<图注前缀或论文标题>`, automatically associates the verified parent literature plus the current PDF's locally extractable text within the existing 80-page/source budgets, then sends immediately. Extraction failure keeps the available metadata/PDF reference and does not block the image request. The current-conversation action reuses the active session, or a normal empty fallback session when none exists, without changing its title, prior messages, drafts, or sources.
+- Each figure action's concise visible user message shows paper, page, `图注` or `未识别到高置信图注`, and `附件：已附图（仅在当前窗口保留）`; do not expose a base64 URL, hidden prompt, transport shape, or private Reader details in the log.
+- Keep one latest image context per target session only while Manager remains open. Reattach it automatically to the image request and every follow-up, remove it when that session is deleted or the window closes, and leave the readable text history behind. Appending another figure to the same conversation replaces the earlier transient image for later requests without deleting prior messages. A failed first send retains the context so Retry remains meaningful; reopening an old text record must not imply that the image is still attached.
+- Figure requests use the ordinary global Chat route, the composer-selected Jadense route/model when applicable, and the existing streaming/error UI. Jadense temporary Chat and the three BYOK protocols project the same image into their native latest-user parts; an unsupported vision model shows the Provider error in place and never switches route. The request-only prompt requires Simplified Chinese Markdown, direct-image/caption/inference separation, no invented unreadable numbers, no claim of reading absent paper text, and untrusted treatment of the paper title, caption, and text inside the image.
+- Group the multiline input and its footer in one bordered surface. Keep the hint on the left and Send/Stop inline on the right, below the full-width textarea. Hints may wrap in compact windows. Disable the native resize grip; long drafts scroll inside the bounded textarea. Show focus on the shared border and retain each button's keyboard focus indicator.
+
+### Literature Analysis Section
+
+- `文献解析` is a first-class Manager section with two top bookmark tabs: `解析历史 / 解析配置`. Use `tablist`, `tab`, and `tabpanel` semantics with keyboard focus and selected state. Inactive tabs use the recessed surface and muted text; the active tab uses the panel surface, rounded top corners only, no outline border, and overlaps the panel edge by about 1px so tab and panel read as one shape.
+- Analysis remains reader-triggered and targets only the reader's verified attachment. Starting `解析` focuses `文献解析 → 解析历史`, shows progress/cancellation there, and never creates, selects, or appends to a local Chat session. It also creates no Webapp chat session or remote file record.
+- `解析历史` persists analyses created by version 0.3.1 and later, including recoverable text from interrupted generation, in a separate bounded profile-local store. Each record title is a keyboard-accessible link-style button that opens only the exact locally revalidated PDF attachment saved with that record; stale identities fail locally without title/path/URL fallback. Do not scan, copy, or migrate earlier analysis-shaped Chat messages; existing Chat history remains readable in Chat.
+- Each history entry defaults to the analysis time, necessary bibliographic metadata—title, authors, date/year, publication title, and DOI—and `summary`. The saved attachment ID/library/key remain navigation authority but are not presented as bibliography. Provide optional, initially collapsed `查看解析笔记` details with `复制笔记`; show the bounded backup as plain text, including recovered category explanations, source-linked notes, readable unlocated notes, or raw output when no structure can be recovered. Warnings remain visible while details are closed. Copy includes the title, warnings, and notes; model text never gains HTML execution or PDF navigation authority.
+- Back up readable notes before native writes, then update the same history entry with the write outcome. A malformed annotation must not discard other valid notes or successful writes. Local format repair makes no additional AI request. Incomplete/failed/cancelled generation retains already received text with an explicit warning and writes no native annotations; failures before text retain their original error. Do not automatically retry an uncertain native save.
+- Recovered formatting and retained partial-generation notices use neutral status styling. Actual history-persistence or native-write failures use error styling; a readable recovery must not look like complete data loss.
+- History stores at most 200 records and 1,000,000 serialized characters, evicting the oldest records; long notes can leave substantially fewer than 200. If persistence or the final write-status update fails, keep at most 10 latest results in the current Manager window with a visible copy-before-close warning. Closing or restarting loses these unsaved results; the UI must not describe them as durably saved.
+- `解析配置` chooses either `攻玉` or one saved BYOK model for analysis only. Provider/key/model catalog editing remains in Settings; do not duplicate it here. A missing or corrupt analysis preference inherits the global route for upgrade continuity and becomes independent once saved.
+- If a specifically saved BYOK model was deleted, belongs to a removed Provider, or is otherwise no longer usable, keep the unavailable selection visible and fail the requested analysis before dispatch. Ask the user to reselect; never fall back to the global route, another BYOK model, or Jadense. This error must not block ordinary Chat, translation, upload, or existing history.
+
+### Connect Jadense Section
+
+The visible `连接攻玉` section retains the internal compatibility value `migrate`. It is the single Manager surface for the Jadense account and one-way upload, grouped into three top bookmark tabs—`连接配置 / 用户信息 / 文献同步`—with the same `tablist`/`tab`/`tabpanel` semantics, keyboard navigation, and underline indicator as the literature-analysis tabs:
+
+- `连接配置`: masked Jadense token with Copy/Edit actions, token help, the `生成 / 更新令牌` Webapp action, and Disconnect. The canonical Jadense server URL remains fixed in the UI; existing developer/staging preferences remain readable.
+- `用户信息`: account display name and subscription label from the linked profile; effective points balance and its source (`个人积分` or `团队积分`)—primary and fallback balances are transport context, not additional totals to add together in the UI; daily check-in state, current streak, today's granted points, and the explicit check-in action; the `打开签到页` and `订阅与用量` Webapp actions.
+- `文献同步`: favorite-folder selector, refresh action, and PDF-upload default; current Zotero collection/item summary; actions for uploading selected items or the selected collection; and a progress/result log with separate metadata/PDF outcomes. Do not duplicate the folder/PDF controls elsewhere in Manager.
+
+Copy stays user-facing: say `这台电脑` rather than `Zotero profile`, never expose OAuth scope names, and point recovery guidance at the concrete tab (token problems to `连接配置`, points/check-in to `用户信息`).
+
+Connection presentation has four stable states: `未连接`, `正在连接`, `已连接`, and `连接失败`. Saving a token starts verification without moving the page. A missing token shows the connection form and keeps the current Zotero selection visible. A successful check-in updates both its own state and the displayed effective balance; it never automatically retries a failed AI request.
+
+Profile, points, and check-in are independent optional projections. Their loading, network, server, or malformed-response failures stay inside the affected block, preserve other usable connection/upload state, and offer a local retry. A bearer `401` means the stored connection is no longer usable and prompts token replacement without silently deleting it. A `403 insufficient_scope` disables only the account feature that needs the missing scope and directs the user to create a new Zotero token; it must not imply that Chat, favorite access, or upload permissions were also revoked.
+
+New Zotero tokens include `points:read` for the balance/check-in snapshot and `points:check-in` for the explicit daily mutation. Existing tokens are never silently widened. The section must therefore give old-token users a precise regeneration path while retaining every capability their stored scopes still allow.
+
+The three Webapp actions are `打开签到页` (`/app/check-in`), `订阅与用量` (`/app?settings=billing`), and `生成 / 更新令牌` (`/app?settings=integrations`, in `连接配置`). Build them from the active normalized Webapp origin and open them through Zotero's system-browser entry. Never navigate the privileged Manager to Webapp content or put the extension token in a URL.
+
+When the Jadense AI route returns `402 POINTS_INSUFFICIENT`, keep the failed message local and say `当前可用积分不足。请打开「连接攻玉」签到领积分或补充积分后重试。` The guidance leads to the same account workbench; topping up or checking in never retries the request automatically.
+
+Disable only the upload action that is missing a usable token, target folder, or relevant selection. A missing folder or an optional account/status failure must not disable Chat or reader tools. Upload always uses the Jadense connection regardless of the active AI route.
+
+### Settings Section
+
+Manager Settings uses accessible `AI 配置 / 快捷键设置` tabs. `AI 配置` keeps the `AI 请求通道：攻玉 / BYOK` segmented control and `BYOK 配置`. `快捷键设置` records, saves, disables, and restores the PDF screenshot and translation shortcuts, effective immediately in open readers. The literature-analysis route is selected independently in `文献解析 → 解析配置`. Jadense account, token, folder, PDF, and upload controls belong to `连接攻玉`.
+
+`BYOK 配置` separates Provider connection records from their model catalogs. A Provider owns display name, protocol, API Base URL, and masked/single replacement key. Each model owns a local display name, exact Provider Model ID, optional context window, and output cap. Users can add, select, edit, and delete either record independently.
+
+Native Zotero Preferences remains the fallback configuration surface when Manager cannot open. It keeps the route control plus the existing `连接攻玉` and `BYOK 配置` sections in a single column, backed by the same local preferences; the account, points, check-in, and upload workbench stays Manager-only.
+
+Saving an empty replacement keeps the corresponding Provider key. Deleting a Provider also deletes only its models. Changing a token, route, or saved BYOK configuration cancels pending reading/AI actions so material from an earlier operation cannot be sent to a new destination. Clearing BYOK does not clear Jadense or change the route. Saving is offline; Test uses the unsaved active Provider/model form for one real, potentially billable request capped at 3,000 output tokens and never changes history or saved configuration. A valid streamed response that ends at this probe cap proves connectivity. BYOK Chat still reports truncated generation as a failure; paper analysis retains received text for reading while withholding native annotation writes.
+
+The composer identifies the active route and BYOK model. On the Jadense route, its compact model selector identifies either `跟随攻玉设置`, an intelligent route, or a direct model without expanding the footer height unnecessarily. The sidebar connection dot continues to report only the Jadense connection; it must not imply BYOK readiness or mirror an optional account/status-card failure.
+
+## Native Item-Pane Panel
+
+The panel is intentionally compact. It appears in Zotero's item pane, so it should not be treated as the primary collection migration UI.
+
+### Layout
+
+- Use a single-column panel with 12px chrome text and 30px to 32px controls.
+- Keep buttons full-width for easy scanning.
+- The first action should open the Jadense Manager.
+- Show current connection, default folder, selected item count, and current collection status as short status rows.
+
+### Actions
+
+The panel can expose:
+
+- Open Jadense Manager.
+- Export selected items.
+- Export current collection when a collection is selected.
+
+Panel copy should make it clear that upload lives in the Manager `连接攻玉` section and collection context menu.
+
+## Menu And Entry Rules
+
+- Tools menu must be a visible `Jadense` submenu.
+- The main Zotero window must load the plugin Fluent resource before menu registration.
+- Menu entries should never depend on webapp navigation.
+- Configure opens the Manager `连接攻玉` section first; Zotero Preferences remains the fallback path.
+- Collection context menu opens Manager `连接攻玉` and may also expose direct collection export.
+
+## Native Reader Tools
+
+- The permanent toolbar logo is a native button named `打开攻玉工作台`, with hover and keyboard-focus feedback. Clicking it opens the Manager Chat section or focuses the existing window, retaining the active conversation and draft without attaching the current paper or dispatching AI.
+- The permanent toolbar also exposes compact native source/target language selectors for the current article. Defaults are `英文 → 简体中文`; source may use `自动识别`, target must be concrete. Save changes locally without an AI request, scoped to the bibliographic parent (or independent PDF), and restore them when reopening. Retain accessible names `文章源语言 / 文章目标语言` and show a local save-failure hint without disabling translation. At widths up to 1100px, a permanent `语言` button opens these selectors below the toolbar within the viewport; its accessible name is `文章翻译语言设置`, its tooltip identifies the saved language pair, and Escape closes the selector panel. Wider readers expose both selectors inline. Saving synchronizes open article toolbars, and Reader focus refreshes preferences saved in another window; sentence snapshots remain independent.
+- The translation panel header exposes `本句源语言 / 本句目标语言` and `重新翻译`, with a short explanation that changes apply only to the current sentence. Changing a selector clears the old result and invalidates old deltas; sending is explicit and retains the panel's original source/page even if PDF selection changes. Disable duplicate sends while generating; allow language changes, retry after errors, and Escape dismissal. New selected text always starts from the article's preferences. Translation history displays the actual source/target language of each completed result.
+- Use Zotero's toolbar and text-selection popup extension slots, with compact labels and accessible button names. Do not restructure Zotero's own controls.
+- Main toolbar offers `提问 / 解析 / 翻译 / 引用`; `提问` uses a chat icon and tooltip `发起新对话，向 AI 提问（当前文献）` and starts a new local Chat for the active document. `解析` opens `文献解析 → 解析历史` and starts an independent analysis for that exact attachment without writing Chat. Selection popup offers `智能翻译 / 引用选文`; read the current selection when invoked and explain when no text is selected.
+- Figure interpretation is a separate canvas-adjacent layer, not another item in either toolbar. On Zotero 10.0.1+ ordinary PDF views, pointer hover over a valid SDT image shows one subtle 2px brand-green outline that cannot intercept mouse input. Click locks it and reveals two vertically grouped buttons: `图片解读（开启新对话）` and `图片解读（追加在当前对话）`. Clamp the group to an 8px viewport inset, allow long labels to wrap in narrow/split views, and explicitly cycle Tab/Shift+Tab between the actions because PDFView owns the native Tab sequence. Do not show them before selection. Escape, blank click, or page change clears them, and zoom, rotation, scrolling, redraw, and split-view changes keep the geometry aligned.
+- Install independent controllers for primary and split PDF views. Selection is available only for the ordinary pointer tool when the user is not dragging; it must not hinder text selection, annotations, or native controls. While either branch is cropping and handing the action to Manager, disable both buttons and show one `处理中…` state on the activated button instead of accepting a duplicate request. Remove all figure nodes and listeners when the view or plugin closes.
+- Attach a caption only when same-page SDT text begins with `Figure`, `Fig.`, `图`, `Scheme`, or `Plate`, excludes `Table`/`表`, aligns or overlaps horizontally, and lies within `max(24pt, 6% page height)`. Merge adjacent caption parts, prefer below-image then nearest geometry/document order, and omit an equal-ranked result. No-caption is a normal actionable state.
+- Crop only after either image-interpretation button is activated. Preserve aspect ratio, limit the longest edge to 2048px and decoded size to 6 MiB, prefer PNG, then progressively use JPEG quality/dimension reduction. If SDT is unavailable, omit automatic recognition while retaining manual capture when native region cropping is available; if a selected crop still cannot meet the limit, show a Reader-local error and make no AI request. Manual selection is an independent shortcut fallback: drag within a PDF page, retain the green frame and both interpretation actions plus `退出`; Escape or Exit clears the selection without dispatch. Use native region crops and PDF coordinates so zoom/rotation remain aligned, even without SDT. Do not add OCR, EPUB/web-attachment support, or change the existing toolbar.
+- Translation opens immediately as a fixed reader-side floating panel with original text, streaming result, Copy, Close, Escape dismissal, and inline error state. Before dispatch, matching active-selection character geometry restores supported Unicode super/subscripts that Zotero's flat popup text omitted; missing or ambiguous geometry leaves the source untouched, and complex/scanned equations are not guessed as text. Its shared model prompt treats recovered scripts as format evidence and requires directly renderable Markdown, `$...$` inline formulas, three-line `$$...$$` display formulas, unchanged LaTeX semantics, and no formula code fences. The result uses the same safe Markdown presentation as Chat in both the reader panel and Translation History, typesetting common inline/display LaTeX formulas through bundled KaTeX MathML while preserving genuine fenced code blocks; archive and Copy retain the Markdown source. It is a non-modal reading aid, not a Chat surface, and a second translation replaces the visible panel content without mixing either result into conversation state.
+- Group reader actions with the existing 20px Jadense logo, 16px action line icons, 28px controls, and Zotero-native theme variables. Use the original logo geometry/gradients as inline SVG with an accessible brand name. Narrow readers may hide toolbar labels but retain the logo, tooltips, and full accessible names; selection-popup actions retain their text.
+- Missing selection shows a local status hint that dismisses with Escape or after five seconds; do not open Manager or dispatch an action. The reader's XHTML/content boundary may not load plugin `chrome://` images, so the logo must be inline and require no external resource request.
+- Annotations are native highlights with original sentences, Chinese explanatory comments, category colors, and tags. Use Zotero's standard annotation colors for research categories, not the brand palette.
+- Categories are 研究问题、核心论点、创新点、研究方法、关键证据、研究结论、局限性、未来工作; unknown additive categories fall back to 补充要点.
+- Never fabricate a highlight when a sentence lacks verified local coordinates. Preserve human annotations and original PDF bytes; users can export native annotations with Zotero's PDF export.
+
+## Visual Rules
+
+- Primary green: `#16cf8c`.
+- Main content background: `#ffffff`.
+- Zotero plugin sidebar/chrome background: `#f7f8f5`.
+- Text: `#111510` or close near-black.
+- Muted text: `#53625a`.
+- Borders: 1px, low opacity or `#d9e2dd`.
+- Maximum ordinary radius: 8px. Compact buttons and inputs should use 5px to 6px.
+- Avoid large shadows, decorative gradients, and large rounded promotional surfaces.
+- Default ordinary action/navigation buttons to ghost (transparent background and border), with hover and keyboard-focus feedback. Retain emphasized primary actions, destructive text, and input/select field borders; do not style every action as an outlined button.
+
+## Validation Checklist
+
+- Tools menu labels render as visible text.
+- Main command opens Chat; Configure and collection actions open `连接攻玉` while retaining the internal `migrate` section value.
+- The four main navigation entries remain visible and correctly route to `对话 / 翻译历史 / 文献解析 / 连接攻玉`; the analysis page exposes accessible `解析历史 / 解析配置` bookmark tabs.
+- Manager controls stay readable at 760px by 620px and larger.
+- Missing token, missing default folder, and missing selected collection each produce distinct disabled states.
+- Disconnected, loading, connected, invalid-token, missing-scope, and optional account/status failures remain distinguishable without shifting the layout or disabling unrelated capabilities.
+- Settings contains `AI 配置 / 快捷键设置`, editable screenshot/translation chords, and a gear entry; native Preferences retains its two fallback configuration sections.
+- Reader analysis adds one post-0.3.1 record with a default summary and expandable/copyable notes to the independent history and no Chat session/message. Verify local format repair, partial-stream retention with zero native writes, per-annotation failure isolation, final write status, old summary-only records, and the unsaved-result copy warning. A stale saved analysis BYOK selection fails before dispatch without changing the global route or unrelated features.
+- A translation-history title opens the revalidated local attachment in Zotero Reader at its saved physical page; stale identity failure stays local to that link.
+- Figure hover, lock, both keyboard-focusable conversation buttons, Escape/blank/page cleanup, pointer/drag gating, primary/split geometry, and shared busy-state duplicate protection work in the installed Zotero 10.0.1 XPI without adding nodes to the permanent or selection toolbar.
+- New-conversation figure interpretation sends exactly one bounded image with the correct page and unique caption, automatically associates the parent literature and current PDF's bounded extractable text, and streams into one new dedicated session. Current-conversation interpretation sends into the active session without creating or resetting it. Both retain only the latest session image for follow-up while Manager remains open and persist no data URL or hidden prompt. Missing/ambiguous captions, unavailable text/SDT/crop capability, oversize crops, and Provider vision errors remain local and do not alter the global route or unrelated reader tools.
+- Panel remains usable when only items are selected and does not promise collection-level visibility.
+- XPI includes manager XHTML, CSS, script, locale files, and icons.
+- Sources, empty/unreadable states, streaming/cancel/error states, dark mode, and the native selection actions remain usable in the compact layout.
+- The Jadense composer selector loads with a `chat:temporary` token, supports grouped search and locked rows, persists route/direct-model/default choices, sends mutually exclusive fields, and leaves the no-override Chat path usable if the optional catalog is unavailable.
+- Native toolbar/popup screenshots must come from the installed XPI in an isolated Zotero profile; a browser fixture proves only Manager layout/interaction. Verify actual viewport sizes before claiming wide/compact coverage.
