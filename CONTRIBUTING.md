@@ -2,7 +2,7 @@
 
 本仓库可以独立开发和构建，无需私有主应用、数据库、账号令牌或 `.env`。GitHub PR 与 Release 按本文执行；官网发布和自动更新不属于此流程。
 
-## 提交 PR
+## 开发与本机验证
 
 使用 `.node-version` 中的 Node 版本和 `packageManager` 中的 pnpm 版本：
 
@@ -18,6 +18,22 @@ pnpm run build
 
 `build` 已包含类型检查、XPI 打包和制品校验。运行功能测试位于 `src/`，GitHub 发布边界测试位于 `.github/scripts/`；后者只使用临时 Git 仓库和模拟发布命令。
 
+当前固定 Node **24.10.0**、pnpm **10.19.0**。构建产物位于 `release/zotero/v<package.json 版本>/`，包括 `jadense-in-zotero-v<版本>.xpi`、`release-metadata.json` 和 `SHA256SUMS`；`manifest.json`、`build/`、`release/` 均为生成物，不提交。XPI 包含项目许可证和打包依赖的完整许可证声明。
+
+安装本机 Zotero 后，可运行隔离冒烟；请将路径替换为自己的可执行文件路径：
+
+```powershell
+pnpm run smoke:installed -- 'C:/Program Files/Zotero/zotero.exe' --keep-temp
+pnpm run smoke:research -- 'C:/Program Files/Zotero/zotero.exe' --keep-temp
+pnpm run smoke:research -- 'C:/Program Files/Zotero/zotero.exe' --appearance-language en-US --screenshots
+pnpm run smoke:research -- 'C:/Program Files/Zotero/zotero.exe' --appearance-language zh-CN --screenshots
+pnpm run preview:research
+```
+
+冒烟创建临时 profile、合成 PDF 和本地模拟接口，不使用真实账号或资料库。`smoke:installed` 验证三次冷启动；`smoke:research` 覆盖阅读器、AI 通道、翻译、解析、账号连接和元数据/PDF 上传，包括无 PDF 条目的独立跳过和关闭 PDF 后仅发送元数据。`--appearance-language` 验证中英文界面、常规设置及主题联动。模拟接口通过不等于生产 Provider 已验证；`preview:research` 用于查看研究工作台的界面状态。
+
+## 提交 PR
+
 1. 从最新 `main` 创建短期功能分支；外部贡献者使用 fork，PR 的目标分支为 `main`。
 2. 一份 PR 解决一个明确问题，说明修改前后的行为、验证结果，以及兼容性或用户数据影响。推荐标题前缀 `feat`、`fix`、`docs`、`test`、`ci`、`chore`，不强制格式检查。
 3. UI 修改提供去除个人信息的截图。涉及阅读器、批注、本地历史或升级的修改，补充实际 Zotero/操作系统版本及针对性验证；没有环境时明确尚未验证的范围。
@@ -32,7 +48,9 @@ pnpm run build
 
 内部开发通过白名单同步形成公开 PR，也经过相同检查。同步冲突必须先协调代码，不能强制覆盖公开侧贡献。受管内容一致后，维护者运行现有同步工具的 `--write` 刷新本地摘要，再以 `--check` 确认无差异。
 
-README、本文、SECURITY 和 `.github/` 在公开仓库独立维护；CI 流程脚本放在 `.github/scripts/`，不进入插件 XPI，也不纳入上游源码同步白名单。
+README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库独立维护；CI 流程脚本放在 `.github/scripts/`，不进入插件 XPI，也不纳入上游源码同步白名单。
+
+源码同步完成后，单独核对公开文档和已知文案分支：README 中英文的功能、入口、版本与链接应一致；CHANGELOG 按版本保留历史事实；CONTRIBUTING、SECURITY 与 DESIGN 应描述当前行为。不能把源码白名单同步通过当作全部文档已经发布。
 
 ## CI 与仓库设置
 
@@ -63,13 +81,13 @@ README、本文、SECURITY 和 `.github/` 在公开仓库独立维护；CI 流�
 - 每个已发布版本保持不可变。修改安装包必须使用新版本号，不同 XPI 字节不得重复使用已公开版本号。
 
 1. 创建发布 PR，集中修改 `package.json` 版本和相关版本说明。依赖发生变化时更新锁文件；清楚列出新增、修复、兼容范围及升级注意事项。
-2. 正常合并发布 PR，并确认 `main` CI 成功。维护者在最新 `main` 的预定提交创建并推送标签；以下 `0.3.2` 仅为示例，必须替换为发布 PR 中的实际版本：
+2. 正常合并发布 PR，并确认 `main` CI 成功。维护者在最新 `main` 的预定提交创建并推送标签；以下 `0.4.1` 仅为示例，必须替换为发布 PR 中的实际版本：
 
    ```powershell
    git switch main
    git pull --ff-only
-   git tag -a v0.3.2 -m "Jadense in Zotero v0.3.2"
-   git push origin refs/tags/v0.3.2
+   git tag -a v0.4.1 -m "Jadense in Zotero v0.4.1"
+   git push origin refs/tags/v0.4.1
    ```
 
 3. 工作流要求标签与包版本精确一致，且提交已包含在 `origin/main` 历史中。`verify` 只构建一次；`draft-release` 下载同次运行的制品，重新检查哈希和元数据后创建草稿，附以下三个文件：
@@ -81,11 +99,11 @@ README、本文、SECURITY 和 `.github/` 在公开仓库独立维护；CI 流�
 4. 从草稿下载这三个文件。使用标签对应的源码和测试脚本，先将 XPI 的 SHA-256 与 `SHA256SUMS` 核对，再对下载的 XPI 进行原生验收，不能重新构建后替代：
 
    ```powershell
-   Get-FileHash ./candidate/jadense-in-zotero-v0.3.2.xpi -Algorithm SHA256
+   Get-FileHash ./candidate/jadense-in-zotero-v0.4.1.xpi -Algorithm SHA256
    Get-Content ./candidate/SHA256SUMS
-   pnpm run smoke:installed -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi
-   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi
-   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.3.2.xpi --upgrade-from ./previous/jadense-in-zotero-v0.3.1.xpi
+   pnpm run smoke:installed -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi
+   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi
+   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi --upgrade-from ./previous/jadense-in-zotero-v0.4.0.xpi
    ```
 
    路径和版本均替换为实际值。升级测试只用于存在同插件身份的上一正式版时；首版或身份不同则在验收记录填写不适用及原因，不将冷启动当作升级验证。冒烟使用临时 profile、合成数据和模拟接口，不上传真实用户资料或凭据。
