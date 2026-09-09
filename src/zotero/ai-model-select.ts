@@ -3,6 +3,7 @@ import type { JadenseChatModelCatalog, JadenseChatModelOption, JadenseChatSelect
 import { jadenseChatSelectionKey, normalizeJadenseChatSelection, readByokSettings, featureModelSelectionKey, type FeatureModelSelection } from "./ai-settings"
 import type { ZoteroLike } from "./runtime"
 import type { JdxSelectOption } from "./custom-select"
+import { getUiLocale, uiText } from "./ui-preferences"
 
 function jadenseModelOptionKey(option: JadenseChatModelOption) {
   return option.kind === "route" ? `route:${option.routeTier}` : `model:${option.modelId}`
@@ -20,7 +21,7 @@ function capabilityLabels(capabilities: readonly string[], english: boolean) {
 export function buildJadenseChatModelSelectOptions(
   catalog: JadenseChatModelCatalog,
   selection?: JadenseChatSelection,
-  english = false,
+  english = getUiLocale() === "en-US",
 ): JdxSelectOption[] {
   const options: JdxSelectOption[] = catalog.options.map(option => {
     const features = option.kind === "model" ? capabilityLabels(option.capabilities, english) : ""
@@ -64,14 +65,14 @@ export function jadenseChatModelSelectionIssue(
   selection: JadenseChatSelection,
 ) {
   const option = catalog.options.find(item => jadenseModelOptionKey(item) === jadenseChatSelectionKey(selection))
-  if (!option) return "此前选择的攻玉模型或路由已不可用，请重新选择。"
+  if (!option) return uiText("此前选择的攻玉模型或路由已不可用，请重新选择。", "The saved Jadense model or route is unavailable. Select another one.")
   return option.locked
-    ? `${option.lockReason || "当前订阅不支持所选模型或路由。"} 请更换可用模型，或升级订阅后重试。`
+    ? `${option.lockReason || uiText("当前订阅不支持所选模型或路由。", "Your subscription does not include this model or route.")} ${uiText("请更换可用模型，或升级订阅后重试。", "Choose an available model, or upgrade your subscription and retry.")}`
     : ""
 }
 
 /** 两种来源始终同时可选；空目录或未登录不隐藏已保存的 BYOK 模型。 */
-export function buildFeatureModelSelectOptions(zotero: ZoteroLike, catalog: JadenseChatModelCatalog, selection: FeatureModelSelection, english = false): JdxSelectOption[] {
+export function buildFeatureModelSelectOptions(zotero: ZoteroLike, catalog: JadenseChatModelCatalog, selection: FeatureModelSelection, english = getUiLocale() === "en-US"): JdxSelectOption[] {
   const options = buildJadenseChatModelSelectOptions(catalog, selection.route === "jadense" ? normalizeJadenseChatSelection(selection.selection) : undefined, english)
   const settings = readByokSettings(zotero)
   options.push(...settings.models.map(model => ({

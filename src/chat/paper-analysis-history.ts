@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * Zotero profile 中独立的文献解析历史。
  * 保存附件身份、元数据、总结与可读笔记备份；不读取或迁移本地对话记录，笔记不作为原生写入输入。
@@ -158,7 +159,7 @@ export function appendPaperAnalysisRecord(
   input: PaperAnalysisRecord,
 ): PaperAnalysisRecord {
   const record = normalizeRecord(input)
-  if (!record) throw new Error("解析记录缺少有效的附件身份、标题或总结。")
+  if (!record) throw new Error(uiText("解析记录缺少有效的附件身份、标题或总结。", "The analysis record is missing a valid attachment identity, title, or summary."))
   const next = fitHistory([record, ...readPaperAnalysisHistory(preferences).records])
   preferences.set(PAPER_ANALYSIS_HISTORY_PREF_KEY, JSON.stringify(next))
   return record

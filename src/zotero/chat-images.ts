@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * Manager 图片附件存储：仅操作当前 profile 的专用目录，不访问用户原始图片路径。
  * Prefs 保存 UUID 引用；读取/写入失败局部降级，模型 Markdown 不获得此能力。
@@ -20,7 +21,7 @@ let cleanup = Promise.resolve()
 
 function imageStorage() {
   const { IOUtils: io, PathUtils: paths } = globalThis as typeof globalThis & ImageHost
-  if (!io || !paths) throw new Error("本地图片存储不可用")
+  if (!io || !paths) throw new Error(uiText("本地图片存储不可用", "Local image storage is unavailable"))
   return { io, paths, directory: paths.join(paths.profileDir, "jadense-chat-images") }
 }
 

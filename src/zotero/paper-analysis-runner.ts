@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * 独立文献解析任务协调器。
  * 上游接收 Reader 附件 ID 与独立模型偏好，下游只写解析历史和 Zotero 原生批注；不接触 Chat 存储。
@@ -52,14 +53,16 @@ function notify(callback: ((message: string) => void) | undefined, message: stri
   try { callback?.(message) } catch { /* 进度 UI 不得改变解析结果。 */ }
 }
 
-function coverageText(snapshot: PdfAnalysisSnapshot) {
+function coverageText(snapshot: PdfAnalysisSnapshot, forDisplay = true) {
+  // 请求上下文使用原有中文范围说明；显示语言只改变界面摘要。
+  const label = (zh: string, en: string) => forDisplay ? uiText(zh, en) : zh
   const text = [
-    `PDF 共 ${snapshot.coverage.totalPages} 页，读取 ${snapshot.coverage.pagesRead} 页。`,
-    `提供 ${snapshot.passages.length} 段可定位原文。`,
-    snapshot.coverage.limited ? "已按页或句子抽样，不代表完整全文。" : "",
+    label(`PDF 共 ${snapshot.coverage.totalPages} 页，读取 ${snapshot.coverage.pagesRead} 页。`, `Read ${snapshot.coverage.pagesRead} of ${snapshot.coverage.totalPages} PDF pages.`),
+    label(`提供 ${snapshot.passages.length} 段可定位原文。`, `${snapshot.passages.length} source passages can be located.`),
+    snapshot.coverage.limited ? label("已按页或句子抽样，不代表完整全文。", "Pages or sentences were sampled; this is not the complete text.") : "",
     ...snapshot.coverage.warnings,
   ].filter(Boolean).join(" ")
-  return text.length > 800 ? `${text.slice(0, 760)}…（说明过长，已截短）` : text
+  return text.length > 800 ? `${text.slice(0, 760)}${label("…（说明过长，已截短）", "… (notice truncated)")}` : text
 }
 
 function analysisCitation(snapshot: PdfAnalysisSnapshot) {
@@ -109,10 +112,10 @@ export async function runIndependentPaperAnalysis(input: {
   const defaults = defaultServices(input.zotero, input.fetchImpl)
   const services = { ...defaults, ...input.services }
 
-  notify(input.onProgress, "正在读取 PDF 原文与句子位置…")
+  notify(input.onProgress, uiText("正在读取 PDF 原文与句子位置…", "Reading PDF text and sentence positions…"))
   const snapshot = await services.readPdf(input.zotero, input.itemID, {
     signal: input.signal,
-    onProgress: ({ pagesRead, totalPages }) => notify(input.onProgress, `正在读取 PDF：${pagesRead} / ${totalPages} 页…`),
+    onProgress: ({ pagesRead, totalPages }) => notify(input.onProgress, uiText(`正在读取 PDF：${pagesRead} / ${totalPages} 页…`, `Reading PDF: ${pagesRead} / ${totalPages} pages…`)),
   })
   input.signal.throwIfAborted()
   const coverage = coverageText(snapshot)
@@ -121,10 +124,10 @@ export async function runIndependentPaperAnalysis(input: {
     title: snapshot.metadata.title,
     citation: analysisCitation(snapshot),
     passages: snapshot.passages,
-    coverage,
+    coverage: coverageText(snapshot, false),
   })
 
-  notify(input.onProgress, `正在使用${model.label}按结构解析文献…`)
+  notify(input.onProgress, uiText(`正在使用${model.label}按结构解析文献…`, `Analyzing the paper with ${model.label}…`))
   let response = ""
   let partialText = ""
   let generationWarning: string | undefined
@@ -145,12 +148,12 @@ export async function runIndependentPaperAnalysis(input: {
     response ||= partialText
     if (!response.trim()) throw error
     generationWarning = input.signal.aborted
-      ? "生成已停止；已保留收到的部分内容供核对，未写入 PDF 批注。"
-      : "AI 响应未完整结束；已保留收到的部分内容供核对，未写入 PDF 批注。"
+      ? uiText("生成已停止；已保留收到的部分内容供核对，未写入 PDF 批注。", "Generation stopped. Received content was retained for review; no PDF annotations were written.")
+      : uiText("AI 响应未完整结束；已保留收到的部分内容供核对，未写入 PDF 批注。", "The AI response was incomplete. Received content was retained for review; no PDF annotations were written.")
   }
   const analysis = parsePaperAnalysis(response, snapshot.passages)
   const warnings = [...(generationWarning ? [generationWarning] : []), ...analysis.warnings]
-  if (analysis.skipped) warnings.push(`有 ${analysis.skipped} 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。`)
+  if (analysis.skipped) warnings.push(uiText(`有 ${analysis.skipped} 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。`, `${analysis.skipped} entries were not used as PDF annotations. Recoverable notes were retained for review.`))
 
   const record: PaperAnalysisRecord = {
     id: requestID,
@@ -166,29 +169,29 @@ export async function runIndependentPaperAnalysis(input: {
       ...(snapshot.metadata.publicationTitle ? { publicationTitle: snapshot.metadata.publicationTitle } : {}),
       ...(snapshot.metadata.doi ? { doi: snapshot.metadata.doi } : {}),
     },
-    summary: analysis.summary || PAPER_ANALYSIS_MISSING_SUMMARY,
+    summary: analysis.summary || uiText(PAPER_ANALYSIS_MISSING_SUMMARY, "No summary was returned for this analysis."),
     notes: formatPaperAnalysis(analysis, MAX_ANALYSIS_NOTES_LENGTH - 1_600),
     warnings,
   }
 
   let historySaved = true
   let historyError: string | undefined
-  notify(input.onProgress, "正在保存解析总结与笔记备份…")
+  notify(input.onProgress, uiText("正在保存解析总结与笔记备份…", "Saving the analysis summary and notes…"))
   const writePending = !generationWarning && analysis.annotations.length > 0
-  if (writePending) record.warnings = [...warnings, "PDF 批注写入尚未确认；解析笔记已保留。"]
+  if (writePending) record.warnings = [...warnings, uiText("PDF 批注写入尚未确认；解析笔记已保留。", "PDF annotation writes have not been confirmed. Analysis notes were retained.")]
   try {
     if (!input.zotero.Prefs) throw new Error("missing preferences")
     services.appendHistory(input.zotero.Prefs, record)
   } catch {
     historySaved = false
-    historyError = "解析历史保存失败；笔记暂留当前窗口，请及时复制。"
-      + (writePending ? "已验证的原生批注仍会继续写入。" : "")
+    historyError = uiText("解析历史保存失败；笔记暂留当前窗口，请及时复制。", "Could not save analysis history. Notes remain in this window; copy them before closing.")
+      + (writePending ? uiText("已验证的原生批注仍会继续写入。", "Validated native annotations will still be written.") : "")
   }
 
   const emptyAnnotations: SavedAnalysisAnnotations = { created: 0, skipped: 0, failed: 0, unprocessed: 0, warnings: [] }
   if (!writePending) return { record, coverage, historySaved, ...(historyError ? { historyError } : {}), annotations: emptyAnnotations }
 
-  notify(input.onProgress, "正在写入 Zotero 原生批注…")
+  notify(input.onProgress, uiText("正在写入 Zotero 原生批注…", "Writing Zotero annotations…"))
   let annotations = emptyAnnotations
   let annotationError: string | undefined
   try {
@@ -196,12 +199,12 @@ export async function runIndependentPaperAnalysis(input: {
   } catch {
     annotations = { ...emptyAnnotations, unprocessed: analysis.annotations.length }
     annotationError = input.signal.aborted
-      ? "已停止写入；此前成功保存的批注予以保留，可展开笔记查看解析内容。"
-      : "原生批注未能全部写入；解析笔记已保留，可展开查看和复制。"
+      ? uiText("已停止写入；此前成功保存的批注予以保留，可展开笔记查看解析内容。", "Writing stopped. Previously saved annotations were retained; expand the notes to review the analysis.")
+      : uiText("原生批注未能全部写入；解析笔记已保留，可展开查看和复制。", "Some native annotations could not be written. Expand the retained analysis notes to review or copy them.")
   }
   const writeSummary = annotationError
-    ?? `PDF 批注：新增 ${annotations.created} 条，跳过 ${annotations.skipped} 条，失败 ${annotations.failed} 条，未执行 ${annotations.unprocessed} 条。`
-  record.notes += `\n\n写入结果\n${writeSummary}`
+    ?? uiText(`PDF 批注：新增 ${annotations.created} 条，跳过 ${annotations.skipped} 条，失败 ${annotations.failed} 条，未执行 ${annotations.unprocessed} 条。`, `PDF annotations: ${annotations.created} created, ${annotations.skipped} skipped, ${annotations.failed} failed, ${annotations.unprocessed} unprocessed.`)
+  record.notes += `\n\n${uiText("写入结果", "Write result")}\n${writeSummary}`
   record.warnings = [...warnings, ...(annotationError || annotations.failed || annotations.unprocessed ? [writeSummary] : []), ...annotations.warnings]
   // 替换同一记录的写入状态；失败时保留首次备份，不重发 AI 或原生写入。
   try {
@@ -211,7 +214,7 @@ export async function runIndependentPaperAnalysis(input: {
     historyError = undefined
   } catch {
     historyError = historySaved
-      ? "笔记备份已保存，但批注写入状态未能更新；当前结果暂留窗口，请及时复制。"
+      ? uiText("笔记备份已保存，但批注写入状态未能更新；当前结果暂留窗口，请及时复制。", "The notes were saved, but the annotation status could not be updated. Copy the current result before closing this window.")
       : historyError
   }
   return { record, coverage, historySaved, ...(historyError ? { historyError } : {}), annotations, ...(annotationError ? { annotationError } : {}) }

@@ -1,6 +1,8 @@
 // 合成 Zotero 9 阅读器契约测试，不读取真实文库；验证坐标绑定、写入隔离和原生工具条生命周期。
 import { readFileSync } from "node:fs"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { initializeUiLocale, saveTheme, THEME_PREF, DISPLAY_LANGUAGE_PREF } from "./ui-preferences"
+beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
 import { readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 import {
   readPdfForAnalysis,
@@ -81,6 +83,7 @@ function host(pages = [page("Our method reduces error. This result requires cont
     return saved
   })
   const zotero: ZoteroReaderHost = {
+    locale: "zh-CN",
     Items: { get: vi.fn(() => item), getByLibraryAndKey: vi.fn((_library, key) => keys.get(key)) },
     Reader: { _readers: [reader] },
     Annotations: { saveFromJSON },
@@ -417,7 +420,8 @@ class ElementStub {
   children: ElementStub[] = []
   attributes = new Map<string, string>()
   handlers = new Map<string, (event?: { key?: string; preventDefault?: () => void }) => void>()
-  style = { cssText: "", left: "", top: "" }
+  style = { cssText: "", left: "", top: "", colorScheme: "" }
+  dataset: Record<string, string> = {}
   className = ""
   title = ""
   textContent = ""
@@ -433,6 +437,7 @@ class ElementStub {
   })
   setAttribute(key: string, value: string) { this.attributes.set(key, value) }
   removeAttribute(key: string) { this.attributes.delete(key) }
+  contains(node: ElementStub): boolean { return node === this || this.children.some(child => child.contains(node)) }
   addEventListener(event: string, handler: () => void) { this.handlers.set(event, handler) }
   getBoundingClientRect() { return { left: 700, bottom: 33 } }
   append(...children: ElementStub[]) {
@@ -470,6 +475,60 @@ function descendants(element: ElementStub): ElementStub[] {
 }
 
 describe("native reader toolbars", () => {
+  it("uses the selected UI language and updates only plugin surfaces when theme preferences change", async () => {
+    const fixture = host()
+    const values = new Map<string, unknown>([[DISPLAY_LANGUAGE_PREF, "en-US"], [THEME_PREF, "dark"]])
+    const observers = new Map<number, { key: string; update: () => void }>()
+    let observerID = 0
+    fixture.zotero.Prefs = {
+      get: key => values.get(key),
+      set: (key, value) => {
+        values.set(key, value)
+        for (const entry of observers.values()) if (entry.key === key) entry.update()
+      },
+      registerObserver: (key, update) => { observers.set(++observerID, { key, update }); return observerID },
+      unregisterObserver: id => { observers.delete(id as number) },
+    }
+    const register = vi.fn()
+    fixture.zotero.Reader!.registerEventListener = register
+    const onAction = vi.fn(async () => ({ translation: "原样保留的 AI 译文" }))
+    const cleanup = registerReaderTools(fixture.zotero, "test@jadense", onAction)
+    const doc = new DocumentStub()
+    const append = vi.fn((node: ElementStub) => doc.body.append(node))
+    register.mock.calls[0][1]({ reader: fixture.reader, doc, append })
+    const toolbar = append.mock.calls[0][0]
+    const panel = doc.body.children.find(node => node.attributes.has("data-jadense-translation-panel"))!
+    const notice = doc.body.children.find(node => node.attributes.has("data-jadense-reader-notice"))!
+    const source = descendants(toolbar).find(node => node.attributes.get("aria-label") === "Document source language")!
+    expect(actionButtons(toolbar).map(node => node.attributes.get("aria-label"))).toEqual([
+      "Start a new AI chat about this document", "Analyze document", "AI translation", "Quote selection",
+    ])
+    expect(source.children.find(node => node.value === "en")?.textContent).toBe("English")
+    expect(panel.attributes.get("aria-label")).toBe("AI translation result")
+    actionButtons(toolbar)[2].handlers.get("click")!()
+    expect(notice.textContent).toContain("Select text in the document")
+    expect([toolbar, panel, notice].map(node => node.dataset.theme)).toEqual(["dark", "dark", "dark"])
+    fixture.zotero.Prefs.set!("browser.theme.toolbar-theme", 1)
+    expect(toolbar.dataset.theme).toBe("dark")
+    saveTheme(fixture.zotero, "system")
+    expect([toolbar, panel, notice].every(node => node.dataset.theme === "light")).toBe(true)
+    fixture.zotero.Prefs.set!("browser.theme.toolbar-theme", 0)
+    expect([toolbar, panel, notice].every(node => node.dataset.theme === "dark")).toBe(true)
+    saveTheme(fixture.zotero, "light")
+    expect(toolbar.dataset.theme).toBe("light")
+    expect(doc.body.dataset.theme).toBeUndefined()
+    expect(doc.head.dataset.theme).toBeUndefined()
+    register.mock.calls[1][1]({
+      reader: fixture.reader, doc, append,
+      params: { annotation: { text: "未经改写的中文原文", position: { pageIndex: 0 }, pageLabel: "1" } },
+    })
+    actionButtons(append.mock.calls[1][0])[0].handlers.get("click")!()
+    await vi.waitFor(() => expect(panel.children[1].children[3].textContent).toBe("原样保留的 AI 译文"))
+    expect(panel.children[1].children[1].textContent).toBe("未经改写的中文原文")
+    cleanup()
+    expect(observers.size).toBe(0)
+  })
+
   it("synchronizes open article toolbars and refreshes externally changed preferences on focus", async () => {
     const fixture = host()
     const values = new Map<string, unknown>()

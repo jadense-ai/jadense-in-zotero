@@ -11,10 +11,12 @@ import {
   DEFAULT_TRANSLATION_LANGUAGES,
   TRANSLATION_LANGUAGES,
   normalizeTranslationLanguages,
-  translationLanguageLabel,
+  translationLanguageDisplayLabel,
   type TranslationLanguages,
 } from "@/chat/translation-languages"
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
+import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
+import { READER_UI_THEME_CSS } from "./reader-ui-theme"
 import { readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 
 type Rect = [number, number, number, number]
@@ -102,7 +104,7 @@ type PdfItem = PdfMetadataItem & {
 }
 
 // 与上传、普通 Chat 的 Zotero 投影分开：阅读器失效不得成为它们的启动依赖。
-export type ZoteroReaderHost = {
+export type ZoteroReaderHost = UiPreferenceHost & {
   Prefs?: { get: (key: string, global?: boolean) => unknown; set?: (key: string, value: unknown, global?: boolean) => void }
   Items?: {
     get?: (id: number) => unknown | Promise<unknown>
@@ -186,7 +188,7 @@ const writes = new WeakMap<ZoteroReaderHost, Map<number, Promise<SavedAnalysisAn
 
 function abortIfNeeded(signal?: AbortSignal) {
   if (signal?.aborted) {
-    const error = new Error("已停止文献解析。")
+    const error = new Error(uiText("已停止文献解析。", "Literature analysis stopped."))
     error.name = "AbortError"
     throw error
   }
@@ -202,7 +204,7 @@ async function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
       promise,
       new Promise<never>((_resolve, reject) => {
         listener = () => {
-          const error = new Error("已停止文献解析。")
+          const error = new Error(uiText("已停止文献解析。", "Literature analysis stopped."))
           error.name = "AbortError"
           reject(error)
         }
@@ -218,7 +220,7 @@ async function getPdfItem(zotero: ZoteroReaderHost, itemID: number): Promise<Pdf
   const item = await zotero.Items?.get?.(itemID) as PdfItem | undefined
   if (!item || item.id !== itemID || !item.key || !Number.isInteger(item.libraryID)
     || item.deleted || !item.isPDFAttachment?.()) {
-    throw new Error("请先选择或打开一个有效的 Zotero PDF 附件。")
+    throw new Error(uiText("请先选择或打开一个有效的 Zotero PDF 附件。", "Select or open a valid Zotero PDF attachment first."))
   }
   return item
 }
@@ -322,7 +324,7 @@ function metadataField(item: PdfMetadataItem, field: string, maxLength: number) 
 function paperMetadata(item: PdfItem): PaperAnalysisMetadata {
   let source: PdfMetadataItem = item
   try { source = item.parentItem ?? item } catch { /* 父文献不可用时退回附件本身。 */ }
-  const title = metadataField(source, "title", 500) || metadataField(item, "title", 500) || "PDF 文献"
+  const title = metadataField(source, "title", 500) || metadataField(item, "title", 500) || uiText("PDF 文献", "PDF document")
   const authors: string[] = []
   try {
     const creators = source.getCreators?.()
@@ -364,13 +366,13 @@ export async function readPdfForAnalysis(
   let reader = zotero.Reader?._readers?.find((candidate) => candidate.itemID === itemID)
   if (!reader && zotero.Reader?.open) reader = await withAbort(zotero.Reader.open(itemID), signal)
   reader ??= zotero.Reader?._readers?.find((candidate) => candidate.itemID === itemID)
-  if (!reader) throw new Error("PDF 阅读器尚未就绪，请打开该 PDF 后重试解析。")
+  if (!reader) throw new Error(uiText("PDF 阅读器尚未就绪，请打开该 PDF 后重试解析。", "The PDF reader is not ready. Open this PDF and try analysis again."))
   if (reader._initPromise) await withAbort(reader._initPromise, signal)
   const view = reader._internalReader?._primaryView
   if (view?.initializedPromise) await withAbort(view.initializedPromise, signal)
   const pdf = view?._iframeWindow?.PDFViewerApplication?.pdfDocument
   if (!view?._ensureBasicPageData || !view._pdfPages || !pdf || !Number.isInteger(pdf.numPages) || pdf.numPages < 1) {
-    throw new Error("当前阅读器无法提供 PDF 文字坐标，仍可使用普通对话。")
+    throw new Error(uiText("当前阅读器无法提供 PDF 文字坐标，仍可使用普通对话。", "This reader cannot provide PDF text coordinates. Regular chat is still available."))
   }
   let labels: string[] | null = null
   try { labels = pdf.getPageLabels ? await withAbort(pdf.getPageLabels(), signal) : null } catch { abortIfNeeded(signal) }
@@ -392,22 +394,22 @@ export async function readPdfForAnalysis(
       pageNumbers.push(pageIndex + 1)
     } catch {
       abortIfNeeded(signal)
-      warnings.push(`第 ${pageIndex + 1} 页的文字坐标读取失败，未纳入解析。`)
+      warnings.push(uiText(`第 ${pageIndex + 1} 页的文字坐标读取失败，未纳入解析。`, `Text coordinates on page ${pageIndex + 1} could not be read; the page was omitted from analysis.`))
     }
     try { onProgress?.({ pagesRead: pageNumbers.length, totalPages: pdf.numPages }) } catch { /* 进度展示不得阻止正文解析。 */ }
   }
   abortIfNeeded(signal)
   if (!candidates.length) {
-    throw new Error("未找到可定位的 PDF 原句。扫描件请先完成 OCR；本次没有生成高亮或批注。")
+    throw new Error(uiText("未找到可定位的 PDF 原句。扫描件请先完成 OCR；本次没有生成高亮或批注。", "No PDF passages with usable coordinates were found. Run OCR for scanned documents first. No highlights or annotations were created."))
   }
   const passages = boundedPassages(candidates)
   const limited = passages.length < candidates.length || pageNumbers.length < pdf.numPages || emptyPages.length > 0
-  if (emptyPages.length) warnings.push(`第 ${emptyPages.join("、")} 页无可定位原句，可能是图像、空白页或缺少文字层，未纳入句子解析。`)
-  if (pageIndexes.length < pdf.numPages) warnings.push(`长文献均匀抽取 ${pageIndexes.length}/${pdf.numPages} 页（包括末页），未读取全部正文。`)
-  if (passages.length < candidates.length) warnings.push(`为控制解析长度，均匀选取 ${passages.length}/${candidates.length} 个可定位原句；结论仅基于这些原句。`)
+  if (emptyPages.length) warnings.push(uiText(`第 ${emptyPages.join("、")} 页无可定位原句，可能是图像、空白页或缺少文字层，未纳入句子解析。`, `Pages ${emptyPages.join(", ")} contain no passages with usable coordinates and were omitted. They may be images, blank, or lack a text layer.`))
+  if (pageIndexes.length < pdf.numPages) warnings.push(uiText(`长文献均匀抽取 ${pageIndexes.length}/${pdf.numPages} 页（包括末页），未读取全部正文。`, `This long document was sampled evenly across ${pageIndexes.length}/${pdf.numPages} pages, including the last page. Not all text was read.`))
+  if (passages.length < candidates.length) warnings.push(uiText(`为控制解析长度，均匀选取 ${passages.length}/${candidates.length} 个可定位原句；结论仅基于这些原句。`, `Analysis uses an evenly sampled ${passages.length}/${candidates.length} passages with usable coordinates; conclusions are limited to these passages.`))
   if (modificationTime !== undefined && modificationTime !== null
     && await item.attachmentModificationTime !== modificationTime) {
-    throw new Error("PDF 文件在读取期间已更改，请重新打开后再解析。")
+    throw new Error(uiText("PDF 文件在读取期间已更改，请重新打开后再解析。", "The PDF changed while being read. Reopen it before running analysis again."))
   }
   abortIfNeeded(signal)
   const metadata = paperMetadata(item)
@@ -454,11 +456,11 @@ function existingIdentities(annotations: AnnotationItem[]): Set<string> {
 async function checkWritable(zotero: ZoteroReaderHost, snapshot: PdfAnalysisSnapshot): Promise<PdfItem> {
   const item = await getPdfItem(zotero, snapshot.itemID)
   if (item.key !== snapshot.itemKey || item.libraryID !== snapshot.libraryID || !item.isEditable?.()) {
-    throw new Error("PDF 已变更或当前文库不可编辑，已停止写入批注。")
+    throw new Error(uiText("PDF 已变更或当前文库不可编辑，已停止写入批注。", "The PDF changed or the library is not editable. Annotation saving stopped."))
   }
   if (snapshot.attachmentModificationTime !== undefined
     && await item.attachmentModificationTime !== snapshot.attachmentModificationTime) {
-    throw new Error("PDF 文件在解析期间已更改，请重新打开并解析后再保存批注。")
+    throw new Error(uiText("PDF 文件在解析期间已更改，请重新打开并解析后再保存批注。", "The PDF changed during analysis. Reopen and analyze it again before saving annotations."))
   }
   return item
 }
@@ -478,16 +480,16 @@ export async function saveAnalysisAnnotations(
     await previous?.catch(() => undefined)
     abortIfNeeded(options.signal)
     if (!zotero.Annotations?.saveFromJSON || !zotero.DataObjectUtilities?.generateKey || !zotero.Items?.getByLibraryAndKey) {
-      throw new Error("当前 Zotero 无法保存原生批注；解析结果仍可在解析记录中阅读。")
+      throw new Error(uiText("当前 Zotero 无法保存原生批注；解析结果仍可在解析记录中阅读。", "Zotero cannot save native annotations right now. The analysis remains readable in analysis history."))
     }
     const attachment = await checkWritable(zotero, snapshot)
-    if (!attachment.getAnnotations) throw new Error("无法读取现有批注，已暂停写入以避免重复。")
+    if (!attachment.getAnnotations) throw new Error(uiText("无法读取现有批注，已暂停写入以避免重复。", "Existing annotations could not be read. Saving paused to avoid duplicates."))
     const existing = existingIdentities(attachment.getAnnotations())
     const passages = new Map(snapshot.passages.map((passage) => [passage.id, passage]))
     const result: SavedAnalysisAnnotations = { created: 0, skipped: 0, failed: 0, unprocessed: annotations.length, warnings: [] }
     let invalid = 0
     for (const suggestion of annotations) {
-      if (options.signal?.aborted) { result.warnings.push("已停止；此前成功保存的批注予以保留。"); break }
+      if (options.signal?.aborted) { result.warnings.push(uiText("已停止；此前成功保存的批注予以保留。", "Stopped. Previously saved annotations are retained.")); break }
       const passage = passages.get(suggestion?.passageId)
       const comment = typeof suggestion?.comment === "string" ? suggestion.comment.trim() : ""
       const category = ANALYSIS_CATEGORIES.find((entry) => entry.id === suggestion?.category)
@@ -510,22 +512,22 @@ export async function saveAnalysisAnnotations(
         if (await zotero.Items.getByLibraryAndKey(snapshot.libraryID, key)) {
           result.skipped++
           result.unprocessed--
-          result.warnings.push("批注标识发生冲突，已跳过该条，请重试。")
+          result.warnings.push(uiText("批注标识发生冲突，已跳过该条，请重试。", "An annotation identifier conflicted. This annotation was skipped; please try again."))
           continue
         }
       } catch {
         result.failed++
         result.unprocessed--
-        result.warnings.push(`第 ${passage.pageIndex + 1} 页的「${category.label}」批注未能核对新标识，未开始写入；其余批注继续保存。`)
+        result.warnings.push(uiText(`第 ${passage.pageIndex + 1} 页的「${category.label}」批注未能核对新标识，未开始写入；其余批注继续保存。`, `The new identifier for a “${category.id}” annotation on page ${passage.pageIndex + 1} could not be verified. It was not saved; other annotations continue.`))
         continue
       }
       // 异步标识核对后再验证附件，避免期间更换文件或文库权限后仍使用旧坐标。
       let current: PdfItem
       try { current = await checkWritable(zotero, snapshot) } catch (error) {
-        result.warnings.push(error instanceof Error ? error.message : "附件状态改变，已停止写入。")
+        result.warnings.push(error instanceof Error ? error.message : uiText("附件状态改变，已停止写入。", "The attachment changed. Saving stopped."))
         break
       }
-      if (options.signal?.aborted) { result.warnings.push("已停止；此前成功保存的批注予以保留。"); break }
+      if (options.signal?.aborted) { result.warnings.push(uiText("已停止；此前成功保存的批注予以保留。", "Stopped. Previously saved annotations are retained.")); break }
       try {
         // 已发起保存的同一原句/分类在本轮不重试：抛错也可能已经持久化，不能盲目新增副本。
         existing.add(identity)
@@ -543,12 +545,12 @@ export async function saveAnalysisAnnotations(
         result.created++
       } catch {
         result.failed++
-        result.warnings.push(`第 ${passage.pageIndex + 1} 页的「${category.label}」批注未确认保存；请先检查 PDF 中的批注再重试。`)
+        result.warnings.push(uiText(`第 ${passage.pageIndex + 1} 页的「${category.label}」批注未确认保存；请先检查 PDF 中的批注再重试。`, `A “${category.id}” annotation on page ${passage.pageIndex + 1} could not be confirmed as saved. Check the PDF annotations before retrying.`))
       }
       result.unprocessed--
     }
-    if (invalid) result.warnings.push(`${invalid} 条建议缺少有效笔记或本地原句坐标，已跳过；其余正确批注予以保留。`)
-    if (result.unprocessed) result.warnings.push(`另有 ${result.unprocessed} 条建议尚未处理，没有为它们确认新增批注。`)
+    if (invalid) result.warnings.push(uiText(`${invalid} 条建议缺少有效笔记或本地原句坐标，已跳过；其余正确批注予以保留。`, `${invalid} suggestions lacked valid notes or local passage coordinates and were skipped. Other valid annotations are retained.`))
+    if (result.unprocessed) result.warnings.push(uiText(`另有 ${result.unprocessed} 条建议尚未处理，没有为它们确认新增批注。`, `${result.unprocessed} additional suggestions remain unprocessed; no new annotations were confirmed for them.`))
     return result
   })()
   locks.set(snapshot.itemID, operation)
@@ -686,17 +688,18 @@ function selectedAction(kind: ReaderToolbarAction["kind"], reader: ReaderInstanc
   return action
 }
 
-// 样式只命中自有节点；颜色沿用原生 reader token，随 Zotero 浅/深色切换。
-const READER_TOOLS_CSS = `
+// 样式只命中自有节点；自有主题变量支持显式浅深色和跟随 Zotero，不覆盖 PDF。
+const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
+
 [data-jadense-reader-tools] {
   display:inline-flex;align-items:center;gap:2px;flex:none;box-sizing:border-box;
-  padding:2px;border:1px solid var(--color-border50,rgba(17,21,16,.12));border-radius:7px;
-  color:var(--fill-primary,CanvasText);background:var(--fill-senary,transparent);
+  padding:2px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:7px;
+  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-surface,transparent);
   font:inherit;-moz-window-dragging:no-drag;
 }
 [data-jadense-reader-tools] .jadense-reader-brand {
   display:flex;align-items:center;justify-content:center;flex:none;padding:0 6px 0 4px;margin-inline-end:2px;
-  border-inline-end:1px solid var(--color-border50,rgba(17,21,16,.12));
+  border-inline-end:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));
 }
 [data-jadense-reader-tools] > button {
   appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
@@ -705,78 +708,78 @@ const READER_TOOLS_CSS = `
   white-space:nowrap;cursor:pointer;-moz-window-dragging:no-drag;
 }
 [data-jadense-reader-tools] > button:hover {
-  background:var(--fill-quinary,rgba(17,21,16,.06));
+  background:var(--jdx-reader-hover,rgba(17,21,16,.06));
 }
 [data-jadense-reader-tools] > button:active {
-  background:var(--fill-quarternary,rgba(17,21,16,.12));
+  background:var(--jdx-reader-active,rgba(17,21,16,.12));
 }
 [data-jadense-reader-tools] > button:focus-visible {
-  outline:2px solid var(--fill-primary,CanvasText);outline-offset:1px;
+  outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;
 }
 [data-jadense-reader-tools] svg {width:16px;height:16px;flex:none;pointer-events:none;}
 [data-jadense-reader-tools] .jadense-reader-brand svg {width:20px;height:20px;}
 [data-jadense-reader-tools="renderTextSelectionPopup"] {
-  margin-top:4px;padding:3px;background:transparent;
+  margin-top:4px;padding:3px;background:var(--jdx-reader-surface,transparent);
 }
 [data-jadense-reader-notice] {
   position:fixed;z-index:10001;box-sizing:border-box;width:260px;max-width:calc(100vw - 16px);
-  padding:9px 11px;border:1px solid var(--color-border,rgba(17,21,16,.16));border-radius:6px;
-  color:var(--fill-primary,CanvasText);background:var(--material-background,Canvas);
+  padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
+  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
   box-shadow:0 2px 8px rgba(0,0,0,.1);font:12px/1.6 system-ui,sans-serif;pointer-events:none;
 }
 [data-jadense-reader-notice][hidden] {display:none;}
 [data-jadense-translation-panel] {
   position:fixed;z-index:10000;top:56px;right:16px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
   box-sizing:border-box;width:min(430px,calc(100vw - 32px));max-height:calc(100vh - 72px);overflow:hidden;
-  border:1px solid var(--color-border,rgba(17,21,16,.16));border-radius:10px;
-  color:var(--fill-primary,CanvasText);background:var(--material-background,Canvas);
+  border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:10px;
+  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
   box-shadow:0 12px 32px rgba(0,0,0,.18);font:13px/1.65 system-ui,sans-serif;
 }
 [data-jadense-translation-panel][hidden] {display:none;}
-[data-jadense-translation-panel] header {display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--color-border50,rgba(17,21,16,.12));}
+[data-jadense-translation-panel] header {display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
 [data-jadense-translation-panel] header strong {font-size:13px;}
-[data-jadense-translation-panel] button {appearance:none;border:1px solid var(--color-border50,rgba(17,21,16,.12));border-radius:5px;padding:5px 9px;color:inherit;background:transparent;font:inherit;cursor:pointer;}
-[data-jadense-translation-panel] button:hover:not(:disabled) {background:var(--fill-quinary,rgba(17,21,16,.06));}
+[data-jadense-translation-panel] button {appearance:none;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;padding:5px 9px;color:inherit;background:transparent;font:inherit;cursor:pointer;}
+[data-jadense-translation-panel] button:hover:not(:disabled) {background:var(--jdx-reader-hover,rgba(17,21,16,.06));}
 [data-jadense-translation-panel] button:disabled {cursor:default;opacity:.5;}
 [data-jadense-translation-panel] .jadense-translation-close {border:0;padding:2px 7px;font-size:18px;line-height:1.2;}
 .jadense-translation-content {min-height:0;overflow-y:auto;padding:12px;}
-.jadense-translation-label {margin:0 0 4px;color:var(--fill-secondary,currentColor);font-size:11px;font-weight:650;letter-spacing:.02em;}
+.jadense-translation-label {margin:0 0 4px;color:var(--jdx-reader-muted,currentColor);font-size:11px;font-weight:650;letter-spacing:.02em;}
 .jadense-translation-text {margin:0 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;}
-.jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--fill-senary,rgba(17,21,16,.04));}
-.jadense-translation-result[data-error="true"] {color:#b42318;}
+.jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--jdx-reader-surface,rgba(17,21,16,.04));}
+.jadense-translation-result[data-error="true"] {color:var(--jdx-reader-error,#b42318);}
 .jadense-translation-result[data-error="false"] {white-space:normal;}
 .jadense-translation-result[data-error="false"] > :first-child {margin-top:0;}
 .jadense-translation-result[data-error="false"] > :last-child {margin-bottom:0;}
 .jadense-translation-result p,.jadense-translation-result ul,.jadense-translation-result ol,.jadense-translation-result blockquote,.jadense-translation-result pre,.jadense-translation-result table {margin:0 0 10px;}
 .jadense-translation-result ul,.jadense-translation-result ol {padding-inline-start:22px;}
-.jadense-translation-result blockquote {border-inline-start:3px solid var(--color-border,rgba(17,21,16,.2));padding-inline-start:10px;color:var(--fill-secondary,currentColor);}
-.jadense-translation-result code {border-radius:3px;padding:1px 4px;background:var(--fill-quinary,rgba(17,21,16,.07));font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;}
-.jadense-translation-result pre {max-width:100%;overflow:auto;border-radius:5px;padding:9px;background:var(--fill-quinary,rgba(17,21,16,.07));}
+.jadense-translation-result blockquote {border-inline-start:3px solid var(--jdx-reader-border,rgba(17,21,16,.2));padding-inline-start:10px;color:var(--jdx-reader-muted,currentColor);}
+.jadense-translation-result code {border-radius:3px;padding:1px 4px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;}
+.jadense-translation-result pre {max-width:100%;overflow:auto;border-radius:5px;padding:9px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));}
 .jadense-translation-result pre code {padding:0;background:transparent;white-space:pre;}
 .jadense-translation-result table {display:block;max-width:100%;overflow:auto;border-collapse:collapse;}
-.jadense-translation-result th,.jadense-translation-result td {border:1px solid var(--color-border50,rgba(17,21,16,.12));padding:4px 6px;text-align:start;}
+.jadense-translation-result th,.jadense-translation-result td {border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));padding:4px 6px;text-align:start;}
 .jadense-translation-result a {color:inherit;text-decoration:underline;text-underline-offset:2px;}
 .jadense-translation-result .katex {font-size:1.04em;}
 .jadense-translation-result .katex-display {display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;padding-block:2px;}
-.jadense-translation-result .jdx-math-error {color:#b42318;}
-.jadense-translation-actions {display:flex;justify-content:flex-end;padding:9px 12px;border-top:1px solid var(--color-border50,rgba(17,21,16,.12));}
+.jadense-translation-result .jdx-math-error {color:var(--jdx-reader-error,#b42318);}
+.jadense-translation-actions {display:flex;justify-content:flex-end;padding:9px 12px;border-top:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
 .jadense-translation-languages {display:inline-flex;align-items:center;gap:4px;min-width:0;}
-[data-jadense-reader-tools] .jadense-translation-languages {margin-inline-start:4px;padding-inline-start:5px;border-inline-start:1px solid var(--color-border50,rgba(17,21,16,.12));}
-.jadense-translation-languages select {box-sizing:border-box;width:82px;min-width:0;height:28px;padding:2px 3px;border:1px solid var(--color-border50,rgba(17,21,16,.12));border-radius:5px;color:inherit;background:var(--material-background,Canvas);font:12px system-ui,sans-serif;}
-.jadense-translation-languages select:focus-visible {outline:2px solid var(--fill-primary,CanvasText);outline-offset:1px;}
+[data-jadense-reader-tools] .jadense-translation-languages {margin-inline-start:4px;padding-inline-start:5px;border-inline-start:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
+.jadense-translation-languages select {box-sizing:border-box;width:82px;min-width:0;height:28px;padding:2px 3px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;color:inherit;background:var(--jdx-reader-background,Canvas);font:12px system-ui,sans-serif;}
+.jadense-translation-languages select:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;}
 [data-jadense-translation-panel] header {flex-wrap:wrap;gap:6px;}
 [data-jadense-sentence-languages] {flex-basis:100%;flex-wrap:wrap;}
 [data-jadense-sentence-languages] button {margin-inline-start:auto;}
-.jadense-translation-language-hint {flex-basis:100%;margin:0;color:var(--fill-secondary,currentColor);font-size:11px;}
+.jadense-translation-language-hint {flex-basis:100%;margin:0;color:var(--jdx-reader-muted,currentColor);font-size:11px;}
 .jadense-article-language-menu {display:inline-flex;align-items:center;}
 .jadense-article-language-toggle {display:none;}
-[data-jadense-language-popover] {position:fixed;z-index:10002;top:44px;right:8px;margin:0;padding:8px;border:1px solid var(--color-border50,rgba(17,21,16,.12));border-radius:6px;background:var(--material-background,Canvas);box-shadow:0 2px 8px rgba(0,0,0,.1);}
+[data-jadense-language-popover] {position:fixed;z-index:10002;top:44px;right:8px;margin:0;padding:8px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:6px;background:var(--jdx-reader-background,Canvas);box-shadow:0 2px 8px rgba(0,0,0,.1);}
 @media (max-width:1100px) {
   [data-jadense-reader-tools="renderToolbar"] .jadense-reader-label {display:none;}
   [data-jadense-reader-tools="renderToolbar"] > button[data-jadense-action] {padding:0;width:28px;}
   .jadense-article-language-toggle {display:inline-flex;flex:none;align-items:center;justify-content:center;min-width:36px;height:28px;padding:0 6px;white-space:nowrap;border:0;border-radius:5px;color:inherit;background:transparent;font:12px system-ui,sans-serif;cursor:pointer;}
-  .jadense-article-language-toggle:hover {background:var(--fill-quinary,rgba(17,21,16,.06));}
-  .jadense-article-language-toggle:focus-visible {outline:2px solid var(--fill-primary,CanvasText);outline-offset:1px;}
+  .jadense-article-language-toggle:hover {background:var(--jdx-reader-hover,rgba(17,21,16,.06));}
+  .jadense-article-language-toggle:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;}
   [data-jadense-reader-tools] [data-jadense-article-languages] {display:none;}
 }
 `
@@ -858,21 +861,22 @@ function translationLanguageControls(doc: Document, scope: "文章" | "本句") 
   element.className = "jadense-translation-languages"
   element.setAttribute(scope === "文章" ? "data-jadense-article-languages" : "data-jadense-sentence-languages", "")
   element.setAttribute("role", "group")
-  element.setAttribute("aria-label", `${scope}翻译语言`)
+  const scopeLabel = uiText(scope, scope === "文章" ? "Document " : "Selection ")
+  element.setAttribute("aria-label", uiText(`${scope}翻译语言`, `${scopeLabel}translation languages`))
   const select = (label: string, source: boolean) => {
     const control = doc.createElement("select")
-    control.setAttribute("aria-label", `${scope}${label}`)
-    control.title = `${scope}${label}`
+    control.setAttribute("aria-label", `${scopeLabel}${label}`)
+    control.title = `${scopeLabel}${label}`
     for (const language of source ? [{ value: "auto", label: "自动识别" }, ...TRANSLATION_LANGUAGES] : TRANSLATION_LANGUAGES) {
       const option = doc.createElement("option")
       option.value = language.value
-      option.textContent = language.label
+      option.textContent = translationLanguageDisplayLabel(language.value)
       control.append(option)
     }
     return control
   }
-  const source = select("源语言", true)
-  const target = select("目标语言", false)
+  const source = select(uiText("源语言", "source language"), true)
+  const target = select(uiText("目标语言", "target language"), false)
   const arrow = doc.createElement("span")
   arrow.textContent = "→"
   arrow.setAttribute("aria-hidden", "true")
@@ -896,6 +900,12 @@ export function registerReaderTools(
   onAction: (action: ReaderAction, hooks?: ReaderActionHooks) => void | ReaderActionResult | Promise<void | ReaderActionResult>,
   onOpenManager?: () => void,
 ): () => void {
+  initializeUiLocale(zotero)
+  const themeCleanups = new Map<HTMLElement, () => void>()
+  const themeRoot = (root: HTMLElement) => {
+    root.setAttribute("data-jadense-reader-theme", "")
+    themeCleanups.set(root, observeTheme(zotero, root))
+  }
   const nodes = new Set<HTMLElement>()
   const handlers = new Map<ReaderEventType, ReaderHandler>()
   const shortcutCleanups = new Map<Document, () => void>()
@@ -932,38 +942,38 @@ export function registerReaderTools(
     const translationPanel = doc.createElement("aside")
     translationPanel.setAttribute("data-jadense-translation-panel", "")
     translationPanel.setAttribute("role", "region")
-    translationPanel.setAttribute("aria-label", "智能翻译结果")
+    translationPanel.setAttribute("aria-label", uiText("智能翻译结果", "AI translation result"))
     translationPanel.hidden = true
     const translationHeader = doc.createElement("header")
     const translationTitle = doc.createElement("strong")
-    translationTitle.textContent = "智能翻译"
+    translationTitle.textContent = uiText("智能翻译", "AI translation")
     const translationClose = doc.createElement("button")
     translationClose.type = "button"
     translationClose.className = "jadense-translation-close"
-    translationClose.setAttribute("aria-label", "关闭翻译浮窗")
-    translationClose.title = "关闭"
+    translationClose.setAttribute("aria-label", uiText("关闭翻译浮窗", "Close translation panel"))
+    translationClose.title = uiText("关闭", "Close")
     translationClose.textContent = "×"
     translationHeader.append(translationTitle, translationClose)
     const sentenceLanguages = translationLanguageControls(doc, "本句")
     const retranslate = doc.createElement("button")
     retranslate.type = "button"
-    retranslate.textContent = "重新翻译"
+    retranslate.textContent = uiText("重新翻译", "Translate again")
     retranslate.disabled = true
     sentenceLanguages.element.append(retranslate)
     const languageHint = doc.createElement("p")
     languageHint.className = "jadense-translation-language-hint"
-    languageHint.textContent = "仅修改本句；文章默认语言在顶部工具条设置。"
+    languageHint.textContent = uiText("仅修改本句；文章默认语言在顶部工具条设置。", "Changes apply to this selection only. Set document defaults in the top toolbar.")
     translationHeader.append(sentenceLanguages.element, languageHint)
     const translationContent = doc.createElement("div")
     translationContent.className = "jadense-translation-content"
     const sourceLabel = doc.createElement("p")
     sourceLabel.className = "jadense-translation-label"
-    sourceLabel.textContent = "原文"
+    sourceLabel.textContent = uiText("原文", "Original")
     const sourceText = doc.createElement("p")
     sourceText.className = "jadense-translation-text"
     const resultLabel = doc.createElement("p")
     resultLabel.className = "jadense-translation-label"
-    resultLabel.textContent = "译文"
+    resultLabel.textContent = uiText("译文", "Translation")
     const resultText = doc.createElement("div")
     resultText.className = "jadense-translation-text jadense-translation-result"
     resultText.setAttribute("aria-live", "polite")
@@ -972,11 +982,13 @@ export function registerReaderTools(
     translationActions.className = "jadense-translation-actions"
     const copyTranslation = doc.createElement("button")
     copyTranslation.type = "button"
-    copyTranslation.textContent = "复制译文"
+    copyTranslation.textContent = uiText("复制译文", "Copy translation")
     copyTranslation.disabled = true
     translationActions.append(copyTranslation)
     translationPanel.append(translationHeader, translationContent, translationActions)
     noticeHost.append(translationPanel)
+    themeRoot(notice)
+    themeRoot(translationPanel)
     let translationRequestID = 0
     let translationError = false
     let translationMarkdown = ""
@@ -1014,7 +1026,7 @@ export function registerReaderTools(
       translationRequestID += 1
       translationMarkdown = ""
       translationError = false
-      resultText.textContent = "语言已修改，点击「重新翻译」。"
+      resultText.textContent = uiText("语言已修改，点击「重新翻译」。", "Languages changed. Click “Translate again”.")
       resultText.setAttribute("data-error", "false")
       copyTranslation.disabled = true
       retranslate.disabled = false
@@ -1032,6 +1044,7 @@ export function registerReaderTools(
     })
     const remove = () => {
       hide()
+      for (const [root, stop] of themeCleanups) if (root.ownerDocument === doc) { stop(); themeCleanups.delete(root) }
       shortcutCleanups.get(doc)?.()
       doc.removeEventListener("keydown", onKeyDown)
       doc.defaultView?.removeEventListener("pagehide", remove)
@@ -1057,7 +1070,7 @@ export function registerReaderTools(
         sentenceLanguages.disable(true)
         retranslate.disabled = true
         translationMarkdown = ""
-        resultText.textContent = "正在翻译…"
+        resultText.textContent = uiText("正在翻译…", "Translating…")
         translationError = false
         resultText.setAttribute("data-error", "false")
         copyTranslation.disabled = true
@@ -1078,7 +1091,7 @@ export function registerReaderTools(
       finishTranslation: (requestID: number, text: string, error = false) => {
         if (requestID !== translationRequestID) return
         translationMarkdown = error ? "" : text
-        const displayText = text || (error ? "翻译未完成。" : "AI 没有返回可显示的译文。")
+        const displayText = text || (error ? uiText("翻译未完成。", "Translation did not complete.") : uiText("AI 没有返回可显示的译文。", "The AI did not return a translation."))
         if (error || !text) resultText.textContent = displayText
         else renderTranslationMarkdown(displayText)
         translationError = error
@@ -1109,7 +1122,7 @@ export function registerReaderTools(
     if (!active) return
     const feedback = documentTools(doc)
     if (!selection.text) {
-      feedback.show(anchor, "请先选中文献中的文字，再使用翻译。")
+      feedback.show(anchor, uiText("请先选中文献中的文字，再使用翻译。", "Select text in the document before translating."))
       return
     }
     feedback.hide()
@@ -1126,7 +1139,7 @@ export function registerReaderTools(
       feedback.finishTranslation(requestID, result && typeof result === "object" ? result.translation?.trim() ?? "" : "")
     }).catch((error) => {
       if (!active || !documents.has(doc)) return
-      feedback.finishTranslation(requestID, error instanceof Error ? error.message : "翻译未完成，请稍后重试。", true)
+      feedback.finishTranslation(requestID, error instanceof Error ? error.message : uiText("翻译未完成，请稍后重试。", "Translation did not complete. Please try again."), true)
     })
   }
   /** PDF iframe 不向外层冒泡键盘事件；跟随主视图/分屏加载并在卸载时解除监听。 */
@@ -1214,32 +1227,36 @@ export function registerReaderTools(
     documents.clear()
     for (const node of nodes) { try { node.remove() } catch { /* 阅读器窗口可能已经关闭。 */ } }
     nodes.clear()
+    for (const stop of themeCleanups.values()) stop()
+    themeCleanups.clear()
   }
   if (!zotero.Reader?.registerEventListener) return cleanup
   const actions = [
-    { kind: "attach", label: "发起新对话，向 AI 提问（当前文献）", short: "提问" },
-    { kind: "analyze", label: "解析文献", short: "解析" },
-    { kind: "translate", label: "智能翻译", short: "翻译" },
-    { kind: "quote", label: "引用选文", short: "引用" },
+    { kind: "attach", label: uiText("发起新对话，向 AI 提问（当前文献）", "Start a new AI chat about this document"), short: uiText("提问", "Ask") },
+    { kind: "analyze", label: uiText("解析文献", "Analyze document"), short: uiText("解析", "Analyze") },
+    { kind: "translate", label: uiText("智能翻译", "AI translation"), short: uiText("翻译", "Translate") },
+    { kind: "quote", label: uiText("引用选文", "Quote selection"), short: uiText("引用", "Quote") },
   ] as const
   for (const type of ["renderToolbar", "renderTextSelectionPopup"] as const) {
     const handler: ReaderHandler = (event) => {
       if (!active || !Number.isInteger(event.reader.itemID)) return
       for (const node of nodes) if (!node.isConnected) {
         articleLanguageClosers.get(node)?.()
+        for (const [root, stop] of themeCleanups) if (root === node || node.contains?.(root)) { stop(); themeCleanups.delete(root) }
         nodes.delete(node); articleLanguageRefreshes.delete(node); articleLanguageClosers.delete(node)
       }
       const feedback = documentTools(event.doc)
       if (type === "renderToolbar") bindTranslationShortcut(event)
       const group = event.doc.createElement("span")
       group.setAttribute("data-jadense-reader-tools", type)
+      themeRoot(group)
       group.setAttribute("role", "group")
-      group.setAttribute("aria-label", "Jadense 阅读工具")
+      group.setAttribute("aria-label", uiText("Jadense 阅读工具", "Jadense reading tools"))
       if (type === "renderToolbar") {
         const brand = event.doc.createElement("button")
         brand.type = "button"
         brand.className = "jadense-reader-brand"
-        brand.title = "打开攻玉工作台"
+        brand.title = uiText("打开攻玉工作台", "Open Jadense workspace")
         brand.setAttribute("aria-label", brand.title)
         brand.append(brandIcon(event.doc))
         // 仅打开或聚焦工作台，不触发阅读器提问，也不附加当前文献。
@@ -1248,7 +1265,7 @@ export function registerReaderTools(
           articleLanguageClosers.get(group)?.()
           feedback.hide()
           try { onOpenManager?.() } catch {
-            feedback.show(brand, "无法打开攻玉工作台，请稍后重试。")
+            feedback.show(brand, uiText("无法打开攻玉工作台，请稍后重试。", "The Jadense workspace could not be opened. Please try again."))
           }
         })
         group.append(brand)
@@ -1270,7 +1287,7 @@ export function registerReaderTools(
           articleLanguageClosers.get(group)?.()
           const selection = selectedAction(action.kind, event.reader, event.params?.annotation)
           if ((action.kind === "translate" || action.kind === "quote") && !selection.text) {
-            feedback.show(button, `请先选中文献中的文字，再点击「${action.short}」。`)
+            feedback.show(button, uiText(`请先选中文献中的文字，再点击「${action.short}」。`, `Select text in the document before clicking “${action.short}”.`))
             return
           }
           feedback.hide()
@@ -1281,22 +1298,23 @@ export function registerReaderTools(
           }
           void Promise.resolve().then(() => { if (active) return onAction(selection) })
             .catch(() => {
-              if (active && documents.has(event.doc)) feedback.show(button, "操作未完成，请稍后重试，或打开 Jadense 对话查看。")
+              if (active && documents.has(event.doc)) feedback.show(button, uiText("操作未完成，请稍后重试，或打开 Jadense 对话查看。", "The action did not complete. Try again or open Jadense Chat for details."))
             })
         })
         group.append(button)
       }
       if (type === "renderToolbar") {
         const articleLanguages = translationLanguageControls(event.doc, "文章")
+        themeRoot(articleLanguages.element)
         articleLanguages.disable(true)
         const menu = event.doc.createElement("span")
         menu.className = "jadense-article-language-menu"
         const toggle = event.doc.createElement("button")
         toggle.type = "button"
         toggle.className = "jadense-article-language-toggle"
-        toggle.textContent = "语言"
-        toggle.title = "当前文章的翻译语言"
-        toggle.setAttribute("aria-label", "文章翻译语言设置")
+        toggle.textContent = uiText("语言", "Languages")
+        toggle.title = uiText("当前文章的翻译语言", "Translation languages for this document")
+        toggle.setAttribute("aria-label", uiText("文章翻译语言设置", "Document translation language settings"))
         toggle.setAttribute("aria-expanded", "false")
         let open = false
         const setOpen = (value: boolean) => {
@@ -1328,7 +1346,7 @@ export function registerReaderTools(
           void readArticleTranslationLanguages(zotero, event.reader.itemID).then((languages) => {
             if (!active || !group.isConnected || current !== revision) return
             articleLanguages.set(languages)
-            toggle.title = `当前文章：${translationLanguageLabel(languages.sourceLanguage)} → ${translationLanguageLabel(languages.targetLanguage)}`
+            toggle.title = `${uiText("当前文章", "Current document")}: ${translationLanguageDisplayLabel(languages.sourceLanguage)} → ${translationLanguageDisplayLabel(languages.targetLanguage)}`
             articleLanguages.disable(false)
           })
         }
@@ -1344,7 +1362,7 @@ export function registerReaderTools(
           if (!saved) {
             articleLanguages.set(await readArticleTranslationLanguages(zotero, event.reader.itemID))
             if (!active || !group.isConnected) return
-            feedback.show(articleLanguages.element, "未能保存文章翻译语言，请稍后重试；仍可在翻译浮窗修改本句语言。")
+            feedback.show(articleLanguages.element, uiText("未能保存文章翻译语言，请稍后重试；仍可在翻译浮窗修改本句语言。", "Document translation languages could not be saved. Try again; you can still change languages for this selection in the translation panel."))
           }
           saving = false
           articleLanguages.disable(false)

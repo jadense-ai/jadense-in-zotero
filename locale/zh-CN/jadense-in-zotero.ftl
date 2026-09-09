@@ -2,23 +2,47 @@ jadense-in-zotero-menu-main =
     .label = Jadense
 
 jadense-in-zotero-menu-open-manager =
-    .label = 打开攻玉工作台
+    .label = { $language ->
+        [zh-CN] 打开攻玉工作台
+        [en-US] Open Jadense Workspace
+       *[system] 打开攻玉工作台
+    }
 
 jadense-in-zotero-menu-export-collection =
-    .label = 上传当前 Zotero 收藏夹到攻玉
+    .label = { $language ->
+        [zh-CN] 上传当前 Zotero 收藏夹到攻玉
+        [en-US] Upload selected collection to Jadense
+       *[system] 上传当前 Zotero 收藏夹到攻玉
+    }
 
 jadense-in-zotero-menu-export-items =
-    .label = 上传选中条目到攻玉
+    .label = { $language ->
+        [zh-CN] 上传选中条目到攻玉
+        [en-US] Upload selected items to Jadense
+       *[system] 上传选中条目到攻玉
+    }
 
 jadense-in-zotero-menu-configure =
-    .label = 配置攻玉连接
+    .label = { $language ->
+        [zh-CN] 配置攻玉连接
+        [en-US] Configure Jadense connection
+       *[system] 配置攻玉连接
+    }
 
 jadense-in-zotero-menu-disconnect =
-    .label = 断开攻玉账号
+    .label = { $language ->
+        [zh-CN] 断开攻玉账号
+        [en-US] Disconnect Jadense account
+       *[system] 断开攻玉账号
+    }
 
 jadense-in-zotero-panel-header =
     .label = Jadense
-    .tooltiptext = 攻玉工作台
+    .tooltiptext = { $language ->
+        [zh-CN] 攻玉工作台
+        [en-US] Jadense workspace
+       *[system] 攻玉工作台
+    }
 
 jadense-in-zotero-panel-sidenav =
     .tooltiptext = Jadense

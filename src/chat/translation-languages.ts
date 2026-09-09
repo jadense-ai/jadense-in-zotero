@@ -1,4 +1,5 @@
 /** 阅读器翻译语言的共同词表；工具条、句级浮窗和请求运行时只保存语言代码。 */
+import { getUiLocale, uiText } from "@/zotero/ui-preferences"
 export type TranslationLanguages = {
   sourceLanguage: string
   targetLanguage: string
@@ -71,4 +72,15 @@ export function normalizeTranslationLanguages(
 export function translationLanguageLabel(code: string): string {
   const value = languageCode(code, true)
   return value === "auto" ? "自动识别" : TRANSLATION_LANGUAGES.find((language) => language.value === value)?.label ?? code.trim()
+}
+
+/** 仅界面使用本地化语言名；请求提示词继续使用稳定的 translationLanguageLabel。 */
+export function translationLanguageDisplayLabel(code: string): string {
+  if (code === "auto") return uiText("自动识别", "Auto-detect")
+  if (getUiLocale() === "zh-CN") return translationLanguageLabel(code)
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(languageCode(code, false) ?? code) ?? code
+  } catch {
+    return code
+  }
 }

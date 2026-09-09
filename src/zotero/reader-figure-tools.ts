@@ -3,6 +3,8 @@
 import type { ChatImageInput } from "@/chat/image-input"
 import type { FigureInterpretationAction } from "./reader-tools"
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
+import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
+import { READER_UI_THEME_CSS } from "./reader-ui-theme"
 
 export type { ChatImageInput } from "@/chat/image-input"
 export type { FigureInterpretationAction } from "./reader-tools"
@@ -21,13 +23,16 @@ type SDTNode = {
 type SDTPage = { viewRect?: unknown; label?: unknown }
 type SDTStructure = { content?: unknown; catalog?: { pages?: unknown } }
 
-const FIGURE_ACTIONS = [
-  { conversationTarget: "new", label: "图片解读（开启新对话）" },
-  { conversationTarget: "current", label: "图片解读（追加在当前对话）" },
-] as const satisfies ReadonlyArray<{
-  conversationTarget: FigureInterpretationAction["conversationTarget"]
-  label: string
-}>
+/** 按启动语言构建新浮层文案，不在模块加载时提前冻结为默认中文。 */
+function figureActions() {
+  return [
+    { conversationTarget: "new", label: uiText("图片解读（开启新对话）", "Interpret image (new chat)") },
+    { conversationTarget: "current", label: uiText("图片解读（追加在当前对话）", "Interpret image (current chat)") },
+  ] as const satisfies ReadonlyArray<{
+    conversationTarget: FigureInterpretationAction["conversationTarget"]
+    label: string
+  }>
+}
 
 export type SDTFigure = {
   ref: SDTRef
@@ -90,7 +95,7 @@ type ZoteroItem = {
   getField?: (field: string) => unknown
 }
 
-export type ZoteroFigureHost = {
+export type ZoteroFigureHost = UiPreferenceHost & {
   version?: string
   Prefs?: { get: (key: string) => unknown }
   Items?: { get?: (itemID: number) => unknown | Promise<unknown> }
@@ -106,7 +111,8 @@ const MAX_IMAGE_EDGE = 2_048
 const FIGURE_PREFIX = /^(?:(?:figure|fig\.?|scheme|plate)\s*[\p{L}\p{N}]|图\s*[\d一二三四五六七八九十百])/iu
 const TABLE_PREFIX = /^(?:table\b|表\s*[\d一二三四五六七八九十百])/iu
 
-const FIGURE_CSS = `
+const FIGURE_CSS = `${READER_UI_THEME_CSS}
+
 [data-jadense-capture-surface] {
   position:fixed;z-index:9997;user-select:none;touch-action:none;
 }
@@ -130,14 +136,14 @@ const FIGURE_CSS = `
 [data-jadense-figure-overlay][data-state="hover"] > [data-jadense-figure-actions] {display:none;}
 [data-jadense-figure-overlay][data-state="selecting"] > [data-jadense-figure-actions] {display:none;}
 [data-jadense-capture], [data-jadense-capture] * {cursor:crosshair!important;user-select:none!important;}
-[data-jadense-figure-actions] > [data-jadense-action="exitFigure"] {background:Canvas;color:CanvasText;}
+[data-jadense-figure-actions] > [data-jadense-action="exitFigure"] {background:var(--jdx-reader-background,Canvas);color:var(--jdx-reader-text,CanvasText);}
 [data-jadense-figure-actions] > button:hover:not(:disabled) {filter:brightness(.96);}
-[data-jadense-figure-actions] > button:focus-visible {outline:2px solid CanvasText;outline-offset:2px;}
+[data-jadense-figure-actions] > button:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:2px;}
 [data-jadense-figure-actions] > button:disabled {cursor:default;opacity:.7;}
 [data-jadense-figure-notice] {
   position:fixed;z-index:9999;top:12px;right:12px;box-sizing:border-box;width:280px;max-width:calc(100vw - 24px);
-  padding:9px 11px;border:1px solid var(--color-border,rgba(17,21,16,.16));border-radius:6px;
-  color:var(--fill-primary,CanvasText);background:var(--material-background,Canvas);
+  padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
+  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
   box-shadow:0 2px 8px rgba(0,0,0,.12);font:12px/1.6 system-ui,sans-serif;
 }
 [data-jadense-figure-notice][hidden] {display:none;}
@@ -457,6 +463,7 @@ class FigureViewController {
   private readonly exitButton: HTMLButtonElement
   private readonly notice: HTMLElement
   private readonly style: HTMLStyleElement
+  private readonly themeCleanups: Array<() => void> = []
   private readonly byPage = new Map<number, SDTFigure[]>()
   private readonly busListeners: Array<[string, (event?: unknown) => void]> = []
   private hovered?: SDTFigure
@@ -503,7 +510,7 @@ class FigureViewController {
     this.overlay.hidden = true
     this.actionBar = this.doc.createElement("div")
     this.actionBar.setAttribute("data-jadense-figure-actions", "")
-    this.buttons = FIGURE_ACTIONS.map(({ conversationTarget, label }) => {
+    this.buttons = figureActions().map(({ conversationTarget, label }) => {
       const button = this.doc.createElement("button")
       button.type = "button"
       button.setAttribute("data-jadense-action", "interpretFigure")
@@ -517,9 +524,9 @@ class FigureViewController {
     this.exitButton = this.doc.createElement("button")
     this.exitButton.type = "button"
     this.exitButton.setAttribute("data-jadense-action", "exitFigure")
-    this.exitButton.setAttribute("aria-label", "退出图片解读")
-    this.exitButton.title = "退出图片解读（Esc）"
-    this.exitButton.textContent = "退出"
+    this.exitButton.setAttribute("aria-label", uiText("退出图片解读", "Exit image interpretation"))
+    this.exitButton.title = uiText("退出图片解读（Esc）", "Exit image interpretation (Esc)")
+    this.exitButton.textContent = uiText("退出", "Exit")
     this.actionBar.append(this.exitButton)
     this.overlay.append(this.actionBar)
     this.notice = this.doc.createElement("div")
@@ -528,6 +535,10 @@ class FigureViewController {
     this.notice.setAttribute("aria-live", "polite")
     this.notice.hidden = true
     this.doc.body.append(this.captureSurface, this.overlay, this.notice)
+    for (const root of [this.overlay, this.notice]) {
+      root.setAttribute("data-jadense-reader-theme", "")
+      this.themeCleanups.push(observeTheme(zotero, root))
+    }
 
     this.container.addEventListener("pointerdown", this.handlePointerDown, true)
     this.container.addEventListener("pointermove", this.handlePointerMove, true)
@@ -758,7 +769,7 @@ class FigureViewController {
     if (!box || box.right - box.left < 5 || box.bottom - box.top < 5) {
       this.locked = undefined
       this.overlay.hidden = true
-      this.showNotice("请在 PDF 页面内拖动框选图片，按 Esc 退出。")
+      this.showNotice(uiText("请在 PDF 页面内拖动框选图片，按 Esc 退出。", "Drag within a PDF page to select an image. Press Esc to exit."))
       return
     }
     this.captureArmed = false
@@ -840,7 +851,7 @@ class FigureViewController {
     this.busy = true
     for (const button of this.buttons) {
       button.disabled = true
-      if (button.getAttribute("data-jadense-conversation-target") === conversationTarget) button.textContent = "处理中…"
+      if (button.getAttribute("data-jadense-conversation-target") === conversationTarget) button.textContent = uiText("处理中…", "Processing…")
     }
     try {
       const [dataUrl, title] = await Promise.all([this.renderCrop(figure), paperTitle(this.zotero, this.reader.itemID)])
@@ -861,12 +872,12 @@ class FigureViewController {
         image,
       })
     } catch {
-      if (!this.disposed && this.locked === figure) this.showNotice("图片解读未完成，请稍后重试。")
+      if (!this.disposed && this.locked === figure) this.showNotice(uiText("图片解读未完成，请稍后重试。", "Image interpretation did not complete. Please try again."))
     } finally {
       this.busy = false
       this.buttons.forEach((button, index) => {
         button.disabled = false
-        button.textContent = FIGURE_ACTIONS[index].label
+        button.textContent = figureActions()[index].label
       })
     }
   }
@@ -905,13 +916,13 @@ class FigureViewController {
     if (this.busy) return true
     this.clearSelection()
     this.doc.defaultView?.focus?.()
-    if (!this.view._pdfRenderer?.renderRegionCrops) { this.showNotice("当前阅读器暂不支持 PDF 截图。"); return true }
+    if (!this.view._pdfRenderer?.renderRegionCrops) { this.showNotice(uiText("当前阅读器暂不支持 PDF 截图。", "This reader does not currently support PDF capture.")); return true }
     this.captureArmed = true
     this.captureSurface.dataset.state = "armed"
     this.positionCaptureSurface()
     this.captureSurface.hidden = false
     this.container.setAttribute("data-jadense-capture", "")
-    this.showNotice("请在 PDF 页面内拖动框选图片，按 Esc 退出。")
+    this.showNotice(uiText("请在 PDF 页面内拖动框选图片，按 Esc 退出。", "Drag within a PDF page to select an image. Press Esc to exit."))
     return true
   }
 
@@ -987,6 +998,7 @@ class FigureViewController {
     for (const [name, listener] of this.busListeners) {
       try { this.eventBus?.off?.(name, listener) } catch { /* optional private event bus */ }
     }
+    for (const stop of this.themeCleanups) stop()
     this.overlay.remove()
     this.captureSurface.remove()
     this.container.removeAttribute("data-jadense-capture")
@@ -1115,6 +1127,7 @@ export function registerReaderFigureTools(
   pluginID: string,
   onAction: (action: FigureInterpretationAction) => void | Promise<void>,
 ): () => void {
+  initializeUiLocale(zotero)
   const register = zotero.Reader?.registerEventListener
   if (!register || !zoteroTenOrNewer(zotero.version)) return () => undefined
   const runtimes = new Map<ReaderInstance, FigureReaderRuntime>()

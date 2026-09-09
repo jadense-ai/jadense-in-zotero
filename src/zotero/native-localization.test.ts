@@ -59,6 +59,11 @@ describe("native Zotero localization contract", () => {
       for (const id of expectedIds) {
         expect(source, `${locale} is missing ${id}`).toMatch(new RegExp(`^${id}\\s*=`, "m"))
       }
+      // 每个宿主语言资源都能显式选择中英文，插件语言不得被宿主 Fluent locale 覆盖。
+      expect(source).toContain("[zh-CN] 打开攻玉工作台")
+      expect(source).toContain("[en-US] Open Jadense Workspace")
+      expect(source).toContain("[zh-CN] 攻玉工作台")
+      expect(source).toContain("[en-US] Jadense workspace")
     }
   })
 })

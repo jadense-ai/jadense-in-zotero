@@ -390,7 +390,7 @@ textarea {
 
 .jdx-manager-connection-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 14px;
   align-items: start;
 }
@@ -458,7 +458,7 @@ textarea {
   align-items: start;
 }
 
-.jdx-manager-account-header {
+.jdx-manager-settings-card-header.jdx-manager-account-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1648,3 +1648,5 @@ button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
 .jdx-chat-message-image > button[aria-expanded="true"] { cursor: zoom-out; }
 .jdx-chat-message-image > button[aria-expanded="true"] img { max-height: none; }
 .jdx-chat-message-image > span { font-size: 12px; overflow-wrap: anywhere; opacity: .75; }
+
+.jdx-manager-account-links { margin-bottom: 16px; }

@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * 攻玉 temporary chat 客户端。
  * 上游接收 Zotero 本地消息，下游只调用无服务端会话历史的 `/api/chat` temporary 模式。
@@ -66,9 +67,9 @@ export async function consumeTemporaryChatStream(
   requireComplete = false,
 ) {
   if (!response.ok) {
-    throw await readJadenseApiError(response, "攻玉对话请求失败")
+    throw await readJadenseApiError(response, uiText("攻玉对话请求失败", "The Jadense chat request failed"))
   }
-  if (!response.body) throw new Error("攻玉对话响应缺少数据流。")
+  if (!response.body) throw new Error(uiText("攻玉对话响应缺少数据流。", "The Jadense chat response has no stream."))
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -88,15 +89,15 @@ export async function consumeTemporaryChatStream(
     }
     const event = parseEventData(data)
     if (!event) return
-    if (event.type === "abort") throw new Error("对话已中止，未写入 PDF 批注。")
+    if (event.type === "abort") throw new Error(uiText("对话已中止，未写入 PDF 批注。", "Chat was stopped. No PDF annotations were written."))
     if (event.type === "error") {
       throw new Error(typeof event.errorText === "string" && event.errorText.trim()
         ? event.errorText.trim()
-        : "攻玉对话生成失败，请稍后重试。")
+        : uiText("攻玉对话生成失败，请稍后重试。", "Jadense chat generation failed. Please try again later."))
     }
     if (event.type === "finish") {
       if (requireComplete && (event.finishReason === "error" || event.finishReason === "length")) {
-        throw new Error("解析输出未完整结束，未写入 PDF 批注。请重试。")
+        throw new Error(uiText("解析输出未完整结束，未写入 PDF 批注。请重试。", "Analysis output was incomplete. No PDF annotations were written. Please retry."))
       }
       complete = true
     }
@@ -120,7 +121,7 @@ export async function consumeTemporaryChatStream(
     }
     if (pending.trim()) consumeBlock(pending)
     // 只有需要写 PDF 的动作要求终止事件；普通对话兼容原有文本流。
-    if (requireComplete && !complete) throw new Error("解析连接意外结束，未写入 PDF 批注。请重试。")
+    if (requireComplete && !complete) throw new Error(uiText("解析连接意外结束，未写入 PDF 批注。请重试。", "The analysis connection ended unexpectedly. No PDF annotations were written. Please retry."))
     return accumulatedText
   } catch (error) {
     await reader.cancel().catch(() => undefined)
@@ -184,8 +185,8 @@ export class TemporaryChatClient {
   }
 
   async send(input: TemporaryChatSendInput) {
-    if (!this.baseUrl) throw new Error("请先配置攻玉服务器地址。")
-    if (!this.token) throw new Error("请先配置包含对话权限的 Zotero 令牌。")
+    if (!this.baseUrl) throw new Error(uiText("请先配置攻玉服务器地址。", "Configure the Jadense server URL first."))
+    if (!this.token) throw new Error(uiText("请先配置包含对话权限的 Zotero 令牌。", "Configure a Zotero token with chat permission first."))
     const response = await this.fetchImpl(`${this.baseUrl}/api/chat`, {
       method: "POST",
       headers: {

@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * Zotero 本地功能模型选择与 BYOK 提供商、模型目录。
  * 旧通道仅用于升级迁移；功能偏好与目录编辑独立，兼容未知附加字段。
@@ -31,7 +32,10 @@ export type PaperAnalysisModelSelection = FeatureModelSelection
 export const AI_FEATURES = ["chat", "translation", "analysis", "figure"] as const
 export type AiFeature = typeof AI_FEATURES[number]
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
-  chat: "AI 对话", translation: "实时翻译", analysis: "文献解析", figure: "图片解读",
+  get chat() { return uiText("AI 对话", "AI Chat") },
+  get translation() { return uiText("实时翻译", "Real-time translation") },
+  get analysis() { return uiText("文献解析", "Literature analysis") },
+  get figure() { return uiText("图片解读", "Image interpretation") },
 }
 export const FEATURE_MODEL_PREF_KEYS: Record<AiFeature, string> = {
   chat: "extensions.jadenseInZotero.chatModel",
@@ -277,7 +281,7 @@ export function readFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature
 export function saveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature, selection: FeatureModelSelection) {
   const normalized = normalizeFeatureModelSelection(selection)
   // 目的地完整性：不能把不完整的显式选择默认成另一个提供商。
-  if (!normalized || (normalized.route === "byok" && !normalized.modelId)) throw new Error("BYOK 模型不能为空。")
+  if (!normalized || (normalized.route === "byok" && !normalized.modelId)) throw new Error(uiText("BYOK 模型不能为空。", "Select a BYOK model."))
   initializeFeatureModelSelections(zotero)
   zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(normalized))
   return normalized
@@ -306,13 +310,13 @@ export function featureModelState(zotero: ZoteroLike, feature: AiFeature, invali
   if (selection.route === "jadense") {
     const token = readConnection(zotero).token
     const invalid = Boolean(token && token === invalidToken)
-    return { selection, route: selection.route, ready: Boolean(token) && !invalid, label: "攻玉", issue: token
-      ? invalid ? "攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。" : ""
-      : "请先在「连接攻玉」中配置攻玉令牌。" }
+    return { selection, route: selection.route, ready: Boolean(token) && !invalid, label: uiText("攻玉", "Jadense"), issue: token
+      ? invalid ? uiText("攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。", "Your Jadense token is invalid or expired. Update it in Connect Jadense.") : ""
+      : uiText("请先在「连接攻玉」中配置攻玉令牌。", "Configure a token in Connect Jadense first.") }
   }
   const config = readByokConfigForModel(zotero, selection.modelId)
-  return { selection, route: selection.route, ready: Boolean(config), label: config ? `BYOK · ${config.model}` : "BYOK · 已失效模型",
-    issue: config ? "" : `已选择的 BYOK 模型已删除或配置不完整；请在「设置 → 功能配置」中重新选择${AI_FEATURE_LABELS[feature]}模型，或前往 BYOK 修复。`,
+  return { selection, route: selection.route, ready: Boolean(config), label: config ? `BYOK · ${config.model}` : uiText("BYOK · 已失效模型", "BYOK · Unavailable model"),
+    issue: config ? "" : uiText(`已选择的 BYOK 模型已删除或配置不完整；请在「设置 → 功能配置」中重新选择${AI_FEATURE_LABELS[feature]}模型，或前往 BYOK 修复。`, `The selected BYOK model was deleted or is incomplete. Select a ${AI_FEATURE_LABELS[feature]} model in Settings → Feature settings, or repair it in BYOK.`),
     ...(config ? { config } : {}) }
 }
 
@@ -373,7 +377,7 @@ export function saveByokProvider(zotero: ZoteroLike, input: ByokProvider) {
   if (pristineDefault && input.id !== "default-provider") settings.providers = []
   const existing = settings.providers.find((provider) => provider.id === input.id)
   const provider = normalizeProvider({ ...input, apiKey: input.apiKey.trim() || existing?.apiKey || "" })
-  if (!provider) throw new Error("提供商 ID 不能为空。")
+  if (!provider) throw new Error(uiText("提供商 ID 不能为空。", "A provider ID is required."))
   const index = settings.providers.findIndex((item) => item.id === provider.id)
   if (index >= 0) settings.providers[index] = provider
   else settings.providers.push(provider)
@@ -389,7 +393,7 @@ export function saveByokProvider(zotero: ZoteroLike, input: ByokProvider) {
 export function saveByokModel(zotero: ZoteroLike, input: ByokModel) {
   const settings = readByokSettings(zotero)
   const model = normalizeModel(input, new Set(settings.providers.map((provider) => provider.id)))
-  if (!model) throw new Error("模型必须关联已保存的提供商。")
+  if (!model) throw new Error(uiText("模型必须关联已保存的提供商。", "A model must belong to a saved provider."))
   const index = settings.models.findIndex((item) => item.id === model.id)
   if (index >= 0) settings.models[index] = model
   else settings.models.push(model)
