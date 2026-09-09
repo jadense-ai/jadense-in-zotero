@@ -1,36 +1,247 @@
-# 更新说明
+# 更新说明 / Changelog
 
 ## 0.4.1 — 2026-09-09
 
-- **完善中英文界面**：工作台、阅读器工具、指南、原生插件设置和菜单，以及动态提示与无障碍文案统一支持简体中文和 English。
-- **新增常规设置**：「设置 → 常规」为首个设置标签，Zotero 原生插件设置也提供相同配置。显示语言可跟随 Zotero 或明确选择中文、英文，保存后重启 Zotero 生效；界面语言不会改写翻译方向、AI 输出要求或已有内容。
-- **统一主题设置**：支持跟随 Zotero、浅色和深色，立即同步已打开的插件界面；保留已有浅深偏好及侧栏切换入口，切换过程中保留草稿和进行中的生成。
-- **整合账号信息与网页入口**：「你的攻玉」集中展示账号、订阅、有效积分与来源，以及签到奖励和连续天数。账号与积分分别加载，单项刷新失败不影响另一项显示；顶部提供攻玉首页、签到页、订阅与用量的网页入口。
+[简体中文](#release-041-zh) · [English](#release-041-en)
 
-### 升级与兼容性
+<a id="release-041-zh"></a>
 
-0.4.1 沿用 GitHub 0.4.0 的 `jadense-in-zotero@jadense.cn` 插件 ID，可从文件安装更新，保留原有设置和本地历史。官网 0.3.2 及更早旧 `.com` ID 版本仍需先禁用旧插件，再手动安装新版；请勿删除 Zotero profile。
+本次更新让插件更贴合你的阅读习惯：选择熟悉的界面语言，在深浅主题间切换，并集中查看攻玉账号与积分信息。
 
-Manifest 兼容范围仍为 Zotero 8.0 至 10.0.*，自动识图仍需 Zotero 10.0.1+ 的兼容 PDF 阅读器。实际验收环境、结果与限制见本次 GitHub Release；GitHub 发布不修改官网自动更新清单。
+**[下载 0.4.1 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.1/jadense-in-zotero-v0.4.1.xpi)** · [安装与快速开始](README.md#quick-start)
+
+### 功能与体验
+
+- **中英文界面更完整**：工作台、阅读器工具、上手指南、设置、菜单和动态提示支持简体中文与 English，让日常阅读与配置更顺手。
+- **新增「常规」设置**：在「设置 → 常规」选择跟随 Zotero、简体中文或 English；Zotero 原生插件设置提供相同配置。保存后重启 Zotero 生效，重开工作台不会提前切换。界面语言不会改变翻译方向、AI 输出要求或已有内容。
+- **主题随你选择**：跟随 Zotero、浅色、深色三种模式，立即同步已打开的插件界面，保留草稿和进行中的生成。原有主题选择继续生效，侧栏主题按钮也会同步保存当前选择。
+- **账号信息更集中**：「你的攻玉」汇总账号、订阅、可用积分与来源，以及签到奖励和连续天数。账号与积分分别加载，单项刷新失败不影响另一项显示。顶部提供攻玉首页、签到页、订阅与用量的网页入口；签到在网页完成后，可刷新查看状态。
+
+### 升级与兼容
+
+从 GitHub v0.4.0 可直接从文件安装更新，保留设置与本地历史，插件 ID 仍为 `jadense-in-zotero@jadense.cn`。官网 0.3.2 及更早旧 `.com` ID 版本需先禁用旧插件再安装，请勿删除 Zotero profile 或同时启用两个身份。GitHub 发布不修改官网自动更新清单。
+
+Manifest 声明兼容 Zotero **8.0 至 10.0.***；自动识图需要 Zotero 10.0.1+ 的兼容 PDF 阅读器。实际验收环境为 **Zotero 10.0.1 / Windows 11 Pro x64（build 26200）**，使用隔离 profile、合成资料和模拟接口。其他系统、Zotero 8/9 及真实付费 Provider 未实测。
+
+<details>
+<summary>查看本版验收记录与安装包校验信息</summary>
+
+- 完整 488 项测试、发布边界测试、lint、类型检查及打包校验通过；PR、主分支与标签 CI 均通过。
+- 对标签 CI 的同一 XPI 完成三次冷启动、从同 ID 正式版 0.4.0 原位升级及 134 项研究检查，中英文分别通过 12 项外观检查。
+- 草稿下载与公开下载的 XPI 哈希一致，三份附件的发布证明及摘要已核验；未重新构建或替换 CI 附件。
+
+XPI：`jadense-in-zotero-v0.4.1.xpi`，**603122 bytes**。Release 同时提供 `release-metadata.json` 和 `SHA256SUMS` 用于核验。
+
+SHA-256：
+
+```text
+5f5f9cbc20ef13b6c23c45d11f58e70d0fe48b8a2d93395ecb4a4f6d8b69649d
+```
+
+详见 [PR #3](https://github.com/jadense-ai/jadense-in-zotero/pull/3)、[标签 CI](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/34320869610) 和 [v0.4.1 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.1)。本记录描述 0.4.1 发布验收；后续文案调整不代表重新执行验收，标签和附件保持不变。
+
+</details>
+
+---
+
+<a id="release-041-en"></a>
+
+### English
+
+Choose the interface language and appearance that suit your reading workflow, with a clearer overview of your Jadense account.
+
+**[Download version 0.4.1](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.1/jadense-in-zotero-v0.4.1.xpi)** · [Installation and quick start](README.en.md#quick-start)
+
+#### Features and experience
+
+- **More complete Chinese and English support** throughout the workbench, reader tools, guide, settings, menus, and notices makes reading and configuration easier in your preferred language.
+- **New General settings** let you follow Zotero’s language or choose Simplified Chinese or English under Settings → General. The native plugin preferences offer the same controls. Restart Zotero to apply language changes; reopening the workbench keeps the current language until then. Translation direction, AI output requirements, and existing content stay intact.
+- **Light, dark, or follow Zotero** themes update open plugin interfaces immediately, preserving drafts and active generation. Existing theme choices remain effective, and the sidebar theme button saves its selection to the same setting.
+- **Your Jadense brings account information together**: view your account, subscription, available points and their source, check-in rewards, and consecutive days in one place. Account and points information load independently, so a failed refresh of one does not hide the other. Website, check-in, and subscription-and-usage shortcuts appear at the top. Complete check-in on the website and refresh to see the updated status.
+
+#### Upgrade and compatibility
+
+Install over GitHub v0.4.0 from a file to update while keeping settings and local history; the plugin ID remains `jadense-in-zotero@jadense.cn`. For website version 0.3.2 or earlier releases using the old `.com` ID, disable the old plugin before installing. Do not delete your Zotero profile or enable both identities at once. This GitHub release does not change the website’s automatic-update manifest.
+
+The manifest declares compatibility with Zotero **8.0 through 10.0.***. Automatic figure detection requires a compatible PDF reader in Zotero 10.0.1 or later. Release acceptance checks ran on **Zotero 10.0.1 / Windows 11 Pro x64 (build 26200)** using isolated profiles, synthetic materials, and simulated services. Other platforms, Zotero 8/9, and live paid providers were not tested.
+
+<details>
+<summary>Release acceptance record and package verification</summary>
+
+- All 488 tests, release-boundary tests, lint, type checking, and package verification passed. PR, main-branch, and tag CI passed.
+- The same XPI produced by tag CI passed three cold starts, an in-place upgrade from version 0.4.0 with the same plugin ID, and 134 research checks. Chinese and English each passed 12 appearance checks.
+- Draft and public downloads had matching XPI hashes. Release attestations and digests for all three attachments were verified; the CI attachments were not rebuilt or replaced.
+
+XPI: `jadense-in-zotero-v0.4.1.xpi`, **603122 bytes**. The release also provides `release-metadata.json` and `SHA256SUMS` for verification.
+
+SHA-256:
+
+```text
+5f5f9cbc20ef13b6c23c45d11f58e70d0fe48b8a2d93395ecb4a4f6d8b69649d
+```
+
+See [PR #3](https://github.com/jadense-ai/jadense-in-zotero/pull/3), [tag CI](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/34320869610), and the [v0.4.1 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.1). This record describes the 0.4.1 acceptance checks. Later text edits do not imply those checks were rerun; the tag and attachments remain unchanged.
+
+</details>
 
 ## 0.4.0 — 2026-09-09
 
-本次为首个 GitHub 正式发布版本，保留[官网 0.3.2](https://jadense.cn/plugin/zotero)的完整阅读、图片对话、翻译与解析功能，同时改善攻玉模型选择及订阅提示。
+[简体中文](#release-040-zh) · [English](#release-040-en)
 
-- **调整攻玉默认模型**：新配置默认使用 DeepSeek V4 Flash Vision（`deepseek-v4-flash-vision-exp`）。已保存的明确模型、路由和 BYOK 选择保持不变；旧版已保存 GLM 的用户可在「设置 → 功能配置」主动更换。
-- **模型订阅要求更清楚**：受限模型标注「需升级」及所需档位；对话、图片解读、翻译和文献解析遇到订阅限制时，提示更换可用模型或升级订阅，并说明充值积分不会解除模型订阅限制。
-- **统一攻玉连接地址**：正式连接使用 `jadense.cn`，BYOK 自定义服务配置保持独立。
-- **改善问题定位**：攻玉 AI 请求附带插件版本与功能标识，便于区分对话、图片解读、翻译和解析请求。
-- **提供可核验的开源安装包**：GitHub Release 提供 MIT 开源客户端 XPI、构建元数据和 SHA-256；BYOK 与连接攻玉使用同一安装包。
+<a id="release-040-zh"></a>
+<a id="release-zh"></a>
 
-### 安装迁移
+**在 Zotero 中读懂论文，把阅读所得变成下一步研究的起点。**
 
-插件 ID 从 `jadense-in-zotero@jadense.com` 改为 `jadense-in-zotero@jadense.cn`。安装过官网 0.3.2 或更早旧 ID 版本的用户，先禁用旧 Jadense 插件，再从文件手动安装新版，避免两个身份同时启用；不同 ID 不会自动覆盖升级。
+Jadense in Zotero 迎来首个 GitHub 正式发布版本。这个由[攻玉学术（Jadense）](https://jadense.cn/)推出的开源阅读助手，把文献问答、原文批注、选文翻译和图表解读带进 Zotero。你可以自带 API Key 独立使用，也可以连接攻玉账号，两种方式使用同一安装包。
 
-新版沿用原有本地偏好命名空间与历史保存位置，请勿删除 Zotero profile。GitHub 发布不修改官网自动更新清单，请从本仓库 Release 下载新版。
+**[下载 0.4.0 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.0/jadense-in-zotero-v0.4.0.xpi)** · [安装与快速开始](https://github.com/jadense-ai/jadense-in-zotero#quick-start)
 
-### 兼容性
+客户端以 MIT 开源；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
-Manifest 声明 Zotero 8.0 至 10.0.*；自动识图需要 Zotero 10.0.1+ 的兼容 PDF 阅读器。各次发布的实际验收环境与结果见 GitHub Release，声明范围不代表全版本实测。
+### 用它开始一次论文阅读
 
-图片上传与本地图片历史、手动截图、32 种翻译语言、阅读器快捷键、解析内容恢复和内置上手指南在官网 0.3.2 中已存在，本次继续保留。
+- **把重点留在原文旁**：点击「解析」生成总结、详细笔记和 Zotero 原生批注，便于回到对应段落核对，不覆盖人工批注。
+- **带着问题继续读**：关联文献、PDF 或选文，围绕方法、证据和结论继续对话。
+- **就地理解难读的段落**：选文翻译支持 32 种语言选项，可调整文章或当前选文的翻译方向，并从历史回到原文页。
+- **结合论文背景解读图表**：自动识图或手动截图后，开启新对话或追加追问；也可上传、粘贴或拖入图片。图片随本地对话保存，重开后仍可查看。
+
+这些阅读能力延续自官网 0.3.2。图片解读需要支持图片输入的模型，自动识图需要 Zotero 10.0.1+ 的兼容 PDF 阅读器。
+
+### 相比官网 0.3.2，这次改进了什么？
+
+- **攻玉模型选择更清楚**：受限模型标注「需升级」及所需订阅档位；遇到限制时，提示更换可用模型或升级订阅，减少将模型权限问题误当成积分不足的困惑。充值积分不会解锁受限模型。
+- **更新新配置的默认模型**：连接攻玉后，新配置默认使用 DeepSeek V4 Flash Vision（`deepseek-v4-flash-vision-exp`）。已有具体模型、路由和 BYOK 选择会保留；旧版已保存 GLM 的用户可在「设置 → 功能配置」主动更换。
+- **统一攻玉连接与插件身份**：正式连接使用 `jadense.cn`，插件身份更新为 `.cn`；BYOK 自定义服务配置保持独立。旧版安装需要按下方步骤手动迁移。
+- **便于定位使用问题**：攻玉 AI 请求附带插件版本与功能标识，用于区分对话、图片解读、翻译和解析请求，原有内容处理路径保持不变。
+- **提供可核验的开源安装包**：本次 GitHub Release 附 XPI、构建元数据与 SHA-256，既可直接安装，也可检查对应源码。
+
+### 从几篇论文，走向一个研究问题
+
+当你准备比较几篇论文的方法与证据，可以在插件「连接攻玉 → 文献同步」中，将选中文献上传到攻玉收藏夹，再到攻玉网页端的项目中「添加上下文」，选择这些资料继续讨论。
+
+例如：「比较这些论文的研究对象、方法和证据边界，列出还需补充检索的问题，并拟一份综述提纲。」让已经读过的材料，成为下一步研究的起点。
+
+上传为 **Zotero → 攻玉单向操作**，可自行选择是否包含 PDF；插件对话、笔记和批注不会自动同步到网页端。BYOK 阅读功能可继续独立使用。
+
+[在攻玉学术继续研究](https://jadense.cn/) · [项目与资料使用说明](https://jadense.cn/docs/research-resources)
+
+### 安装与旧版迁移
+
+新用户下载上方 `.xpi` 文件，在 Zotero 插件管理器中选择「从文件安装插件」，再打开工作台配置 BYOK 或连接攻玉。详细步骤见 [README](https://github.com/jadense-ai/jadense-in-zotero#quick-start)。
+
+**安装过官网 0.3.2 或更早旧 ID 版本时，先禁用旧 Jadense 插件，再手动安装新版。** 插件 ID 从 `jadense-in-zotero@jadense.com` 改为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
+
+新版沿用原有本地偏好命名空间与历史保存位置，请勿删除 Zotero profile。GitHub 发布不修改官网自动更新清单。
+
+### 兼容性与已知限制
+
+Manifest 声明兼容 Zotero **8.0 至 10.0.***。本次实际验收环境为 **Windows 11 Pro x64（10.0.26200）/ Zotero 10.0.1**，使用临时 profile、合成资料与本机模拟接口；未实测 macOS、Linux、Zotero 8/9 或真实付费 Provider。
+
+连续窗口缩放验收中，出现过一次窄窗口导航未自动收起的超时；同一 XPI、相同测试在新临时 profile 完整复跑通过，根因尚未确认。遇到时可用左上角导航收起按钮。
+
+解析依赖 PDF 可提取正文，扫描件需先 OCR；模型生成的解释与批注请结合原文核对。本地历史不代表离线 AI，模型请求会携带所需上下文，数据路径见 [README](https://github.com/jadense-ai/jadense-in-zotero#数据与凭据)。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
+
+<details>
+<summary>查看本版验收记录与安装包校验信息</summary>
+
+- 已下载原草稿附件，核对 XPI、元数据、SHA256SUMS 及 GitHub asset digest。
+- `smoke:installed --xpi` 三次冷启动通过。
+- `smoke:research --xpi --screenshots` 完整 **131 项检查**通过，包含阅读器、图片历史恢复、翻译、解析、BYOK、功能模型及订阅提示；未通过修改测试或重建附件消除上述窗口缩放记录。
+- 同 ID 上一正式版升级检查不适用：官网 0.3.2 使用旧 `.com` ID，本版为 `.cn`，需手动迁移。
+- 已核对更新说明、安装迁移和三个附件，并由维护者公开。本记录来自 0.4.0 发布验收，文案调整不代表重新执行验收。
+
+XPI：`jadense-in-zotero-v0.4.0.xpi`，**577815 bytes**。
+
+SHA-256：
+
+```text
+ba6acbc2f6ee9d73f80462fe50091fb97abd3aa131b72222d01b28efddc17057
+```
+
+附件全部来自[同一次标签 CI](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/34272736935)，源码提交为 `49cc4c6951eb38244aa0931116ad657cf3cf8495`。正式版本的标签和附件保持不变，更换制品字节必须升版。
+
+本版包含由 [@jadense-ai](https://github.com/jadense-ai) 贡献的 [PR #1：PR 检查与不可变草稿发布](https://github.com/jadense-ai/jadense-in-zotero/pull/1)和 [PR #2：0.4.0 发布准备](https://github.com/jadense-ai/jadense-in-zotero/pull/2)。这是该账号在本仓库的首次贡献；[完整提交记录](https://github.com/jadense-ai/jadense-in-zotero/commits/v0.4.0)。
+
+</details>
+
+---
+
+<a id="release-040-en"></a>
+<a id="release-en"></a>
+
+### English
+
+**Understand papers in Zotero, and turn what you read into the next step of your research.**
+
+This is the first official GitHub release of Jadense in Zotero. This open-source reading assistant from [Jadense (攻玉学术)](https://jadense.cn/) brings paper Q&A, annotations alongside the source text, selected-text translation, and figure interpretation into Zotero. Use your own API key independently, or connect a Jadense account. Both options use the same installation package.
+
+**[Download version 0.4.0](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.0/jadense-in-zotero-v0.4.0.xpi)** · [Installation and quick start](https://github.com/jadense-ai/jadense-in-zotero/blob/main/README.en.md#quick-start)
+
+The client is open source under the MIT License. Model usage is subject to your chosen provider's fees or your Jadense account's subscription and points rules. In version 0.4.0, the workbench uses mainly Chinese labels; the historical instructions below retain those labels so you can find the controls in that version.
+
+#### Start with a paper
+
+- **Keep the key points beside the source text:** choose 「解析」 (Analyze) to generate a summary, detailed notes, and native Zotero annotations that help you return to the relevant passages. Your manual annotations are preserved.
+- **Read with a question in mind:** associate papers, PDFs, or selected passages with a conversation, then ask follow-up questions about methods, evidence, and conclusions.
+- **Translate difficult passages where you read them:** choose from 32 language options, set the translation direction for a paper or the current selection, and return to the original page from translation history.
+- **Interpret figures with the paper as context:** use automatic figure detection or a manual screenshot, then start a new conversation or continue an existing one. You can also upload, paste, or drop images. Images are saved with the local conversation and remain available when you reopen it.
+
+These reading features carry forward from website version 0.3.2. Figure interpretation requires a model that accepts image input. Automatic figure detection requires a compatible PDF reader in Zotero 10.0.1 or later.
+
+#### What changed since website version 0.3.2?
+
+- **Clearer Jadense model access:** restricted models show 「需升级」 (Upgrade required) and the required subscription tier. If a request is restricted, the message explains how to choose an available model or upgrade, helping distinguish model access from a low points balance. Buying more points does not unlock a restricted model.
+- **An updated default for new configurations:** after connecting Jadense, new configurations default to DeepSeek V4 Flash Vision (`deepseek-v4-flash-vision-exp`). Existing explicit model, route, and BYOK selections are preserved. If an older installation has a GLM model saved, you can change it under 「设置 → 功能配置」 (Settings → Feature configuration).
+- **Consistent Jadense connection and plugin identity:** the official connection uses `jadense.cn`, and the plugin ID now uses `.cn`. Custom BYOK provider settings remain independent. Existing installations using the old ID require the manual migration below.
+- **Easier troubleshooting:** Jadense AI requests include the plugin version and feature identifier to distinguish chat, figure interpretation, translation, and paper analysis. Existing content-processing paths are unchanged.
+- **A verifiable open-source package:** this GitHub release includes the XPI, build metadata, and SHA-256 checksums. Install the package directly or inspect the corresponding source code.
+
+#### From a few papers to a research question
+
+When you are ready to compare methods and evidence across papers, open 「连接攻玉 → 文献同步」 (Connect Jadense → Literature sync) in the plugin and upload the selected papers to a Jadense favorites folder. Then open a project in the Jadense web app, choose 「添加上下文」 (Add context), and select those materials to continue the discussion.
+
+For example: “Compare the research subjects, methods, and limits of the evidence in these papers. List questions that need further literature searches, and draft a literature-review outline.” The papers you have read become the starting point for your next step.
+
+Uploads are **one-way, from Zotero to Jadense**, and you choose whether to include PDFs. Plugin conversations, notes, and annotations do not automatically sync to the web app. BYOK reading features remain available independently.
+
+[Continue your research in Jadense](https://jadense.cn/) · [Projects and research materials guide](https://jadense.cn/docs/research-resources)
+
+#### Installation and migration from an older version
+
+New users can download the `.xpi` file above, choose the install-from-file option (「从文件安装插件」) in Zotero's plugin manager, and then open the workbench to configure BYOK or connect Jadense. See the [English quick start](https://github.com/jadense-ai/jadense-in-zotero/blob/main/README.en.md#quick-start) for the full steps.
+
+**If you installed website version 0.3.2 or an earlier release with the old ID, disable the old Jadense plugin before manually installing this version.** The plugin ID changes from `jadense-in-zotero@jadense.com` to `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other during installation; do not enable both at once.
+
+This version retains the existing local preference namespace and history locations. Do not delete your Zotero profile. Publishing on GitHub does not change the website's automatic-update manifest.
+
+#### Compatibility and known limitations
+
+The manifest declares compatibility with Zotero **8.0 through 10.0.***. Release acceptance checks ran on **Windows 11 Pro x64 (10.0.26200) / Zotero 10.0.1**, using temporary profiles, synthetic materials, and local mock endpoints. macOS, Linux, Zotero 8/9, and live paid providers were not tested in this release's acceptance run.
+
+During repeated window-resizing checks, one run timed out because navigation did not automatically collapse in a narrow window. A complete rerun with the same XPI and tests passed in a fresh temporary profile; the cause remains unconfirmed. If this occurs, use the navigation-collapse button at the top left.
+
+Paper analysis requires extractable PDF text; scanned documents need OCR first. Check model-generated explanations and annotations against the original paper. Local history does not mean offline AI: model requests include the context needed for the request. See [Data and credentials](https://github.com/jadense-ai/jadense-in-zotero/blob/main/README.en.md#data-and-credentials) for the data paths. Each message can include one new image; images not saved by older versions cannot be recovered automatically.
+
+<details>
+<summary>Release acceptance record and package verification</summary>
+
+- The original draft attachments were downloaded, and the XPI, metadata, `SHA256SUMS`, and GitHub asset digest were verified.
+- `smoke:installed --xpi` passed three cold starts.
+- `smoke:research --xpi --screenshots` passed the full **131 checks**, covering the reader, restored image history, translation, analysis, BYOK, feature models, and subscription messages. Tests were not modified and attachments were not rebuilt to remove the window-resizing issue recorded above.
+- An upgrade check from an earlier official release with the same ID does not apply: website version 0.3.2 uses the old `.com` ID, while this version uses `.cn` and requires manual migration.
+- The release notes, migration instructions, and three attachments were checked before the maintainer published the release. This record describes the 0.4.0 acceptance checks; editing the release text does not imply those checks were rerun.
+
+XPI: `jadense-in-zotero-v0.4.0.xpi`, **577815 bytes**.
+
+SHA-256:
+
+```text
+ba6acbc2f6ee9d73f80462fe50091fb97abd3aa131b72222d01b28efddc17057
+```
+
+All attachments come from [the same tag CI run](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/34272736935), built from source commit `49cc4c6951eb38244aa0931116ad657cf3cf8495`. The published tag and attachments remain unchanged. Changing artifact bytes requires a new version.
+
+This release includes [PR #1: PR checks and immutable draft releases](https://github.com/jadense-ai/jadense-in-zotero/pull/1) and [PR #2: Preparing the 0.4.0 release](https://github.com/jadense-ai/jadense-in-zotero/pull/2), contributed by [@jadense-ai](https://github.com/jadense-ai). These are the account's first contributions to this repository. See the [full commit history](https://github.com/jadense-ai/jadense-in-zotero/commits/v0.4.0).
+
+</details>

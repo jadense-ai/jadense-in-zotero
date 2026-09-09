@@ -1,6 +1,6 @@
 # Jadense in Zotero Design Guide
 
-This document extends root `DESIGN.md` for the Zotero XPI: the independent Manager, compact item-pane panel, native reader tools, and version 0.3.1 PDF figure interaction. The root design system owns palette, typography, borders, and brand usage.
+This document defines the current design of the Zotero XPI: the independent Manager, compact item-pane panel, native reader tools, and PDF figure interactions. Its palette, typography, borders, and brand guidance are described below so the plugin can be developed independently.
 
 ## Design Direction
 
@@ -85,7 +85,7 @@ The `上手指南` section (`guide`) is bundled with the XPI. Its own sticky, gr
 The visible `连接攻玉` section retains the internal compatibility value `migrate`. It is the single Manager surface for the Jadense account and one-way upload, grouped into three top bookmark tabs—`连接配置 / 用户信息 / 文献同步`—with the same `tablist`/`tab`/`tabpanel` semantics, keyboard navigation, and underline indicator as the literature-analysis tabs:
 
 - `连接配置`: masked Jadense token with Copy/Edit actions, token help, the `生成 / 更新令牌` Webapp action, and Disconnect. The canonical Jadense server URL remains fixed in the UI; existing developer/staging preferences remain readable.
-- `用户信息`: the `你的攻玉 / Your Jadense` card shows account display name, subscription, effective points balance and source (`个人积分` or `团队积分`), daily check-in state, current streak, and today's granted points. Keep `打开签到页` and `订阅与用量` as system-browser actions. Remove the direct daily check-in button; checking in happens on the Jadense website. Primary and fallback balances are transport context and must not be added together.
+- `用户信息`: the `你的攻玉 / Your Jadense` card shows account display name, subscription, effective points balance and source (`个人积分` or `团队积分`), daily check-in state, current streak, and today's granted points. `前往攻玉`, `打开签到页`, and `订阅与用量` open the corresponding pages in the system browser. Check-in information is read-only; checking in happens on the Jadense website. Primary and fallback balances are transport context and must not be added together.
 - `文献同步`: favorite-folder selector, refresh action, and PDF-upload default; current Zotero collection/item summary; actions for uploading selected items or the selected collection; and a progress/result log with separate metadata/PDF outcomes. Do not duplicate the folder/PDF controls elsewhere in Manager.
 
 Copy stays user-facing: say `这台电脑` rather than `Zotero profile`, never expose OAuth scope names, and point recovery guidance at the concrete tab (token problems to `连接配置`, points/check-in to `用户信息`).
@@ -94,7 +94,7 @@ Connection presentation has four stable states: `未连接`, `正在连接`, `�
 
 Profile and points/check-in status are independent optional projections. Their loading, network, server, or malformed-response failures stay inside the affected block, preserve other usable connection/upload state, and offer a local retry. A bearer `401` prompts token replacement without silently deleting the stored token. A `403 insufficient_scope` disables only the account feature that needs the missing scope; Chat, favorites, and uploads retain their existing permissions.
 
-The existing server token scopes remain compatible: `points:read` permits the balance/check-in snapshot and `points:check-in` remains in the server contract for older clients. This UI removal does not revoke tokens, widen existing tokens, or change server check-in behavior. The current plugin has no direct check-in action.
+The existing server token scopes remain compatible: `points:read` permits the balance/check-in snapshot and `points:check-in` remains in the server contract for older clients. The read-only account view does not revoke tokens, widen existing tokens, or change server check-in behavior. The current plugin has no direct check-in action.
 
 The three Webapp actions in `用户信息` are `前往攻玉` (`/`), `打开签到页` (`/app/check-in`), and `订阅与用量` (`/app?settings=billing`). `连接配置` separately provides `生成 / 更新令牌` (`/app?settings=integrations`). Build them from the active normalized Webapp origin and open them through Zotero's system-browser entry. Never navigate the privileged Manager to Webapp content or put the extension token in a URL.
 
