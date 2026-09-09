@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 import type { JadenseZoteroImportItem } from "@/sync/metadata"
 
 export type JadenseApiOptions = {
@@ -88,7 +89,7 @@ export class JadenseApiError extends Error {
 export function jadenseModelSubscriptionErrorMessage(error: unknown): string | null {
   if (!(error instanceof JadenseApiError)) return null
   if (!["AI_MODEL_SELECTION_PLAN_REQUIRED", "AI_USER_ROUTE_PLAN_REQUIRED"].includes(error.code?.toUpperCase() ?? "")) return null
-  return "当前订阅不支持所选模型或路由。请在「设置 → 功能配置」更换可用模型，或升级订阅后重试。充值积分不会解除此限制。"
+  return uiText("当前订阅不支持所选模型或路由。请在「设置 → 功能配置」更换可用模型，或升级订阅后重试。充值积分不会解除此限制。", "Your subscription does not include this model or route. Choose an available model in Settings → Feature settings, or upgrade your subscription and retry. Buying points does not remove this restriction.")
 }
 
 function nonEmptyText(value: unknown) {
@@ -104,7 +105,7 @@ function finiteNumber(value: unknown) {
 }
 
 function invalidPayload(endpoint: string) {
-  return new Error(`攻玉${endpoint}响应格式无效，请稍后重试。`)
+  return new Error(uiText(`攻玉${endpoint}响应格式无效，请稍后重试。`, `The Jadense ${endpoint} response is invalid. Please try again later.`))
 }
 
 function parseProfile(value: unknown): JadenseProfile {
@@ -113,7 +114,7 @@ function parseProfile(value: unknown): JadenseProfile {
   const userId = nonEmptyText(profile?.userId)
   const code = nonEmptyText(subscription?.code)
   const label = nonEmptyText(subscription?.label)
-  if (!profile || !userId || (!code && !label)) throw invalidPayload("账号资料")
+  if (!profile || !userId || (!code && !label)) throw invalidPayload(uiText("账号资料", "account profile"))
   return {
     userId,
     displayName: nonEmptyText(profile.displayName),
@@ -148,7 +149,7 @@ function parsePointsStatus(value: unknown): JadensePointsStatus {
     || balancePoints === null || primaryBalancePoints === null
     || (fallbackBalancePoints === null && billing.fallbackBalancePoints !== null)
     || typeof signedToday !== "boolean" || currentStreakDays === null || grantedPoints === null
-  ) throw invalidPayload("积分状态")
+  ) throw invalidPayload(uiText("积分状态", "points status"))
   return {
     billing: { sourceKind, teamId, balancePoints, primaryBalancePoints, fallbackBalancePoints },
     checkIn: { signedToday, currentStreakDays, todayReward: { grantedPoints } },
@@ -161,7 +162,7 @@ function parsePointsCheckIn(value: unknown): JadensePointsCheckInResult {
   const balanceAfter = finiteNumber(result?.balanceAfter)
   const grantedPoints = finiteNumber(result?.grantedPoints)
   if (!result || typeof alreadyCheckedIn !== "boolean" || balanceAfter === null || grantedPoints === null) {
-    throw invalidPayload("签到")
+    throw invalidPayload(uiText("签到", "check-in"))
   }
   return { alreadyCheckedIn, balanceAfter, grantedPoints }
 }
@@ -210,14 +211,14 @@ function parseChatModelOption(value: unknown): JadenseChatModelOption | null {
 /** 模型目录是可选展示数据：丢弃不认识的行和附加字段，只要求顶层 options 可枚举。 */
 export function parseJadenseChatModelCatalog(value: unknown): JadenseChatModelCatalog {
   const root = objectValue(value)
-  if (!root || !Array.isArray(root.options)) throw invalidPayload("模型目录")
+  if (!root || !Array.isArray(root.options)) throw invalidPayload(uiText("模型目录", "model catalog"))
   return {
     options: root.options.flatMap(option => parseChatModelOption(option) ?? []),
     defaultSelection: parseChatSelection(root.defaultSelection),
   }
 }
 
-export async function readJadenseApiError(response: Response, fallback = "攻玉请求失败") {
+export async function readJadenseApiError(response: Response, fallback = uiText("攻玉请求失败", "The Jadense request failed")) {
   const body = await response.text().catch(() => "")
   let code: string | null = null
   let message: string | null = null
@@ -315,25 +316,25 @@ export class JadenseApiClient {
   }
 
   async getCurrentProfile(signal?: AbortSignal) {
-    return parseProfile(await this.requestJson<unknown>("/api/extension/profile/me", { signal }, "账号资料"))
+    return parseProfile(await this.requestJson<unknown>("/api/extension/profile/me", { signal }, uiText("账号资料", "account profile")))
   }
 
   async getPointsStatus(signal?: AbortSignal) {
-    return parsePointsStatus(await this.requestJson<unknown>("/api/extension/points/status", { signal }, "积分状态"))
+    return parsePointsStatus(await this.requestJson<unknown>("/api/extension/points/status", { signal }, uiText("积分状态", "points status")))
   }
 
   async checkInPoints(signal?: AbortSignal) {
     return parsePointsCheckIn(await this.requestJson<unknown>("/api/extension/points/check-in", {
       method: "POST",
       signal,
-    }, "签到"))
+    }, uiText("签到", "check-in")))
   }
 
   async getChatModels(signal?: AbortSignal) {
     return parseJadenseChatModelCatalog(await this.requestJson<unknown>(
       "/api/extension/chat/models",
       { signal },
-      "模型目录",
+      uiText("模型目录", "model catalog"),
     ))
   }
 

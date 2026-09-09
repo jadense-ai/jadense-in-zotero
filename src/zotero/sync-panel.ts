@@ -1,3 +1,5 @@
+/** 原生条目面板使用启动语言；主题只覆盖插件自有正文，不覆盖 Zotero 标题与侧栏。 */
+import { getUiLocale, observeTheme, uiText } from "./ui-preferences"
 import {
   pushSelectedCollectionToJadense,
   pushSelectedItemsToJadense,
@@ -62,7 +64,7 @@ export function summarizeZoteroSelection(zotero: ZoteroLike): ZoteroSelectionSum
   return {
     selectedItemCount: selectedItems.length,
     hasSelectedCollection: Boolean(collection),
-    collectionName: collections.length > 1 ? `${collections.length} 个分类` : selectedCollectionName(collection),
+    collectionName: collections.length > 1 ? uiText(`${collections.length} 个分类`, `${collections.length} collections`) : selectedCollectionName(collection),
   }
 }
 
@@ -73,22 +75,22 @@ export function buildSyncPanelState(zotero: ZoteroLike): SyncPanelState {
   const selection = summarizeZoteroSelection(zotero)
 
   return {
-    managerActionLabel: "打开攻玉工作台",
+    managerActionLabel: uiText("打开攻玉工作台", "Open Jadense Workspace"),
     connected,
     baseUrl: connection.baseUrl,
     defaultFolderId: connection.defaultFolderId,
     includePdfDefault: readCollectionUploadIncludePdfDefault(zotero),
     selection,
-    hintLabel: "在攻玉工作台中对话，或将 Zotero 文献单向上传到攻玉。",
-    connectionLabel: connected ? `已连接 ${connection.baseUrl}` : "未配置攻玉令牌，请打开「连接攻玉」",
-    folderLabel: hasDefaultFolder ? `默认收藏夹：${connection.defaultFolderId}` : "未设置默认收藏夹",
+    hintLabel: uiText("在攻玉工作台中对话，或将 Zotero 文献单向上传到攻玉。", "Chat in Jadense Workspace or upload Zotero literature to Jadense."),
+    connectionLabel: connected ? uiText(`已连接 ${connection.baseUrl}`, `Connected to ${connection.baseUrl}`) : uiText("未配置攻玉令牌，请打开「连接攻玉」", "No Jadense token. Open Connect Jadense."),
+    folderLabel: hasDefaultFolder ? uiText(`默认收藏夹：${connection.defaultFolderId}`, `Default folder: ${connection.defaultFolderId}`) : uiText("未设置默认收藏夹", "No default folder selected"),
     selectionLabels: [
       selection.hasSelectedCollection
-        ? `当前分类：${selection.collectionName ?? "未命名分类"}`
-        : "未选中分类",
+        ? uiText(`当前分类：${selection.collectionName ?? "未命名分类"}`, `Current collection: ${selection.collectionName ?? "Untitled collection"}`)
+        : uiText("未选中分类", "No collection selected"),
       selection.selectedItemCount > 0
-        ? `已选中 ${selection.selectedItemCount} 个条目`
-        : "未选中条目",
+        ? uiText(`已选中 ${selection.selectedItemCount} 个条目`, `${selection.selectedItemCount} items selected`)
+        : uiText("未选中条目", "No items selected"),
     ],
     canExportItems: connected && hasDefaultFolder && selection.selectedItemCount > 0,
     canExportCollection: connected && hasDefaultFolder && selection.hasSelectedCollection,
@@ -114,12 +116,12 @@ async function runPanelCommand(
   status: HTMLElement,
   operation: () => Promise<unknown>,
 ) {
-  setStatus(status, "正在上传到攻玉…")
+  setStatus(status, uiText("正在上传到攻玉…", "Uploading to Jadense…"))
   try {
     const result = await operation()
-    setStatus(status, `上传完成。\n${formatCommandResult(result)}`, "success")
+    setStatus(status, uiText(`上传完成。\n${formatCommandResult(result)}`, `Upload completed.\n${formatCommandResult(result)}`), "success")
   } catch (error) {
-    setStatus(status, error instanceof Error ? error.message : "上传失败。", "error")
+    setStatus(status, error instanceof Error ? error.message : uiText("上传失败。", "Upload failed."), "error")
   }
 }
 
@@ -161,24 +163,23 @@ const PANEL_STYLES = `
     display: grid;
     gap: 10px;
     color: var(--jdx-text);
+    background: var(--jdx-subtle);
     font: 12px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    .jdx-sync-panel {
-      --jdx-text: #e4eae6;
-      --jdx-muted: #9aa8a1;
-      --jdx-line: #303a34;
-      --jdx-line-strong: #42504a;
-      --jdx-surface: #202723;
-      --jdx-subtle: #1b211e;
-      --jdx-green-deep: #2f9d71;
-      --jdx-green-deep-hover: #3bb184;
-      --jdx-green-text: #eef7f2;
-      --jdx-error-text: #f5a097;
-      --jdx-error-bg: #3a2320;
-      --jdx-success-text: #7fe0b2;
-      --jdx-success-bg: #14291f;
-    }
+  .jdx-sync-panel[data-theme="dark"] {
+    --jdx-text: #e4eae6;
+    --jdx-muted: #9aa8a1;
+    --jdx-line: #303a34;
+    --jdx-line-strong: #42504a;
+    --jdx-surface: #202723;
+    --jdx-subtle: #1b211e;
+    --jdx-green-deep: #2f9d71;
+    --jdx-green-deep-hover: #3bb184;
+    --jdx-green-text: #eef7f2;
+    --jdx-error-text: #f5a097;
+    --jdx-error-bg: #3a2320;
+    --jdx-success-text: #7fe0b2;
+    --jdx-success-bg: #14291f;
   }
   .jdx-sync-hint {
     margin: 0;
@@ -272,6 +273,8 @@ const PANEL_STYLES = `
   }
 `
 
+const panelThemes = new WeakMap<HTMLElement, () => void>()
+
 export function renderSyncPanel(input: {
   doc: Document
   body: HTMLDivElement
@@ -280,6 +283,7 @@ export function renderSyncPanel(input: {
 }) {
   const { doc, body, zotero, callbacks } = input
   const state = buildSyncPanelState(zotero)
+  panelThemes.get(body)?.()
   body.replaceChildren()
 
   const root = create(doc, "div", "jdx-sync-panel")
@@ -317,7 +321,7 @@ export function renderSyncPanel(input: {
   appendButton({
     doc,
     parent: actions,
-    label: "上传选中条目",
+    label: uiText("上传选中条目", "Upload selected items"),
     disabled: !state.canExportItems,
     primary: true,
     onClick: () => {
@@ -329,7 +333,7 @@ export function renderSyncPanel(input: {
   appendButton({
     doc,
     parent: actions,
-    label: state.includePdfDefault ? "上传收藏夹（含 PDF）" : "上传收藏夹",
+    label: state.includePdfDefault ? uiText("上传收藏夹（含 PDF）", "Upload collection with PDFs") : uiText("上传收藏夹", "Upload collection"),
     disabled: !state.canExportCollection,
     primary: true,
     onClick: () => {
@@ -339,6 +343,13 @@ export function renderSyncPanel(input: {
   })
   root.append(style, hint, card, actions, commandStatus)
   body.append(root)
+  const stopObservingTheme = observeTheme(zotero, root)
+  const stopTheme = () => {
+    stopObservingTheme()
+    doc.defaultView?.removeEventListener("unload", stopTheme)
+  }
+  panelThemes.set(body, stopTheme)
+  doc.defaultView?.addEventListener("unload", stopTheme, { once: true })
 }
 
 export function registerSyncPanel(
@@ -351,16 +362,19 @@ export function registerSyncPanel(
     paneID: JADENSE_SYNC_PANEL_ID,
     pluginID: context.pluginID,
     header: {
+      l10nArgs: JSON.stringify({ language: getUiLocale() }),
       l10nID: "jadense-in-zotero-panel-header",
       icon: `${context.rootURI}icons/jadense-16.svg`,
     },
     sidenav: {
+      l10nArgs: JSON.stringify({ language: getUiLocale() }),
       l10nID: "jadense-in-zotero-panel-sidenav",
       icon: `${context.rootURI}icons/jadense-20.svg`,
     },
     onItemChange: ({ setEnabled }) => {
       setEnabled(true)
     },
+    onDestroy: ({ body }) => { panelThemes.get(body)?.(); panelThemes.delete(body) },
     onRender: ({ doc, body }) => {
       renderSyncPanel({ doc, body, zotero, callbacks })
     },

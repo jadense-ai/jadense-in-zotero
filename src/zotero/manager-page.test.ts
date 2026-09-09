@@ -492,15 +492,13 @@ describe("manager connection indicator", () => {
     expect(classifyJadenseAccountError(new TypeError("network down"))).toBe("local")
   })
 
-  it("keeps points-read and check-in scope recovery distinct and hides 5xx internals", () => {
+  it("keeps points-read recovery local and hides 5xx internals", () => {
     const scope = new JadenseApiError({ status: 403, code: "insufficient_scope", body: "{}", message: "missing scope" })
-    expect(accountErrorMessage(scope, "points")).toContain("仍可尝试签到")
-    expect(accountErrorMessage(scope, "check-in")).toContain("缺少签到权限")
+    expect(accountErrorMessage(scope, "points")).toContain("缺少积分读取权限")
     const server = new JadenseApiError({ status: 500, body: "database secret", message: "relation private_table failed" })
     expect(accountErrorMessage(server, "profile")).toBe("账号资料暂时无法刷新：攻玉服务暂时不可用，请稍后重试。")
-    expect(pointsRefreshErrorMessage(scope, false)).toContain("仍可尝试签到")
-    expect(pointsRefreshErrorMessage(scope, true)).toContain("积分读取及签到权限")
-    expect(pointsRefreshErrorMessage(scope, false, true)).toBe("当前令牌缺少积分读取权限；请在「连接配置」中更新令牌后刷新余额。")
+    expect(pointsRefreshErrorMessage(scope)).toContain("缺少积分读取权限")
+    expect(pointsRefreshErrorMessage(scope)).not.toContain("尝试签到")
   })
 
   it("times out and aborts an optional account request so the UI can retry", async () => {
@@ -521,18 +519,19 @@ describe("manager connection indicator", () => {
     }
   })
 
-  it("does not cancel an independent profile refresh when direct check-in starts", () => {
+  it("keeps account projections independent and exposes only web check-in", () => {
     const source = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const checkIn = source.match(/async function checkInJadenseAccount[\s\S]*?\n}\n\nexport function jadenseAppUrl/)?.[0] ?? ""
-    expect(checkIn).toContain("const generation = accountRefreshGeneration")
-    expect(checkIn).not.toContain("cancelJadenseAccountRequests()")
+    expect(source).toContain("Promise.all([profileRequest, pointsRequest])")
+    expect(source).toContain("elements.accountProfileStatus")
+    expect(source).toContain("elements.accountStatus")
+    expect(source).not.toContain("checkInJadenseAccount")
+    expect(source).not.toContain("checkInPoints(")
+    expect(source).not.toContain("accountCheckInBusy")
   })
 
-  it("keeps account refresh disabled until both an overlapping refresh and check-in settle", () => {
-    expect(accountRefreshIsDisabled(true, false)).toBe(true)
-    expect(accountRefreshIsDisabled(false, true)).toBe(true)
-    expect(accountRefreshIsDisabled(true, true)).toBe(true)
-    expect(accountRefreshIsDisabled(false, false)).toBe(false)
+  it("keeps refresh disabled while its independent account projections are pending", () => {
+    expect(accountRefreshIsDisabled(true)).toBe(true)
+    expect(accountRefreshIsDisabled(false)).toBe(false)
   })
 
   it("does not let an older successful projection clear a newer 401", () => {
@@ -542,13 +541,14 @@ describe("manager connection indicator", () => {
   })
 
   it("builds fixed account actions against the configured Jadense origin", () => {
+    expect(jadenseAppUrl("https://jadense.cn/", "/")).toBe("https://jadense.cn/")
     expect(jadenseAppUrl("https://jadense.cn/", "/app/check-in")).toBe("https://jadense.cn/app/check-in")
     expect(jadenseAppUrl("http://localhost:3000", "/app?settings=billing")).toBe("http://localhost:3000/app?settings=billing")
     expect(jadenseAppUrl("https://jadense.cn", "/app?settings=integrations")).toBe("https://jadense.cn/app?settings=integrations")
   })
 
   it.each([
-    [402, "POINTS_INSUFFICIENT", "签到领积分或补充积分"],
+    [402, "POINTS_INSUFFICIENT", "打开签到页领取积分"],
     [403, "insufficient_scope", "重新生成 Zotero 令牌"],
   ] as const)("uses typed %s errors for actionable chat recovery", (status, code, expected) => {
     expect(friendlyChatError(new JadenseApiError({
@@ -597,7 +597,7 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain("html:head")
     expect(xhtml).not.toContain("html:body")
     expect(xhtml).not.toContain("局内对话")
-    expect(xhtml).toContain("<h2>连接攻玉</h2>")
+    expect(xhtml).toContain('<h2 data-ui-en="Connect Jadense">连接攻玉</h2>')
     expect(xhtml).toContain("上传到攻玉")
     expect(xhtml).not.toContain("Import Jadense folder")
   })
@@ -692,7 +692,7 @@ describe("manager page state", () => {
     expect(connection).toContain("用户信息")
     expect(connection).toContain("文献同步")
     expect(connection).toContain('aria-selected="true"')
-    expect(connection.match(/data-connection-section=/g)).toHaveLength(5)
+    expect(connection.match(/data-connection-section=/g)).toHaveLength(4)
     expect(connection).not.toContain("Zotero profile")
     expect(connection).not.toContain("chat:temporary")
     expect(manager).toContain("setConnectionTab")
@@ -748,9 +748,11 @@ describe("manager page state", () => {
     expect(footer).toContain('id="jadense-manager-theme-toggle"')
     expect(footer).toContain("jdx-manager-theme-icon-moon")
     expect(footer).toContain("jdx-manager-theme-icon-sun")
-    expect(footer).toContain('aria-label="切换主题" title="切换为深色模式"')
+    expect(footer).toContain('aria-label="切换主题"')
+    expect(footer).toContain('title="切换为深色模式"')
     expect(footer).toContain('id="jadense-manager-nav-settings"')
-    expect(footer).toContain('aria-label="设置" title="设置"')
+    expect(footer).toContain('aria-label="设置"')
+    expect(footer).toContain('title="设置"')
     expect(footer).toContain("jdx-manager-settings-gear")
     expect(footer).not.toContain("jdx-manager-nav-label")
     expect(xhtml.match(/id="jadense-manager-nav-settings"/g)).toHaveLength(1)
@@ -790,7 +792,7 @@ describe("manager page state", () => {
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(1)
     expect(xhtml).not.toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
-    for (const name of ["features", "shortcuts", "ai"]) {
+    for (const name of ["general", "features", "shortcuts", "ai"]) {
       expect(xhtml).toContain(`id="jadense-settings-tab-${name}"`)
       expect(xhtml).toContain(`id="jadense-settings-panel-${name}"`)
     }
@@ -801,7 +803,7 @@ describe("manager page state", () => {
       for (const button of ["save", "reset", "disable"]) expect(xhtml).toContain(`id="jadense-shortcut-${action}-${button}"`)
     }
     expect(xhtml).toContain('id="jadense-shortcut-status"')
-    expect(xhtml.match(/data-connection-section=/g)).toHaveLength(5)
+    expect(xhtml.match(/data-connection-section=/g)).toHaveLength(4)
     expect(xhtml).not.toContain("AI 请求通道")
     for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-feature-${feature}-model"`)
     expect(xhtml).toContain('id="jadense-manager-byok-key-mask"')
@@ -810,13 +812,15 @@ describe("manager page state", () => {
     expect(xhtml).toContain('id="jadense-manager-byok-model-select"')
     expect(xhtml).toContain('id="jadense-manager-byok-model-name"')
     expect(xhtml).toContain('id="jadense-manager-byok-context-window"')
-    for (const id of ["account-name", "account-plan", "account-balance", "account-source", "account-reward", "account-streak", "account-check-in"]) {
+    for (const id of ["account-name", "account-plan", "account-balance", "account-source", "account-reward", "account-streak"]) {
       expect(xhtml).toContain(`id="jadense-manager-${id}"`)
     }
+    expect(xhtml).not.toContain('id="jadense-manager-account-check-in"')
+    expect(xhtml).toContain('id="jadense-manager-open-jadense"')
     expect(xhtml).toContain('id="jadense-manager-open-check-in"')
     expect(xhtml).toContain('id="jadense-manager-open-billing"')
     expect(xhtml).toContain('id="jadense-manager-open-integrations"')
-    expect(css).toMatch(/\.jdx-manager-connection-grid[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+    expect(css).toMatch(/\.jdx-manager-connection-grid[\s\S]*?grid-template-columns: 1fr/)
     expect(css).toMatch(/@media \(max-width: 1050px\)[\s\S]*?\.jdx-manager-connection-grid \{ grid-template-columns: 1fr; \}/)
   })
 
@@ -908,6 +912,6 @@ describe("manager page state", () => {
     expect(preview).toContain("fixtureAccount.signedToday = true")
     expect(smoke).toContain('"manager-ai-settings-byok"')
     expect(smoke).toContain('"shortcut-settings-light-dark-compact"')
-    expect(smoke).toContain('"manager-account-points-check-in"')
+    expect(smoke).toContain('"manager-account-points-web-actions"')
   })
 })

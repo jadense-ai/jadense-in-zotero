@@ -1,3 +1,4 @@
+import { uiText } from "./ui-preferences"
 import { JadenseApiClient, type JadenseFavoriteFolder, type JadenseZoteroImportResult } from "@/jadense/api"
 import {
   jadenseFavoriteToZoteroDraft,
@@ -94,6 +95,7 @@ type SyncMappingState = {
 
 export type ZoteroLike = {
   locale?: string
+  __jadenseInZoteroUiLocale?: "zh-CN" | "en-US"
   Prefs?: {
     // Zotero.Prefs.get/set 的第二个参数 global=true 表示键是完整 pref 路径；
     // 缺省时 Zotero 会把键解析到 extensions.zotero. 分支下。
@@ -154,8 +156,9 @@ export type ZoteroLike = {
     registerSection(options: {
       paneID: string
       pluginID: string
-      header: { l10nID: string; icon: string }
-      sidenav: { l10nID: string; icon: string }
+      header: { l10nID: string; l10nArgs?: string; icon: string }
+      sidenav: { l10nID: string; l10nArgs?: string; icon: string }
+      onDestroy?: (props: { body: HTMLDivElement }) => void
       onItemChange?: (props: { setEnabled: (enabled: boolean) => void }) => void
       onRender: (props: { doc: Document; body: HTMLDivElement }) => void
     }): string | boolean | void
@@ -175,6 +178,7 @@ export type ZoteroLike = {
 export type ZoteroMenuItem = {
   menuType: "menuitem" | "separator" | "submenu"
   l10nID?: string
+  l10nArgs?: string
   onShowing?: (event: Event, context: ZoteroMenuContext) => void
   onCommand?: (event: Event, context: ZoteroMenuContext) => void
   menus?: ZoteroMenuItem[]
@@ -304,7 +308,7 @@ function sourceIdentityKey(source: unknown, id: unknown) {
 
 function assertClient(zotero: ZoteroLike) {
   const { baseUrl, token } = readConnection(zotero)
-  if (!token) throw new Error("未配置攻玉令牌，请先在「连接攻玉」中完成连接。")
+  if (!token) throw new Error(uiText("未配置攻玉令牌，请先在「连接攻玉」中完成连接。", "No Jadense token is configured. Connect your account in Connect Jadense first."))
   const win = zotero.getMainWindow?.()
   const fetchImpl = win?.fetch ? win.fetch.bind(win) : undefined
   const formDataFactory = win?.FormData ? () => new win.FormData() : undefined
@@ -523,7 +527,7 @@ async function collectSelectedCollectionItems(zotero: ZoteroLike): Promise<{
   skipped: CollectionSkippedEntry[]
 }> {
   const collections = selectedZoteroCollections(zotero)
-  if (collections.length === 0) throw new Error("请先在 Zotero 中选中分类再上传。")
+  if (collections.length === 0) throw new Error(uiText("请先在 Zotero 中选中分类再上传。", "Select a Zotero collection before uploading."))
 
   const entriesByKey = new Map<string, CollectionItemEntry>()
   const skippedByKey = new Map<string, CollectionSkippedEntry>()
@@ -1024,11 +1028,11 @@ export function readConnection(zotero: ZoteroLike): JadenseConnection {
 // 存量的 baseUrl pref 仍由 readConnection() 读取并迁移。baseUrl 入参仅保留给
 // 测试/开发环境手动覆盖,UI 一律不传。
 export function saveConnection(zotero: ZoteroLike, input: { token: string; defaultFolderId?: string | null; baseUrl?: string }) {
-  if (!input.token.trim()) throw new Error("请填写攻玉插件令牌。")
+  if (!input.token.trim()) throw new Error(uiText("请填写攻玉插件令牌。", "Enter a Jadense plugin token."))
 
   if (input.baseUrl !== undefined) {
     const baseUrl = migrateBaseUrl(input.baseUrl)
-    if (!baseUrl) throw new Error("请填写攻玉 Webapp 地址。")
+    if (!baseUrl) throw new Error(uiText("请填写攻玉 Webapp 地址。", "Enter the Jadense web app URL."))
     zotero.Prefs?.set(PREF_BASE_URL, baseUrl)
   }
   zotero.Prefs?.set(PREF_TOKEN, input.token.trim())
@@ -1073,8 +1077,8 @@ export async function listFavoriteFoldersForConnection(
 ) {
   const baseUrl = normalizeBaseUrl(input.baseUrl)
   const token = input.token.trim()
-  if (!baseUrl) throw new Error("请填写攻玉 Webapp 地址。")
-  if (!token) throw new Error("请先配置攻玉插件令牌再加载收藏夹。")
+  if (!baseUrl) throw new Error(uiText("请填写攻玉 Webapp 地址。", "Enter the Jadense web app URL."))
+  if (!token) throw new Error(uiText("请先配置攻玉插件令牌再加载收藏夹。", "Configure a Jadense plugin token before loading folders."))
   return new JadenseApiClient({ baseUrl, token, fetchImpl }).listFavoriteFolders()
 }
 
@@ -1148,7 +1152,7 @@ export function refreshFavoriteFoldersCache(
       folders: [],
       selectedFolderId: connection.defaultFolderId,
       fetchedAt: readFavoriteFoldersCache(zotero)?.fetchedAt ?? "",
-      message: "请先配置攻玉插件令牌再加载收藏夹。",
+      message: uiText("请先配置攻玉插件令牌再加载收藏夹。", "Configure a Jadense plugin token before loading folders."),
     })
   }
 
@@ -1176,7 +1180,7 @@ export function refreshFavoriteFoldersCache(
         folders,
         selectedFolderId,
         fetchedAt,
-        message: `已加载 ${folders.length} 个收藏夹。`,
+        message: uiText(`已加载 ${folders.length} 个收藏夹。`, `Loaded ${folders.length} favorite folders.`),
       }
     } catch (error) {
       const cached = readFavoriteFoldersCache(zotero)
@@ -1186,7 +1190,7 @@ export function refreshFavoriteFoldersCache(
         folders: cached?.folders ?? [],
         selectedFolderId: connection.defaultFolderId,
         fetchedAt: cached?.fetchedAt ?? "",
-        message: error instanceof Error ? error.message : "收藏夹加载失败。",
+        message: error instanceof Error ? error.message : uiText("收藏夹加载失败。", "Could not load favorite folders."),
       }
     } finally {
       favoriteFoldersRefreshInFlight = null
@@ -1202,11 +1206,11 @@ export async function pushSelectedItemsToJadense(
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
-  if (!folderId) throw new Error("未设置默认攻玉收藏夹。")
+  if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
   const entries = selectedEntries(zotero)
   const items = entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
-  if (items.length === 0) throw new Error("未选中可上传的 Zotero 条目。")
+  if (items.length === 0) throw new Error(uiText("未选中可上传的 Zotero 条目。", "No uploadable Zotero items are selected."))
 
   const result = await importMetadataBatches(client, folderId, items)
   const resultsById = resultByClientItemId(result.results)
@@ -1270,7 +1274,7 @@ export async function pushSelectedCollectionToJadense(
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
-  if (!folderId) throw new Error("未设置默认攻玉收藏夹。")
+  if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
   const collected = await collectSelectedCollectionItems(zotero)
   const localSkippedItems: ZoteroCollectionUploadItemResult[] = collected.skipped.map((item) => ({
@@ -1353,7 +1357,7 @@ export async function pushSelectedCollectionToJadense(
 export async function pullFavoriteFolderToZotero(zotero: ZoteroLike) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
-  if (!folderId) throw new Error("未设置默认攻玉收藏夹。")
+  if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
   const payload = await client.listFavoriteItems(folderId)
   const mappingState = readSyncMappings(zotero)

@@ -23,6 +23,8 @@ function installPreviewHost() {
   let saved
   try { saved = JSON.parse(sessionStorage.getItem(storageKey) || "{}") } catch { saved = {} }
   const preferences = { ...(saved.preferences || {}) }
+  const requestedUiLanguage = new URLSearchParams(location.search).get("ui-language")
+  if (["zh-CN", "en-US", "system"].includes(requestedUiLanguage)) preferences["extensions.jadenseInZotero.displayLanguage"] = requestedUiLanguage
   preferences["extensions.jadenseInZotero.baseUrl"] = location.origin
   preferences["extensions.jadenseInZotero.token"] = "synthetic-fixture-token-not-a-credential"
   preferences["extensions.jadenseInZotero.managerThemeDark"] ??= false
@@ -126,6 +128,7 @@ function installPreviewHost() {
       } } },
     } },
   }
+  const preferenceObservers = new Map()
   const Zotero = {
     locale: "zh-CN",
     Prefs: {
@@ -134,8 +137,11 @@ function installPreviewHost() {
         preferences[key] = key.endsWith(".baseUrl") ? location.origin
           : key.endsWith(".token") ? "synthetic-fixture-token-not-a-credential" : value
         persist()
+        for (const [callback, observedKey] of preferenceObservers) if (observedKey === key) callback()
       },
       clear: (key) => { delete preferences[key]; persist() },
+      registerObserver: (key, callback) => { preferenceObservers.set(callback, key); return callback },
+      unregisterObserver: (callback) => preferenceObservers.delete(callback),
     },
     Items: {
       get: (id) => items.get(Number(id)),

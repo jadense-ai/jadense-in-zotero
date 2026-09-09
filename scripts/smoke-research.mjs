@@ -627,6 +627,112 @@ async function runHarness(config) {
       return event.defaultPrevented
     }
     await waitFor(() => toolbarButton("analyze"), "actual release toolbar")
+    if (config.appearanceLanguage) {
+      await stage("appearance-and-language")
+      const english = config.appearanceLanguage === "en-US"
+      assert(toolbarButton("attach").textContent.trim() === (english ? "Ask" : "提问"), "Reader ignored the plugin language")
+      const openManager = () => readerDoc.querySelector(".jadense-reader-brand").click()
+      openManager()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), "appearance Manager")
+      const element = (id) => manager.document.getElementById(id)
+      element("jadense-manager-nav-settings").click()
+      element("jadense-settings-tab-general").click()
+      assert(element("jadense-settings-tab-general").textContent === (english ? "General" : "常规"), "Manager language is incorrect")
+      assert(Zotero.__jadenseInZoteroUiLocale === config.appearanceLanguage, "Bootstrap locale was not shared with Manager")
+      const choose = (root, index) => {
+        root.querySelector(".jdx-select-trigger").click()
+        root.querySelectorAll('[role="option"]')[index].click()
+      }
+      const localized = await Zotero.getMainWindow().document.l10n.formatMessages([
+        { id: "jadense-in-zotero-menu-configure", args: { language: config.appearanceLanguage } },
+      ])
+      assert(localized[0].attributes.find(item => item.name === "label").value === (english ? "Configure Jadense connection" : "配置攻玉连接"), "Native Fluent did not honor explicit plugin language")
+      await Promise.resolve(Zotero.Utilities.Internal.openPreferences("jadense-in-zotero-preferences"))
+      const preferences = await waitFor(() => findWindowContaining("jadense-in-zotero-preferences-pane"), "appearance native Preferences")
+      const preferenceRoot = preferences.document.getElementById("jadense-in-zotero-preferences-pane")
+      await waitFor(() => preferenceRoot.querySelector(".jdx-select-trigger"), "native General controls")
+      assert(preferenceRoot.querySelector('[data-settings-section="general"] h3').textContent === (english ? "General" : "常规"), "Native Preferences language is incorrect")
+      const hostThemeBefore = preferences.document.documentElement.getAttribute("data-theme")
+      const readerThemeBefore = readerDoc.documentElement.getAttribute("data-theme")
+      const draft = element("jadense-chat-input")
+      draft.value = "Unsent appearance test draft"
+      draft.dispatchEvent(new manager.Event("input", { bubbles: true }))
+      const themeEverywhere = value => manager.document.documentElement.dataset.theme === value
+        && preferenceRoot.dataset.theme === value
+        && Array.from(readerDoc.querySelectorAll("[data-jadense-reader-theme]")).every(root => root.dataset.theme === value)
+      for (const [value, index] of [["light", 1], ["dark", 2]]) {
+        choose(element("jadense-display-theme"), index)
+        await waitFor(() => themeEverywhere(value), "shared " + value + " theme")
+        assert(draft.value === "Unsent appearance test draft", "Theme change discarded a draft")
+        await screenshot("general-" + config.appearanceLanguage + "-" + value, manager)
+        await screenshot("native-general-" + config.appearanceLanguage + "-" + value, preferences)
+        await screenshot("reader-" + config.appearanceLanguage + "-" + value)
+      }
+      choose(element("jadense-display-theme"), 0)
+      Zotero.Prefs.set("browser.theme.toolbar-theme", 0, true)
+      await waitFor(() => themeEverywhere("dark"), "follow host dark")
+      Zotero.Prefs.set("browser.theme.toolbar-theme", 1, true)
+      await waitFor(() => themeEverywhere("light"), "follow host light")
+      assert(preferences.document.documentElement.getAttribute("data-theme") === hostThemeBefore
+        && readerDoc.documentElement.getAttribute("data-theme") === readerThemeBefore, "Plugin changed the host document theme attribute")
+      choose(element("jadense-display-language"), english ? 1 : 2)
+      assert(Zotero.__jadenseInZoteroUiLocale === config.appearanceLanguage
+        && element("jadense-settings-tab-general").textContent === (english ? "General" : "常规"), "Saved language took effect before restart")
+      preferences.close()
+      manager.close()
+      await waitFor(() => !findManager(), "closed appearance Manager")
+      openManager()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), "reopened appearance Manager")
+      assert(element("jadense-settings-tab-general").textContent === (english ? "General" : "常规"), "Reopening Manager applied pending language")
+      element("jadense-manager-nav-migrate").click()
+      element("jadense-connection-tab-account").click()
+      await waitFor(() => element("jadense-manager-account-name").textContent === "研究烟测用户", "appearance account profile")
+      assert(!element("jadense-manager-account-check-in"), "Direct check-in control is still present")
+      await waitFor(() => element("jadense-manager-account-balance").textContent.includes("36"), "appearance points snapshot")
+      const originalFetch = manager.fetch
+      try {
+        manager.fetch = (url, options) => String(url).endsWith("/api/extension/points/status")
+          ? Promise.resolve(new manager.Response('{"error":"synthetic optional points failure"}', { status: 503 }))
+          : originalFetch.call(manager, url, options)
+        element("jadense-manager-account-refresh").click()
+        await waitFor(() => element("jadense-manager-account-status").dataset.kind === "error"
+          && element("jadense-manager-account-profile-status").dataset.kind === "success"
+          && !element("jadense-manager-account-refresh").disabled, "independent account refresh failure")
+        assert(element("jadense-manager-account-name").textContent === "研究烟测用户"
+          && element("jadense-manager-account-balance").textContent.includes("36"), "Optional points failure discarded successful account data")
+      } finally { manager.fetch = originalFetch }
+      element("jadense-manager-account-refresh").click()
+      await waitFor(() => element("jadense-manager-account-status").dataset.kind === "success", "points refresh recovery")
+      const urls = []
+      const originalLaunchURL = Zotero.launchURL
+      try {
+        Zotero.launchURL = url => urls.push(url)
+        for (const id of ["jadense-manager-open-jadense", "jadense-manager-open-check-in", "jadense-manager-open-billing"]) element(id).click()
+      } finally { Zotero.launchURL = originalLaunchURL }
+      assert(JSON.stringify(urls) === JSON.stringify([config.origin + "/", config.origin + "/app/check-in", config.origin + "/app?settings=billing"]), "Appearance account actions have incorrect URLs")
+      const chromeWidth = manager.outerWidth - manager.innerWidth
+      const chromeHeight = manager.outerHeight - manager.innerHeight
+      manager.resizeTo(760 + chromeWidth, 620 + chromeHeight)
+      await waitFor(() => manager.innerWidth === 760, "compact appearance viewport")
+      await screenshot("account-" + config.appearanceLanguage + "-compact", manager)
+      Zotero.Prefs.set("extensions.jadenseInZotero.token", "")
+      const unconfiguredUrls = []
+      try {
+        Zotero.launchURL = url => unconfiguredUrls.push(url)
+        for (const id of ["jadense-manager-open-jadense", "jadense-manager-open-check-in", "jadense-manager-open-billing"]) element(id).click()
+      } finally { Zotero.launchURL = originalLaunchURL }
+      assert(JSON.stringify(unconfiguredUrls) === JSON.stringify(urls), "Web actions require a plugin token")
+      element("jadense-manager-nav-guide").click()
+      await screenshot("guide-" + config.appearanceLanguage + "-compact", manager)
+      element("jadense-manager-nav-settings").click()
+      element("jadense-settings-tab-general").click()
+      await screenshot("general-" + config.appearanceLanguage + "-compact", manager)
+      assert(manager.document.documentElement.scrollWidth <= manager.innerWidth, "Appearance page overflows horizontally")
+      report.checks.push("explicit-plugin-locale-native-manager-reader", "shared-general-preferences", "theme-live-all-owned-surfaces", "host-theme-follow", "host-style-isolation", "theme-preserves-draft", "language-requires-restart-including-reopened-manager", "account-web-actions", "account-refresh-failure-isolation", "web-actions-without-token", "compact-localized-layout")
+      report.state = "passed"
+      await persist()
+      return
+    }
     assert(toolbarButton("attach").textContent.trim() === "提问"
       && toolbarButton("attach").title.includes("发起新对话")
       && toolbarButton("attach").getAttribute("aria-label").includes("当前文献"), "Reader question entry does not describe its document and new-conversation behavior")
@@ -1406,7 +1512,7 @@ async function runHarness(config) {
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-settings").hidden, "Manager settings section")
     manager.document.getElementById("jadense-settings-tab-ai").click()
     const featureTab = manager.document.getElementById("jadense-settings-tab-features")
-    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "功能配置 / 快捷键设置 / BYOK", "Feature settings tab labels/order changed")
+    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "常规 / 功能配置 / 快捷键设置 / BYOK", "Feature settings tab labels/order changed")
     assert(!manager.document.getElementById("jadense-manager-route-byok"), "Obsolete global channel is still visible")
     const byokBaseUrl = manager.document.getElementById("jadense-manager-byok-base-url")
     const byokKey = manager.document.getElementById("jadense-manager-byok-key-input")
@@ -1484,7 +1590,7 @@ async function runHarness(config) {
     await waitFor(() => preferencesWindow.document.getElementById("jadense-in-zotero-byok-save"), "native BYOK Preferences controls")
     const preferenceSections = Array.from(preferencesWindow.document.querySelectorAll("[data-settings-section]"))
     await waitFor(() => preferencesWindow.getComputedStyle(preferenceSections[0]).display === "grid", "native Preferences stylesheet")
-    assert(preferenceSections.length === 3
+    assert(preferenceSections.length === 4
       && preferenceSections[1].getBoundingClientRect().top > preferenceSections[0].getBoundingClientRect().bottom,
     "Native Preferences lost feature, connection, or BYOK sections")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-byok-endpoint").textContent.endsWith("/chat/completions"),
@@ -1493,7 +1599,7 @@ async function runHarness(config) {
       && preferencesWindow.document.querySelector(".jdx-pref-checkbox span").textContent.trim(),
     "Native Preferences did not preserve hidden edit state or option copy")
     await screenshot("native-preferences-jadense", preferencesWindow)
-    preferenceSections[2].scrollIntoView({ block: "start" })
+    preferenceSections[3].scrollIntoView({ block: "start" })
     await Zotero.Promise.delay(150)
     await screenshot("native-preferences-byok", preferencesWindow)
     const savedByokBeforeTest = Zotero.Prefs.get("extensions.jadenseInZotero.byokConfig")
@@ -1522,13 +1628,20 @@ async function runHarness(config) {
     await waitFor(() => !connectionPanel("account").hidden, "Manager connection account tab")
     await waitFor(() => manager.document.getElementById("jadense-manager-account-name").textContent === "研究烟测用户"
       && manager.document.getElementById("jadense-manager-account-balance").textContent === "36 积分"
-      && !manager.document.getElementById("jadense-manager-account-check-in").disabled,
+      && !manager.document.getElementById("jadense-manager-account-check-in"),
     "Manager account and points projection")
-    manager.document.getElementById("jadense-manager-account-check-in").click()
-    await waitFor(() => manager.document.getElementById("jadense-manager-account-balance").textContent === "38 积分"
-      && manager.document.getElementById("jadense-manager-account-check-in").textContent === "今日已签到",
-    "Manager check-in status refresh")
-    report.checks.push("feature-models-both-sources", "feature-models-light-dark-compact", "manager-ai-settings-byok", "manager-settings-gear-icon", "manager-settings-light-dark", "shortcut-settings-light-dark-compact", "manager-connection-workbench", "manager-account-points-check-in", "native-preferences-shared-byok", "byok-test-unsaved-3000-token-no-history")
+    assert(connectionPanel("account").querySelector('[data-connection-section="account"] h3').textContent === "你的攻玉"
+      && !connectionPanel("account").querySelector('[data-connection-section="points"]'), "Account cards were not merged")
+    const originalLaunchURL = Zotero.launchURL
+    const accountUrls = []
+    try {
+      Zotero.launchURL = (url) => accountUrls.push(url)
+      for (const id of ["jadense-manager-open-jadense", "jadense-manager-open-check-in", "jadense-manager-open-billing"]) manager.document.getElementById(id).click()
+    } finally { Zotero.launchURL = originalLaunchURL }
+    assert(JSON.stringify(accountUrls) === JSON.stringify([config.origin + "/", config.origin + "/app/check-in", config.origin + "/app?settings=billing"]), "Account web actions have incorrect destinations")
+    manager.document.getElementById("jadense-manager-account-refresh").click()
+    await waitFor(() => !manager.document.getElementById("jadense-manager-account-refresh").disabled, "Account refresh without direct check-in")
+    report.checks.push("feature-models-both-sources", "feature-models-light-dark-compact", "manager-ai-settings-byok", "manager-settings-gear-icon", "manager-settings-light-dark", "shortcut-settings-light-dark-compact", "manager-connection-workbench", "manager-account-points-web-actions", "native-preferences-shared-byok", "byok-test-unsaved-3000-token-no-history")
 
     await stage("manager-synthetic-literature-upload")
     const mainPane = Zotero.getMainWindow().ZoteroPane
@@ -1704,6 +1817,12 @@ async function runHarness(config) {
       return node?.querySelector("h2") && node.querySelector("strong") && node.querySelector("pre > code") ? node : null
     }, "rendered Markdown before stream completion")
     assert(streaming.dataset.status === "streaming", "Markdown rendered only after generation finished")
+    const generatingTheme = manager.document.documentElement.dataset.theme
+    manager.document.getElementById("jadense-manager-theme-toggle").click()
+    assert(manager.document.documentElement.dataset.theme !== generatingTheme
+      && streaming.dataset.status === "streaming", "Theme change interrupted active generation")
+    manager.document.getElementById("jadense-manager-theme-toggle").click()
+    report.checks.push("theme-change-preserves-active-stream")
     const detailsStop = manager.document.getElementById("jadense-chat-details-stop")
     assert(detailsStop && !detailsStop.hidden && !detailsStop.disabled, "Busy conversation details do not expose Stop")
     const prefix = "稳定前缀"
@@ -2115,6 +2234,7 @@ async function main() {
   const argv = process.argv.slice(2)
   const executable = argValue(argv, "--zotero") ?? (argv[0]?.startsWith("-") ? undefined : argv[0]) ?? process.env.ZOTERO_EXE
   if (!executable) throw new Error("Usage: node scripts/smoke-research.mjs <absolute-zotero-executable> [--xpi path] [--upgrade-from previous-xpi] [--keep-temp] [--screenshots]")
+  const appearanceLanguage = argValue(argv, "--appearance-language")
   const timeoutMs = Number(argValue(argv, "--timeout-ms") ?? 150_000)
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("--timeout-ms must be positive")
   const { facts, version } = await loadReleaseContext()
@@ -2152,12 +2272,14 @@ async function main() {
         user: createMarkdownFixture("user", stub.origin),
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
-      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot,
+      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage,
     })
     await writeFile(path.join(profileDir, "user.js"), [
       'user_pref("extensions.autoDisableScopes", 0);',
       'user_pref("extensions.enabledScopes", 15);',
       'user_pref("extensions.update.enabled", false);',
+      'user_pref("intl.locale.requested", "zh-CN");',
+      'user_pref("extensions.jadenseInZotero.displayLanguage", ' + JSON.stringify(appearanceLanguage || "zh-CN") + ');',
       "",
     ].join("\n"))
     stdout = await open(path.join(smokeRoot, "zotero.stdout.log"), "w")
@@ -2183,11 +2305,11 @@ async function main() {
     }
     if (report?.state !== "passed") throw new Error(`Research smoke timed out at ${report?.stage ?? "companion startup"}`)
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
-      || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1) {
+    if (!appearanceLanguage && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+      || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!appearanceLanguage && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -2199,10 +2321,12 @@ async function main() {
       || stub.requests.filter((request) => request.kind === "byok-direct").length !== 1
       || stub.requests.filter((request) => request.kind === "image-upload").length !== 1
       || stub.requests.filter((request) => request.kind === "image-upload-followup").length !== 1
-      || stub.requests.filter((request) => request.kind === "byok-test").length !== 1) {
+      || stub.requests.filter((request) => request.kind === "byok-test").length !== 1)) {
       throw new Error("Expected three Jadense analyses, one selected-BYOK analysis, three translations, one Markdown, three SDT and two manual-capture Figure Chat requests, one direct BYOK Chat, and one BYOK test request")
     }
-    report.checks.push("markdown-no-automatic-network-resources")
+    if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
+    report.checks.push("no-plugin-check-in-post")
+    if (!appearanceLanguage) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

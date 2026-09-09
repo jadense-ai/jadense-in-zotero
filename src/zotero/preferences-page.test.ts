@@ -1,10 +1,23 @@
 import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
+import { selectPreferencesStrings } from "./connection-display"
 
 const xhtml = readFileSync(new URL("../../content/preferences.xhtml", import.meta.url), "utf8")
 
 describe("preferences pane markup", () => {
+  it("provides General controls with labels, restart guidance, and complete bilingual static copy", () => {
+    expect(xhtml).toContain('data-settings-section="general"')
+    expect(xhtml).toContain('id="jadense-in-zotero-display-language" aria-labelledby="jadense-in-zotero-display-language-label"')
+    expect(xhtml).toContain('id="jadense-in-zotero-theme" aria-labelledby="jadense-in-zotero-theme-label"')
+    expect(xhtml).toContain('data-i18n-key="languageRestartNote"')
+    for (const locale of ["zh-CN", "en-US"]) {
+      const strings = selectPreferencesStrings(locale)
+      for (const match of xhtml.matchAll(/data-i18n-(?:key|aria-label)="([^"]+)"/g)) {
+        expect(strings[match[1] as keyof typeof strings], `${locale}: ${match[1]}`).toBeTypeOf("string")
+      }
+    }
+  })
   it("keeps token display and editing as separate rows", () => {
     expect(xhtml).toContain('id="jadense-in-zotero-token-mask"')
     expect(xhtml).toContain('id="jadense-in-zotero-token-copy"')
@@ -24,7 +37,7 @@ describe("preferences pane markup", () => {
   it("presents independent feature models with connection and BYOK sections", () => {
     expect(xhtml).not.toContain('id="jadense-in-zotero-route-jadense"')
     for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-in-zotero-feature-${feature}-model"`)
-    expect(xhtml.match(/data-settings-section=/g)).toHaveLength(3)
+    expect(xhtml.match(/data-settings-section=/g)).toHaveLength(4)
     expect(xhtml).toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-key-mask"')

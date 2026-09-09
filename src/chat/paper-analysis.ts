@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * 文献解析与选文翻译的纯文本包装层。
  * 上游提供本地提取的句子，下游复用 temporary chat；模型只选择句子 ID，不能提供 PDF 坐标或条目身份。
@@ -260,31 +261,31 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
   if (!value) {
     const repaired = repairAnalysisSyntax(input)
     value = readAnalysisObject(repaired)
-    if (value) warnings.add("已修复 AI 返回的 JSON 格式，批注仍按本地原句校验。")
+    if (value) warnings.add(uiText("已修复 AI 返回的 JSON 格式，批注仍按本地原句校验。", "The AI response format was repaired. Annotations are still validated against local source sentences."))
     else {
       value = recoverAnalysisObject(repaired)
-      if (value) warnings.add("AI 返回的结构不完整，已恢复可读字段和完整条目；损坏片段未写入 PDF 批注。")
+      if (value) warnings.add(uiText("AI 返回的结构不完整，已恢复可读字段和完整条目；损坏片段未写入 PDF 批注。", "The AI response was incomplete. Readable fields and complete entries were recovered; damaged fragments were not written as PDF annotations."))
     }
   }
   if (!value) {
     result.rawText = boundedText(response, MAX_RESPONSE_LENGTH)
     result.warnings.push(response.length > MAX_RESPONSE_LENGTH
-      ? "AI 返回内容过长，已截断为文本展示，未生成 PDF 批注。"
-      : "AI 返回内容未能解析为结构化结果，已保留原始文字，未生成 PDF 批注。")
+      ? uiText("AI 返回内容过长，已截断为文本展示，未生成 PDF 批注。", "The AI response was too long. Truncated text was retained for display; no PDF annotations were generated.")
+      : uiText("AI 返回内容未能解析为结构化结果，已保留原始文字，未生成 PDF 批注。", "The AI response could not be parsed. Original text was retained; no PDF annotations were generated."))
     return result
   }
 
-  if (response.length > MAX_RESPONSE_LENGTH) warnings.add("AI 返回内容过长，已在处理范围内保留完整内容，超出部分未处理。")
+  if (response.length > MAX_RESPONSE_LENGTH) warnings.add(uiText("AI 返回内容过长，已在处理范围内保留完整内容，超出部分未处理。", "The AI response exceeded the processing limit. Complete content within the limit was retained; the rest was not processed."))
   const readText = (text: unknown, limit: number) => {
     const normalized = Array.isArray(text) ? text.filter((part): part is string => typeof part === "string").join("\n") : text
     const clipped = boundedText(normalized, limit)
-    if (typeof normalized === "string" && normalized.trim().length > limit) warnings.add("部分文字过长，已截断并标明。")
+    if (typeof normalized === "string" && normalized.trim().length > limit) warnings.add(uiText("部分文字过长，已截断并标明。", "Some text exceeded the limit and was marked as truncated."))
     return clipped
   }
   const categoryOf = (category: unknown): AnalysisCategoryId => {
     const name = typeof category === "string" ? category.trim().toLowerCase() : ""
     const match = ANALYSIS_CATEGORIES.find(({ id, label }) => id === name || label === name)
-    if (!match) warnings.add("未识别的分类已归入“补充要点”。")
+    if (!match) warnings.add(uiText("未识别的分类已归入“补充要点”。", "Unknown categories were grouped under Additional points."))
     return match?.id ?? "additional"
   }
   result.summary = readText(value.summary, 1600)
@@ -320,7 +321,7 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
     if (!comment) return
     const key = JSON.stringify([passageId, category, comment])
     if (noteKeys.has(key)) return
-    if ((result.notes?.length ?? 0) >= MAX_NOTES) { warnings.add(`额外笔记超过 ${MAX_NOTES} 条，后续内容未保留。`); return }
+    if ((result.notes?.length ?? 0) >= MAX_NOTES) { warnings.add(uiText(`额外笔记超过 ${MAX_NOTES} 条，后续内容未保留。`, `Additional notes exceeded ${MAX_NOTES} entries; further content was not retained.`)); return }
     noteKeys.add(key)
     result.notes ??= []
     result.notes.push({ category, comment, ...(passageId ? { passageId } : {}), reason })
@@ -349,7 +350,7 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
     }
     if (result.annotations.length >= MAX_ANNOTATIONS) {
       result.skipped += 1
-      warnings.add(`批注超过 ${MAX_ANNOTATIONS} 条，仅保留前 ${MAX_ANNOTATIONS} 条有效批注。`)
+      warnings.add(uiText(`批注超过 ${MAX_ANNOTATIONS} 条，仅保留前 ${MAX_ANNOTATIONS} 条有效批注。`, `Only the first ${MAX_ANNOTATIONS} valid annotations were retained.`))
       retainNote(comment, category, passageId, "limit")
       continue
     }
@@ -365,7 +366,7 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
   }
   if (!result.summary && !result.sections.length && !result.annotations.length && !result.notes?.length) {
     result.rawText = boundedText(response, MAX_RESPONSE_LENGTH)
-    warnings.add("未找到可用的解析内容，已保留原始文字，未生成 PDF 批注。")
+    warnings.add(uiText("未找到可用的解析内容，已保留原始文字，未生成 PDF 批注。", "No usable analysis content was found. Original text was retained; no PDF annotations were generated."))
   }
   result.warnings = [...warnings]
   return result

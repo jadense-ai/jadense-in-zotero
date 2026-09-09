@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { initializeUiLocale, saveTheme, THEME_PREF, type UiPreferenceHost } from "./ui-preferences"
+beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
 import {
   buildSDTFigureIndex,
   normalizeFigureImage,
@@ -226,6 +228,7 @@ function readerFixture(options: { secondary?: boolean } = {}) {
   const unregister = vi.fn()
   const zotero = {
     version: "10.0.1",
+    locale: "zh-CN",
     Items: { get: vi.fn(async () => ({ parentItem: { getField: () => "Paper title" } })) },
     Reader: { registerEventListener: register, unregisterEventListener: unregister },
   }
@@ -389,6 +392,51 @@ describe("figure image normalization", () => {
 })
 
 describe("native Reader figure overlay", () => {
+  it("localizes figure actions and follows live theme changes without recoloring the PDF host", async () => {
+    const fixture = readerFixture()
+    fixture.zotero.locale = "en-US"
+    const values = new Map<string, unknown>([[THEME_PREF, "light"]])
+    const observers = new Map<number, { key: string; update: () => void }>()
+    let observerID = 0
+    const prefs: NonNullable<UiPreferenceHost["Prefs"]> = {
+      get: key => values.get(key),
+      set: (key, value) => {
+        values.set(key, value)
+        for (const entry of observers.values()) if (entry.key === key) entry.update()
+      },
+      registerObserver: (key, update) => { observers.set(++observerID, { key, update }); return observerID },
+      unregisterObserver: id => { observers.delete(id as number) },
+    }
+    Object.assign(fixture.zotero, { Prefs: prefs })
+    const cleanup = registerReaderFigureTools(fixture.zotero, "test", vi.fn())
+    fixture.register.mock.calls[0][1]({ reader: fixture.reader, doc: fixture.outerDoc })
+    await vi.waitFor(() => expect(findByAttribute(fixture.primary.doc, "data-jadense-figure-overlay")).toBeTruthy())
+    const overlay = findByAttribute(fixture.primary.doc, "data-jadense-figure-overlay")!
+    const notice = findByAttribute(fixture.primary.doc, "data-jadense-figure-notice")!
+    const buttons = overlay.children[0].children
+    expect(buttons.map(button => button.textContent)).toEqual([
+      "Interpret image (new chat)", "Interpret image (current chat)", "Exit",
+    ])
+    expect(buttons[0].getAttribute("aria-label")).toBe("Interpret image (new chat)")
+    expect(buttons[2].title).toBe("Exit image interpretation (Esc)")
+    captureShortcut(fixture.primary)
+    expect(notice.textContent).toBe("Drag within a PDF page to select an image. Press Esc to exit.")
+    expect(overlay.dataset.theme).toBe("light")
+    saveTheme(fixture.zotero, "dark")
+    expect(overlay.dataset.theme).toBe("dark")
+    expect(notice.dataset.theme).toBe("dark")
+    saveTheme(fixture.zotero, "system")
+    prefs.set!("browser.theme.toolbar-theme", 1)
+    expect(overlay.dataset.theme).toBe("light")
+    prefs.set!("browser.theme.toolbar-theme", 0)
+    expect(overlay.dataset.theme).toBe("dark")
+    expect(fixture.primary.doc.body.dataset.theme).toBeUndefined()
+    expect(fixture.primary.container.dataset.theme).toBeUndefined()
+    expect(fixture.primary.page.dataset.theme).toBeUndefined()
+    cleanup()
+    expect(observers.size).toBe(0)
+  })
+
   it("isolates capture from earlier native mouse handlers and preserves release and text input after Exit or Escape", async () => {
     const fixture = readerFixture()
     const view = fixture.primary

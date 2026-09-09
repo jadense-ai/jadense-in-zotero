@@ -7,6 +7,7 @@ import {
   unregisterSyncPanel,
 } from "./sync-panel"
 import type { ZoteroLike } from "./runtime"
+import { initializeUiLocale } from "./ui-preferences"
 
 function fakeZotero(input: {
   token?: string
@@ -42,6 +43,15 @@ function fakeZotero(input: {
 }
 
 describe("sync panel state", () => {
+  it("renders native panel content in the startup display language", () => {
+    initializeUiLocale({ locale: "en-US" })
+    expect(buildSyncPanelState(fakeZotero({}))).toMatchObject({
+      managerActionLabel: "Open Jadense Workspace",
+      connectionLabel: "No Jadense token. Open Connect Jadense.",
+      selectionLabels: ["No collection selected", "No items selected"],
+    })
+    initializeUiLocale({ locale: "zh-CN" })
+  })
   it("summarizes Zotero selection", () => {
     expect(summarizeZoteroSelection(fakeZotero({
       selectedItems: [{ id: 1 }, { id: 2 }],
@@ -106,10 +116,12 @@ describe("sync panel state", () => {
     expect(paneID).toBe("plugin@example.com-jadense-in-zotero-sync-panel")
     expect(registerSection).toHaveBeenCalledWith(expect.objectContaining({
       header: {
+        l10nArgs: JSON.stringify({ language: "zh-CN" }),
         l10nID: "jadense-in-zotero-panel-header",
         icon: "chrome://jadense-in-zotero/icons/jadense-16.svg",
       },
       sidenav: {
+        l10nArgs: JSON.stringify({ language: "zh-CN" }),
         l10nID: "jadense-in-zotero-panel-sidenav",
         icon: "chrome://jadense-in-zotero/icons/jadense-20.svg",
       },

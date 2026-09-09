@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * BYOK 文本生成客户端：把本地 Chat 投影为三种标准 HTTP/SSE 协议。
  * 上游只提供本地消息与来源，下游直接连接用户配置的 Provider，不经过攻玉服务器。
@@ -69,17 +70,17 @@ export function validateByokConfig(input: ByokConfig): ByokConfig {
   try {
     parsed = new URL(baseUrl)
   } catch {
-    throw new Error("请输入有效的 BYOK API 基础地址。")
+    throw new Error(uiText("请输入有效的 BYOK API 基础地址。", "Enter a valid BYOK API base URL."))
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("BYOK API 基础地址仅支持 HTTP 或 HTTPS。")
+    throw new Error(uiText("BYOK API 基础地址仅支持 HTTP 或 HTTPS。", "The BYOK API base URL must use HTTP or HTTPS."))
   }
   const apiKey = input.apiKey.trim()
-  if (!apiKey) throw new Error("请填写 BYOK API 密钥。")
+  if (!apiKey) throw new Error(uiText("请填写 BYOK API 密钥。", "Enter a BYOK API key."))
   const model = input.model.trim()
-  if (!model) throw new Error("请填写 BYOK 模型 ID。")
+  if (!model) throw new Error(uiText("请填写 BYOK 模型 ID。", "Enter a BYOK model ID."))
   if (!Number.isSafeInteger(input.maxOutputTokens) || input.maxOutputTokens <= 0) {
-    throw new Error("最大输出量（词元） 必须是正整数。")
+    throw new Error(uiText("最大输出量（词元） 必须是正整数。", "Maximum output tokens must be a positive integer."))
   }
   return { protocol: input.protocol, baseUrl, apiKey, model, maxOutputTokens: input.maxOutputTokens }
 }
@@ -89,7 +90,7 @@ export function byokConfigurationIssue(input: ByokConfig) {
     validateByokConfig(input)
     return ""
   } catch (error) {
-    return error instanceof Error ? error.message : "BYOK 配置不完整。"
+    return error instanceof Error ? error.message : uiText("BYOK 配置不完整。", "The BYOK configuration is incomplete.")
   }
 }
 
@@ -119,7 +120,7 @@ async function responseError(response: Response, apiKey: string) {
   } catch {
     // 不显示未知原始响应，避免 Provider 回显凭据或私有请求内容。
   }
-  return redactedError(message, apiKey, `BYOK 请求失败（${response.status}）。`)
+  return redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`))
 }
 
 export async function consumeByokStream(
@@ -131,7 +132,7 @@ export async function consumeByokStream(
   acceptTruncated = false,
 ) {
   if (!response.ok) throw await responseError(response, apiKey)
-  if (!response.body) throw new Error("BYOK 响应缺少数据流。")
+  if (!response.body) throw new Error(uiText("BYOK 响应缺少数据流。", "The BYOK response has no stream."))
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -141,11 +142,11 @@ export async function consumeByokStream(
 
   const incompleteError = (kind: "truncated" | "eof") => new Error(requireComplete
     ? kind === "truncated"
-      ? "BYOK 输出未完整结束，未写入 PDF 批注。请重试。"
-      : "BYOK 连接意外结束，未写入 PDF 批注。请重试。"
+      ? uiText("BYOK 输出未完整结束，未写入 PDF 批注。请重试。", "BYOK output was incomplete. No PDF annotations were written. Please retry.")
+      : uiText("BYOK 连接意外结束，未写入 PDF 批注。请重试。", "The BYOK connection ended unexpectedly. No PDF annotations were written. Please retry.")
     : kind === "truncated"
-      ? "BYOK 输出因提供商限制被截断。请提高输出上限后重试。"
-      : "BYOK 连接在成功结束事件前意外中断。请重试。")
+      ? uiText("BYOK 输出因提供商限制被截断。请提高输出上限后重试。", "The provider truncated the BYOK output. Increase the output limit and retry.")
+      : uiText("BYOK 连接在成功结束事件前意外中断。请重试。", "The BYOK connection ended before completion. Please retry."))
 
   const append = (delta: unknown) => {
     if (typeof delta !== "string" || !delta) return
@@ -172,12 +173,12 @@ export async function consumeByokStream(
       if (!object(parsed)) return
       event = parsed as JsonObject
     } catch {
-      throw new Error("BYOK 提供商返回了无法解析的流事件。")
+      throw new Error(uiText("BYOK 提供商返回了无法解析的流事件。", "The BYOK provider returned an unreadable stream event."))
     }
 
     const errorMessage = providerErrorMessage(event)
     if (protocol === "openai-chat-completions") {
-      if (event.error) throw redactedError(errorMessage, apiKey, "OpenAI Chat Completion 生成失败。")
+      if (event.error) throw redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed."))
       const choices = Array.isArray(event.choices) ? event.choices : []
       for (const choiceValue of choices) {
         const choice = object(choiceValue)
@@ -191,7 +192,7 @@ export async function consumeByokStream(
     }
 
     if (protocol === "anthropic-messages") {
-      if (event.type === "error") throw redactedError(errorMessage, apiKey, "Anthropic Messages 生成失败。")
+      if (event.type === "error") throw redactedError(errorMessage, apiKey, uiText("Anthropic Messages 生成失败。", "Anthropic Messages failed."))
       if (event.type === "content_block_delta") append(object(event.delta)?.text)
       if (event.type === "message_delta") {
         const stopReason = object(event.delta)?.stop_reason
@@ -206,7 +207,7 @@ export async function consumeByokStream(
 
     if (event.type === "error" || event.type === "response.failed") {
       const nested = providerErrorMessage(event.response)
-      throw redactedError(errorMessage || nested, apiKey, "OpenAI Responses 生成失败。")
+      throw redactedError(errorMessage || nested, apiKey, uiText("OpenAI Responses 生成失败。", "OpenAI Responses failed."))
     }
     if (event.type === "response.output_text.delta") append(event.delta)
     if (event.type === "response.completed") complete = true
@@ -235,7 +236,7 @@ export async function consumeByokStream(
   } catch (error) {
     await reader.cancel().catch(() => undefined)
     if (object(error)?.name === "AbortError") throw error
-    throw redactedError(error instanceof Error ? error.message : "", apiKey, "BYOK 数据流处理失败。")
+    throw redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream."))
   } finally {
     reader.releaseLock()
   }
@@ -334,7 +335,7 @@ export class ByokChatClient {
       })
     } catch (error) {
       if (input.signal?.aborted || object(error)?.name === "AbortError") throw error
-      throw redactedError(error instanceof Error ? error.message : "", this.config.apiKey, "BYOK 网络请求失败。")
+      throw redactedError(error instanceof Error ? error.message : "", this.config.apiKey, uiText("BYOK 网络请求失败。", "The BYOK network request failed."))
     }
     return consumeByokStream(
       response,

@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * Jadense 自研下拉组件。
  * Zotero chrome 窗口中原生 <select> 的弹出层是文档内 XUL menupopup，缺少主题样式，
@@ -150,7 +151,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     const selected = state.options.find((option) => option.value === state.value) ?? null
     valueLabel.textContent = selected?.label ?? "—"
     valueLabel.dataset.placeholder = String(state.value === "")
-    if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${selected?.label ?? "未选择"}`)
+    if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${selected?.label ?? uiText("未选择", "Not selected")}`)
     trigger.disabled = state.disabled
     trigger.setAttribute("aria-expanded", String(state.open))
     search?.setAttribute("aria-expanded", String(state.open))
@@ -163,7 +164,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     if (options.length === 0) {
       const empty = htmlElement(doc, "li")
       empty.className = "jdx-select-empty"
-      empty.textContent = state.query ? "没有匹配的选项" : "—"
+      empty.textContent = state.query ? uiText("没有匹配的选项", "No matching options") : "—"
       list.append(empty)
       return
     }

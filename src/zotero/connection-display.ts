@@ -44,6 +44,16 @@ export async function copyTextToClipboard(zotero: ZoteroLike | null, text: strin
 }
 
 export type PreferencesStrings = {
+  generalTitle: string
+  displayLanguageLabel: string
+  themeLabel: string
+  followZotero: string
+  lightTheme: string
+  darkTheme: string
+  languageRestartNote: string
+  languageSaved: string
+  preferenceSaveFailed: string
+
   featureConfigTitle: string
   featureChatLabel: string
   featureTranslationLabel: string
@@ -136,6 +146,16 @@ export type PreferencesStrings = {
 }
 
 const ZH_STRINGS: PreferencesStrings = {
+  generalTitle: "常规",
+  displayLanguageLabel: "显示语言",
+  themeLabel: "主题设置",
+  followZotero: "跟随 Zotero",
+  lightTheme: "浅色",
+  darkTheme: "深色",
+  languageRestartNote: "显示语言在重启 Zotero 后生效；主题设置立即生效。",
+  languageSaved: "显示语言已保存，重启 Zotero 后生效。",
+  preferenceSaveFailed: "无法保存显示偏好，请重试。",
+
   featureConfigTitle: "功能配置",
   featureChatLabel: "AI 对话",
   featureTranslationLabel: "实时翻译",
@@ -233,6 +253,16 @@ const ZH_STRINGS: PreferencesStrings = {
 }
 
 const EN_STRINGS: PreferencesStrings = {
+  generalTitle: "General",
+  displayLanguageLabel: "Display language",
+  themeLabel: "Theme",
+  followZotero: "Follow Zotero",
+  lightTheme: "Light",
+  darkTheme: "Dark",
+  languageRestartNote: "Display language takes effect after restarting Zotero. Theme changes apply immediately.",
+  languageSaved: "Display language saved. Restart Zotero to apply it.",
+  preferenceSaveFailed: "Could not save the display preference. Please try again.",
+
   featureConfigTitle: "Feature settings",
   featureChatLabel: "AI Chat",
   featureTranslationLabel: "Translation",

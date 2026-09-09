@@ -2,17 +2,26 @@
 
 在 Zotero 内与文献对话、翻译选文、解读图片，并生成带原文定位的文献解析。完整客户端以 MIT 开源，同时支持 **BYOK** 和 **连接攻玉**，两种方式使用同一份安装包。
 
-当前版本为 **0.4.0**，保留官网 0.3.2 的完整客户端功能，并完善默认模型、订阅提示及插件身份迁移；具体差异见 [更新说明](CHANGELOG.md)。仓库只包含 Zotero 客户端，不包含攻玉主应用、服务端或服务凭据。攻玉账号服务仍按其账号权限、订阅及积分规则提供。
+当前版本为 **0.4.1**，完善中英文界面，新增语言与主题常规设置，并整合账号信息和网页入口；具体差异见 [更新说明](CHANGELOG.md)。仓库只包含 Zotero 客户端，不包含攻玉主应用、服务端或服务凭据。攻玉账号服务仍按其账号权限、订阅及积分规则提供。
 
 ## 安装
 
-1. 从本仓库的 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 下载 `jadense-in-zotero-v0.4.0.xpi`，或按下方步骤自行构建。安装过旧 `.com` ID 版本时，先在插件管理器中禁用旧 Jadense 插件。
+1. 从本仓库的 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 下载 `jadense-in-zotero-v0.4.1.xpi`，或按下方步骤自行构建。安装过旧 `.com` ID 版本时，先在插件管理器中禁用旧 Jadense 插件。
 2. 在 Zotero 的插件管理器中选择「从文件安装插件」，选择 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，选择所需 AI 通道。
 
 Manifest 声明兼容 Zotero 8.0 至 10.0.*；原生功能主要在 Zotero 10.0.1 验证。自动识图需要 Zotero 10.0.1+ 的普通 PDF 视图与可用的原生裁图能力，旧版本或无 SDT 的 PDF 不提供相同的自动识别能力。
 
-插件 ID 为 `jadense-in-zotero@jadense.cn`。官网 0.3.2 使用旧 `.com` ID，两者不会自动覆盖升级，不能同时启用；请先禁用旧插件再手动安装新版。新版沿用原有本地偏好命名空间与历史保存位置，不要删除 Zotero profile。插件仍读取 [攻玉官方更新源](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)，但 GitHub 发布不修改该更新清单，不能据此假设官网已提供新版自动更新。
+插件 ID 为 `jadense-in-zotero@jadense.cn`，与 GitHub 0.4.0 相同，可从文件安装更新。官网 0.3.2 使用旧 `.com` ID，两者不会自动覆盖升级，不能同时启用；请先禁用旧插件再手动安装新版。新版沿用原有本地偏好命名空间与历史保存位置，不要删除 Zotero profile。插件仍读取 [攻玉官方更新源](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)，但 GitHub 发布不修改该更新清单，不能据此假设官网已提供新版自动更新。
+
+## 语言与主题
+
+在工作台「设置 → 常规」或 Zotero 原生插件设置的「常规」中配置，两处共享偏好：
+
+- **显示语言**：跟随 Zotero、简体中文或 English，默认跟随；中文 Zotero 使用简体中文，其他语言使用英文。保存后重启 Zotero 生效，仅重开工作台不会切换。界面语言不改变翻译方向、AI 输出要求或已有文献与历史。
+- **主题设置**：跟随 Zotero、浅色或深色，默认跟随；修改立即同步到已打开的插件界面。已有浅深主题选择继续保留，侧栏主题按钮也可保存明确的浅色或深色选择。切换主题保留草稿和进行中的生成。
+
+工作台、阅读器工具、指南、原生插件设置和菜单均支持中英文；Zotero 窗口外框、系统标题栏及 PDF 页面外观继续由 Zotero 管理。
 
 ## 使用 BYOK
 
@@ -27,8 +36,10 @@ Provider/模型配置保存在本机 Zotero profile。更换或删除模型不�
 
 1. 在 [攻玉](https://jadense.cn) 的「设置 → 集成 → 连接 Jadense in Zotero」创建令牌。
 2. 在插件「连接攻玉 → 连接配置」粘贴攻玉插件令牌并保存连接；插件使用内置的攻玉站点地址。
-3. 「用户信息」显示账号、订阅、积分来源及签到；在功能配置中选择账号可访问的模型。新配置默认使用 `deepseek-v4-flash-vision-exp`，已有明确模型、路由和 BYOK 选择保持不变。
+3. 「用户信息 → 你的攻玉」集中显示账号、订阅、可用积分与来源，以及签到奖励和连续天数，可在标题右侧刷新。顶部「前往攻玉 / 打开签到页 / 订阅与用量」打开相应网页，未连接时也可使用；签到在网页完成。
 4. 「文献同步」选择攻玉收藏夹及是否包含 PDF，再上传 Zotero 当前选中条目或收藏夹。上传始终使用攻玉连接，与 BYOK 通道独立。
+
+在功能配置中选择账号可访问的模型。新配置默认使用 `deepseek-v4-flash-vision-exp`，已有明确模型、路由和 BYOK 选择保持不变。
 
 旧令牌可能缺少积分权限，账号卡片会提示更新令牌；其他已获授权功能继续可用。上传是 Zotero → 攻玉的单向操作，元数据和 PDF 分别报告结果。
 
@@ -64,9 +75,9 @@ pnpm run lint
 pnpm run build
 ```
 
-`build` 包含类型检查、打包和制品校验，产物位于 `release/zotero/v0.4.0/`：
+`build` 包含类型检查、打包和制品校验，产物位于 `release/zotero/v0.4.1/`：
 
-- `jadense-in-zotero-v0.4.0.xpi`
+- `jadense-in-zotero-v0.4.1.xpi`
 - `release-metadata.json`
 - `SHA256SUMS`
 

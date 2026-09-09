@@ -1,3 +1,5 @@
+/** 原生菜单保留宿主壳与 Fluent ID，只以启动语言参数选择插件文案。 */
+import { getUiLocale } from "./ui-preferences"
 import type {
   ZoteroLike,
   ZoteroMenuRegistration,
@@ -26,32 +28,38 @@ export function buildJadenseMenuRegistrations(
       menus: [
         {
           menuType: "submenu",
+          l10nArgs: JSON.stringify({ language: getUiLocale() }),
           l10nID: "jadense-in-zotero-menu-main",
           menus: [
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-open-manager",
               onCommand: callbacks.openManager,
             },
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-configure",
               onCommand: callbacks.configureConnection,
             },
             { menuType: "separator" },
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-export-collection",
               onCommand: callbacks.exportSelectedCollection,
             },
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-export-items",
               onCommand: callbacks.exportSelectedItems,
             },
             { menuType: "separator" },
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-disconnect",
               onCommand: callbacks.disconnect,
             },
@@ -66,16 +74,19 @@ export function buildJadenseMenuRegistrations(
       menus: [
         {
           menuType: "submenu",
+          l10nArgs: JSON.stringify({ language: getUiLocale() }),
           l10nID: "jadense-in-zotero-menu-main",
           menus: [
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-open-manager",
               onCommand: callbacks.openManager,
             },
             { menuType: "separator" },
             {
               menuType: "menuitem",
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
               l10nID: "jadense-in-zotero-menu-export-collection",
               onCommand: callbacks.exportSelectedCollection,
             },

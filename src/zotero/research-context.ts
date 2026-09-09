@@ -1,3 +1,4 @@
+import { uiText } from "./ui-preferences"
 /**
  * Zotero 本地文献/文件与对话来源之间的适配层。
  * 只读取调用方明确指定的条目或当前选择；正文提取是可降级的可选能力，
@@ -118,7 +119,7 @@ function authors(item: LocalItem) {
 }
 
 function metadataSource(item: LocalItem): ChatSource | null {
-  const title = field(item, "title") || "未命名 Zotero 来源"
+  const title = field(item, "title") || uiText("未命名 Zotero 来源", "Untitled Zotero source")
   const abstract = field(item, "abstractNote")
   const doi = field(item, "DOI")
   return normalizeChatSources([{
@@ -170,11 +171,11 @@ async function attachmentSource(zotero: ResearchZotero, item: LocalItem, include
         const extractedPages = result?.extractedPages
         const totalPages = result?.totalPages
         source.warning = positiveID(extractedPages) && positiveID(totalPages)
-          ? `PDF 已提取 ${extractedPages} / ${totalPages} 页的可读文字${extractedPages < totalPages ? "；其余页面未提供" : ""}。`
-          : `PDF 提取范围最多为前 ${MAX_PDF_SOURCE_PAGES} 页；未取得完整页数信息。`
-        if (!source.text) source.warning += " 未找到可提取文字，可能是扫描件；仅保留来源引用。"
+          ? uiText(`PDF 已提取 ${extractedPages} / ${totalPages} 页的可读文字${extractedPages < totalPages ? "；其余页面未提供" : ""}。`, `Extracted readable text from ${extractedPages} of ${totalPages} PDF pages.${extractedPages < totalPages ? " Other pages were not supplied." : ""}`)
+          : uiText(`PDF 提取范围最多为前 ${MAX_PDF_SOURCE_PAGES} 页；未取得完整页数信息。`, `PDF extraction covers at most the first ${MAX_PDF_SOURCE_PAGES} pages; the total page count is unavailable.`)
+        if (!source.text) source.warning += uiText(" 未找到可提取文字，可能是扫描件；仅保留来源引用。", " No extractable text was found. This may be a scan; only the source reference is retained.")
       } else {
-        source.warning = "当前 Zotero 未提供 PDF 文本提取接口；仅保留来源引用。"
+        source.warning = uiText("当前 Zotero 未提供 PDF 文本提取接口；仅保留来源引用。", "PDF text extraction is unavailable in this Zotero version; only the source reference is retained.")
       }
     } else if (contentType(item).startsWith("text/") || contentType(item) === "application/xhtml+xml"
       || contentType(item) === "application/epub+zip") {
@@ -182,14 +183,14 @@ async function attachmentSource(zotero: ResearchZotero, item: LocalItem, include
       const extracted = await item.attachmentText
       source.text = typeof extracted === "string" ? extracted.trim() : ""
       source.warning = source.text
-        ? "使用 Zotero 可读文本；原始排版、图片与全文完整性未确认。"
-        : "Zotero 未提供此附件的可读文本；仅保留来源引用。"
+        ? uiText("使用 Zotero 可读文本；原始排版、图片与全文完整性未确认。", "Using text extracted by Zotero; layout, images, and full-text completeness have not been verified.")
+        : uiText("Zotero 未提供此附件的可读文本；仅保留来源引用。", "Zotero supplied no readable text for this attachment; only the source reference is retained.")
     } else {
-      source.warning = "此附件暂不支持文本提取；仅保留来源引用。"
+      source.warning = uiText("此附件暂不支持文本提取；仅保留来源引用。", "Text extraction is unavailable for this attachment; only the source reference is retained.")
     }
   } catch {
     // 原生错误可能含文件路径；不持久化或发送错误原文。
-    source.warning = "附件文字提取失败，可能未下载、加密或不可读；仅保留来源引用。"
+    source.warning = uiText("附件文字提取失败，可能未下载、加密或不可读；仅保留来源引用。", "Attachment text extraction failed. The file may be missing, encrypted, or unreadable; only the source reference is retained.")
   }
   return normalizeChatSources([source])[0] ?? null
 }
@@ -254,7 +255,7 @@ export async function collectChatSources(
           try {
             attachments = typeof item.getAttachments === "function" ? await item.getAttachments.call(item) : []
           } catch {
-            source.warning = "无法读取此文献的附件列表；已保留元数据和摘要。"
+            source.warning = uiText("无法读取此文献的附件列表；已保留元数据和摘要。", "Could not read the attachment list. Metadata and the abstract were retained.")
             continue
           }
           let pdfCount = 0
@@ -267,7 +268,7 @@ export async function collectChatSources(
             add(await collectAttachment(attachment))
             if (sources.length > MAX_CHAT_SOURCES) break
           }
-          if (!pdfCount) source.warning = "此文献没有可关联的 PDF 附件；已保留元数据和摘要。"
+          if (!pdfCount) source.warning = uiText("此文献没有可关联的 PDF 附件；已保留元数据和摘要。", "This item has no PDF attachment to link. Metadata and the abstract were retained.")
         }
       }
     } catch {

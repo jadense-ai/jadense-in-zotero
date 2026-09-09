@@ -1,3 +1,48 @@
+/* 仅插件 vbox 覆盖主题；Zotero 设置窗口外框继续使用宿主主题。 */
+#jadense-in-zotero-preferences-pane {
+  --jdx-pref-line: #d9e2dd;
+  --jdx-pref-surface: #ffffff;
+  --jdx-pref-text: #17211b;
+  --jdx-pref-muted: #53625a;
+  --jdx-pref-line-subtle: #eef2ef;
+  --jdx-pref-warning: #d9a514;
+  --jdx-pref-warning-text: #735c13;
+  --jdx-pref-faint: #9aa8a1;
+  --jdx-pref-error: #b42318;
+  --jdx-pref-subtle: #f1f4ef;
+  --jdx-pref-green-text: #0f7c56;
+  --jdx-pref-line-strong: #96aaa0;
+  --jdx-pref-hover: #f1f6f3;
+  --jdx-pref-active: #d4fae8;
+  --jdx-pref-success: #117a52;
+  --jdx-pref-disabled: #e6ece8;
+  --jdx-pref-button-text: #07351f;
+  color: var(--jdx-pref-text);
+  background: var(--jdx-pref-surface);
+}
+
+#jadense-in-zotero-preferences-pane[data-theme="dark"] {
+  --jdx-pref-line: #303a34;
+  --jdx-pref-surface: #111611;
+  --jdx-pref-text: #f1f5ef;
+  --jdx-pref-muted: #b0bdb4;
+  --jdx-pref-line-subtle: #26312a;
+  --jdx-pref-warning: #d9a514;
+  --jdx-pref-warning-text: #e0c174;
+  --jdx-pref-faint: #87968c;
+  --jdx-pref-error: #f5a097;
+  --jdx-pref-subtle: #182019;
+  --jdx-pref-green-text: #64d9a2;
+  --jdx-pref-line-strong: #586b5e;
+  --jdx-pref-hover: #1f2922;
+  --jdx-pref-active: #0f2a20;
+  --jdx-pref-success: #7fe0b2;
+  --jdx-pref-disabled: #26312a;
+  --jdx-pref-button-text: #07351f;
+  color: var(--jdx-pref-text);
+  background: var(--jdx-pref-surface);
+}
+
 #jadense-in-zotero-preferences-pane {
   max-width: 680px;
 }
@@ -8,7 +53,7 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-note {
   margin: 0 0 14px;
-  color: CanvasText;
+  color: var(--jdx-pref-text);
   opacity: 0.72;
   line-height: 1.45;
 }
@@ -23,22 +68,22 @@
   display: grid;
   gap: 10px;
   align-content: start;
-  border: 1px solid #d9e2dd;
+  border: 1px solid var(--jdx-pref-line);
   border-radius: 8px;
   padding: 12px 14px;
-  background: #ffffff;
+  background: var(--jdx-pref-surface);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-card-title {
   margin: 0;
   font-size: 13px;
   font-weight: 650;
-  color: #17211b;
+  color: var(--jdx-pref-text);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-card-note {
   margin: 0;
-  color: #53625a;
+  color: var(--jdx-pref-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -46,7 +91,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-card-footer {
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid #eef2ef;
+  border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 10px;
 }
 
@@ -58,7 +103,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-byok-panel {
   display: grid;
   gap: 10px;
-  border-top: 1px solid #e2e9e5;
+  border-top: 1px solid var(--jdx-pref-line-subtle);
   padding: 10px 0 0;
   background: transparent;
 }
@@ -86,21 +131,21 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-key-summary {
   display: grid;
   gap: 4px;
-  color: #53625a;
+  color: var(--jdx-pref-muted);
   font-size: 12px;
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-endpoint code,
 #jadense-in-zotero-preferences-pane .jdx-pref-key-summary code {
   overflow-wrap: anywhere;
-  color: #17211b;
+  color: var(--jdx-pref-text);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-warning {
   margin: 0;
-  border-left: 3px solid #d9a514;
+  border-left: 3px solid var(--jdx-pref-warning);
   padding-left: 9px;
-  color: #735c13;
+  color: var(--jdx-pref-warning-text);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -110,7 +155,7 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 1px solid #eef2ef;
+  border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 10px;
 }
 
@@ -120,7 +165,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  color: #17211b;
+  color: var(--jdx-pref-text);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-status-dot {
@@ -128,7 +173,7 @@
   height: 8px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #9aa8a1;
+  background: var(--jdx-pref-faint);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="connected"] .jdx-pref-status-dot {
@@ -136,15 +181,15 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="checking"] .jdx-pref-status-dot {
-  background: #d9a514;
+  background: var(--jdx-pref-warning);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="failed"] .jdx-pref-status-dot {
-  background: #b42318;
+  background: var(--jdx-pref-error);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-connection-updated {
-  color: #53625a;
+  color: var(--jdx-pref-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -158,7 +203,7 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-field-label {
   font-weight: 600;
-  color: #17211b;
+  color: var(--jdx-pref-text);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-token-mask {
@@ -167,8 +212,8 @@
   overflow: hidden;
   border-radius: 6px;
   padding: 5px 9px;
-  background: #f1f4ef;
-  color: #17211b;
+  background: var(--jdx-pref-subtle);
+  color: var(--jdx-pref-text);
   font-family: monospace;
   font-size: 13px;
   letter-spacing: 0.5px;
@@ -177,7 +222,7 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-token-mask[data-empty="true"] {
-  color: #9aa8a1;
+  color: var(--jdx-pref-faint);
   font-family: inherit;
   letter-spacing: normal;
 }
@@ -210,7 +255,7 @@
   border: 0;
   padding: 0;
   background: none;
-  color: #0f7c56;
+  color: var(--jdx-pref-green-text);
   font-size: 12px;
   text-decoration: underline;
 }
@@ -224,7 +269,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-help {
   display: grid;
   gap: 7px;
-  border-top: 1px solid #eef2ef;
+  border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 10px;
 }
 
@@ -233,7 +278,7 @@
   gap: 6px;
   margin: 0;
   padding-left: 20px;
-  color: #17211b;
+  color: var(--jdx-pref-text);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -242,18 +287,18 @@
   box-sizing: border-box;
   min-height: 34px;
   width: 100%;
-  border: 1px solid #cfd9d4;
+  border: 1px solid var(--jdx-pref-line);
   border-radius: 6px;
   padding: 6px 9px;
-  color: #17211b;
-  background: #fff;
+  color: var(--jdx-pref-text);
+  background: var(--jdx-pref-surface);
   font: inherit;
   font-weight: 400;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 #jadense-in-zotero-preferences-pane input:hover:not(:disabled) {
-  border-color: #96aaa0;
+  border-color: var(--jdx-pref-line-strong);
 }
 
 #jadense-in-zotero-preferences-pane input:focus {
@@ -263,7 +308,7 @@
 }
 
 #jadense-in-zotero-preferences-pane input::placeholder {
-  color: #9aa8a1;
+  color: var(--jdx-pref-faint);
 }
 
 /* 自研下拉组件:不透明白底弹出层,绕开 Zotero 原生 menupopup 的透明渲染。 */
@@ -281,11 +326,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border: 1px solid #cfd9d4;
+  border: 1px solid var(--jdx-pref-line);
   border-radius: 6px;
   padding: 6px 9px;
-  color: #17211b;
-  background: #fff;
+  color: var(--jdx-pref-text);
+  background: var(--jdx-pref-surface);
   font: inherit;
   font-weight: 400;
   text-align: left;
@@ -294,7 +339,7 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-trigger:hover:not(:disabled) {
-  border-color: #96aaa0;
+  border-color: var(--jdx-pref-line-strong);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-trigger:focus-visible,
@@ -317,12 +362,12 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-value[data-placeholder="true"] {
-  color: #53625a;
+  color: var(--jdx-pref-muted);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-chevron {
   flex: 0 0 auto;
-  color: #53625a;
+  color: var(--jdx-pref-muted);
   transition: transform 0.15s ease;
 }
 
@@ -335,10 +380,10 @@
   z-index: 100;
   display: none;
   overflow-y: auto;
-  border: 1px solid #cfd9d4;
+  border: 1px solid var(--jdx-pref-line);
   border-radius: 8px;
   padding: 4px;
-  background: #fff;
+  background: var(--jdx-pref-surface);
   box-shadow: 0 6px 18px rgb(17 21 16 / 0.12), 0 1px 4px rgb(17 21 16 / 0.08);
 }
 
@@ -358,7 +403,7 @@
   min-height: 28px;
   border-radius: 5px;
   padding: 5px 8px;
-  color: #17211b;
+  color: var(--jdx-pref-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -366,21 +411,21 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-option[data-active="true"] {
-  background: #f1f6f3;
+  background: var(--jdx-pref-hover);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-option[aria-selected="true"] {
-  color: #0f7c56;
+  color: var(--jdx-pref-green-text);
   font-weight: 650;
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-option[aria-selected="true"][data-active="true"] {
-  background: #d4fae8;
+  background: var(--jdx-pref-active);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-select-empty {
   padding: 6px 8px;
-  color: #53625a;
+  color: var(--jdx-pref-muted);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-checkbox {
@@ -388,7 +433,7 @@
   gap: 8px;
   align-items: flex-start;
   font-weight: 600;
-  color: #17211b;
+  color: var(--jdx-pref-text);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-checkbox input {
@@ -400,32 +445,32 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-status {
   min-height: 18px;
-  color: #53625a;
+  color: var(--jdx-pref-muted);
   font-size: 12px;
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="error"] {
-  color: #b42318;
+  color: var(--jdx-pref-error);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="success"] {
-  color: #117a52;
+  color: var(--jdx-pref-success);
 }
 
 #jadense-in-zotero-preferences-pane button {
   min-height: 34px;
-  border: 1px solid #cfd9d4;
+  border: 1px solid var(--jdx-pref-line);
   border-radius: 6px;
   padding: 6px 12px;
-  color: #17211b;
-  background: #fff;
+  color: var(--jdx-pref-text);
+  background: var(--jdx-pref-surface);
   font: inherit;
   cursor: pointer;
 }
 
 #jadense-in-zotero-preferences-pane button:hover {
-  border-color: #96aaa0;
-  background: #f1f6f3;
+  border-color: var(--jdx-pref-line-strong);
+  background: var(--jdx-pref-hover);
 }
 
 #jadense-in-zotero-preferences-pane button:focus-visible {
@@ -435,7 +480,7 @@
 }
 
 #jadense-in-zotero-preferences-pane button:active:not(:disabled) {
-  background: #e6ece8;
+  background: var(--jdx-pref-disabled);
 }
 
 #jadense-in-zotero-preferences-pane button:disabled {
@@ -446,10 +491,10 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-primary {
   border-color: #16d78f;
   background: #16d78f;
-  color: #07351f;
+  color: var(--jdx-pref-button-text);
   font-weight: 650;
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-danger {
-  color: #8f1f1f;
+  color: var(--jdx-pref-error);
 }

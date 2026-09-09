@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { initializeUiLocale } from "./ui-preferences"
+beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
 
 import { TRANSLATION_HISTORY_PREF_KEY, readTranslationHistory } from "@/chat/translation-history"
 import { defaultByokConfig } from "@/chat/byok-chat"
@@ -35,6 +37,15 @@ function readerSourceItems(): NonNullable<ZoteroLike["Items"]> {
 }
 
 describe("reader translation runtime", () => {
+  it("uses the UI language for local validation without sending a translation request", async () => {
+    initializeUiLocale({ locale: "en-US" })
+    const fetchImpl = vi.fn()
+    await expect(translateReaderSelection({
+      zotero: {}, fetchImpl, action: { kind: "translate", itemID: 17, text: " " },
+    })).rejects.toThrow("Select the text to translate first.")
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it.each(["AI_MODEL_SELECTION_PLAN_REQUIRED", "AI_USER_ROUTE_PLAN_REQUIRED"])("explains %s from the sending endpoint without retries or catalog dependency", async code => {
     const values = new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-token"]])
     const zotero = zoteroWithPreferences(values, readerSourceItems())
@@ -181,7 +192,7 @@ describe("reader translation runtime", () => {
 
   it.each([
     [403, "insufficient_scope", /重新生成 Zotero 令牌/],
-    [402, "POINTS_INSUFFICIENT", /连接攻玉.*签到领积分或补充积分/],
+    [402, "POINTS_INSUFFICIENT", /攻玉学术主页.*签到领积分或补充积分/],
   ] as const)("turns structured %s failures into actionable translation guidance", async (status, code, expected) => {
     const values = new Map<string, unknown>([
       ["extensions.jadenseInZotero.token", "test-token"],

@@ -1,4 +1,5 @@
 /** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
+import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText } from "./ui-preferences"
 import {
   clearConnection,
   favoriteFolderOptionLabel,
@@ -148,7 +149,7 @@ function element<T extends HTMLElement>(id: string) {
 }
 
 function readElements(): PreferenceElements {
-  const strings = selectPreferencesStrings(Zotero.locale)
+  const strings = selectPreferencesStrings(getUiLocale())
   const labels = { chat: strings.featureChatLabel, translation: strings.featureTranslationLabel, analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
     featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), { searchPlaceholder: strings.featureModelSearch, ariaLabel: labels[feature] })])) as Record<AiFeature, JdxSelect>,
@@ -219,7 +220,7 @@ function renderConnectionStatus(
       : state === "failed"
         ? strings.statusFailed
         : strings.statusNotConfigured
-  const relative = fetchedAt ? formatRelativeTime(fetchedAt, Zotero.locale) : ""
+  const relative = fetchedAt ? formatRelativeTime(fetchedAt, getUiLocale()) : ""
   elements.connectionUpdated.textContent = relative ? strings.updatedAgo(relative) : ""
 }
 
@@ -345,13 +346,13 @@ let featureCatalogGeneration = 0
 function renderFeatureModels(elements: PreferenceElements) {
   for (const feature of AI_FEATURES) {
     const selection = readFeatureModelSelection(Zotero, feature)
-    elements.featureModels[feature].setOptions(buildFeatureModelSelectOptions(Zotero, featureModelCatalog, selection, !Zotero.locale?.toLowerCase().startsWith("zh")), featureModelSelectionKey(selection))
+    elements.featureModels[feature].setOptions(buildFeatureModelSelectOptions(Zotero, featureModelCatalog, selection, !getUiLocale()?.toLowerCase().startsWith("zh")), featureModelSelectionKey(selection))
   }
 }
 
 /** 目录只用于展示；加载失败保留已有选择与 BYOK，旧账号响应不得污染新连接。 */
 async function refreshFeatureModelCatalog(elements: PreferenceElements) {
-  const strings = selectPreferencesStrings(Zotero.locale)
+  const strings = selectPreferencesStrings(getUiLocale())
   const connection = readConnection(Zotero)
   const generation = ++featureCatalogGeneration
   featureModelCatalog = { options: [], defaultSelection: null }
@@ -411,7 +412,7 @@ function byokProviderDraft(elements: PreferenceElements): ByokProvider {
   const stored = settings.providers.find((provider) => provider.id === settings.activeProviderId) ?? settings.providers[0]
   return {
     id: stored.id,
-    name: elements.byokProviderName.value.trim() || "自定义提供商",
+    name: elements.byokProviderName.value.trim() || uiText("自定义提供商", "Custom provider"),
     protocol: currentByokProtocol(elements),
     baseUrl: elements.byokBaseUrl.value,
     apiKey: elements.byokKeyInput.value.trim() || stored.apiKey,
@@ -426,7 +427,7 @@ function byokModelDraft(elements: PreferenceElements): ByokModel {
   return {
     id: stored?.id ?? createByokId("byok-model"),
     providerId: settings.activeProviderId,
-    name: elements.byokModelName.value.trim() || elements.byokModel.value.trim() || "未命名模型",
+    name: elements.byokModelName.value.trim() || elements.byokModel.value.trim() || uiText("未命名模型", "Untitled model"),
     model: elements.byokModel.value,
     ...(Number.isSafeInteger(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
@@ -469,8 +470,40 @@ export function initJadensePreferencesPage() {
   const root = document.getElementById("jadense-in-zotero-preferences-pane")
   if (!root || root.getAttribute("data-jadense-initialized") === "true") return
   root.setAttribute("data-jadense-initialized", "true")
-  const strings = selectPreferencesStrings(Zotero.locale)
+  initializeUiLocale(Zotero)
+  root.setAttribute("lang", getUiLocale())
+  const strings = selectPreferencesStrings(getUiLocale())
   applyStrings(root, strings)
+  const language = createJdxSelect(element("jadense-in-zotero-display-language"), { ariaLabel: strings.displayLanguageLabel })
+  const languageOptions = [{ value: "system", label: strings.followZotero }, { value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }]
+  const stopLanguage = observeDisplayLanguage(Zotero, value => language.setOptions(languageOptions, value))
+  const theme = createJdxSelect(element("jadense-in-zotero-theme"), { ariaLabel: strings.themeLabel })
+  const themeOptions = [{ value: "system", label: strings.followZotero }, { value: "light", label: strings.lightTheme }, { value: "dark", label: strings.darkTheme }]
+  const generalStatus = element("jadense-in-zotero-general-status")
+  const stopTheme = observeTheme(Zotero, root, () => theme.setOptions(themeOptions, readTheme(Zotero)))
+  // Zotero 卸载 pane 时也会移除根节点，不让跨窗口主题 observer 引用旧 UI。
+  let removalObserver: MutationObserver | null = null
+  const cleanup = () => {
+    stopTheme()
+    stopLanguage()
+    removalObserver?.disconnect()
+    root.ownerDocument.defaultView?.removeEventListener("unload", cleanup)
+  }
+  try {
+    removalObserver = new MutationObserver(() => { if (!root.isConnected) cleanup() })
+    removalObserver.observe(root.ownerDocument, { childList: true, subtree: true })
+  } catch { /* 旧宿主缺少节点观察能力时仍可使用设置，窗口卸载负责清理。 */ }
+  root.ownerDocument.defaultView?.addEventListener("unload", cleanup, { once: true })
+  language.onChange(value => {
+    const saved = saveDisplayLanguage(Zotero, value)
+    if (!saved) language.setOptions(languageOptions, readDisplayLanguage(Zotero))
+    setStatus(generalStatus, saved ? strings.languageSaved : strings.preferenceSaveFailed, saved ? "success" : "error")
+  })
+  theme.onChange(value => {
+    const saved = saveTheme(Zotero, value)
+    theme.setOptions(themeOptions, readTheme(Zotero))
+    setStatus(generalStatus, saved ? strings.optionSaved : strings.preferenceSaveFailed, saved ? "success" : "error")
+  })
 
   const elements = readElements()
   renderHelpSteps(elements, strings)

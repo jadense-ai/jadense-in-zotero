@@ -7,6 +7,7 @@ import {
   type MenuCallbacks,
 } from "./native-menus"
 import type { ZoteroLike } from "./runtime"
+import { initializeUiLocale, saveDisplayLanguage } from "./ui-preferences"
 
 function callbacks(): MenuCallbacks {
   return {
@@ -19,6 +20,16 @@ function callbacks(): MenuCallbacks {
 }
 
 describe("native Zotero menus", () => {
+  it("passes the startup language to Fluent independently of the host locale or pending language", () => {
+    const values = new Map<string, unknown>([["extensions.jadenseInZotero.displayLanguage", "en-US"]])
+    const zotero = { locale: "zh-CN", Prefs: { get: (key: string) => values.get(key), set: (key: string, value: unknown) => { values.set(key, value) } } }
+    initializeUiLocale(zotero)
+    saveDisplayLanguage(zotero, "zh-CN")
+    const menu = buildJadenseMenuRegistrations("test", callbacks())[0].menus[0]
+    expect(menu.l10nArgs).toBe(JSON.stringify({ language: "en-US" }))
+    expect(menu.menus?.filter(item => item.menuType !== "separator").every(item => item.l10nArgs === menu.l10nArgs)).toBe(true)
+    initializeUiLocale({ locale: "zh-CN" })
+  })
   it("builds Tools and collection context menu registrations", () => {
     const registrations = buildJadenseMenuRegistrations("plugin@example.com", callbacks())
 

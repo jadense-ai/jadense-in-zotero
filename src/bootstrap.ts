@@ -1,3 +1,5 @@
+/** 插件生命周期与原生入口；就绪后固定会话语言，停止时清理窗口和宿主注册。 */
+import { initializeUiLocale, uiText } from "@/zotero/ui-preferences"
 import {
   clearConnection,
   previewSelectedCollectionUpload,
@@ -166,9 +168,9 @@ function alertUser(message: string) {
 async function runCommand(operation: () => Promise<unknown>) {
   try {
     const result = await operation()
-    alertUser(`上传完成。\n${formatJadenseSyncResult(result)}`)
+    alertUser(uiText(`上传完成。\n${formatJadenseSyncResult(result)}`, `Upload completed.\n${formatJadenseSyncResult(result)}`))
   } catch (error) {
-    alertUser(error instanceof Error ? error.message : "上传失败。")
+    alertUser(error instanceof Error ? error.message : uiText("上传失败。", "Upload failed."))
   }
 }
 
@@ -177,39 +179,39 @@ async function runCollectionUploadFlow(win: Window & typeof globalThis) {
     const preview = await previewSelectedCollectionUpload(Zotero)
     if (preview.totalCount === 0) {
       const skippedText = preview.skippedCount > 0
-        ? ` 其中 ${preview.skippedCount} 个条目因缺少标题等必要元数据，上传前已被跳过。`
+        ? uiText(` 其中 ${preview.skippedCount} 个条目因缺少标题等必要元数据，上传前已被跳过。`, ` ${preview.skippedCount} items were skipped because required metadata was missing.`)
         : ""
-      alertUser(`“${preview.collectionName}”及其子分类中没有可上传的 Zotero 条目。${skippedText}`)
+      alertUser(uiText(`“${preview.collectionName}”及其子分类中没有可上传的 Zotero 条目。${skippedText}`, `“${preview.collectionName}” and its subcollections contain no uploadable Zotero items.${skippedText}`))
       return
     }
     const shouldContinue = win.confirm(
       [
-        `将“${preview.collectionName}”及其子分类中的 ${preview.totalCount} 个 Zotero 条目元数据上传到攻玉？`,
-        preview.skippedCount > 0 ? `${preview.skippedCount} 个条目因缺少必要元数据将被跳过。` : null,
+        uiText(`将“${preview.collectionName}”及其子分类中的 ${preview.totalCount} 个 Zotero 条目元数据上传到攻玉？`, `Upload metadata for ${preview.totalCount} Zotero items in “${preview.collectionName}” and its subcollections to Jadense?`),
+        preview.skippedCount > 0 ? uiText(`${preview.skippedCount} 个条目因缺少必要元数据将被跳过。`, `${preview.skippedCount} items with missing required metadata will be skipped.`) : null,
       ].filter(Boolean).join("\n"),
     )
     if (!shouldContinue) return
     const pdfDefault = readCollectionUploadIncludePdfDefault(Zotero)
     const includePdf = win.confirm(
-      `同时上传可读取的本地 PDF 附件？\n当前默认：${pdfDefault ? "元数据 + PDF" : "仅元数据"}\n确定：元数据 + PDF\n取消：仅元数据`,
+      uiText(`同时上传可读取的本地 PDF 附件？\n当前默认：${pdfDefault ? "元数据 + PDF" : "仅元数据"}\n确定：元数据 + PDF\n取消：仅元数据`, `Also upload readable local PDF attachments?\nCurrent default: ${pdfDefault ? "Metadata + PDF" : "Metadata only"}\nOK: Metadata + PDF\nCancel: Metadata only`),
     )
     saveCollectionUploadIncludePdfDefault(Zotero, includePdf)
     await runCommand(() => pushSelectedCollectionToJadense(Zotero, { includePdf }))
   } catch (error) {
-    alertUser(error instanceof Error ? error.message : "收藏夹上传失败。")
+    alertUser(error instanceof Error ? error.message : uiText("收藏夹上传失败。", "Collection upload failed."))
   }
 }
 
 function runPromptConnectionFlow(win: Window & typeof globalThis) {
   // 兜底链路同样不暴露攻玉地址与收藏夹 ID:地址由插件固定,收藏夹由首次自动加载解析落盘。
-  const token = win.prompt("请输入攻玉插件令牌")?.trim()
+  const token = win.prompt(uiText("请输入攻玉插件令牌", "Enter your Jadense plugin token"))?.trim()
   if (!token) return
   try {
     saveConnection(Zotero, { token })
-    alertUser("攻玉账号已保存。")
+    alertUser(uiText("攻玉账号已保存。", "Jadense account saved."))
     warmFavoriteFoldersCache()
   } catch (error) {
-    alertUser(error instanceof Error ? error.message : "攻玉账号保存失败。")
+    alertUser(error instanceof Error ? error.message : uiText("攻玉账号保存失败。", "Could not save the Jadense account."))
   }
 }
 
@@ -248,7 +250,7 @@ function configureConnection() {
   }
   if (openManager("migrate")) return
   if (openPreferencesPane(Zotero, win)) return
-  alertUser("请打开 Zotero 设置并选择 Jadense in Zotero；将改用输入框完成配置。")
+  alertUser(uiText("请打开 Zotero 设置并选择 Jadense in Zotero；将改用输入框完成配置。", "Open Zotero Settings and select Jadense in Zotero. A token prompt will open as a fallback."))
   runPromptConnectionFlow(win)
 }
 
@@ -271,7 +273,7 @@ function registerMenus() {
       },
       disconnect: () => {
         clearConnection(Zotero)
-        alertUser("已从当前 Zotero 配置中移除攻玉账号。")
+        alertUser(uiText("已从当前 Zotero 配置中移除攻玉账号。", "Jadense account removed from this Zotero profile."))
       },
     })
     if (registeredMenuIDs.length === 0) {
@@ -302,6 +304,7 @@ async function startup(data: BootstrapData = {}) {
   }
 
   await waitForMainWindowUi()
+  initializeUiLocale(Zotero)
 
   loadLocalizationIntoOpenWindows()
 
@@ -326,7 +329,7 @@ async function startup(data: BootstrapData = {}) {
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
         const win = mainWindow()
-        if (!win) throw new Error("当前 Zotero 窗口不可用，无法翻译。")
+        if (!win) throw new Error(uiText("当前 Zotero 窗口不可用，无法翻译。", "The Zotero window is unavailable for translation."))
         return translateReaderSelection({
           zotero: Zotero,
           action,
@@ -336,7 +339,7 @@ async function startup(data: BootstrapData = {}) {
       }
       openManager(action.kind === "analyze" ? "analysis" : "chat", action)
     }, () => {
-      if (!openManager()) throw new Error("无法打开攻玉工作台。")
+      if (!openManager()) throw new Error(uiText("无法打开攻玉工作台。", "Could not open Jadense Workspace."))
     })
   } catch (error) {
     // 阅读器增强是可选入口，不能影响普通对话和原有上传。
@@ -344,7 +347,7 @@ async function startup(data: BootstrapData = {}) {
   }
   try {
     unregisterReaderFigureTools = registerReaderFigureTools(Zotero, pluginContext.pluginID, (action) => {
-      if (!openManager("chat", action)) throw new Error("当前 Zotero 窗口不可用，无法解读图片。")
+      if (!openManager("chat", action)) throw new Error(uiText("当前 Zotero 窗口不可用，无法解读图片。", "The Zotero window is unavailable for image interpretation."))
     })
   } catch (error) {
     // 图片识别依赖 Zotero 10 Reader 私有能力；失败只关闭这一入口。

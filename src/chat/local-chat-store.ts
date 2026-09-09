@@ -1,3 +1,4 @@
+import { uiText } from "@/zotero/ui-preferences"
 /**
  * Zotero 本地对话存储层。
  * 上游由 Manager 对话界面调用，下游只写当前 Zotero profile 的 Prefs，绝不读取服务端会话历史。
@@ -221,7 +222,7 @@ export function createLocalChatSession(
   const now = input.now ?? new Date().toISOString()
   const session: LocalChatSession = {
     id: input.id ?? createId("chat"),
-    title: nonEmptyText(input.title, 80) || "新对话",
+    title: nonEmptyText(input.title, 80) || uiText("新对话", "New conversation"),
     createdAt: now,
     updatedAt: now,
     messages: [],
