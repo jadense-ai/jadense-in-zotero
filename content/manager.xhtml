@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <title>Jadense in Zotero</title>
     <link rel="stylesheet" href="manager.css" />
+    <link rel="stylesheet" href="ui.css" />
+    <link rel="stylesheet" href="analysis.css" />
     <script defer="defer" src="manager.js"></script>
   </head>
   <body>
@@ -152,10 +154,10 @@
                   <li data-ui-en="Read the summary, then return to the categorized PDF annotations to check the claims against the source.">完成后查看摘要，并回到 PDF 阅读对应的分类批注，核对论点与原文证据。</li>
                 </ol>
                 <h4 data-ui-en="Where to find results">在哪里查看结果</h4>
-                <p data-ui-en="Analysis history saves paper metadata and summaries. Expand View analysis notes for a detailed backup, or use Copy notes. Click a history title to reopen its local PDF.">「解析历史」保存文献信息和摘要。展开「查看解析笔记」可阅读详细备份，使用「复制笔记」带走内容；点击历史记录标题可重新打开对应的本地 PDF。</p>
+                <p data-ui-en="Analysis history shows the latest result for each PDF. Click a title to open its Summary, Analysis notes and References tabs; Open PDF is a separate action. Returning restores your list position, and each tab retains its reading position. Copy summary or notes to keep a text backup.">「解析历史」按 PDF 展示每篇最新结果。点击标题进入详情，通过「解析总结 / 解析笔记 / 参考文献」切换阅读；「打开原文」是独立操作。返回恢复列表位置，各标签保留阅读位置，可复制总结或笔记备份。</p>
                 <p data-ui-en="Content that can be located in the source becomes native Zotero annotations, which you can edit, filter, and export. Unlocated or unwritten content remains in analysis notes. Analysis does not create an AI conversation.">能够定位到原文的解析内容会写为 Zotero 原生批注，可以继续编辑、筛选和导出。无法定位或未成功写入的内容仍可在解析笔记中查看。解析不会创建 AI 对话。</p>
                 <h4 data-ui-en="Extract references">解析参考文献</h4>
-                <p data-ui-en="Analyze extracts references for the current PDF. Open Literature analysis → References to view them, or choose another PDF there. Text and layout rules identify entries first. Only uncertain local fragments may use the Literature analysis model; a missing DOI alone never triggers AI. Raw citations, numbering, order and repeated occurrences are retained, including unresolved fragments.">点击阅读器「解析」会同时提取当前 PDF 的参考文献。在「文献解析 → 参考文献」查看结果，也可在该页面选择其他 PDF。先按文字和排版规则提取，只有不确定局部才使用文献解析模型兜底；仅缺少 DOI 不会调用 AI。原始引用、编号、顺序、重复出现和待识别片段都会保留。</p>
+                <p data-ui-en="Analyze extracts references when that PDF starts processing. Open the paper's References tab to search, filter and select verified entries, then choose a destination library and collection before importing. Browsing never starts extraction; if no result exists, click Extract references. Stop analysis cancels generation and pauses its references while retaining received content. Text and layout rules identify entries first; only uncertain fragments may use AI. Raw citations, numbering, order and repeated occurrences are retained.">解析实际开始时会同步提取该 PDF 的参考文献。在论文详情的「参考文献」标签中搜索、筛选和勾选已核验条目，选择目标文库与分类后导入。浏览不会启动提取；没有结果时可点击「提取参考文献」。「停止本次解析」同时中断生成并暂停关联参考文献，已收到内容保留。先按文字和排版规则提取，仅不确定片段使用 AI；原始引用、编号、顺序和重复出现均保留。</p>
                 <p data-ui-en="Use Identify uncertain fragments to retry local recognition. Skip AI and verify cancels only AI and continues metadata checks. Pause stops the entire task; Verify all again never calls AI.">「识别待定片段」可重试局部识别；「跳过 AI，继续核验」仅取消 AI 并继续元数据核验。「暂停」停止整个任务；「统一重新核验」不会调用 AI。</p>
                 <p data-ui-en="Verification uses Zotero DOI translators and Crossref, without AI or library writes. Unverified entries have no actions. A verified DOI must also match the source title, author and year before location, publication link and import controls appear. Choose a writable library and collection, then import individual or checked verified entries. Same-library DOI duplicates are kept in the list without creating another item. Attachments are not downloaded.">核验仅使用 Zotero DOI 转换器和 Crossref，不调用 AI、不写文库。未验证条目没有操作按钮；DOI 还必须与原引用的题名、作者和年份匹配，才显示定位、原文链接及导入操作。选择可写文库和分类后，可导入单条或勾选的已验证条目。同库 DOI 重复时保留列表条目，但不重复创建；不下载附件。</p>
                 <h4 data-ui-en="If something goes wrong">遇到问题时</h4>
@@ -268,9 +270,7 @@
           <div id="jadense-analysis-tabs" class="jdx-tabs" role="tablist" aria-label="文献解析页面" data-ui-en-aria-label="Literature analysis pages">
             <button id="jadense-analysis-tab-history" type="button" role="tab" aria-selected="true" aria-controls="jadense-analysis-panel-history" tabindex="0" data-ui-en="Analysis history">解析历史</button>
             <button id="jadense-analysis-tab-config" type="button" role="tab" aria-selected="false" aria-controls="jadense-analysis-panel-config" tabindex="-1" data-ui-en="Analysis settings">解析配置</button>
-            <button id="jadense-analysis-tab-references" type="button" role="tab" aria-selected="false" aria-controls="jadense-analysis-panel-references" tabindex="-1" data-ui-en="References">参考文献</button>
           </div>
-          <section id="jadense-analysis-panel-references" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-references" hidden="hidden"></section>
           <section id="jadense-analysis-panel-history" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-history">
             <div class="jdx-analysis-run">
               <div id="jadense-analysis-status" class="jdx-manager-inline-status" role="status" data-ui-en="Click Analyze in the PDF reader toolbar to start an independent literature analysis.">从 PDF 阅读器工具栏点击“解析”，即可开始独立文献解析。</div>
@@ -280,7 +280,7 @@
               <h3 data-ui-en="Analysis records">解析记录</h3>
               <button id="jadense-analysis-history-refresh" type="button" data-ui-en="Refresh">刷新</button>
             </div>
-            <div id="jadense-analysis-history" class="jdx-analysis-history" aria-live="polite"></div>
+            <div id="jadense-analysis-history" class="jdx-analysis-history"></div>
           </section>
           <section id="jadense-analysis-panel-config" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-config" hidden="hidden">
             <div class="jdx-manager-settings-card jdx-analysis-config-card">

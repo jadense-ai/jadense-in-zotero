@@ -30,6 +30,7 @@ export type PaperAnalysisRecord = {
   summary: string
   notes?: string
   warnings?: string[]
+  referenceTaskID?: string
 }
 
 export type PaperAnalysisHistory = {
@@ -114,6 +115,8 @@ function normalizeRecord(value: unknown): PaperAnalysisRecord | null {
       ...(optionalText(source?.doi, 500) ? { doi: optionalText(source?.doi, 500) } : {}),
     },
     summary,
+    ...(typeof row?.referenceTaskID === "string" && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/iu.test(row.referenceTaskID)
+      ? { referenceTaskID: row.referenceTaskID } : {}),
     ...(notes ? { notes: typeof row?.notes === "string" && row.notes.trim().length > MAX_ANALYSIS_NOTES_LENGTH
       ? `${notes.slice(0, -20)}\n…（笔记过长，后续已截断）` : notes } : {}),
     ...(warnings.length ? { warnings } : {}),

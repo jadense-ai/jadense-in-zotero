@@ -2,10 +2,10 @@
  * 阅读器选文翻译运行时。
  * 上游接收本地选区，下游按独立翻译模型生成译文并写入独立翻译历史。
  */
-import { ByokChatClient } from "@/chat/byok-chat"
+import { ReliableByokChatClient as ByokChatClient } from "@/chat/reliable-byok-chat"
 import { buildTranslationPrompt } from "@/chat/paper-analysis"
 import { normalizeTranslationLanguages, translationLanguageLabel } from "@/chat/translation-languages"
-import { TemporaryChatClient } from "@/chat/temporary-chat"
+import { ReliableTemporaryChatClient as TemporaryChatClient } from "@/chat/reliable-temporary-chat"
 import { JadenseApiError, jadenseModelSubscriptionErrorMessage } from "@/jadense/api"
 import {
   appendTranslationRecord,
@@ -77,6 +77,8 @@ export async function translateReaderSelection(input: {
       clientFeature: "translation",
       clientRequestId: createId("request"),
       conversationId: id,
+      taskId: id,
+      operationId: id,
       messages: [{
         id: createId("user"),
         role: "user",

@@ -698,179 +698,6 @@ textarea {
   accent-color: var(--jdx-green);
 }
 
-/* 自研下拉组件：不透明白底弹出层，绕开 Zotero 原生 menupopup 的透明渲染。 */
-.jdx-select {
-  position: relative;
-  min-width: 0;
-  width: 100%;
-}
-
-.jdx-select-trigger {
-  display: flex;
-  min-height: 34px;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--jdx-line-strong);
-  border-radius: 6px;
-  padding: 6px 9px;
-  color: var(--jdx-text);
-  background: var(--jdx-surface);
-  font-weight: 400;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.jdx-select-trigger:hover:not(:disabled) {
-  border-color: var(--jdx-hover-line);
-}
-
-.jdx-select-trigger:focus-visible,
-.jdx-select[data-open="true"] .jdx-select-trigger {
-  border-color: var(--jdx-green);
-  outline: 2px solid rgb(22 207 140 / 0.18);
-  outline-offset: 0;
-}
-
-.jdx-select-trigger:disabled {
-  cursor: default;
-  opacity: 0.58;
-}
-
-.jdx-select-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jdx-select-value[data-placeholder="true"] {
-  color: var(--jdx-muted);
-}
-
-.jdx-select-chevron {
-  flex: 0 0 auto;
-  color: var(--jdx-muted);
-  transition: transform 0.15s ease;
-}
-
-.jdx-select[data-open="true"] .jdx-select-chevron {
-  transform: rotate(180deg);
-}
-
-.jdx-select-popup {
-  position: fixed;
-  z-index: 100;
-  display: none;
-  overflow-y: auto;
-  border: 1px solid var(--jdx-line-strong);
-  border-radius: 8px;
-  padding: 4px;
-  background: var(--jdx-surface);
-  box-shadow: var(--jdx-popup-shadow);
-}
-
-.jdx-select[data-open="true"] .jdx-select-popup {
-  display: block;
-}
-
-.jdx-select-list {
-  display: grid;
-  gap: 1px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.jdx-select-search {
-  display: block;
-  width: calc(100% - 8px);
-  min-height: 32px;
-  margin: 0 4px 4px;
-  border: 0;
-  border-bottom: 1px solid var(--jdx-line);
-  border-radius: 0;
-  padding: 5px 4px;
-  color: var(--jdx-text);
-  background: transparent;
-  font: inherit;
-}
-
-.jdx-select-search:focus {
-  outline: 0;
-  border-bottom-color: var(--jdx-green);
-}
-
-.jdx-select-group {
-  padding: 7px 8px 3px;
-  color: var(--jdx-muted);
-  font-size: calc(10px * var(--jdx-font-scale,1));
-  font-weight: 650;
-}
-
-.jdx-select-option {
-  min-height: 28px;
-  border-radius: 5px;
-  padding: 5px 8px;
-  color: var(--jdx-text);
-  cursor: pointer;
-}
-
-.jdx-select-option-main {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.jdx-select-option-label {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jdx-select-option-meta {
-  flex: 0 0 auto;
-  color: var(--jdx-muted);
-  font-size: calc(10px * var(--jdx-font-scale,1));
-  font-variant-numeric: tabular-nums;
-}
-
-.jdx-select-option-description {
-  display: block;
-  margin-top: 2px;
-  color: var(--jdx-muted);
-  font-size: calc(10px * var(--jdx-font-scale,1));
-  font-weight: 400;
-  line-height: 1.35;
-}
-
-.jdx-select-option[aria-disabled="true"] {
-  cursor: default;
-  opacity: 0.56;
-}
-
-.jdx-select-option[data-active="true"] {
-  background: var(--jdx-subtle);
-}
-
-.jdx-select-option[aria-selected="true"] {
-  color: var(--jdx-green-deep);
-  font-weight: 650;
-}
-
-.jdx-select-option[aria-selected="true"][data-active="true"] {
-  background: var(--jdx-active-bg);
-}
-
-.jdx-select-empty {
-  padding: 6px 8px;
-  color: var(--jdx-muted);
-}
 
 .jdx-manager-actions {
   display: flex;
@@ -1588,11 +1415,6 @@ button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
 .jdx-translation-result-header button { min-height: 26px; padding: 3px 7px; font-size: calc(11px * var(--jdx-font-scale,1)); }
 @media (max-width: 900px) { .jdx-translation-columns { grid-template-columns: 1fr; } }
 
-/* 顶部书签 tab：文献解析与连接攻玉共用，紧凑窗口也保持可键盘操作。 */
-.jdx-tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 1px solid var(--jdx-line); }
-.jdx-tabs button { position: relative; min-height: 34px; border: 0; padding: 6px 14px; color: var(--jdx-muted); background: transparent; cursor: pointer; }
-.jdx-tabs button[aria-selected="true"] { color: var(--jdx-text); font-weight: 650; }
-.jdx-tabs button[aria-selected="true"]::after { content: ""; position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; background: var(--jdx-green); }
 .jdx-analysis-panel[hidden] { display: none; }
 /* 批注写入独立于可读笔记；原生 details 提供键盘展开，文字不作为 HTML 解释。 */
 .jdx-analysis-notice { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale,1)); line-height: 1.7; }
@@ -1676,3 +1498,15 @@ button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
 .jdx-chat-message-image > span { font-size: calc(12px * var(--jdx-font-scale,1)); overflow-wrap: anywhere; opacity: .75; }
 
 .jdx-manager-account-links { margin-bottom: 16px; }
+
+/* 参考文献 AI 设置与本地恢复：独立功能行，继承现有明暗主题。 */
+.jdx-reference-ai-setting { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 16px 0; border-top: 1px solid var(--jdx-line, var(--jdx-pref-line)); cursor: pointer; }
+.jdx-reference-ai-setting > input { width: 16px; height: 16px; margin: 0; accent-color: #16cf8c; }
+.jdx-reference-ai-setting > span { font-weight: 600; }
+.jdx-reference-ai-setting > p { grid-column: 2; margin: 0; color: var(--jdx-muted, var(--jdx-pref-muted)); font-size: 12px; line-height: 1.6; }
+.jdx-temporary-recovery { padding: 12px 0; border-top: 1px solid var(--jdx-line); }
+.jdx-temporary-recovery button { padding: 7px 10px; border: 1px solid var(--jdx-line-strong); border-radius: 5px; color: var(--jdx-text); background: var(--jdx-surface); font: inherit; cursor: pointer; }
+.jdx-temporary-recovery button:disabled { opacity: .6; cursor: default; }
+.jdx-temporary-recovery button:focus-visible { outline: 2px solid #16cf8c; outline-offset: 2px; }
+.jdx-temporary-recovery textarea { box-sizing: border-box; display: block; width: 100%; min-height: 180px; margin-block: 10px; padding: 10px; border: 1px solid var(--jdx-line); background: var(--jdx-surface); color: var(--jdx-text); font: inherit; }
+.jdx-temporary-recovery textarea[hidden] { display: none; }

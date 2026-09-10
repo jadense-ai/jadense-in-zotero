@@ -8,6 +8,11 @@ import { redactChatImageDataUrls, type ChatImageInput } from "./image-input"
 
 export type ByokProtocol = "openai-chat-completions" | "anthropic-messages" | "openai-responses"
 
+/** 保留可信 HTTP 状态供调度区分明确拒绝与结果不确定；正文仍使用原脱敏逻辑。 */
+export class ByokResponseError extends Error {
+  constructor(readonly status: number, message: string) { super(message) }
+}
+
 export type ByokConfig = {
   protocol: ByokProtocol
   baseUrl: string
@@ -120,7 +125,7 @@ async function responseError(response: Response, apiKey: string) {
   } catch {
     // 不显示未知原始响应，避免 Provider 回显凭据或私有请求内容。
   }
-  return redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`))
+  return new ByokResponseError(response.status, redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`)).message)
 }
 
 export async function consumeByokStream(

@@ -316,3 +316,25 @@ describe("independent paper analysis", () => {
     expect(saveAnnotations).not.toHaveBeenCalled()
   })
 })
+
+// 模拟能力端点与本地磁盘，保留真实新版客户端的 SSE/终态判断；恢复幂等由专用测试覆盖。
+vi.mock('@/chat/reliable-temporary-chat', async () => {
+  const actual = await vi.importActual<typeof import('@/chat/reliable-temporary-chat')>('@/chat/reliable-temporary-chat')
+  return { ReliableTemporaryChatClient: class extends actual.ReliableTemporaryChatClient {
+    constructor(options: ConstructorParameters<typeof actual.ReliableTemporaryChatClient>[0]) {
+      super({ ...options, fetchImpl: async (url, init) => {
+        if (init?.method === 'HEAD') return new Response(null, { headers: { 'x-jadense-temporary-protocol': '1' } })
+        const response = await options.fetchImpl!(url, init)
+        response.headers.set('x-jadense-temporary-protocol', '1')
+        if (response.ok) response.headers.set('content-type', 'text/event-stream')
+        return response
+      } }, { list: async () => [], save: async () => {} } as never)
+    }
+  } }
+})
+vi.mock('@/chat/reliable-byok-chat', async () => {
+  const actual = await vi.importActual<typeof import('@/chat/reliable-byok-chat')>('@/chat/reliable-byok-chat')
+  return { ReliableByokChatClient: class extends actual.ReliableByokChatClient {
+    constructor(options: ConstructorParameters<typeof actual.ReliableByokChatClient>[0]) { super(options, { list: async () => [], save: async () => {} } as never) }
+  } }
+})

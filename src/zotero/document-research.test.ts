@@ -1,9 +1,12 @@
 /** 0.4.2 行为回归：完整来源覆盖、零 AI 常规引用、无副作用核验与恢复。 */
 import { describe, it, expect, vi } from "vitest"
+// 本文件验证文档调度；传输认领/磁盘/恢复在 reliable-temporary-chat.test.ts 独立使用真实客户端验证。
+vi.mock('@/chat/reliable-temporary-chat', async () => ({ ReliableTemporaryChatClient: (await import('@/chat/temporary-chat')).TemporaryChatClient }))
+vi.mock('@/chat/reliable-byok-chat', async () => ({ ReliableByokChatClient: (await import('@/chat/byok-chat')).ByokChatClient }))
 import { extractReferences, applyReferenceSuggestion, metadataMatches, parseReferenceFields } from "@/chat/reference-list"
 import { DocumentJobs, acceptTranslations, splitTranslationText } from "./document-jobs"
 import { DocumentStore, type TaskIO, type TranslationPage } from "./document-store"
-import { readTextDocument, textPage, orderColumnLines, validateDocument, navigateDocument, type PdfTextDocument, type PdfLine } from "./pdf-document"
+import { readTextDocument, textPage, orderColumnLines, validateDocument, navigateDocument, isLiveDocumentReader, type PdfTextDocument, type PdfLine } from "./pdf-document"
 import { importReference, ReferenceVerifier } from "./reference-verification"
 import { referenceRow } from "./document-ui"
 import { FONT_SIZE_PREF, readFontSize, saveFontSize, readTranslationStyle, saveTranslationStyle } from "./ui-preferences"
@@ -26,7 +29,7 @@ function memoryStore() {
   const paths = { profileDir: "/fixture", join: (...parts: string[]) => parts.join("/"), filename: (path: string) => path.split("/").at(-1)! }
   return { store: new DocumentStore(io, paths), reload: () => new DocumentStore(io, paths), files, io }
 }
-const configured = () => new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-only"]])
+const configured = () => new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-only"], ['extensions.jadenseInZotero.referenceAIEnabled', true]])
 function response(value: unknown) { return new Response(`data: ${JSON.stringify({ type: "text-delta", delta: JSON.stringify(value) })}\n\ndata: ${JSON.stringify({ type: "finish" })}\n\n`, { status: 200 }) }
 function translateRequest(options: RequestInit) {
   const serialized = JSON.stringify(JSON.parse(String(options.body)))
@@ -35,6 +38,158 @@ function translateRequest(options: RequestInit) {
 }
 
 describe("complete PDF and reference evidence", () => {
+  it('continues later batches after malformed JSON without repair requests', async () => {
+    const fixture = host([['References', ...Array.from({ length: 17 }, (_, i) => `[${i + 1}] Unknown ${i}`)]], configured()), memory = memoryStore()
+    const fetchImpl = vi.fn(async () => response({ items: [] }))
+    fetchImpl.mockResolvedValueOnce(new Response('data: {"type":"text-delta","delta":"not JSON"}\n\ndata: {"type":"finish"}\n\n'))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(fetchImpl).toHaveBeenCalledTimes(2); expect(task.completed).toBe(17)
+    expect(task.referenceAI?.batches.map(batch => batch.status)).toEqual(['failed', 'complete']); jobs.dispose()
+  })
+  it('disabling the shared preference cancels AI and still verifies all entries', async () => {
+    const prefs = configured(), fixture = host([['References', ...Array.from({ length: 17 }, (_, i) => `[${i + 1}] Unknown ${i}`)]], prefs), memory = memoryStore()
+    let changed = () => {}
+    Object.assign(fixture.zotero.Prefs!, { registerObserver: (key: string, cb: () => void) => { if (key.endsWith('referenceAIEnabled')) changed = cb; return key }, unregisterObserver: vi.fn() })
+    const fetchImpl = vi.fn(async () => { prefs.set('extensions.jadenseInZotero.referenceAIEnabled', false); changed(); throw new DOMException('cancelled', 'AbortError') })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle(); await jobs.idle()
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(task.completed).toBe(17); jobs.dispose()
+  })
+  it('does not send AI when identity cannot be persisted, while retaining verification', async () => {
+    const fixture = host([['References', '[1] Unknown']], configured()), memory = memoryStore(), fetchImpl = vi.fn()
+    memory.io.writeUTF8 = vi.fn(async () => { throw new Error('disk full') })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(fetchImpl).not.toHaveBeenCalled(); expect(task.completed).toBe(1); expect(task.referenceAI?.pausedReason).toBeTruthy(); jobs.dispose()
+  })
+  it('defaults AI off even with an existing token and completes non-AI verification', async () => {
+    const fixture = host([['References', '[1] Unknown alpha', '[2] Unknown beta']], new Map([['extensions.jadenseInZotero.token', 'synthetic-only']]))
+    const memory = memoryStore(), fetchImpl = vi.fn()
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(fetchImpl).not.toHaveBeenCalled(); expect(task.completed).toBe(2); jobs.dispose()
+  })
+  it('persists batches and stops all later AI after 402 while verifying every original reference', async () => {
+    const fixture = host([['References', ...Array.from({ length: 33 }, (_, i) => `[${i + 1}] Unknown source ${i}`)]], configured())
+    const memory = memoryStore()
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: 'POINTS_INSUFFICIENT', error: '积分不足' }), { status: 402 }))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(task.completed).toBe(33)
+    expect(task.referenceAI?.pausedReason).toBe('积分不足')
+    expect(task.referenceAI?.batches.map(batch => batch.entryIds.length)).toEqual([16, 16, 1])
+    expect(task.referenceAI?.batches.every(batch => batch.status === 'failed')).toBe(true)
+    jobs.dispose()
+    const reloaded = new DocumentJobs(fixture.zotero, fetchImpl, memory.reload()); await reloaded.ready; await reloaded.idle()
+    expect(fetchImpl).toHaveBeenCalledTimes(1); reloaded.dispose()
+  })
+  it("copies a paper title only once even when copyright precedes it", async () => {
+    const fixture = host([["Copyright notice", "Fixture", "A scientific paragraph."]], configured()), memory = memoryStore()
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(async (_url, options) => translateRequest(options!)), memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    const page = (await memory.store.page(task.id, 0))!
+    const titlePiece = page.pieces.find(piece => piece.text === "Fixture")!
+    page.translations[titlePiece.id] = "Translated duplicate title"
+    await memory.store.savePage(task.id, page)
+    const text = await jobs.copy(task.id)
+    expect(text.startsWith("Fixture\n\n")).toBe(true)
+    expect(text).not.toContain("Translated duplicate title")
+    expect(text).toContain("译文"); jobs.dispose()
+  })
+  it("deduplicates repeated starts while the native reference read is still pending", async () => {
+    const fixture = host(), memory = memoryStore()
+    let release!: () => void
+    fixture.view._ensureBasicPageData.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(), memory.store)
+    const first = jobs.start("references", 11)
+    await vi.waitFor(() => expect(fixture.view._ensureBasicPageData).toHaveBeenCalledTimes(1))
+    const second = jobs.start("references", 11)
+    release()
+    expect((await first).id).toBe((await second).id)
+    await jobs.idle(); expect(jobs.list("references")).toHaveLength(1)
+    expect(fixture.view._ensureBasicPageData).toHaveBeenCalledTimes(1); jobs.dispose()
+  })
+
+  it("pauses a queued reference task before it can identify or verify another PDF", async () => {
+    const fixture = host([["References", "[1] Uncertain source"]], configured()), memory = memoryStore()
+    const secondItem = { ...fixture.item, id: 12, key: "PDF00002" }
+    const readers = [{ itemID: 11, _internalReader: { _primaryView: fixture.view } }, { itemID: 12, _internalReader: { _primaryView: fixture.view } }]
+    Object.assign(fixture.zotero, { Items: { get: (id: number) => id === 12 ? secondItem : fixture.item }, Reader: { _readers: readers } })
+    let release!: () => void
+    const fetchImpl = vi.fn(() => new Promise<Response>(resolve => { release = () => resolve(response({ references: [] })) }))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
+    await jobs.start("references", 11)
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1))
+    const queued = await jobs.start("references", 12)
+    expect(jobs.referencePhase(queued.id)).toBe("queued")
+    jobs.pause(queued.id); release(); await jobs.idle()
+    expect(queued.status).toBe("paused"); expect(queued.completed).toBe(0)
+    expect(fetchImpl).toHaveBeenCalledTimes(1); expect(await memory.store.references(queued.id)).toHaveLength(1); jobs.dispose()
+  })
+
+  it("reports partial import failure while preserving successful entries and retryable source rows", async () => {
+    const fixture = host([["References", citation, citation.replace("[1]", "[2]")]]), memory = memoryStore()
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(), memory.store)
+    const task = await jobs.start("references", 11); await jobs.idle()
+    const entries = await memory.store.references(task.id)
+    entries.forEach(entry => { entry.verification = "verified"; entry.verified = entry.fields })
+    await memory.store.saveReferences(task.id, entries)
+    const search = vi.fn().mockRejectedValueOnce(new Error("lookup offline")).mockResolvedValue([])
+    const save = vi.fn(async () => {})
+    Object.assign(fixture.zotero, { Libraries: { get: () => ({ editable: true }) }, Search: class { libraryID = 1; addCondition() {} search = search }, Item: class { id = 50; key = "IMPORTED"; libraryID = 1; setField() {} setCreators() {} saveTx = save } })
+    expect(await jobs.import(task.id, entries.map(entry => entry.id), 1)).toEqual({ imported: 1, failed: 1, uncertain: 0 })
+    const after = await memory.store.references(task.id)
+    expect(after.map(entry => entry.raw)).toEqual(entries.map(entry => entry.raw))
+    expect(after[0].imported).toBeUndefined(); expect(after[0].importUncertain).toBeFalsy()
+    expect(after[1].imported?.itemID).toBe(50); expect(save).toHaveBeenCalledTimes(1); jobs.dispose()
+  })
+
+  it("cancels reference preparation immediately and discards a late native page read", async () => {
+    const fixture = host(), memory = memoryStore(), controller = new AbortController()
+    let release!: () => void
+    fixture.view._ensureBasicPageData.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(), memory.store)
+    const pending = jobs.start("references", 11, false, { signal: controller.signal })
+    await vi.waitFor(() => expect(fixture.view._ensureBasicPageData).toHaveBeenCalled())
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(jobs.list()).toHaveLength(0)
+    release(); await Promise.resolve(); await Promise.resolve()
+    expect(jobs.list()).toHaveLength(0); jobs.dispose()
+  })
+
+  it("does not read pages when cancelled before document storage becomes ready", async () => {
+    const fixture = host(), memory = memoryStore(), controller = new AbortController()
+    controller.abort()
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(), memory.store)
+    await expect(jobs.start("references", 11, false, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" })
+    expect(fixture.view._ensureBasicPageData).not.toHaveBeenCalled(); jobs.dispose()
+  })
+
+  it("serializes an import with re-verification so later task saves retain native import results", async () => {
+    const fixture = host(), memory = memoryStore(), jobs = new DocumentJobs(fixture.zotero, vi.fn(), memory.store)
+    const task = await jobs.start("references", 11); await jobs.idle()
+    const rows = await memory.store.references(task.id)
+    rows[0].verification = "verified"; rows[0].verified = rows[0].fields
+    await memory.store.saveReferences(task.id, rows)
+    let release!: () => void
+    const searched = vi.fn(() => new Promise<number[]>(resolve => { release = () => resolve([]) }))
+    const save = vi.fn(async () => {})
+    Object.assign(fixture.zotero, {
+      Libraries: { get: () => ({ editable: true }) },
+      Search: class { libraryID = 1; addCondition() {} search = searched },
+      Item: class { id = 50; key = "IMPORTED"; libraryID = 1; setField() {} setCreators() {} saveTx = save },
+    })
+    const importing = jobs.import(task.id, [rows[0].id], 1)
+    await vi.waitFor(() => expect(searched).toHaveBeenCalled())
+    jobs.resume(task.id)
+    release()
+    expect(await importing).toEqual({ imported: 1, failed: 0, uncertain: 0 })
+    await jobs.idle()
+    expect((await memory.store.references(task.id))[0].imported?.itemID).toBe(50)
+    expect(save).toHaveBeenCalledTimes(1); jobs.dispose()
+  })
   it("reads every page beyond 80, keeps short headings and text without coordinates", async () => {
     const fixture = host(Array.from({ length: 83 }, (_, i) => [i === 82 ? "FINAL PAGE" : "Title"]))
     const result = await readTextDocument(fixture.zotero as never, 11)
@@ -92,6 +247,20 @@ describe("complete PDF and reference evidence", () => {
       expect(navigate).toHaveBeenLastCalledWith({ pageIndex: 1 }, { behavior: "instant" })
       expect(parse).toHaveBeenCalledTimes(4)
   })
+  it("locates in the originating Reader when the same attachment is open in two windows", async () => {
+    const fixture = host(), readerDocument = {} as Document, open = vi.fn(), navigate = vi.fn()
+    Object.assign(fixture.zotero.Reader!, { open, _readers: [
+      { itemID: 11, _iframeWindow: { document: {} }, navigate: vi.fn() },
+      { itemID: 11, _iframeWindow: { document: readerDocument }, navigate },
+    ] })
+    await navigateDocument(fixture.zotero as never, document().source, { pageIndex: 1 }, readerDocument)
+    expect(open).not.toHaveBeenCalled(); expect(navigate).toHaveBeenCalledWith({ pageIndex: 1 })
+  })
+  it("contains dead Reader windows while other PDFs remain usable", () => {
+    expect(isLiveDocumentReader({ get _iframeWindow(): Window { throw new Error("can't access dead object") } })).toBe(false)
+    expect(isLiveDocumentReader({ _iframeWindow: { closed: true } })).toBe(false)
+    expect(isLiveDocumentReader({ _iframeWindow: { closed: false } })).toBe(true)
+  })
 })
 
 describe("non-AI verification and static rows", () => {
@@ -144,6 +313,67 @@ describe("non-AI verification and static rows", () => {
 })
 
 describe("document jobs, durability and appearance", () => {
+  it("dispatches restored paragraphs without margin Article and retains the raw source on disk", async () => {
+    const fixture = host([["unused"], ["unused"]], configured()), memory = memoryStore()
+    for (let i = 0; i < 2; i++) Object.assign(fixture.view._pdfPages[i], {
+      viewBox: [0, 0, 600, 800],
+      chars: [["Article", 770], ["The complete scientific argument continues", 700], ["with all of its evidence and conclusion.", 686], [String(i + 1), 20]].flatMap(([line, y]) =>
+        [...String(line)].map((c, j) => ({ c, rect: [30 + j * 5, Number(y), 35 + j * 5, Number(y) + 10], lineBreakAfter: j === String(line).length - 1, paragraphBreakAfter: j === String(line).length - 1 }))),
+    })
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => translateRequest(options))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    expect(task.total).toBe(2); expect(task.status).toBe("complete")
+    for (const call of fetchImpl.mock.calls) {
+      expect(String(call[1].body)).not.toContain("Article")
+      expect(String(call[1].body)).toContain("The complete scientific argument continues with all of its evidence and conclusion.")
+    }
+    const stored = await memory.reload().page(task.id, 0)
+    expect(stored?.lines.map(line => line.text)).toContain("Article")
+    expect(stored?.excludedLines).toHaveLength(2)
+    expect(stored?.pieces).toHaveLength(1)
+    jobs.dispose()
+  })
+  it("reduces context-error batches only between intact paragraphs and keeps every ID stable", async () => {
+    const texts = ["First scientific paragraph. ".repeat(70).trim(), "Second scientific paragraph. ".repeat(70).trim()]
+    const fixture = host([texts], configured()), memory = memoryStore()
+    const prompts: Array<Array<{ id: string; text: string }>> = []
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => {
+      const prompt = JSON.parse(String(options.body)).messages[0].parts[0].text
+      const rows = JSON.parse(prompt.split("\n").at(-1)); prompts.push(rows)
+      if (rows.length > 1) throw new Error("maximum context length exceeded")
+      return response({ translations: rows.map((row: { id: string }) => ({ id: row.id, text: "完整译文" })) })
+    })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    expect(task.status).toBe("complete"); expect(task.total).toBe(2)
+    expect(prompts.map(rows => rows.length)).toEqual([2, 1, 1])
+    expect(prompts.flat().every(row => texts.includes(row.text))).toBe(true)
+    expect((await memory.store.page(task.id, 0))?.pieces.map(piece => piece.id)).toEqual(prompts[0].map(row => row.id))
+    jobs.dispose()
+  })
+  it("includes whole adjacent context and previous terminology without adding its IDs to the request", async () => {
+    const fixture = host([["A complete preceding argument."], ["Methods"], ["It follows from that result."]], configured()), memory = memoryStore()
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => translateRequest(options))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    const prompt = JSON.parse(String(fetchImpl.mock.calls[1][1].body)).messages[0].parts[0].text
+    expect(prompt).toContain('"before":{"text":"A complete preceding argument.","translation":"译文 p0-c0-0"}')
+    expect(JSON.parse(prompt.split("\n").at(-1))).toEqual([{ id: "p1-c0-0", text: "Methods" }, { id: "p2-c0-0", text: "It follows from that result." }])
+    expect(task.status).toBe("complete"); jobs.dispose()
+  })
+  it("does not reuse legacy extraction while preserving its readable history", async () => {
+    const fixture = host([["An intact paragraph."]], configured()), memory = memoryStore()
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => translateRequest(options))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const old = await jobs.start("translation", 11); await jobs.idle()
+    delete old.extractionVersion; await memory.store.save(old)
+    const current = await jobs.start("translation", 11); await jobs.idle()
+    expect(current.id).not.toBe(old.id); expect(jobs.list("translation")).toHaveLength(2)
+    expect(await jobs.copy(old.id)).toContain("译文")
+    expect((await jobs.start("translation", 11)).id).toBe(current.id)
+    expect(fetchImpl).toHaveBeenCalledTimes(2); jobs.dispose()
+  })
   it("translates beyond 80 pages including the final page while marking a scanned page incomplete", async () => {
     const fixture = host(Array.from({ length: 83 }, (_, i) => i === 40 ? [] : [i === 82 ? "Last $x^2$" : `Page ${i}`]), configured()), memory = memoryStore()
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => translateRequest(options))
@@ -151,14 +381,15 @@ describe("document jobs, durability and appearance", () => {
     const task = await jobs.start("translation", 11); await jobs.idle()
     expect(task.totalPages).toBe(83); expect(task.completed).toBe(82); expect(task.status).toBe("partial")
     expect((await memory.store.page(task.id, 82))?.translations).toEqual({ "p82-c0-0": "译文 p82-c0-0" })
-    expect(fetchImpl).toHaveBeenCalledTimes(82); jobs.dispose()
+    expect(fetchImpl).toHaveBeenCalledTimes(2); jobs.dispose()
   })
-  it("halves only explicit context errors with a finite retry limit and preserves long source text", async () => {
+  it("never splits a paragraph or retries an identical oversized paragraph on context errors", async () => {
     const text = "Very long scientific sentence. ".repeat(200), fixture = host([[text]], configured()), memory = memoryStore()
     const fetchImpl = vi.fn(async () => { throw new Error("maximum context length exceeded") })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
     const task = await jobs.start("translation", 11); await jobs.idle()
-    expect(task.status).toBe("error"); expect(fetchImpl).toHaveBeenCalledTimes(4)
+    expect(task.status).toBe("error"); expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect((await memory.store.page(task.id, 0))?.pieces).toHaveLength(1)
     expect((await memory.store.page(task.id, 0))?.pieces.map(piece => piece.text).join("")).toBe(text.trim())
     jobs.dispose()
   })
@@ -198,7 +429,7 @@ describe("document jobs, durability and appearance", () => {
   })
   it("preserves unknown fields but ignores conflicting IDs and never loses split source characters", () => {
     const source = "Hello 世界. ".repeat(150)
-    expect(splitTranslationText(source, 80).join("")).toBe(source)
+    expect(splitTranslationText(source, 80)).toEqual([source])
     const page = { translations: {} } as TranslationPage
     acceptTranslations(page, ["a", "b"], { translations: [{ id: "a", text: "one" }, { id: "a", text: "conflict" }, { id: "b", text: "two", future: true }, { id: "fake", text: "injected" }] })
     expect(page.translations).toEqual({ b: "two" })
@@ -231,7 +462,7 @@ describe("document jobs, durability and appearance", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1); jobs.dispose()
   })
   it("retains prior chunks after a network error, resumes only missing work and blocks a replaced file", async () => {
-    const fixture = host([["First"], ["Second"]], configured()), memory = memoryStore()
+    const fixture = host([["Introduction"], ["Methods"]], configured()), memory = memoryStore()
     let fail = true
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => { if (String(options.body).includes("p1-c0") && fail) throw new Error("offline"); return translateRequest(options) })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
@@ -257,7 +488,7 @@ describe("document jobs, durability and appearance", () => {
   })
   it("pauses through preference observers and restores interrupted tasks without automatic requests", async () => {
     const fixture = host([["Result"]], configured()), memory = memoryStore(), observers: Array<() => void> = []
-    Object.assign(fixture.zotero.Prefs!, { registerObserver: (_key: string, callback: () => void) => { observers.push(callback); return observers.length }, unregisterObserver: vi.fn() })
+    Object.assign(fixture.zotero.Prefs!, { registerObserver: (_key: string, callback: () => void) => { if (_key !== 'extensions.jadenseInZotero.referenceAIEnabled') observers.push(callback); return observers.length }, unregisterObserver: vi.fn() })
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => { observers[0](); if (options.signal?.aborted) throw new DOMException("paused", "AbortError"); return translateRequest(options) })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
     const task = await jobs.start("translation", 11); await jobs.idle(); expect(task.status).toBe("paused"); jobs.dispose()

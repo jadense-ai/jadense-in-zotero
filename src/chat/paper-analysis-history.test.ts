@@ -42,6 +42,12 @@ function record(index: number, overrides: Partial<PaperAnalysisRecord> = {}): Pa
 }
 
 describe("paper analysis history", () => {
+  it("round-trips optional reference task identity and drops malformed/additive presentation fields locally", () => {
+    const fixture = preferences(), id = "10000000-0000-4000-8000-000000000001"
+    appendPaperAnalysisRecord(fixture.store, record(1, { referenceTaskID: id }))
+    appendPaperAnalysisRecord(fixture.store, { ...record(2), referenceTaskID: "../wrong", future: true } as PaperAnalysisRecord)
+    expect(readPaperAnalysisHistory(fixture.store).records.map(row => row.referenceTaskID)).toEqual([undefined, id])
+  })
   it("keeps legacy summary-only records readable under the same independent v1 preference", () => {
     const fixture = preferences({
       "extensions.jadenseInZotero.localChatState": JSON.stringify({ messages: [{ kind: "analysis" }] }),

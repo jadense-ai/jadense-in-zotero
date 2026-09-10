@@ -14,6 +14,8 @@ BYOK 的 Base URL 决定请求和凭据发往何处，请使用可信的服务�
 
 AI 功能按当前选择向攻玉或 BYOK 服务发送请求所需的文本、关联文献上下文和图片；对话历史保存在本机不代表 AI 离线执行。账号页、签到页和订阅与用量等网页按钮交由系统浏览器打开，URL 不附带插件令牌。完整用户数据路径见 [README](README.md#数据与凭据) 或 [English README](README.en.md#data-and-credentials)。
 
+临时请求恢复记录也保存在本机 profile，可能包含请求正文、文献上下文、图片和已完成结果；与其他本地历史一样，不应上传或分享这些文件。
+
 ## 报告漏洞
 
 公开 GitHub 仓库启用 Private vulnerability reporting 后，请通过 Security → Report a vulnerability 私下提交可复现问题。若该入口尚未启用，请先通过攻玉官网提供的支持入口联系维护者，取得私下报告渠道；不要在公开 Issue 中提交可利用细节、令牌或用户文件。

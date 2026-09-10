@@ -10,6 +10,7 @@ import {
 } from "./runtime"
 import type { BootstrapPluginContext } from "./native-preferences"
 import { formatJadenseSyncResult } from "./sync-result"
+import { mountNativeReaderSidebar, removeNativeReaderSidebar, removeReaderSidebars } from "./reader-sidebar"
 
 export const JADENSE_SYNC_PANEL_ID = "jadense-in-zotero-sync-panel"
 
@@ -36,6 +37,7 @@ export type SyncPanelState = {
 
 export type SyncPanelCallbacks = {
   openManager?: () => void
+  openTranslationHistory?: () => void
 }
 
 function defaultPaneHandle(pluginID: string, paneID: string) {
@@ -374,8 +376,12 @@ export function registerSyncPanel(
     onItemChange: ({ setEnabled }) => {
       setEnabled(true)
     },
-    onDestroy: ({ body }) => { panelThemes.get(body)?.(); panelThemes.delete(body) },
-    onRender: ({ doc, body }) => {
+    onDestroy: ({ body }) => { panelThemes.get(body)?.(); panelThemes.delete(body); removeNativeReaderSidebar(body) },
+    onRender: ({ doc, body, tabType }) => {
+      if (tabType && tabType !== "library" && mountNativeReaderSidebar(body, zotero, callbacks.openTranslationHistory)) {
+        panelThemes.get(body)?.(); panelThemes.delete(body); return
+      }
+      removeNativeReaderSidebar(body)
       renderSyncPanel({ doc, body, zotero, callbacks })
     },
   })
@@ -386,6 +392,7 @@ export function registerSyncPanel(
 }
 
 export function unregisterSyncPanel(zotero: ZoteroLike, paneID: string | null, _pluginID = "") {
+  removeReaderSidebars(zotero)
   if (!paneID) return
   try {
     zotero.ItemPaneManager?.unregisterSection?.(paneID)

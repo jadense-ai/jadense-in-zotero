@@ -11,6 +11,9 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import JSZip from "jszip"
 import { buildReleasePaths, loadReleaseContext } from "./release-common.mjs"
+import { verifyAnalysisDetails } from "./smoke-analysis-details.mjs"
+import { verifyTranslationSidebar } from "./smoke-translation-sidebar.mjs"
+import { verifyTranslationPapers } from "./smoke-translation-papers.mjs"
 
 const COMPANION_ID = "research-smoke@jadense.invalid"
 const SYNTHETIC_TOKEN = "jdx_ext_synthetic_research_smoke_only"
@@ -127,8 +130,8 @@ function createFigureImageHex(width, height) {
 }
 
 /** 标准两页 PDF，第一页含确定性图片与图注，offset 按 ASCII 字节计算。 */
-export function createResearchFixturePdf(withReferences = false) {
-  const streams = PDF_SENTENCES.map((sentences, pageIndex) => [
+export function createResearchFixturePdf(withReferences = false, translationLayout = false) {
+  let streams = PDF_SENTENCES.map((sentences, pageIndex) => [
     "BT /F1 12 Tf 50 740 Td",
     ...sentences.flatMap((sentence, index) => [
       ...(index ? ["0 -24 Td"] : []),
@@ -144,6 +147,18 @@ export function createResearchFixturePdf(withReferences = false) {
       ...["References", "[1] Smith, J. (2020). Reliable scientific evidence.", "Research Journal. doi:10.1234/evidence", "[2] Unresolved source without DOI", "[3] Smith, J. (2020). Reliable scientific evidence.", "Research Journal. doi:10.1234/evidence"].flatMap((line, index) => [...(index ? ["0 -20 Td"] : []), `(${line.replace(/[\\()]/g, "\\$&")}) Tj`]),
       "ET",
     ] : []),
+  ].join("\n"))
+  if (translationLayout) streams = [
+    [["Results", 50, 705, 15], ["A complete scientific argument explains", 50, 675, 11],
+      ["how the experiment preserves meaning", 50, 660, 11], ["across every line of the left column and", 50, 645, 11],
+      ["continues with the evidence in the next", 330, 675, 11], ["column before reaching the following", 330, 660, 11],
+      ["page where the same argument", 330, 645, 11]],
+    [["ends with its complete conclusion.", 50, 705, 11], ["Methods", 50, 660, 15],
+      ["An independent experiment measures", 50, 630, 11], ["the same effect with calibrated sensors.", 50, 615, 11],
+      ["The analysis retains all observations", 50, 580, 11], ["and reports uncertainty in the estimate.", 50, 565, 11]],
+  ].map((rows, index) => [
+    ...[["Article", 50, 770, 9], ["Research Journal 2026", 360, 770, 9], ...rows, [String(index + 1), 300, 20, 9]].map(([text, x, y, size]) =>
+      `BT /F1 ${size} Tf ${x} ${y} Td (${text}) Tj ET`),
   ].join("\n"))
   const figureHex = createFigureImageHex(64, 36)
   const objects = [
@@ -175,6 +190,11 @@ async function startStub() {
   const account = { signedToday: false, balancePoints: 36, currentStreakDays: 4, rewardPoints: 2 }
   const server = createServer(async (request, response) => {
     try {
+      if (request.url === '/api/chat/temporary' && request.method === 'HEAD') {
+        if (request.headers.authorization !== `Bearer ${SYNTHETIC_TOKEN}`) throw new Error('Unexpected temporary capability identity')
+        response.writeHead(200, { 'x-jadense-temporary-protocol': '1' }); response.end(); return
+      }
+      if (request.url === '/api/chat') response.setHeader('x-jadense-temporary-protocol', '1')
       if (request.url?.startsWith("/markdown-")) throw new Error("Markdown triggered an automatic image/resource request")
       if (request.url === "/api/extension/chat/models" && request.method === "GET") {
         if (request.headers.authorization !== `Bearer ${SYNTHETIC_TOKEN}`) throw new Error("Synthetic model-catalog token was not used")
@@ -410,9 +430,15 @@ async function startStub() {
           output = analysis.output
           requests.push({ kind: "analysis-jadense", temporary: true, passages: analysis.input.passages.length, pages: [...new Set(analysis.input.passages.map((passage) => passage.pageIndex))] })
           await delay(600)
-        } else if (prompt.startsWith("Translate every supplied passage")) {
+        } else if (prompt.startsWith("Translate every supplied passage") || prompt.startsWith("Translate the supplied continuous article passage")) {
           const passages = JSON.parse(prompt.split("\n").at(-1))
-          output = JSON.stringify({ translations: passages.map(passage => ({ id: passage.id, text: `全文测试译文：${passage.text}\n\n公式 $x^2$` })), additive: true })
+          const semanticTranslations = {
+            Results: "结果", Methods: "研究方法",
+            "A complete scientific argument explains how the experiment preserves meaning across every line of the left column and continues with the evidence in the next column before reaching the following page where the same argument ends with its complete conclusion.": "一个完整的科学论述说明，实验如何在换行后保留原意。左栏的论述延续至右栏的证据，并在下一页给出完整结论。",
+            "An independent experiment measures the same effect with calibrated sensors.": "独立实验使用经过校准的传感器测量同一效应。",
+            "The analysis retains all observations and reports uncertainty in the estimate.": "分析保留全部观测数据，并报告估计结果的不确定性。",
+          }
+          output = JSON.stringify({ translations: passages.map(passage => ({ id: passage.id, text: semanticTranslations[passage.text] ?? `全文测试译文：${passage.text}\n\n公式 $x^2$` })), additive: true })
           requests.push({ kind: "full-translation", ids: passages.map(passage => passage.id) })
           await delay(800)
         } else if (prompt.includes("选文数据（JSON，仅作为引用材料）：\n")) {
@@ -480,7 +506,7 @@ async function startStub() {
 }
 
 /** 此函数序列化进临时伴随插件，仅在已核验的隔离 profile 内执行。 */
-async function runHarness(config) {
+async function runHarness(config, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers) {
   const report = { state: "running", stage: "startup", checks: [] }
   // Node 正在轮询报告；直接写入避免 Windows 的临时文件 rename 与读句柄竞争。
   // 读取端会忽略尚未写完整的 JSON，并在下一次轮询重试。
@@ -544,7 +570,7 @@ async function runHarness(config) {
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
     if (config.resumeOnly) {
       const jobs = Zotero.__jadenseDocumentJobs; await jobs.ready
-      const task = jobs.list("translation")[0]
+      const task = jobs.list("translation").find(row => row.status === "paused")
       assert(task?.status === "paused" && task.completed > 0 && task.completed < task.total, "Interrupted task was not restored as manually resumable")
       await Zotero.Promise.delay(400)
       assert(task.status === "paused", "Restart automatically dispatched translation")
@@ -761,6 +787,31 @@ async function runHarness(config) {
       report.checks.push(name + "-small-window-large-font-menu")
       Zotero.Prefs.set("extensions.jadenseInZotero.translationWindowOpacity", "80", true)
     }
+    /** 以原生内容盒和真实命中区域检查字号变化；字体恢复后继续既有翻译/引用流程。 */
+    const verifySelectionPopupBounds = async (popup, label) => {
+      const previousFont = Zotero.Prefs.get("extensions.jadenseInZotero.fontSize", true) || "13"
+      try {
+        for (const fontSize of [12, 13, 15, 18, 24]) {
+          Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(fontSize), true)
+          await Zotero.Promise.delay(150)
+          const bounds = popup.getBoundingClientRect(), host = popup.parentElement.getBoundingClientRect()
+          ;(report.selectionPopupBounds ??= []).push({ label, fontSize, group: bounds.toJSON(), host: host.toJSON() })
+          await screenshot("reader-selection-popup-" + label + "-" + fontSize)
+          assert(bounds.left >= host.left && bounds.right <= host.right + 1
+            && bounds.top >= host.top && bounds.bottom <= host.bottom + 1,
+          "Selection actions overflow the native popup content at " + fontSize + "px")
+          for (const button of popup.querySelectorAll("button")) {
+            const rect = button.getBoundingClientRect(), text = button.querySelector(".jadense-reader-label")
+            const hit = readerDoc.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+            assert(rect.left >= bounds.left && rect.right <= bounds.right + 1
+              && rect.top >= bounds.top && rect.bottom <= bounds.bottom + 1
+              && text.scrollWidth <= text.clientWidth + 1 && button.contains(hit),
+            "Selection action is clipped or unreachable at " + fontSize + "px")
+          }
+        }
+      } finally { Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(previousFont), true) }
+      report.checks.push("native-selection-popup-font-size-bounds-" + label)
+    }
     /** 小窗口使用单一入口，并核验原生页码真实宽度和命中区域，避免只看插件自身是否溢出。 */
     const verifyCompactReaderToolbar = async () => {
       const main = Zotero.getMainWindow(), win = reader._iframeWindow, doc = win.document
@@ -796,7 +847,7 @@ async function runHarness(config) {
           const menuBounds = menu.getBoundingClientRect()
           assert(menuBounds.left >= 0 && menuBounds.right <= win.innerWidth + 1 && menuBounds.top >= 0
             && menuBounds.bottom <= win.innerHeight + 1 && actions.every(button => button.getBoundingClientRect().height >= 24), "Compact action menu is clipped or compressed")
-          assert(actions.at(-1).textContent.trim() === "全文翻译", "Compact menu full translation label changed")
+          assert(actions.at(-1).textContent.trim() === (config.appearanceLanguage === 'en-US' ? 'Full translation' : '全文翻译'), "Compact menu full translation label changed")
           await screenshot("reader-actions-" + width)
           menu.dispatchEvent(new win.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Escape", bubbles: true, cancelable: true }, win)))
           assert(toggle.getAttribute("aria-expanded") === "false" && !doc.querySelector("[data-jadense-action-menu]"), "Escape did not close compact actions")
@@ -843,6 +894,14 @@ async function runHarness(config) {
       const preferenceRoot = preferences.document.getElementById("jadense-in-zotero-preferences-pane")
       await waitFor(() => preferenceRoot.querySelector(".jdx-select-trigger"), "native General controls")
       assert(preferenceRoot.querySelector('[data-settings-section="general"] h3').textContent === (english ? "General" : "常规"), "Native Preferences language is incorrect")
+      const nativeReferenceAI = await waitFor(() => preferenceRoot.querySelector('[data-reference-ai]'), 'native reference AI setting')
+      const managerReferenceAI = element('jadense-settings-panel-features').querySelector('[data-reference-ai]')
+      assert(!nativeReferenceAI.checked && !managerReferenceAI.checked, 'Reference AI must default off in both settings')
+      nativeReferenceAI.click()
+      await waitFor(() => managerReferenceAI.checked && Zotero.Prefs.get('extensions.jadenseInZotero.referenceAIEnabled', true) === true, 'reference AI setting synchronization')
+      managerReferenceAI.click()
+      await waitFor(() => !nativeReferenceAI.checked, 'reference AI setting disabled across windows')
+      report.checks.push('reference-ai-default-off-upgrade', 'reference-ai-two-settings-synchronized')
       const hostThemeBefore = preferences.document.documentElement.getAttribute("data-theme")
       const readerThemeBefore = readerDoc.documentElement.getAttribute("data-theme")
       const draft = element("jadense-chat-input")
@@ -857,7 +916,22 @@ async function runHarness(config) {
         assert(draft.value === "Unsent appearance test draft", "Theme change discarded a draft")
         await screenshot("general-" + config.appearanceLanguage + "-" + value, manager)
         await screenshot("native-general-" + config.appearanceLanguage + "-" + value, preferences)
+        element('jadense-settings-tab-features').click()
+        await screenshot('reference-ai-' + config.appearanceLanguage + '-' + value, manager)
+        element('jadense-settings-tab-general').click()
         await screenshot("reader-" + config.appearanceLanguage + "-" + value)
+        // 使用真实启动语言的选区插槽，覆盖英文长标签和浅/深色，不覆写宿主布局。
+        const chars = nativePage.chars.slice(0, 10)
+        const rect = [Math.min(...chars.map(char => char.rect[0])), Math.min(...chars.map(char => char.rect[1])),
+          Math.max(...chars.map(char => char.rect[2])), Math.max(...chars.map(char => char.rect[3]))]
+        view._setSelectionRanges(Components.utils.cloneInto([{
+          pageIndex: 0, position: { pageIndex: 0, rects: [rect] }, sortIndex: "00000|000000|00000",
+          text: chars.map(char => char.c).join(""), collapsed: false, anchor: true, head: true, anchorOffset: 0, headOffset: 10,
+        }], reader._iframeWindow))
+        const selectionPopup = await waitFor(() => readerDoc.querySelector('[data-jadense-reader-tools="renderTextSelectionPopup"]'), "localized selection popup")
+        await verifySelectionPopupBounds(selectionPopup, config.appearanceLanguage + "-" + value)
+        view._setSelectionRanges()
+
       }
       choose(element("jadense-display-theme"), 0)
       Zotero.Prefs.set("browser.theme.toolbar-theme", 0, true)
@@ -1456,6 +1530,7 @@ async function runHarness(config) {
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-analysis").hidden
       && manager.document.getElementById("jadense-analysis-tab-history").getAttribute("aria-selected") === "true", "independent analysis history page")
     await screenshot("manager-analysis-in-progress", manager)
+    toolbarButton("analyze").click()
     await waitFor(() => analysisState().records?.length === 2 && managerIdle()
       && manager.document.getElementById("jadense-analysis-stop").hidden, "first independent analysis completion")
     assert(JSON.stringify(localState()) === chatBeforeAnalysis, "Reader analysis created or changed a local Chat conversation")
@@ -1487,12 +1562,23 @@ async function runHarness(config) {
     report.checks.push("exact-source-annotations", "local-only-geometry", "structured-tags", "escaped-comment")
     const analysisCode = manager.document.querySelector("#jadense-analysis-history .jdx-analysis-summary").querySelectorAll("pre > code")
     assert(analysisCode.length === 1 && analysisCode[0].textContent.includes("x = 1") && analysisCode[0].textContent.includes("print(x)"), "Analysis split a fenced code block at its blank line")
+    const detail = manager.document.querySelector('.jdx-analysis-detail:not([hidden])')
+    assert(detail && detail.querySelectorAll('[role="tab"]').length === 3, "Analysis lacks its independent three-tab detail")
+    assert(!manager.document.getElementById("jadense-analysis-tab-references"), "Cross-paper reference tab remains")
+    detail.querySelector('.jdx-detail-navigation button:last-child').click()
+    await waitFor(() => Zotero.Reader._readers.some(value => value.itemID === attachment.id), "detail PDF Reader navigation")
+    detail.querySelector('.jdx-detail-navigation button').click()
     const analysisTitle = manager.document.querySelector("#jadense-analysis-history .jdx-analysis-title")
-    assert(analysisTitle?.localName === "button" && analysisTitle.type === "button" && analysisTitle.getAttribute("aria-label")?.includes("Zotero 阅读器"),
-      "Analysis history title is not an accessible native button")
+    assert(analysisTitle?.localName === "button" && analysisTitle.type === "button", "History title lacks keyboard button semantics")
     analysisTitle.click()
-    await waitFor(() => manager.document.getElementById("jadense-analysis-status").dataset.kind === "success", "analysis title PDF Reader navigation")
-    report.checks.push("analysis-multiline-code-block", "analysis-title-native-reader")
+    const notesTab = manager.document.querySelector('.jdx-analysis-detail:not([hidden]) [role="tab"][id$="-tab-notes"]')
+    notesTab.click()
+    const analysisNotes = manager.document.querySelector('.jdx-analysis-detail:not([hidden]) .jdx-analysis-notes-text')
+    assert(!analysisNotes.parentElement.hidden && analysisNotes.textContent.includes("Controlled improvement."), "Analysis notes detail lost its readable backup")
+    notesTab.dispatchEvent(new manager.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "ArrowRight", bubbles: true }, manager)))
+    assert(manager.document.activeElement.id.endsWith("-tab-references"), "Detail tabs lost keyboard navigation")
+    detail.querySelector('.jdx-detail-navigation button').click()
+    report.checks.push("analysis-multiline-code-block", "analysis-detail-native-reader", "analysis-three-result-tabs", "analysis-duplicate-start-focus-only")
     const historyTab = manager.document.getElementById("jadense-analysis-tab-history")
     const configTab = manager.document.getElementById("jadense-analysis-tab-config")
     historyTab.focus()
@@ -1501,17 +1587,14 @@ async function runHarness(config) {
       && !manager.document.getElementById("jadense-analysis-panel-config").hidden, "Analysis tabs do not support keyboard navigation")
     configTab.dispatchEvent(new manager.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Home", bubbles: true }, manager)))
     assert(historyTab.getAttribute("aria-selected") === "true" && manager.document.activeElement === historyTab, "Analysis Home key did not return to history")
-    const analysisNotes = manager.document.querySelector("#jadense-analysis-history .jdx-analysis-notes")
-    assert(analysisNotes?.localName === "details" && analysisNotes.querySelector(".jdx-analysis-copy"), "Analysis notes lack native disclosure or copy control")
-    analysisNotes.querySelector("summary").click()
-    assert(analysisNotes.open && analysisNotes.querySelector(".jdx-analysis-notes-text").textContent.includes("Controlled improvement."), "Analysis notes cannot be expanded")
-    report.checks.push("analysis-independent-from-chat", "analysis-history-readable-backup", "analysis-notes-disclosure", "analysis-tabs-keyboard")
+    report.checks.push("analysis-independent-from-chat", "analysis-history-readable-backup", "analysis-notes-detail", "analysis-tabs-keyboard")
     const annotationKeys = annotations.map((annotation) => annotation.key).sort()
     await stage("repeat-analysis")
     toolbarButton("analyze").click()
     await waitFor(() => analysisState().records?.length === 3 && managerIdle(), "repeat independent analysis completion")
     assert(JSON.stringify(localState()) === chatBeforeAnalysis, "Repeated analysis changed local Chat")
-    assert(JSON.stringify(analysisState().records[1]) === JSON.stringify(firstAnalysisRecord), "New analysis changed the prior analysis history record")
+    assert(analysisState().records[1].notes === firstAnalysisRecord.notes && analysisState().records[1].summary === firstAnalysisRecord.summary, "New analysis changed the prior analysis content")
+    assert(manager.document.querySelectorAll('.jdx-analysis-record').length < analysisState().records.length, "Repeated analyses were not grouped by PDF")
     annotations = attachment.getAnnotations()
     assert(JSON.stringify(annotations.map((annotation) => annotation.key).sort()) === JSON.stringify(annotationKeys), "Repeated analysis created or replaced annotations")
     report.checks.push("repeat-analysis-idempotency", "repeat-analysis-adds-history", "prior-analysis-history-preserved", "analysis-no-chat-session")
@@ -1535,6 +1618,7 @@ async function runHarness(config) {
     let popup = await showSelection()
     assert(!popup.querySelector('[data-jadense-action="interpretFigure"]'), "Figure action leaked into the text-selection toolbar")
     await screenshot("reader-selection-popup")
+    await verifySelectionPopupBounds(popup, "zh-CN")
     popup.querySelector('[data-jadense-action="quote"]').click()
     await waitFor(() => currentSession().sources.some((source) => source.kind === "quote" && source.text === first.annotationText && source.pageIndex === 0), "quoted source in local Chat")
     assert(manager.document.querySelectorAll(".jdx-chat-source-group").length === 1,
@@ -1874,15 +1958,16 @@ async function runHarness(config) {
     manager.document.getElementById("jadense-manager-nav-analysis").click()
     if (config.screenshots) {
       const savedAnalysisHistory = Zotero.Prefs.get("extensions.jadenseInZotero.paperAnalysisHistory")
+      const rowsBeforeClear = manager.document.querySelectorAll(".jdx-analysis-record").length
       Zotero.Prefs.clear("extensions.jadenseInZotero.paperAnalysisHistory")
       // 空状态使用真实刷新入口；这里只验证展示，不应触发 chrome unload 清理已注册的 Reader 窗口上下文。
       manager.document.getElementById("jadense-analysis-history-refresh").click()
       await waitFor(() => !manager.document.getElementById("jadense-manager-section-analysis").hidden
-        && manager.document.querySelector("#jadense-analysis-history .jdx-analysis-empty"), "fresh empty analysis history")
-      await screenshot("manager-analysis-history-empty", manager)
+        && manager.document.querySelector(".jdx-analysis-record"), "reference-only history remains readable")
+      await screenshot("manager-analysis-reference-only-history", manager)
       Zotero.Prefs.set("extensions.jadenseInZotero.paperAnalysisHistory", savedAnalysisHistory)
       manager.document.getElementById("jadense-analysis-history-refresh").click()
-      await waitFor(() => manager.document.querySelectorAll("#jadense-analysis-history .jdx-analysis-record").length === historyBeforeByokAnalysis,
+      await waitFor(() => manager.document.querySelectorAll("#jadense-analysis-history .jdx-analysis-record").length === rowsBeforeClear,
         "restored analysis history after empty-state visual")
     }
     manager.document.getElementById("jadense-analysis-tab-config").click()
@@ -2057,7 +2142,7 @@ async function runHarness(config) {
       assert(manager.__jadenseSmokeMarkupExecuted !== true && manager.wrappedJSObject?.__jadenseSmokeMarkupExecuted !== true, "Raw Markdown HTML executed in Manager")
       assert(!manager.document.querySelector('article[data-research="true"]')
         && analysisState().records?.length >= 3
-        && manager.document.querySelectorAll("#jadense-analysis-history .jdx-analysis-record").length >= 3,
+        && manager.document.querySelectorAll("#jadense-analysis-history .jdx-analysis-record").length >= 1,
       "Ordinary Chat leaked analysis cards or displaced independent analysis history")
     }
     verifyMarkdown()
@@ -2320,66 +2405,19 @@ async function runHarness(config) {
     Zotero.Prefs.set("extensions.jadenseInZotero.translationModel", JSON.stringify({ route: "jadense", selection: { kind: "model", modelId: "synthetic-platform-model" } }))
     const jobs = Zotero.__jadenseDocumentJobs
     assert(jobs, "Plugin lifecycle did not own the document jobs")
-    const documentReaderDoc = reader._iframeWindow.document
-    const fullButton = documentReaderDoc.querySelector('[data-jadense-action="fullTranslate"]')
-    assert(!documentReaderDoc.querySelector('[data-jadense-reader-tools="renderToolbar"] [data-jadense-action="translate"], [data-jadense-action-menu] [data-jadense-action="translate"]'), "Selection translation leaked into the full-document toolbar")
-    assert(fullButton, "Reader full translation entry is missing")
-    fullButton.click()
-    const fullWindow = await waitFor(() => documentReaderDoc.querySelector(".jdx-full-translation-window"), "full translation floating window")
-    await waitFor(() => { if (fullWindow.textContent.includes("Error") || fullWindow.textContent.includes("not defined")) throw new Error(fullWindow.textContent); return jobs.list("translation").length }, "full PDF task")
-    const fullTask = jobs.list("translation")[0]
-    await waitFor(() => fullTask.status === "running" || fullTask.status === "error" || fullTask.completed > 0, "full translation dispatch")
-    fullWindow.querySelector("header").querySelectorAll("button")[1].click()
-    assert(fullWindow.hidden, "Full translation did not hide")
-    await waitFor(() => fullTask.status !== "running", "hidden full translation completion")
-    assert(fullTask.status === "complete" && fullTask.completed === fullTask.total && fullTask.totalPages === 2, `Incomplete translation: ${JSON.stringify(fullTask)}`)
-    assert((await jobs.copy(fullTask.id)).includes("全文测试译文"), "Full copy lost translations")
-    fullButton.click()
-    await waitFor(() => !fullWindow.hidden && fullWindow.querySelector(".katex"), "full translation safe math rendering")
-    assert(jobs.list("translation").length === 1, "Opening an existing result created another task")
-    assert(!fullWindow.querySelector("details").open, "Original paragraphs were not collapsed")
-    await verifyFloatingWindow(fullWindow, "full-translation")
-    await reader.navigate({ pageIndex: 1 })
-    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, "PDF before full-text selection")
-    const translated = fullWindow.querySelector(".jdx-document-paragraph .jdx-markdown")
-    const range = documentReaderDoc.createRange(); range.selectNodeContents(translated)
-    documentReaderDoc.defaultView.getSelection().addRange(range)
-    assert(view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, "Selecting translated text navigated the PDF")
-    documentReaderDoc.defaultView.getSelection().removeAllRanges()
-    fullWindow.querySelector(".jdx-document-paragraph button").click()
-    await Zotero.Promise.delay(500)
-    report.fullReaderLocations = Zotero.Reader._readers.map(value => ({ itemID: value.itemID, closed: value._isTabClosed, page: value._internalReader?._primaryView?._iframeWindow?.PDFViewerApplication?.pdfViewer?.currentPageNumber }))
-    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 1, "full paragraph coordinate navigation", 10000)
-    assert(view._highlightedPosition?.pageIndex === 0 && view._highlightedPosition.rects.length > 0, "Native paragraph highlight is missing")
-    const clipboard = Zotero.getMainWindow().navigator.clipboard, previousWrite = clipboard.writeText
-    let copied = ""
-    try {
-      clipboard.writeText = async text => { copied = text }
-      fullWindow.querySelector(".jdx-document-controls").querySelectorAll("button")[1].click()
-      await waitFor(() => copied.includes("全文测试译文"), "full-copy clipboard invocation")
-    } finally { clipboard.writeText = previousWrite }
-    report.checks.push("full-paragraph-native-location", "translated-selection-no-navigation", "full-copy-clipboard-api")
-    const pdfFontBefore = view._iframeWindow.getComputedStyle(view._iframeWindow.document.body).fontSize
-    for (const theme of ["light", "dark"]) {
-      Zotero.Prefs.set("extensions.jadenseInZotero.theme", theme, true)
-      for (const size of [12, 13, 18, 24]) {
-        Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(size), true)
-        Zotero.Prefs.set("extensions.jadenseInZotero.translationWindowStyle", size >= 18 ? "glass" : "default", true)
-        await Zotero.Promise.delay(150)
-        assert(Math.abs(parseFloat(reader._iframeWindow.getComputedStyle(fullWindow).fontSize) - size) < .1, `Reader font ${size} did not update`)
-        const rect = fullWindow.getBoundingClientRect()
-        assert(rect.right <= reader._iframeWindow.innerWidth + 1 && rect.left >= 0 && rect.bottom <= reader._iframeWindow.innerHeight + 1, "Floating translation escaped viewport")
-        assert(fullWindow.querySelector(".jdx-document-pages").getBoundingClientRect().height >= 60, "Font settings left no readable translation viewport")
-        assert(fullWindow.querySelector("select[data-jdx-translation-style]").value === (size >= 18 ? "glass" : "default"), "Style selector did not follow the shared preference")
-        await screenshot(`full-translation-${theme}-${size}`)
-      }
+    if (config.translationPapers) {
+      await verifyTranslationPapers({ Zotero, jobs, directory: config.translationPapers, report, assert })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
-    assert(view._iframeWindow.getComputedStyle(view._iframeWindow.document.body).fontSize === pdfFontBefore, "Plugin font changed native PDF font")
-    Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", "13", true)
-    const min = fullWindow.querySelector("header").querySelectorAll("button")[0]; min.click()
-    assert(fullWindow.dataset.minimized === "true", "Minimize failed"); min.click()
-    fullWindow.querySelector("header").querySelectorAll("button")[1].click()
-    report.checks.push("full-pdf-native-all-pages", "full-pdf-hidden-completion", "full-pdf-existing-task-reuse", "full-pdf-safe-math", "full-pdf-copy", "font-12-13-18-24", "font-native-pdf-isolation", "full-window-themes-styles-minimize")
+    if (config.sidebarOnly) {
+      await verifyTranslationSidebar({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    let fullTask
+    if (!config.analysisOnly) {
+      const result = await verifyTranslationSidebar({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager })
+      fullTask = result.task
+    }
     await stage("references-042")
     const referenceAttachment = await Zotero.Attachments.importFromFile({ file: config.referencePdfPath, parentItemID: parent.id, contentType: "application/pdf" })
     Zotero.Prefs.set("extensions.jadenseInZotero.paperAnalysisModel", JSON.stringify({ route: "byok", modelId: "unconfigured-fixture" }))
@@ -2402,17 +2440,30 @@ async function runHarness(config) {
       assert(entries.length === 3 && entries.map(row => row.label).join(",") === "1,2,3", `Reference source coverage failed: ${JSON.stringify(entries)}`)
       assert(entries[0].verification === "verified" && entries[2].verification === "verified" && entries[1].verification === "unverified", "Reference verification statuses are wrong")
       assert(lookupCount === 1, "Successful DOI query was not cached")
+      const historyKey = "extensions.jadenseInZotero.paperAnalysisHistory"
+      const previousRecords = JSON.parse(Zotero.Prefs.get(historyKey) || '{"records":[]}').records
+      Zotero.Prefs.set(historyKey, JSON.stringify({ version: 1, records: [{ id: 'analysis-detail-fixture', createdAt: new Date().toISOString(), source: { ...task.source, authors: ['J. Smith', 'L. Chen'], title: 'Reliable scientific evidence: methods, findings and limitations', year: '2020', publicationTitle: 'Research Journal' }, referenceTaskID: task.id, summary: '## Research overview\n\nThis study examines **reliable scientific evidence** using a controlled comparison. The findings connect the observed treatment response to the design of the experiment.\n\n### Main findings\n\n- The controlled comparison identifies a consistent improvement.\n- The small sample limits generalization to other populations.\n\n### Reading perspective\n\nReview the source passages and methods before applying these results.', notes: '文献解析（AI 辅助，请核对原文）\n\n总体概述\nA controlled comparison identifies a consistent improvement.\n\n关键句与批注（2 条）\n\n【创新点】第 1 页\n原句：Our method improves the controlled outcome.\nAI 批注：The comparison provides evidence for a measurable improvement within the study design.\n\n【局限性】第 2 页\n原句：The sample is restricted to a single population.\nAI 批注：The sampling restriction limits external validity. Broader populations require independent evaluation.' }, ...previousRecords] }))
       const refReader = Zotero.Reader._readers.find(value => value.itemID === referenceAttachment.id)
       const refButton = refReader._iframeWindow.document.querySelector('[data-jadense-action="analyze"]')
       assert(refButton && !refReader._iframeWindow.document.querySelector('[data-jadense-action="references"]'), "References were not consolidated under literature analysis"); refButton.click()
       manager = await waitFor(findManager, "reference Manager")
-      manager.document.getElementById("jadense-analysis-tab-references").click()
+      // 先验证 Reader 失败仍保留已有结果，再重载按历史浏览，截图不带本次失败的临时状态。
+      await waitFor(() => manager.document.querySelector('.jdx-analysis-summary strong'), 'previous result after failed analysis')
+      const beforeDetailReload = manager.document
+      manager.location.reload()
+      await waitFor(() => manager.document !== beforeDetailReload && manager.receiveJadenseContext && manager.document.querySelector('.jdx-analysis-title'), 'history-only detail reload')
+      manager.document.getElementById('jadense-manager-nav-analysis').click()
+      Array.from(manager.document.querySelectorAll('.jdx-analysis-title')).find(button => button.textContent.includes('methods, findings')).click()
+      const referenceTab = await waitFor(() => manager.document.querySelector('.jdx-analysis-detail:not([hidden]) [id$="-tab-references"]'), "single-paper reference tab")
+      referenceTab.click()
       await waitFor(() => manager.document.querySelectorAll(".jdx-reference-row").length === 3, "reference result rows")
       const staticRow = manager.document.querySelector('[data-verification="unverified"]')
       assert(staticRow && !staticRow.querySelector("button,a,input,select,textarea,[tabindex]"), "Unverified reference exposes an interactive action")
       await screenshot("references-verified-and-static", manager)
       const rawBefore = entries.map(row => row.raw).join("\n")
-      await jobs.import(task.id, entries.map(row => row.id), parent.libraryID)
+      const siblingAttachment = await Zotero.Attachments.importFromFile({ file: config.pdfPath, parentItemID: parent.id, contentType: 'application/pdf' })
+      await verifyAnalysisDetails({ manager, Zotero, task, jobs, assert, waitFor, screenshot, report, language: config.appearanceLanguage || 'zh-CN', sibling: { itemID: siblingAttachment.id, libraryID: siblingAttachment.libraryID, itemKey: siblingAttachment.key } })
+      assert(lookupCount === 1, 'Browsing or importing redispatched reference verification')
       entries = await jobs.store.references(task.id)
       assert(entries.length === 3 && entries.map(row => row.raw).join("\n") === rawBefore, "Import changed the original reference list")
       assert(entries[0].imported?.itemID && entries[0].imported.itemID === entries[2].imported?.itemID && !entries[1].imported, `Verified-only import and duplicate detection failed: ${JSON.stringify(entries)}`)
@@ -2423,9 +2474,11 @@ async function runHarness(config) {
       manager.location.reload()
       await waitFor(() => manager.document !== previousDocument && manager.receiveJadenseContext && manager.document.querySelector(".jdx-reading-preferences"), "reloaded Manager action receiver")
       refButton.click()
-      manager.document.getElementById("jadense-analysis-tab-references").click()
+      const reloadedReferenceTab = await waitFor(() => manager.document.querySelector('.jdx-analysis-detail:not([hidden]) [id$="-tab-references"]'), "reloaded single-paper reference tab")
+      reloadedReferenceTab.click()
       await waitFor(() => manager.document.querySelectorAll(".jdx-reference-row").length === 3, "references after Manager reload")
       assert(findManagers().length === 1, "Reader opened a duplicate Manager after reload")
+      if (config.analysisOnly) { report.state = 'passed'; report.stage = 'complete'; await persist(); return }
       manager.document.getElementById("jadense-manager-nav-settings").click()
       manager.document.getElementById("jadense-settings-tab-general").click()
       const readingControls = manager.document.querySelector("#jadense-settings-panel-general .jdx-manager-settings-card .jdx-reading-preferences")
@@ -2443,9 +2496,9 @@ async function runHarness(config) {
       styleControl.querySelector(".jdx-select-trigger").click()
       styleControl.querySelectorAll('[role="option"]')[1].click()
       opacityInput.value = "65"; opacityInput.dispatchEvent(new manager.Event("input", { bubbles: true }))
-      await waitFor(() => nativeOpacity.value === "65" && fullWindow.querySelector("input[data-jdx-translation-opacity]").value === "65", "shared General opacity across native and floating windows")
+      await waitFor(() => nativeOpacity.value === "65", "shared General opacity across settings")
       assert(preferenceRoot.querySelector("[data-jdx-translation-opacity-value]").textContent === "65%"
-        && fullWindow.dataset.windowStyle === "glass", "Style or transparency label failed to synchronize")
+        , "Style or transparency label failed to synchronize")
       nativeOpacity.value = "30"; nativeOpacity.dispatchEvent(new preferences.Event("input", { bubbles: true }))
       await waitFor(() => opacityInput.value === "30" && readingControls.querySelector("[data-jdx-translation-opacity-value]").textContent === "30%", "native opacity updates Manager")
       for (const theme of ["light", "dark"]) {
@@ -2470,6 +2523,26 @@ async function runHarness(config) {
       report.checks.push("references-manager-reload-reuses-window", "font-shared-manager-native-preferences")
       report.checks.push("reading-preferences-integrated-general-card", "reading-preferences-styled-controls", "opacity-shared-manager-native-floating", "references-within-literature-analysis")
     } finally { Zotero.Translate.Search = NativeSearch }
+    await stage("semantic-full-translation")
+    const semanticAttachment = await Zotero.Attachments.importFromFile({ file: config.translationPdfPath, parentItemID: parent.id, contentType: "application/pdf" })
+    const semanticReader = await Zotero.Reader.open(semanticAttachment.id)
+    await semanticReader._initPromise
+    const semanticDoc = semanticReader._iframeWindow.document
+    const semanticButton = await waitFor(() => semanticDoc.querySelector('[data-jadense-action="fullTranslate"]'), "semantic full translation entry")
+    semanticButton.click()
+    await Zotero.Promise.delay(500)
+    report.semanticOpen = { itemID: semanticAttachment.id, tab: semanticReader.tabID, window: semanticReader._window.document.URL, text: semanticDoc.body.textContent.slice(-1800), tasks: jobs.list('translation').map(task => ({ itemID: task.source.itemID, status: task.status })), roots: Array.from(Zotero.getMainWindow().document.querySelectorAll('.jdx-reader-workspace')).map(root => ({ item: root.dataset.readerItem, text: root.textContent.slice(0, 700) })) }
+    const semanticTask = await waitFor(() => jobs.list("translation").find(row => row.source.itemID === semanticAttachment.id), "semantic task")
+    await waitFor(() => semanticTask.status === "complete", "semantic translation completion")
+    const sourcePage = await jobs.store.page(semanticTask.id, 0), nextPage = await jobs.store.page(semanticTask.id, 1)
+    report.semanticSource = { pages: [sourcePage, nextPage].map(page => ({ viewBox: page.viewBox, paragraphs: page.paragraphs, excludedLines: page.excludedLines })) }
+    assert(sourcePage.excludedLines.some(line => line.text.includes("Article")), "Native Article header was retained in translation")
+    const continued = sourcePage.paragraphs.find(row => row.text.startsWith("A complete scientific"))
+    assert(continued?.text.includes("ends with its complete conclusion.") && continued.locations.length === 2, "Native cross-column/page argument was split")
+    const semanticRoot = await waitFor(() => Zotero.getMainWindow().document.querySelector(`.jdx-reader-workspace[data-reader-item="${semanticAttachment.id}"] .jdx-reading-body`), "semantic continuous prose")
+    assert(!semanticRoot.querySelector('button,details'), "Semantic prose contains source controls")
+    await screenshot("semantic-full-complete", Zotero.getMainWindow())
+    report.checks.push("full-native-header-removal", "full-native-cross-column-page-paragraph", "full-semantic-continuous-layout")
     report.assistantMessages = completed().length
     if (config.documentRestart) {
       // 只修改合成任务：保留前面成果，模拟最后一个请求尚未完成时进程退出。
@@ -2486,7 +2559,7 @@ async function runHarness(config) {
     report.error = `${String(error)}\n${error?.stack || ""}`
     report.managerStatus = manager?.document?.getElementById("jadense-chat-status")?.textContent ?? ""
     report.analysisStatus = manager?.document?.getElementById("jadense-analysis-status")?.textContent ?? ""
-    report.documentUI = reader?._iframeWindow?.document?.querySelector(".jdx-full-translation-window")?.textContent
+    report.documentUI = Zotero.getMainWindow()?.document.querySelector(".jdx-reader-workspace")?.textContent
     report.analysisUi = manager ? {
       sectionHidden: manager.document.getElementById("jadense-manager-section-analysis")?.hidden,
       stopHidden: manager.document.getElementById("jadense-analysis-stop")?.hidden,
@@ -2517,8 +2590,11 @@ async function writeCompanion(extensionsDir, config) {
   }))
   zip.file("bootstrap.js", [
     `const SMOKE_CONFIG = ${JSON.stringify(config)};`,
+    verifyAnalysisDetails.toString(),
+    verifyTranslationSidebar.toString(),
+    verifyTranslationPapers.toString(),
     runHarness.toString(),
-    "function startup() { void runHarness(SMOKE_CONFIG).catch(error => Zotero.logError(error)); }",
+    "function startup() { void runHarness(SMOKE_CONFIG, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers).catch(error => Zotero.logError(error)); }",
     "function shutdown() {}",
     "function install() {}",
     "function uninstall() {}",
@@ -2577,6 +2653,7 @@ async function main() {
   const reportPath = path.join(smokeRoot, "research-report.json")
   const pdfPath = path.join(smokeRoot, "synthetic-research.pdf")
   const referencePdfPath = path.join(smokeRoot, "synthetic-references.pdf")
+  const translationPdfPath = path.join(smokeRoot, "synthetic-translation.pdf")
   const extensionsDir = path.join(profileDir, "extensions")
   const stub = await startStub()
   let child
@@ -2588,11 +2665,13 @@ async function main() {
     await mkdir(dataDir, { recursive: true })
     await writeFile(pdfPath, createResearchFixturePdf())
     await writeFile(referencePdfPath, createResearchFixturePdf(true))
+    await writeFile(translationPdfPath, createResearchFixturePdf(false, true))
     await copyFile(upgradeFrom ? path.resolve(upgradeFrom) : artifact, path.join(extensionsDir, `${pluginID}.xpi`))
     const upgradeXpi = upgradeFrom ? path.join(smokeRoot, "upgrade.xpi") : undefined
     if (upgradeXpi) await copyFile(artifact, upgradeXpi)
     const companionConfig = {
-      pluginID, profileDir, dataDir, pdfPath, referencePdfPath, reportPath, origin: stub.origin, upgradeXpi,
+      pluginID, profileDir, dataDir, pdfPath, referencePdfPath, translationPdfPath, reportPath, origin: stub.origin, upgradeXpi,
+      translationPapers: argValue(argv, '--translation-papers') ? path.resolve(argValue(argv, '--translation-papers')) : undefined,
       token: SYNTHETIC_TOKEN, uploadFolderId: UPLOAD_FOLDER_ID,
       sentences: PDF_SENTENCES, translationMarker: TRANSLATION_MARKER, byokMarker: BYOK_MARKER,
       figureCaption: FIGURE_CAPTION, figureMarker: FIGURE_MARKER,
@@ -2604,7 +2683,7 @@ async function main() {
         user: createMarkdownFixture("user", stub.origin),
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
-      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [

@@ -2,16 +2,21 @@
 import { uiText } from "./ui-preferences"
 
 export type PdfRect = [number, number, number, number]
-export type PdfLine = { id: string; text: string; pageIndex: number; pageLabel: string; rects: PdfRect[]; paragraphEnd?: boolean }
-export type PdfParagraph = PdfLine & { lineIDs: string[] }
+export type PdfLine = { id: string; text: string; pageIndex: number; pageLabel: string; rects: PdfRect[]; paragraphEnd?: boolean; fontSize?: number }
+export type PdfParagraph = PdfLine & { lineIDs: string[]; heading?: boolean; locations?: Array<{ pageIndex: number; pageLabel: string; rects: PdfRect[] }> }
 export type DocumentIdentity = { itemID: number; libraryID: number; itemKey: string; title: string; modificationTime?: number }
-export type DocumentPage = { pageIndex: number; pageLabel: string; paragraphs: PdfParagraph[]; lines: PdfLine[]; warning?: string }
+export type DocumentPage = { pageIndex: number; pageLabel: string; paragraphs: PdfParagraph[]; lines: PdfLine[]; warning?: string; layoutWarning?: string; viewBox?: number[]; excludedLines?: PdfLine[]; continuationFrom?: number[] }
 export type PdfTextDocument = { source: DocumentIdentity; pages: DocumentPage[] }
-type Char = { c: string; rect?: number[]; inlineRect?: number[]; ignorable?: boolean; spaceAfter?: boolean; lineBreakAfter?: boolean; paragraphBreakAfter?: boolean }
+type Char = { c: string; rect?: number[]; inlineRect?: number[]; fontSize?: number; ignorable?: boolean; spaceAfter?: boolean; lineBreakAfter?: boolean; paragraphBreakAfter?: boolean }
 type Item = { id: number; libraryID: number; key: string; deleted?: boolean; parentItem?: Item; getField?(key: string): unknown; isPDFAttachment?(): boolean; attachmentModificationTime?: number | Promise<number | null> }
 type View = { initializedPromise?: Promise<unknown>; _ensureBasicPageData?(page: number): Promise<void>; _pdfPages?: Record<number, { chars: Char[]; viewBox?: number[] }>; _iframeWindow?: { PDFViewerApplication?: { pdfDocument?: { numPages: number; getPageLabels?(): Promise<string[] | null> } } } }
 type Reader = { itemID: number; _initPromise?: Promise<unknown>; _iframeWindow?: Window; navigate?(location: unknown): unknown; _internalReader?: { _primaryView?: View; navigate?(location: unknown, options?: unknown): unknown } }
 export type DocumentHost = { Items?: { get?(id: number): unknown }; Reader?: { _readers?: Reader[]; open?(id: number, location?: unknown): Promise<Reader | undefined> } }
+
+/** Zotero 关闭窗口后可能暂留 Reader/Xray 对象；一个失效窗口不能阻断其他附件。 */
+export function isLiveDocumentReader(reader: { _iframeWindow?: { closed?: boolean }; _isTabClosed?: boolean }) {
+  try { return !reader._isTabClosed && !reader._iframeWindow?.closed } catch { return false }
+}
 
 export function checkCancelled(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException(uiText("任务已暂停", "Task paused"), "AbortError")
@@ -65,16 +70,28 @@ export function textPage(chars: Char[], pageIndex: number, pageLabel: string): D
   const lines: PdfLine[] = []
   let text = "", start = 0
   let bounds: PdfRect | undefined
+  let sizes: number[] = [], lastRect: PdfRect | undefined
   const flush = (end: boolean) => {
-    if (text.trim()) lines.push({ id: `p${pageIndex}-c${start}`, text: text.trim(), pageIndex, pageLabel, rects: bounds ? [bounds] : [], paragraphEnd: end })
-    text = ""; bounds = undefined
+    sizes.sort((a, b) => a - b)
+    if (text.trim()) lines.push({ id: `p${pageIndex}-c${start}`, text: text.trim(), pageIndex, pageLabel, rects: bounds ? [bounds] : [], paragraphEnd: end, ...(sizes.length ? { fontSize: sizes[Math.floor(sizes.length / 2)] } : {}) })
+    text = ""; bounds = undefined; sizes = []; lastRect = undefined
   }
   chars.forEach((char, index) => {
-    if (char.ignorable || typeof char.c !== "string") return
+    if (typeof char.c !== "string") return
+    if (char.ignorable) {
+      // PDF.js 会把行尾连字符标为 ignorable，但该字符仍可能携带唯一的换行标记。
+      if (text && /[-‐\u00ad]/u.test(char.c)) text += "\u00ad"
+      if (char.lineBreakAfter || char.paragraphBreakAfter) flush(Boolean(char.paragraphBreakAfter))
+      return
+    }
+    const rect = rectangle(char.inlineRect) ? char.inlineRect : char.rect
+    // 字符级几何补足缺失的换行标记，不让数行文字聚成一个“巨大字号”的框。
+    if (bounds && lastRect && rectangle(rect) && rect[0] < lastRect[0] - 2 && rect[0] < bounds[0] + Math.max(20, (bounds[2] - bounds[0]) / 2)
+      && Math.abs(rect[1] - lastRect[1]) > Math.max(rect[3] - rect[1], lastRect[3] - lastRect[1]) * .7) flush(false)
     if (!text) start = index
     text += char.c
-    const rect = rectangle(char.inlineRect) ? char.inlineRect : char.rect
     if (rectangle(rect)) bounds = bounds ? [Math.min(bounds[0], rect[0]), Math.min(bounds[1], rect[1]), Math.max(bounds[2], rect[2]), Math.max(bounds[3], rect[3])] : [...rect]
+    if (rectangle(rect)) { lastRect = rect; sizes.push(typeof char.fontSize === "number" && char.fontSize > 0 ? char.fontSize : rect[3] - rect[1]) }
     if (char.paragraphBreakAfter || char.lineBreakAfter || char.c.includes("\n")) flush(Boolean(char.paragraphBreakAfter))
     else if (char.spaceAfter) text += " "
   })
@@ -101,7 +118,7 @@ export async function readTextDocument(host: DocumentHost, itemID: number, signa
   const item = await checkedItem(host, itemID)
   const source: DocumentIdentity = { itemID, libraryID: item.libraryID, itemKey: item.key, title: String(item.parentItem?.getField?.("title") || item.getField?.("title") || "PDF") }
   try { const value = await item.attachmentModificationTime; if (typeof value === "number") source.modificationTime = value } catch { /* 文件版本不可用时仍允许提取。 */ }
-  const reader = host.Reader?._readers?.find(row => row.itemID === itemID) ?? await host.Reader?.open?.(itemID)
+  const reader = host.Reader?._readers?.find(row => isLiveDocumentReader(row) && row.itemID === itemID) ?? await host.Reader?.open?.(itemID)
   await reader?._initPromise
   const view = reader?._internalReader?._primaryView
   await view?.initializedPromise
@@ -119,6 +136,7 @@ export async function readTextDocument(host: DocumentHost, itemID: number, signa
       const data = view._pdfPages[pageIndex]
       if (!Array.isArray(data?.chars)) throw new Error("missing page text")
       page = textPage(data.chars, pageIndex, pageLabel)
+      if (rectangle(data.viewBox)) page.viewBox = [...data.viewBox]
     } catch { page = { pageIndex, pageLabel, lines: [], paragraphs: [], warning: uiText("本页文字读取失败", "Could not read this page") } }
     pages.push(page)
     onPage?.(page, pdf.numPages)
@@ -129,10 +147,11 @@ export async function readTextDocument(host: DocumentHost, itemID: number, signa
 }
 
 /** 导航权来自已复核附件与本地坐标；无矩形时仅按物理页定位。 */
-export async function navigateDocument(host: DocumentHost, source: DocumentIdentity, location: { pageIndex: number; rects?: PdfRect[] }) {
+export async function navigateDocument(host: DocumentHost, source: DocumentIdentity, location: { pageIndex: number; rects?: PdfRect[] }, readerDocument?: Document) {
   await validateDocument(host, source)
   const target = location.rects?.length ? { position: { pageIndex: location.pageIndex, rects: location.rects } } : { pageIndex: location.pageIndex }
-  const reader = await host.Reader?.open?.(source.itemID, { pageIndex: location.pageIndex })
+  const reader = (readerDocument && host.Reader?._readers?.find(value => isLiveDocumentReader(value) && value.itemID === source.itemID && value._iframeWindow?.document === readerDocument))
+    || await host.Reader?.open?.(source.itemID, { pageIndex: location.pageIndex })
   await reader?._initPromise
   const win = reader?._iframeWindow as (Window & typeof globalThis & { wrappedJSObject?: Window & typeof globalThis }) | undefined
   const scope = win?.wrappedJSObject ?? win

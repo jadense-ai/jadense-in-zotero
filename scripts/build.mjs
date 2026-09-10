@@ -70,7 +70,7 @@ await build({
 // Chrome 样式缓存按资源地址复用；内容摘要让热升级和同版本重建都加载匹配的 CSS/JS。
 const managerHtmlPath = path.join(buildDir, "content/manager.xhtml")
 let managerHtml = await readFile(managerHtmlPath, "utf8")
-for (const fileName of ["manager.css", "manager.js"]) {
+for (const fileName of ["manager.css", "ui.css", "analysis.css", "manager.js"]) {
   const revision = sha256(await readFile(path.join(buildDir, "content", fileName))).slice(0, 12)
   managerHtml = managerHtml.replace(`"${fileName}"`, `"${fileName}?v=${revision}"`)
 }
