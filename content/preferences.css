@@ -518,3 +518,15 @@
 #jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--jdx-pref-muted); }
 #jadense-in-zotero-preferences-pane .jdx-reading-preferences-status { margin: 0; color: var(--jdx-pref-error); font-size: .92em; }
 #jadense-in-zotero-preferences-pane .jdx-reading-preferences-status:empty { display: none; }
+
+/* 参考文献 AI 设置与本地恢复：独立功能行，继承现有明暗主题。 */
+.jdx-reference-ai-setting { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 16px 0; border-top: 1px solid var(--jdx-line, var(--jdx-pref-line)); cursor: pointer; }
+.jdx-reference-ai-setting > input { width: 16px; height: 16px; margin: 0; accent-color: #16cf8c; }
+.jdx-reference-ai-setting > span { font-weight: 600; }
+.jdx-reference-ai-setting > p { grid-column: 2; margin: 0; color: var(--jdx-muted, var(--jdx-pref-muted)); font-size: 12px; line-height: 1.6; }
+.jdx-temporary-recovery { padding: 12px 0; border-top: 1px solid var(--jdx-line); }
+.jdx-temporary-recovery button { padding: 7px 10px; border: 1px solid var(--jdx-line-strong); border-radius: 5px; color: var(--jdx-text); background: var(--jdx-surface); font: inherit; cursor: pointer; }
+.jdx-temporary-recovery button:disabled { opacity: .6; cursor: default; }
+.jdx-temporary-recovery button:focus-visible { outline: 2px solid #16cf8c; outline-offset: 2px; }
+.jdx-temporary-recovery textarea { box-sizing: border-box; display: block; width: 100%; min-height: 180px; margin-block: 10px; padding: 10px; border: 1px solid var(--jdx-line); background: var(--jdx-surface); color: var(--jdx-text); font: inherit; }
+.jdx-temporary-recovery textarea[hidden] { display: none; }

@@ -325,6 +325,7 @@ async function startup(data: BootstrapData = {}) {
 
   try {
     registeredSyncPanelID = registerSyncPanel(Zotero, pluginContext, {
+      openTranslationHistory: () => { openManager("translations") },
       openManager: () => {
         openManager()
       },

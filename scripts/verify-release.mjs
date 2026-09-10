@@ -78,6 +78,8 @@ check(bundledFiles.includes("content/preferences.css"), "XPI is missing Preferen
 check(bundledFiles.includes("content/preferences.js"), "XPI is missing Preferences pane script.")
 check(bundledFiles.includes("content/manager.xhtml"), "XPI is missing Jadense Manager XHTML.")
 check(bundledFiles.includes("content/manager.css"), "XPI is missing Jadense Manager CSS.")
+check(bundledFiles.includes("content/ui.css"), "XPI is missing shared UI CSS.")
+check(bundledFiles.includes("content/analysis.css"), "XPI is missing literature analysis CSS.")
 check(bundledFiles.includes("content/manager.js"), "XPI is missing Jadense Manager script.")
 check(bundledFiles.includes("locale/en-US/jadense-in-zotero.ftl"), "XPI is missing en-US Fluent strings.")
 check(bundledFiles.includes("locale/zh-CN/jadense-in-zotero.ftl"), "XPI is missing zh-CN Fluent strings.")
@@ -107,7 +109,7 @@ for (const fileName of bundledFiles) {
 const managerEntry = zip.file("content/manager.xhtml")
 if (managerEntry) {
   const managerHtml = await managerEntry.async("string")
-  for (const [attribute, fileName] of [["href", "manager.css"], ["src", "manager.js"]]) {
+  for (const [attribute, fileName] of [["href", "manager.css"], ["href", "ui.css"], ["href", "analysis.css"], ["src", "manager.js"]]) {
     const resource = zip.file(`content/${fileName}`)
     if (!resource) continue
     const revision = sha256(await resource.async("nodebuffer")).slice(0, 12)

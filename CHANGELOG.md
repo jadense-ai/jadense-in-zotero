@@ -1,5 +1,30 @@
 # 更新说明 / Changelog
 
+
+## 0.4.3 — 2026-09-11
+
+### 简体中文
+
+- 全文译文以连续文档呈现在阅读器侧栏，提供目录、阅读/定位模式、独立字号与行距、阅读位置恢复，并支持独立 PDF 窗口。
+- 优化跨页完整段落提取与翻译批次，改善换行和页边编号干扰；旧译文保留，回看不会自动重新翻译。
+- 文献解析新增论文详情，将总结、笔记与参考文献放在同一处，保留搜索、筛选和导入选择。
+- 参考文献批量 AI 默认关闭，支持明确开启、暂停和继续；业务拒绝后停止后续批次。
+- 攻玉请求支持持久请求身份与结果恢复；BYOK 保留本地完成结果，不自动重发未确认请求。修复大字号选文工具栏溢出。
+
+从 GitHub 0.4.2 可直接安装更新，保留设置和历史；旧 .com 身份需先禁用再安装。攻玉 AI 需要服务端临时执行 V1 协议，旧服务端会提示升级；本客户端发布不代表生产服务已部署。BYOK 独立可用。GitHub 发布不推进官网自动更新。
+
+### English
+
+- Read full translations as a continuous document in the reader sidebar, with a table of contents, Reading/Locate modes, independent typography, restored position, and detached PDF-window support.
+- Improve complete-paragraph extraction and batching across pages, including line breaks and margin-number handling. Existing translations remain readable without automatic regeneration.
+- Open paper details with summaries, notes, and references together, retaining search, filters, and import selections.
+- Batched reference AI is off by default, with explicit opt-in, pause/resume, and stopping after a business rejection.
+- Recover Jadense results using persistent request identities. BYOK keeps completed local results and never automatically resends uncertain requests. Fix selection-toolbar overflow at larger font sizes.
+
+Install over GitHub 0.4.2 to retain settings and history. Disable legacy .com builds first. Jadense AI requires the temporary-execution V1 server protocol; older servers show an upgrade message. This client release does not establish production server readiness. BYOK remains independent. Website automatic updates are unchanged.
+
+Validation and final package checksum: [v0.4.3 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.3).
+
 ## 0.4.2 — 2026-09-10
 
 [简体中文](#release-042-zh) · [English](#release-042-en)

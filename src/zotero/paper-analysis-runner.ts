@@ -3,7 +3,8 @@ import { uiText } from "@/zotero/ui-preferences"
  * 独立文献解析任务协调器。
  * 上游接收 Reader 附件 ID 与独立模型偏好，下游只写解析历史和 Zotero 原生批注；不接触 Chat 存储。
  */
-import { ByokChatClient, type ByokConfig } from "@/chat/byok-chat"
+import type { ByokConfig } from "@/chat/byok-chat"
+import { ReliableByokChatClient as ByokChatClient } from "@/chat/reliable-byok-chat"
 import {
   appendPaperAnalysisRecord,
   MAX_ANALYSIS_NOTES_LENGTH,
@@ -11,7 +12,8 @@ import {
   type PaperAnalysisRecord,
 } from "@/chat/paper-analysis-history"
 import { buildPaperAnalysisPrompt, formatPaperAnalysis, parsePaperAnalysis } from "@/chat/paper-analysis"
-import { TemporaryChatClient, type TemporaryChatSendInput } from "@/chat/temporary-chat"
+import type { TemporaryChatSendInput } from "@/chat/temporary-chat"
+import { ReliableTemporaryChatClient as TemporaryChatClient } from "@/chat/reliable-temporary-chat"
 import { featureModelState, type PaperAnalysisModelSelection } from "./ai-settings"
 import { readPdfForAnalysis, saveAnalysisAnnotations, type PdfAnalysisSnapshot, type SavedAnalysisAnnotations, type ZoteroReaderHost } from "./reader-tools"
 import { readConnection, type ZoteroLike } from "./runtime"
@@ -105,6 +107,7 @@ export async function runIndependentPaperAnalysis(input: {
   onProgress?: (message: string) => void
   recordID?: string
   createdAt?: string
+  referenceTaskID?: string
   services?: Partial<PaperAnalysisRunnerServices>
 }): Promise<PaperAnalysisRunResult> {
   const model = paperAnalysisModelState(input.zotero, input.invalidJadenseToken)
@@ -135,6 +138,8 @@ export async function runIndependentPaperAnalysis(input: {
     response = await services.send({
       clientRequestId: taskId("analysis-request"),
       conversationId: requestID,
+      taskId: requestID,
+      operationId: requestID,
       messages: [{ id: taskId("analysis-prompt"), role: "user", text: prompt }],
       sources: [],
       signal: input.signal,
@@ -157,6 +162,7 @@ export async function runIndependentPaperAnalysis(input: {
 
   const record: PaperAnalysisRecord = {
     id: requestID,
+    ...(input.referenceTaskID ? { referenceTaskID: input.referenceTaskID } : {}),
     createdAt: input.createdAt ?? new Date().toISOString(),
     source: {
       itemID: snapshot.itemID,

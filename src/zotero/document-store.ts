@@ -2,11 +2,13 @@
 import type { ReferenceEntry } from "@/chat/reference-list"
 import { normalizeTranslationLanguages, type TranslationLanguages } from "@/chat/translation-languages"
 import type { DocumentIdentity, DocumentPage } from "./pdf-document"
+import type { TranslationReadingIndex, TranslationReadingPosition } from "./translation-reading"
 
 export type DocumentTask = {
+  referenceAI?: { unavailable?: boolean; pausedReason?: string; batches: Array<{ id: string; requestId: string; previousRequestId?: string; entryIds: string[]; prompt: string; model: string; status: 'pending' | 'complete' | 'failed' }> }
   version: 1; id: string; kind: "translation" | "references"; source: DocumentIdentity; createdAt: string
   status: "running" | "paused" | "complete" | "partial" | "error"; totalPages: number; completed: number; total: number
-  languages?: TranslationLanguages; models: string[]; warnings: string[]; storageWarning?: boolean; error?: string
+  languages?: TranslationLanguages; models: string[]; warnings: string[]; storageWarning?: boolean; error?: string; extractionVersion?: number
 }
 export type TranslationPage = DocumentPage & { translations: Record<string, string>; pieces: Array<{ id: string; paragraphID: string; text: string }> }
 export type TaskIO = {
@@ -60,6 +62,17 @@ export class DocumentStore {
       && value.translations && typeof value.translations === "object" ? value : null
   }
   savePage(id: string, page: TranslationPage) { return this.write(id, `page-${page.pageIndex}.json`, page) }
+  saveReadingIndex(id: string, index: TranslationReadingIndex) { return this.write(id, "reading.json", index) }
+  async readingIndex(id: string): Promise<TranslationReadingIndex | null> {
+    const value = await this.read<TranslationReadingIndex>(id, "reading.json")
+    return value?.version === 1 && Array.isArray(value.blocks) && value.blocks.every(block => block && typeof block.id === "string"
+      && Number.isSafeInteger(block.pageIndex) && typeof block.paragraphID === "string" && Array.isArray(block.pieceIDs)) ? value : null
+  }
+  saveReadingPosition(id: string, position: TranslationReadingPosition) { return this.write(id, "reading-position.json", position) }
+  async readingPosition(id: string): Promise<TranslationReadingPosition | null> {
+    const value = await this.read<TranslationReadingPosition>(id, "reading-position.json")
+    return value && typeof value.blockID === "string" && Number.isFinite(value.offset) ? value : null
+  }
   async references(id: string) { const value = await this.read<ReferenceEntry[]>(id, "references.json"); return Array.isArray(value) ? value.filter(row => row && typeof row.raw === "string" && Array.isArray(row.lines) && row.fields) : [] }
   saveReferences(id: string, entries: ReferenceEntry[]) { return this.write(id, "references.json", entries) }
   async list(): Promise<DocumentTask[]> {
@@ -78,6 +91,9 @@ export class DocumentStore {
         task.completed = Number.isSafeInteger(task.completed) && task.completed >= 0 ? task.completed : 0
         if (!["running", "paused", "complete", "partial", "error"].includes(task.status)) task.status = "error"
         if (task.kind === "translation") task.languages = normalizeTranslationLanguages(task.languages)
+        if (task.referenceAI && (!Array.isArray(task.referenceAI.batches) || !task.referenceAI.batches.every(batch => batch && typeof batch.id === 'string' && typeof batch.requestId === 'string' && typeof batch.prompt === 'string' && typeof batch.model === 'string' && Array.isArray(batch.entryIds) && batch.entryIds.every(id => typeof id === 'string') && ['pending','complete','failed'].includes(batch.status)))) {
+          task.referenceAI = { unavailable: true, pausedReason: 'AI 批次身份记录损坏；原文与非 AI 核验仍可使用。', batches: [] }
+        }
         result.push(task)
       }
     }
@@ -91,7 +107,7 @@ export class DocumentStore {
       try { paths = await this.io.getChildren(this.path(id)) } catch { /* 未落盘记录没有目录。 */ }
         for (const path of paths.sort((a, b) => Number(this.paths!.filename(a) === "task.json") - Number(this.paths!.filename(b) === "task.json"))) {
           const name = this.paths.filename(path)
-          if (/^(task|references|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
+          if (/^(task|references|reading|reading-position|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
         }
     }
     for (const key of this.cache.keys()) if (key.startsWith(`${id}/`)) this.cache.delete(key)

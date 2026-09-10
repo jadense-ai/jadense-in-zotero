@@ -24,6 +24,9 @@ export type TemporaryChatClientOptions = {
 }
 
 export type TemporaryChatSendInput = {
+  taskId?: string
+  operationId?: string
+  previousRequestId?: string
   clientFeature?: "chat" | "translation" | "analysis" | "figure"
   clientRequestId: string
   conversationId: string

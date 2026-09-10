@@ -149,7 +149,9 @@ function installPreviewHost() {
       getByLibraryAndKey: (libraryID, key) => [...items.values()].find((item) => item.libraryID === libraryID && item.key === key)
         || annotations.find((entry) => entry.key === key),
     },
-    Libraries: { userLibraryID: 1 },
+    Libraries: { userLibraryID: 1, getAll: () => [{ libraryID: 1, name: "我的文库", editable: true }], get: id => ({ libraryID: id, editable: id === 1 }) },
+    Collections: { getByLibrary: () => [{ id: 1, name: "Evidence review", libraryID: 1 }], get: id => id === 1 ? { libraryID: 1 } : undefined },
+    launchURL: url => { nativeAction = `打开链接 ${url}`; update() },
     getMainWindow: () => window,
     getActiveZoteroPane: () => ({
       getSelectedItems: () => selectedIDs.map((id) => items.get(id)).filter(Boolean),
@@ -192,7 +194,29 @@ function installPreviewHost() {
     return null
   }
   window.Zotero = Zotero
-  window.JadenseInZotero = { zotero: Zotero, section: "chat", pluginID: "jadense-research-preview-fixture" }
+  window.JadenseInZotero = { zotero: Zotero, section: new URLSearchParams(location.search).get("section") || "chat", pluginID: "jadense-research-preview-fixture" }
+  // 可复现的详情验收数据；只在显式 fixture 参数下建立浏览器内存文件系统。
+  if (new URLSearchParams(location.search).has("analysis-fixture")) {
+    const taskID = "10000000-0000-4000-8000-000000000001"
+    const source = { itemID: pdf.id, itemKey: pdf.key, libraryID: 1, title: paper.getField("title"), authors: ["Ada Example", "Lin Chen"], year: "2026", publicationTitle: "Synthetic Research Review", doi: "10.0000/fixture.1" }
+    const notes = "文献解析（AI 辅助，请核对原文）\n\n总体概述\n这是一组用于验收的合成结果。证据图将论点与句子级支持关系关联起来。\n\n研究方法\n先检索候选原句，再结合上下文验证证据与论点的对应关系。\n\n核心论点\n保持证据可追溯能够帮助读者核对结论边界。\n\n关键句与批注（2 条）\n\n【关键证据】第 1 页\n原句：The evidence graph improves retrieval precision from 72 percent to 86 percent.\nAI 批注：这一数值比较支持检索质量的改善。**这里的数字仅为合成测试数据**，不代表真实模型评测。\n\n【局限性】第 2 页\n原句：The study is limited to synthetic documents.\nAI 批注：评估材料的范围限制了结论的外推。后续仍需在真实文献和多语种材料上验证。"
+    preferences["extensions.jadenseInZotero.paperAnalysisHistory"] = JSON.stringify({ version: 1, records: [
+      { id: "analysis-demo-new", createdAt: "2026-09-10T06:30:00Z", source, summary: "这篇模拟研究提出一种**句子级证据图**，将文献中的核心论点与原文依据关联。\n\n方法包含候选句检索和上下文核验两个阶段，评估覆盖 120 篇合成文档。示例中的检索精度由 72% 提升至 86%，但这一结果仅用于验证界面的数值与层级展示。\n\n### 阅读判断\n\n- 证据链清楚，便于回到原文核对。\n- 样本全部来自合成材料，外推范围有限。\n- 后续需要验证多语种与扫描文档场景。", notes, referenceTaskID: taskID },
+      { id: "analysis-demo-old", createdAt: "2026-09-09T06:30:00Z", source, summary: "旧解析不会单独占据历史列表。" },
+      { id: "analysis-demo-second", createdAt: "2026-09-08T06:30:00Z", source: { ...source, itemID: 6, itemKey: secondPdf.key, title: secondPaper.getField("title") }, summary: "另一篇独立文献的结果。用于验证快速切换时不会混入上一篇的参考文献。", warnings: ["部分结果已恢复，尚未写入原生批注。"] },
+    ] })
+    const references = Array.from({ length: 18 }, (_, order) => {
+      const fields = { title: ["Sentence-level evidence retrieval in scientific documents", "A framework for structured literature review", "Reasoning with attributable sources"][order % 3], authors: ["Smith, J.", "Chen, L."], year: String(2020 + order % 6), doi: `10.0000/fixture.reference.${order}`, url: `https://example.org/references/${order}` }
+      const verification = order % 4 === 1 ? "unverified" : "verified"
+      return { id: `ref-${order}`, order, label: String(order + 1), raw: `[${order + 1}] ${fields.authors.join("; ")} (${fields.year}). ${fields.title}. Journal of Research Methods, 12(3), 45–62. https://doi.org/${fields.doi}`, fields, verification, ...(verification === "verified" ? { verified: fields } : { reason: "未找到足够的 DOI 匹配证据" }), uncertain: false, lines: [{ pageIndex: 1, rects: [[48, 100, 500, 120]] }] }
+    })
+    const task = { version: 1, id: taskID, kind: "references", source, createdAt: "2026-09-10T06:30:00Z", status: "complete", totalPages: 2, completed: references.length, total: references.length, models: [], warnings: [] }
+    const files = new Map([[`/fixture/jadense-document-tasks/${taskID}/task.json`, JSON.stringify(task)], [`/fixture/jadense-document-tasks/${taskID}/references.json`, JSON.stringify(references)]])
+    window.PathUtils = { profileDir: "/fixture", join: (...parts) => parts.join("/"), filename: path => path.split("/").at(-1) }
+    window.IOUtils = { makeDirectory: async () => {}, readUTF8: async path => { if (!files.has(path)) throw new Error("missing fixture"); return files.get(path) }, writeUTF8: async (path, text) => { files.set(path, text) }, getChildren: async path => [...new Set([...files.keys()].filter(key => key.startsWith(path + "/")).map(key => path + "/" + key.slice(path.length + 1).split("/")[0]))], remove: async path => files.delete(path) }
+    Zotero.Search = class { addCondition(_field, _condition, value) { this.doi = value } async search() { return [...items.values()].filter(item => item.getField("DOI") === this.doi).map(item => item.id) } }
+    Zotero.Item = class { constructor() { this.fields = {}; this.id = 600 + items.size; this.key = `IM${this.id}` } setField(key, value) { this.fields[key] = value } getField(key) { return this.fields[key] || "" } setCreators() {} setCollections() {} async saveTx() { items.set(this.id, this) } }
+  }
   const nativeFetch = window.fetch.bind(window)
   window.fetch = async (input, options = {}) => {
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href)
@@ -346,6 +370,8 @@ async function serveChat(request, response) {
 }
 
 const assets = new Map([
+  ["/ui.css", ["ui.css", "text/css; charset=utf-8"]],
+  ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],
   ["/manager.js", ["manager.js", "text/javascript; charset=utf-8"]],
   ["/manager.css", ["manager.css", "text/css; charset=utf-8"]],
   ["/icons/logo-padded.png", ["icons/logo-padded.png", "image/png"]],

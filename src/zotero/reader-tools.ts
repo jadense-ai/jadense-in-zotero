@@ -723,8 +723,15 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 :is([data-jadense-reader-tools], .jadense-reader-actions) svg {width:16px;height:16px;flex:none;pointer-events:none;}
 [data-jadense-reader-tools] .jadense-reader-brand svg {width:20px;height:20px;}
 [data-jadense-reader-tools="renderTextSelectionPopup"] {
+  display:flex;flex-wrap:wrap;width:100%;max-width:100%;min-width:0;
   margin-top:4px;padding:3px;background:var(--jdx-reader-surface,transparent);
 }
+/* 选文插槽受宿主弹窗宽度限制；大字号或长标签换行，不撑宽原生颜色/批注工具。 */
+[data-jadense-reader-tools="renderTextSelectionPopup"] > button {
+  flex:1 1 auto;max-width:100%;height:auto;min-height:28px;padding:5px 6px;
+  white-space:normal;line-height:1.3;
+}
+[data-jadense-reader-tools="renderTextSelectionPopup"] .jadense-reader-label {min-width:0;overflow-wrap:anywhere;}
 [data-jadense-reader-notice] {
   position:fixed;z-index:10001;box-sizing:border-box;width:260px;max-width:calc(100vw - 16px);
   padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
@@ -1307,7 +1314,8 @@ export function registerReaderTools(
           }
           feedback.hide()
           if (selection.kind === "fullTranslate") {
-            void showFullTranslation(zotero as unknown as ZoteroLike, event.doc, selection.itemID, taskID => { void onAction({ ...selection, taskID }) })
+            void showFullTranslation(zotero as unknown as ZoteroLike, event.doc, selection.itemID, taskID => { void onAction({ ...selection, taskID }) }, event.reader as unknown as import("./reader-sidebar").ReaderSidebarSource)
+              .catch(error => feedback.show(anchor, `${uiText("无法打开全文阅读侧栏。", "Could not open the reading sidebar.")} ${error instanceof Error ? error.message : String(error)}`))
             return
           }
           // 在原生点击同步阶段保留选区；让焦点变化或 popup 关闭发生后仍引用同一段文字。

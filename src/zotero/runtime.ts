@@ -159,8 +159,8 @@ export type ZoteroLike = {
       header: { l10nID: string; l10nArgs?: string; icon: string }
       sidenav: { l10nID: string; l10nArgs?: string; icon: string }
       onDestroy?: (props: { body: HTMLDivElement }) => void
-      onItemChange?: (props: { setEnabled: (enabled: boolean) => void }) => void
-      onRender: (props: { doc: Document; body: HTMLDivElement }) => void
+      onItemChange?: (props: { setEnabled: (enabled: boolean) => void; item?: unknown; tabType?: string }) => void
+      onRender: (props: { doc: Document; body: HTMLDivElement; item?: unknown; tabType?: string }) => void
     }): string | boolean | void
     unregisterSection(id: string): boolean
   }

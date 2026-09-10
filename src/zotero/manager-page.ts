@@ -1,3 +1,6 @@
+import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
+import { wireTemporaryRecovery } from './temporary-recovery-panel'
+import { wireReferenceAISetting } from './reference-ai-settings'
 /**
  * Jadense Zotero 主工作台页面。
  * 上游由 bootstrap 打开独立 chrome 窗口，下游连接本地对话存储、Zotero 选择与攻玉扩展 API。
@@ -20,16 +23,15 @@ import { redactChatImageDataUrls } from "@/chat/image-input"
 import { pruneChatImages, readChatImage, saveChatImage } from "./chat-images"
 import { normalizeFigureImage } from "./reader-figure-tools"
 import {
-  ByokChatClient,
   BYOK_TEST_MAX_OUTPUT_TOKENS,
   byokEndpoint,
   defaultByokBaseUrl,
   type ByokConfig,
   type ByokProtocol,
 } from "@/chat/byok-chat"
-import { TemporaryChatClient } from "@/chat/temporary-chat"
+import { ReliableTemporaryChatClient as TemporaryChatClient } from "@/chat/reliable-temporary-chat"
 import { updateChatMarkdown } from "@/chat/markdown"
-import { readPaperAnalysisHistory, type PaperAnalysisRecord } from "@/chat/paper-analysis-history"
+import { appendPaperAnalysisRecord, readPaperAnalysisHistory, type PaperAnalysisRecord, type PaperAnalysisSource } from "@/chat/paper-analysis-history"
 import { type TranslationRecord } from "@/chat/translation-history"
 import { createQuoteSource, groupChatSources, type ChatSource } from "@/chat/research-context"
 import { ANALYSIS_CATEGORIES } from "@/chat/paper-analysis"
@@ -90,7 +92,12 @@ import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-an
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
-import { renderDocumentHistory, mountReferenceWorkspace } from "./document-ui"
+import { renderDocumentHistory } from "./document-ui"
+import { mountAnalysisWorkspace, type AnalysisRunView } from "./analysis-workspace"
+import { analysisPapers, paperKey } from "./analysis-workspace-model"
+import { documentJobs } from "./document-jobs"
+import type { DocumentTask } from "./document-store"
+import { bindTabs } from "./ui/controls"
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import { localizeManagerStaticContent } from "./manager-localization"
 
@@ -438,6 +445,9 @@ const figureChatContexts = new Map<string, FigureChatContext>()
 const renderedMessageText = new WeakMap<HTMLElement, string>()
 // 历史存储不可用时保留本窗口最近结果，刷新列表也不丢失复制入口。
 const unsavedPaperAnalyses = new Map<string, PaperAnalysisRecord>()
+let analysisWorkspace: ReturnType<typeof mountAnalysisWorkspace> | undefined
+let preparingAnalysisItemID: number | undefined
+const analysisSessions = new Map<number, { controller: AbortController; recordID: string; view: AnalysisRunView }>()
 export const MANAGER_OPERATION_PREF_KEYS = [
   "extensions.jadenseInZotero.baseUrl",
   "extensions.jadenseInZotero.token",
@@ -810,81 +820,53 @@ function renderTranslationHistory(elements: ManagerElements, zotero: ZoteroLike)
   })
 }
 
+/** 保持保存/临时结果的同 ID 覆盖语义，组件只获得用于阅读的投影。 */
+function paperAnalysisRecords(zotero: ZoteroLike) {
+  const saved = zotero.Prefs ? readPaperAnalysisHistory(zotero.Prefs).records : []
+  return [...unsavedPaperAnalyses.values(), ...saved.filter(record => !unsavedPaperAnalyses.has(record.id))]
+}
+
+/** 只重读同 ID 最新记录后合并可选关联，绝不以较早的生成快照覆盖批注写入结果。 */
+function linkAnalysisReference(zotero: ZoteroLike, recordID: string, task: DocumentTask) {
+  const latest = paperAnalysisRecords(zotero).find(record => record.id === recordID)
+  if (!latest || paperKey(latest.source) !== paperKey(task.source)) return
+  const linked = { ...latest, referenceTaskID: task.id }
+  if (unsavedPaperAnalyses.has(recordID)) { unsavedPaperAnalyses.set(recordID, linked); return }
+  try { if (zotero.Prefs) appendPaperAnalysisRecord(zotero.Prefs, linked) }
+  catch { /* 可选关联失败不降级已保存的核心结果；本次窗口仍可按同附件读取引用。 */ }
+}
+
+function stopPaperAnalysis(zotero: ZoteroLike, source?: PaperAnalysisSource) {
+  const session = source ? analysisSessions.get(source.itemID) : analysisSessions.get(preparingAnalysisItemID!)
+  if (session && (!source || paperKey(session.view.source) === paperKey(source))) {
+    session.controller.abort()
+    if (session.view.referenceTaskID) documentJobs(zotero).pause(session.view.referenceTaskID)
+    session.view.message = uiText("正在停止，已取得内容会保留。", "Stopping. Received content will be retained.")
+    analysisWorkspace?.setRun(session.view)
+  } else if (source) {
+    const task = analysisPapers(paperAnalysisRecords(zotero), documentJobs(zotero).list("references")).find(paper => paper.key === paperKey(source))?.references
+    if (task) documentJobs(zotero).pause(task.id)
+  } else if (activeOperation === "analysis") activeChatAbort?.abort()
+}
+
 function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLike) {
-  const savedRecords = zotero.Prefs ? readPaperAnalysisHistory(zotero.Prefs).records : []
-  const records = [...unsavedPaperAnalyses.values(), ...savedRecords.filter(({ id }) => !unsavedPaperAnalyses.has(id))]
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-  if (!records.length) {
-    const empty = create("div", "jdx-translation-empty jdx-analysis-empty")
-    const title = create("h3")
-    title.textContent = uiText("还没有解析记录", "No analyses yet")
-    const guide = create("p")
-    guide.textContent = uiText("在 PDF 阅读器工具栏点击“解析”；总结和解析笔记会保存在这里。", "Click Analyze in the PDF reader toolbar. Summaries and analysis notes will be saved here.")
-    empty.append(title, guide)
-    elements.analysisHistory.replaceChildren(empty)
-    return
-  }
-  elements.analysisHistory.replaceChildren(...records.map((record) => {
-    const card = create("article", "jdx-analysis-record")
-    const header = create("header")
-    const title = create("button", "jdx-analysis-title") as HTMLButtonElement
-    title.type = "button"
-    title.textContent = record.source.title
-    title.title = uiText(`在 Zotero 阅读器中打开：${record.source.title}`, `Open in Zotero Reader: ${record.source.title}`)
-    title.setAttribute("aria-label", title.title)
-    title.addEventListener("click", () => {
-      setStatus(elements.analysisStatus, uiText("正在 Zotero 阅读器中打开 PDF…", "Opening the PDF in Zotero Reader…"))
-      void openPaperAnalysisHistoryRecord(zotero, record).then((opened) => {
-        setStatus(
-          elements.analysisStatus,
-          opened ? uiText("已在 Zotero 阅读器中打开 PDF。", "Opened the PDF in Zotero Reader.") : uiText("无法打开原 PDF；它可能已被删除、移动到其他文库或身份已失效。", "Cannot open the original PDF. It may have been deleted, moved to another library, or no longer match its saved identity."),
-          opened ? "success" : "error",
-        )
-      }).catch(() => setStatus(elements.analysisStatus, uiText("无法打开原 PDF；请确认文件仍在当前 Zotero 资料库中。", "Cannot open the original PDF. Check that it is still in this Zotero library."), "error"))
-    })
-    const time = create("time") as HTMLTimeElement
-    time.dateTime = record.createdAt
-    const date = new Date(record.createdAt)
-    time.textContent = Number.isNaN(date.getTime()) ? record.createdAt : date.toLocaleString(getUiLocale())
-    header.append(title, time)
-    const metadata = create("p", "jdx-analysis-meta")
-    metadata.textContent = [
-      record.source.authors.join("、"),
-      record.source.date || record.source.year,
-      record.source.publicationTitle,
-      record.source.doi ? `DOI: ${record.source.doi}` : "",
-    ].filter(Boolean).join(" · ")
-    metadata.hidden = !metadata.textContent
-    const summary = create("div", "jdx-markdown jdx-analysis-summary")
-    updateChatMarkdown(summary, record.summary)
-    card.append(header, metadata, summary)
-    const warnings = [...(unsavedPaperAnalyses.has(record.id) ? [uiText("最新结果尚未完整保存，关闭窗口前请复制笔记。", "The latest result is not fully saved. Copy the notes before closing this window.")] : []), ...(record.warnings ?? [])]
-    if (warnings.length) {
-      const notice = create("p", "jdx-analysis-notice")
-      notice.textContent = warnings.join("\n")
-      card.append(notice)
-    }
-    if (record.notes) {
-      const details = create("details", "jdx-analysis-notes")
-      const toggle = create("summary")
-      toggle.textContent = uiText("查看解析笔记", "View analysis notes")
-      const copy = create("button", "jdx-analysis-copy") as HTMLButtonElement
-      copy.type = "button"
-      copy.textContent = uiText("复制笔记", "Copy notes")
-      copy.addEventListener("click", () => {
-        const content = [record.source.title, ...warnings, record.notes].join("\n\n")
-        void copyTextToClipboard(zotero, content).then((copied) => {
-          copy.textContent = copied ? uiText("已复制", "Copied") : uiText("复制失败，请选择下方文字复制", "Copy failed. Select the text below to copy it.")
-          window.setTimeout(() => { copy.textContent = uiText("复制笔记", "Copy notes") }, 1500)
-        })
-      })
-      const notes = create("div", "jdx-analysis-notes-text")
-      notes.textContent = record.notes
-      details.append(toggle, copy, notes)
-      card.append(details)
-    }
-    return card
-  }))
+  analysisWorkspace ??= mountAnalysisWorkspace(elements.analysisHistory, zotero, {
+    records: () => paperAnalysisRecords(zotero),
+    unsaved: id => unsavedPaperAnalyses.has(id),
+    openSource: source => openPaperAnalysisHistoryRecord(zotero, { id: "", createdAt: "", source, summary: "" }),
+    stop: source => stopPaperAnalysis(zotero, source),
+    onReferenceTask: (source, task) => {
+      const session = analysisSessions.get(source.itemID)
+      if (session && paperKey(session.view.source) === paperKey(source)) {
+        session.view.referenceTaskID = task.id
+        session.view.references = undefined
+        analysisWorkspace?.setRun(session.view)
+      }
+      const record = paperAnalysisRecords(zotero).filter(record => paperKey(record.source) === paperKey(source)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      if (record) linkAnalysisReference(zotero, record.id, task)
+    },
+  })
+  analysisWorkspace.refresh()
 }
 
 /** 有图片上下文时，输入栏与追问共同使用图片解读模型。 */
@@ -961,7 +943,7 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   elements.settingsSection.hidden = section !== "settings"
 }
 
-type AnalysisTab = "history" | "config" | "references"
+type AnalysisTab = "history" | "config"
 
 /** 内置指南只切换本页章节；无需账号、网络或 Zotero API，离开页面时保留当前章节。 */
 export function wireGuideNavigation(section: HTMLElement) {
@@ -990,7 +972,8 @@ export function wireGuideNavigation(section: HTMLElement) {
 }
 
 function setAnalysisTab(elements: ManagerElements, tab: AnalysisTab, focus = false) {
-  for (const name of ["history", "config", "references"] as const) {
+  if (tab === "config") analysisWorkspace?.back()
+  for (const name of ["history", "config"] as const) {
     const button = document.getElementById(`jadense-analysis-tab-${name}`)
     const panel = document.getElementById(`jadense-analysis-panel-${name}`)
     if (!button || !panel) continue
@@ -1954,10 +1937,6 @@ type PreparedChat = {
   finish?: (text: string, signal: AbortSignal) => Promise<{ text: string; status: string; kind?: "success" | "error" | "idle"; research?: ResearchMessageContext }>
 }
 
-function boundedNotice(value: string) {
-  return value.length > 800 ? uiText(`${value.slice(0, 760)}…（说明过长，已截短）`, `${value.slice(0, 760)}… (description shortened)`) : value
-}
-
 /** 所有智能动作复用这一条本地会话与 temporary Chat 流，仅包装输入和输出。 */
 async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, options: {
   prompt?: string
@@ -2048,6 +2027,8 @@ async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, op
     setStatus(elements.chatStatus, [prepared.streamVisible === false ? uiText("正在按八类结构解析文献…", "Analyzing the paper across eight categories…") : uiText("正在生成…", "Generating…"), imageNotice].filter(Boolean).join(" "))
     const finalText = await client.send({
       clientFeature: options.image || figureContext || latestAttachment?.origin === "figure" ? "figure" : "chat",
+      taskId: session.id,
+      operationId: assistantMessageId,
       clientRequestId: createId("request"),
       conversationId: session.id,
       messages: requestSession.messages
@@ -2099,56 +2080,75 @@ async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemI
   if (chatBusy || window.closed) return
   setActiveSection(elements, "analysis")
   setAnalysisTab(elements, "history")
-  const model = paperAnalysisModelState(zotero, invalidConnectionToken)
-  if (!model.ready) {
-    setStatus(elements.analysisStatus, model.issue, "error")
-    renderPaperAnalysisModel(elements, zotero)
-    return
-  }
-
   const operation = new AbortController()
-  activeChatAbort = operation
-  activeOperation = "analysis"
+  activeChatAbort = operation; activeOperation = "analysis"; preparingAnalysisItemID = itemID
   setChatBusy(elements, zotero, true)
+  let session: (typeof analysisSessions extends Map<number, infer T> ? T : never) | undefined
+  const model = paperAnalysisModelState(zotero, invalidConnectionToken)
+  const progress = (message: string, error = false) => {
+    setStatus(elements.analysisStatus, message, error ? "error" : "idle")
+    if (session) { session.view.message = message; session.view.error = error; analysisWorkspace?.setRun(session.view) }
+  }
   try {
+    const source = await waitForSourceRead(collectSourceForItem(zotero, itemID, { includeText: false }), operation.signal)
+    operation.signal.throwIfAborted()
+    if (!source || source.kind !== "file") throw new Error(uiText("原 PDF 附件不可用。", "The original PDF attachment is unavailable."))
+    session = { controller: operation, recordID: `analysis-${crypto.randomUUID()}`, view: {
+      source: { itemID: source.itemID, libraryID: source.libraryID, itemKey: source.itemKey, title: source.parentItem?.title || source.title, authors: [] },
+      createdAt: new Date().toISOString(), message: uiText("正在准备文献解析…", "Preparing the analysis…"), busy: true,
+    } }
+    analysisSessions.set(itemID, session)
+    renderPaperAnalysisHistory(elements, zotero); analysisWorkspace!.setRun(session.view); analysisWorkspace!.open(session.view.source, "summary")
+    if (!model.ready) throw new Error(model.issue)
+
+    // 在实际调度时启动同篇引用。独立承诺不等待核心结果；错误只进入引用标签。
+    const current = session, jobs = documentJobs(zotero)
+    current.view.references = { running: true, message: uiText("正在读取参考文献…", "Reading references…") }
+    operation.signal.addEventListener("abort", () => { if (current.view.referenceTaskID) jobs.pause(current.view.referenceTaskID) }, { once: true })
+    void jobs.start("references", itemID, false, { signal: operation.signal, onProgress: message => {
+      current.view.references = { running: true, message }; analysisWorkspace?.setRun(current.view)
+    } }).then(task => {
+      current.view.referenceTaskID = task.id
+      if (operation.signal.aborted) jobs.pause(task.id)
+      else if (["paused", "error"].includes(task.status)) jobs.resume(task.id)
+      linkAnalysisReference(zotero, current.recordID, task)
+    }).catch(error => {
+      current.view.references = { running: false, ...(operation.signal.aborted ? { message: uiText("参考文献提取已停止", "Reference extraction stopped") } : { error: error instanceof Error ? error.message : String(error) }) }
+    }).finally(() => {
+      if (current.view.references) current.view.references.running = false
+      analysisWorkspace?.setRun(current.view)
+    })
+
     const result = await runIndependentPaperAnalysis({
-      zotero,
-      itemID,
-      fetchImpl: managerFetch(),
-      signal: operation.signal,
-      invalidJadenseToken: invalidConnectionToken,
-      onProgress: (message) => setStatus(elements.analysisStatus, message),
+      zotero, itemID, fetchImpl: managerFetch(), signal: operation.signal,
+      invalidJadenseToken: invalidConnectionToken, recordID: current.recordID, createdAt: current.view.createdAt,
+      onProgress: message => progress(message),
     })
     if (!result.historySaved || result.historyError) {
       unsavedPaperAnalyses.set(result.record.id, result.record)
       if (unsavedPaperAnalyses.size > 10) unsavedPaperAnalyses.delete(unsavedPaperAnalyses.keys().next().value!)
     } else unsavedPaperAnalyses.delete(result.record.id)
-    renderPaperAnalysisHistory(elements, zotero)
+    current.view.source = result.record.source
+    if (current.view.referenceTaskID) {
+      const task = jobs.get(current.view.referenceTaskID)
+      if (task) linkAnalysisReference(zotero, current.recordID, task)
+    }
     const saved = result.annotations
-    const annotationStatus = result.annotationError
-      ?? (saved.created || saved.skipped || saved.failed || saved.unprocessed
-        ? uiText(`新增 ${saved.created} 条 PDF 批注，跳过 ${saved.skipped} 条；失败 ${saved.failed} 条，未执行 ${saved.unprocessed} 条。`, `PDF annotations: ${saved.created} added, ${saved.skipped} skipped, ${saved.failed} failed, ${saved.unprocessed} not attempted.`)
-        : uiText("本次未新增 PDF 批注，可展开查看解析笔记。", "No new PDF annotations were added. Expand the analysis notes to read the result."))
-    const message = [
-      result.historyError ?? (result.historySaved ? uiText("解析总结与笔记已保存，可展开查看和复制。", "Analysis summary and notes saved. Expand to read and copy them.") : ""),
-      annotationStatus,
-      result.record.warnings?.length ? boundedNotice(result.record.warnings.join("\n")) : "",
-    ].filter(Boolean).join(" ")
-    const writeFailed = !result.historySaved || Boolean(result.historyError) || Boolean(result.annotationError) || saved.failed > 0 || saved.unprocessed > 0
-    setStatus(elements.analysisStatus, message, operation.signal.aborted ? "idle" : writeFailed ? "error" : result.record.warnings?.length ? "idle" : "success")
+    const annotationStatus = result.annotationError ?? uiText(
+      `PDF 批注：新增 ${saved.created} 条，跳过 ${saved.skipped} 条，失败 ${saved.failed} 条，未执行 ${saved.unprocessed} 条。`,
+      `PDF annotations: ${saved.created} added, ${saved.skipped} skipped, ${saved.failed} failed, ${saved.unprocessed} not attempted.`,
+    )
+    progress([result.historyError || uiText("解析结果已保留。", "Analysis results retained."), annotationStatus].filter(Boolean).join(" "),
+      !result.historySaved || Boolean(result.historyError) || Boolean(result.annotationError) || saved.failed > 0 || saved.unprocessed > 0)
+    renderPaperAnalysisHistory(elements, zotero)
   } catch (error) {
-    const stopped = operation.signal.aborted
-    if (model.selection.route === "jadense" && classifyJadenseAccountError(error) === "invalid-token") {
-      recordInvalidConnection(elements, zotero, readConnection(zotero).token)
-    }
-    setStatus(elements.analysisStatus, stopped ? uiText("已停止文献解析；未完成的结果没有写入历史或批注。", "Paper analysis stopped. Incomplete results were not written to history or annotations.") : friendlyChatError(error), stopped ? "idle" : "error")
+    if (model.selection.route === "jadense" && classifyJadenseAccountError(error) === "invalid-token") recordInvalidConnection(elements, zotero, readConnection(zotero).token)
+    progress(operation.signal.aborted ? uiText("已停止文献解析，已保存的结果仍可阅读。", "Analysis stopped. Saved results remain readable.") : friendlyChatError(error), !operation.signal.aborted)
   } finally {
-    if (activeChatAbort === operation) {
-      activeChatAbort = null
-      activeOperation = null
-    }
-    setChatBusy(elements, zotero, false)
-    renderPaperAnalysisModel(elements, zotero)
+    if (session) { session.view.busy = false; analysisWorkspace?.setRun(session.view) }
+    if (activeChatAbort === operation) { activeChatAbort = null; activeOperation = null }
+    preparingAnalysisItemID = undefined
+    setChatBusy(elements, zotero, false); renderPaperAnalysisModel(elements, zotero)
     void drainReaderActions(elements, zotero)
   }
 }
@@ -2761,17 +2761,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.navSettings.addEventListener("click", () => setActiveSection(elements, "settings"))
   elements.translationHistoryRefresh.addEventListener("click", () => renderTranslationHistory(elements, zotero))
   elements.analysisHistoryRefresh.addEventListener("click", () => renderPaperAnalysisHistory(elements, zotero))
-  elements.analysisTabHistory.addEventListener("click", () => setAnalysisTab(elements, "history"))
-  elements.analysisTabConfig.addEventListener("click", () => setAnalysisTab(elements, "config"))
-  elements.analysisTabs.addEventListener("keydown", (event) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const tabs = ["history", "config", "references"] as const
-    const current = tabs.findIndex(name => document.activeElement?.id === `jadense-analysis-tab-${name}`)
-    const next = event.key === "Home" ? 0 : event.key === "End" ? 2
-      : (current + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3
-    event.preventDefault()
-    setAnalysisTab(elements, tabs[next], true)
-  })
+  bindTabs([elements.analysisTabHistory, elements.analysisTabConfig], index => setAnalysisTab(elements, index ? "config" : "history"))
   const selectFeatureModel = (feature: AiFeature, value: string) => {
     if (chatBusy) return
     try {
@@ -2790,9 +2780,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     setActiveSection(elements, "settings")
   })
   elements.analysisStop.addEventListener("click", () => {
-    if (activeOperation !== "analysis") return
-    readerActionQueue.length = 0
-    activeChatAbort?.abort()
+    stopPaperAnalysis(zotero)
   })
   elements.newSession.addEventListener("click", () => {
     if (chatBusy) return
@@ -3206,6 +3194,10 @@ export function initJadenseManagerPage() {
   window.matchMedia?.("(max-width: 820px)").addEventListener("change", () => {
     if (zotero) applySidebarCollapsed(elements, readSidebarCollapsed(zotero))
   })
+  const stopRecovery = wireTemporaryRecovery(zotero, document.getElementById("jadense-settings-panel-features"), window.fetch.bind(window))
+  window.addEventListener('unload', stopRecovery, { once: true })
+  const stopReferenceAI = wireReferenceAISetting(zotero, document.getElementById("jadense-settings-panel-features"))
+  window.addEventListener('unload', stopReferenceAI, { once: true })
   const stopReadingPreferences = wireReadingPreferences(zotero, document.getElementById("jadense-settings-panel-general")!)
   window.addEventListener("unload", stopReadingPreferences, { once: true })
   const stopObservingAppearance = wireManagerAppearance(elements, zotero, document.documentElement)
@@ -3239,16 +3231,24 @@ export function initJadenseManagerPage() {
   renderTranslationHistory(elements, zotero)
   renderPaperAnalysisHistory(elements, zotero)
   wireEvents(elements, zotero)
-  const referencesPanel = document.getElementById("jadense-analysis-panel-references")!
-  mountReferenceWorkspace(referencesPanel, zotero)
-  document.getElementById("jadense-analysis-tab-references")!.addEventListener("click", () => setAnalysisTab(elements, "references"))
   const receive = (context: Pick<ManagerContext, "section" | "actions">) => {
     const actions = (context.actions ?? []).filter(action => {
-      // 解析入口同时绑定同一 PDF 的参考文献任务；提取失败由参考文献页局部展示，摘要/笔记独立继续。
-      if (action.kind === "analyze") mountReferenceWorkspace(referencesPanel, zotero, action.itemID)
+      if (action.kind === "analyze") {
+        const session = analysisSessions.get(action.itemID)
+        if (preparingAnalysisItemID === action.itemID || session?.view.busy || session?.view.references?.running
+          || (session?.view.referenceTaskID && documentJobs(zotero).get(session.view.referenceTaskID)?.status === "running")
+          || readerActionQueue.some(queued => queued.kind === "analyze" && queued.itemID === action.itemID)) {
+          setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+          if (session) analysisWorkspace?.open(session.view.source)
+          return false
+        }
+      }
       if (action.kind === "references") {
-        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "references")
-        mountReferenceWorkspace(referencesPanel, zotero, action.itemID); return false
+        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+        void collectSourceForItem(zotero, action.itemID, { includeText: false }).then(source => {
+          if (source?.kind === "file") analysisWorkspace?.open({ ...source, title: source.parentItem?.title || source.title, authors: [] }, "references")
+        }).catch(() => setStatus(elements.analysisStatus, uiText("原 PDF 不可用", "Original PDF unavailable"), "error"))
+        return false
       }
       if (action.kind === "fullTranslate") {
         setActiveSection(elements, "translations")
@@ -3281,6 +3281,7 @@ export function initJadenseManagerPage() {
   window.addEventListener("unload", () => {
     stopObservingOperationPreferences()
     activeChatAbort?.abort()
+    analysisWorkspace?.remove(); analysisWorkspace = undefined; analysisSessions.clear()
     ++accountRefreshGeneration
     cancelJadenseAccountRequests()
     ++chatModelCatalogGeneration

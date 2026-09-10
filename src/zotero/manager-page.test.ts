@@ -712,14 +712,14 @@ describe("manager page state", () => {
     expect(renderer).toContain("translationHistoryStatus")
   })
 
-  it("renders analysis titles as native accessible buttons backed by exact local PDF navigation", () => {
+  it("routes analysis titles into the dedicated workspace and keeps exact PDF navigation separate", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
     const renderer = manager.match(/function renderPaperAnalysisHistory[\s\S]*?\n}\n\n\/\*\* 有图片上下文/)?.[0] ?? ""
-    expect(renderer).toContain('create("button", "jdx-analysis-title")')
-    expect(renderer).toContain('title.type = "button"')
-    expect(renderer).toContain('title.setAttribute("aria-label"')
+    expect(renderer).toContain("mountAnalysisWorkspace")
     expect(renderer).toContain("openPaperAnalysisHistoryRecord")
-    expect(renderer).toContain("analysisStatus")
+    const view = readFileSync(new URL("./analysis-workspace.ts", import.meta.url), "utf8")
+    expect(view).toContain('() => open(paper.source)')
+    expect(view).toContain('uiText("打开原文 ↗", "Open PDF ↗")')
   })
 
   it("places resource management beside the conversation and exposes independent collapse controls", () => {
