@@ -144,7 +144,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.2 was tested on **Windows 11 / Zotero 10.0.1**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for the full validation record and scope.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.2 was tested on **Windows 11 / Zotero 10.0.2**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for the full validation record and scope.
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 

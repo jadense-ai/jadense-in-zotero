@@ -25,7 +25,7 @@
 
 已知界面现象：原生截图验收中曾出现窄窗口导航未自动收起，同包复跑恢复正常，根因尚未确认；遇到时可使用侧栏收起按钮。
 
-Manifest 声明 Zotero **8.0–10.0.***；本版原生验收使用 **Windows 11 / Zotero 10.0.1**、隔离 profile、合成资料与模拟服务。其他系统、Zotero 8/9、真实 Provider 翻译品质及实际 Crossref 命中率未实测。最终安装包校验和原生验收结果见 [v0.4.2 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2)。
+Manifest 声明 Zotero **8.0–10.0.***；本版原生验收使用 **Windows 11 / Zotero 10.0.2**、隔离 profile、合成资料与模拟服务。其他系统、Zotero 8/9、真实 Provider 翻译品质及实际 Crossref 命中率未实测。最终安装包校验和原生验收结果见 [v0.4.2 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2)。
 
 <a id="release-042-en"></a>
 
@@ -46,7 +46,7 @@ Full translation requires extractable PDF text, provides no OCR or original-layo
 
 Known UI behavior: a native screenshot run intermittently failed to collapse navigation in a narrow window; the same package passed on rerun, and the cause remains unconfirmed. Use the sidebar collapse button if needed.
 
-The manifest declares Zotero **8.0–10.0.***. Native validation uses **Windows 11 / Zotero 10.0.1**, isolated profiles, synthetic documents, and mocked services. Other platforms, Zotero 8/9, real-provider translation quality, and real Crossref matching accuracy were not tested. See the [v0.4.2 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for final artifact checksums and validation results.
+The manifest declares Zotero **8.0–10.0.***. Native validation uses **Windows 11 / Zotero 10.0.2**, isolated profiles, synthetic documents, and mocked services. Other platforms, Zotero 8/9, real-provider translation quality, and real Crossref matching accuracy were not tested. See the [v0.4.2 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for final artifact checksums and validation results.
 
 ## 0.4.1 — 2026-09-09
 

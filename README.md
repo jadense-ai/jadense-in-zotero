@@ -140,7 +140,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 支持哪些版本？有哪些阅读限制？
 
-Manifest 声明兼容 Zotero **8.0 至 10.0.***；0.4.2 的实际验收环境是 **Windows 11 / Zotero 10.0.1**，使用合成资料与模拟接口。macOS、Linux、Zotero 8/9 及真实付费 Provider 未在该次发布中实测，完整验收记录与范围见 [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2)。
+Manifest 声明兼容 Zotero **8.0 至 10.0.***；0.4.2 的实际验收环境是 **Windows 11 / Zotero 10.0.2**，使用合成资料与模拟接口。macOS、Linux、Zotero 8/9 及真实付费 Provider 未在该次发布中实测，完整验收记录与范围见 [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2)。
 
 扫描 PDF 需先 OCR 才能进行依赖正文提取的操作。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
 
