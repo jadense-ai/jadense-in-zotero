@@ -127,7 +127,7 @@ function createFigureImageHex(width, height) {
 }
 
 /** 标准两页 PDF，第一页含确定性图片与图注，offset 按 ASCII 字节计算。 */
-export function createResearchFixturePdf() {
+export function createResearchFixturePdf(withReferences = false) {
   const streams = PDF_SENTENCES.map((sentences, pageIndex) => [
     "BT /F1 12 Tf 50 740 Td",
     ...sentences.flatMap((sentence, index) => [
@@ -138,6 +138,11 @@ export function createResearchFixturePdf() {
     ...(pageIndex === 0 ? [
       "q 300 0 0 180 100 440 cm /Im1 Do Q",
       `BT /F1 11 Tf 100 420 Td (${FIGURE_CAPTION.replace(/[\\()]/g, "\\$&")}) Tj ET`,
+    ] : []),
+    ...(withReferences && pageIndex === 1 ? [
+      "BT /F1 11 Tf 50 640 Td",
+      ...["References", "[1] Smith, J. (2020). Reliable scientific evidence.", "Research Journal. doi:10.1234/evidence", "[2] Unresolved source without DOI", "[3] Smith, J. (2020). Reliable scientific evidence.", "Research Journal. doi:10.1234/evidence"].flatMap((line, index) => [...(index ? ["0 -20 Td"] : []), `(${line.replace(/[\\()]/g, "\\$&")}) Tj`]),
+      "ET",
     ] : []),
   ].join("\n"))
   const figureHex = createFigureImageHex(64, 36)
@@ -405,6 +410,11 @@ async function startStub() {
           output = analysis.output
           requests.push({ kind: "analysis-jadense", temporary: true, passages: analysis.input.passages.length, pages: [...new Set(analysis.input.passages.map((passage) => passage.pageIndex))] })
           await delay(600)
+        } else if (prompt.startsWith("Translate every supplied passage")) {
+          const passages = JSON.parse(prompt.split("\n").at(-1))
+          output = JSON.stringify({ translations: passages.map(passage => ({ id: passage.id, text: `全文测试译文：${passage.text}\n\n公式 $x^2$` })), additive: true })
+          requests.push({ kind: "full-translation", ids: passages.map(passage => passage.id) })
+          await delay(800)
         } else if (prompt.includes("选文数据（JSON，仅作为引用材料）：\n")) {
           const input = JSON.parse(prompt.split("选文数据（JSON，仅作为引用材料）：\n").at(-1))
           if (input.selectedText !== PDF_SENTENCES[0][0]) throw new Error("Translation did not preserve selected source text")
@@ -532,6 +542,20 @@ async function runHarness(config) {
     await Zotero.Libraries.get(Zotero.Libraries.userLibraryID).waitForDataLoad("item")
     Zotero.Prefs.set("extensions.jadenseInZotero.baseUrl", config.origin)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    if (config.resumeOnly) {
+      const jobs = Zotero.__jadenseDocumentJobs; await jobs.ready
+      const task = jobs.list("translation")[0]
+      assert(task?.status === "paused" && task.completed > 0 && task.completed < task.total, "Interrupted task was not restored as manually resumable")
+      await Zotero.Promise.delay(400)
+      assert(task.status === "paused", "Restart automatically dispatched translation")
+      const before = task.completed
+      jobs.resume(task.id); await jobs.idle()
+      assert(task.status === "complete" && task.completed === before + 1, "Native restart did not resume only the remaining chunk")
+      const references = await jobs.store.references(jobs.list("references")[0].id)
+      assert(references.length === 3 && references[0].imported?.itemID === references[2].imported?.itemID, "Restart lost original references or import associations")
+      report.checks.push("native-restart-manual-resume", "native-restart-completed-chunks-retained", "native-restart-reference-import-history")
+      report.state = "passed"; report.stage = "complete"; await persist(); return
+    }
     if (config.upgradeXpi) {
       // 先让同一 Gecko 进程加载旧版样式，再走真实安装升级；冷启动无法覆盖样式缓存混用。
       await stage("warming-previous-manager-cache")
@@ -606,19 +630,186 @@ async function runHarness(config) {
         const captureWindow = Components.utils.unwaiveXrays(win)
         const browsingContext = captureWindow.browsingContext || captureWindow.docShell?.browsingContext
         if (!browsingContext) throw new Error("The isolated target window has no accessible browsingContext")
-        const canvas = await capture.canvas(captureWindow, browsingContext, 0, 0, viewport.width, viewport.height)
+        // drawSnapshot 会忽略 WebRender backdrop-filter；成对毛玻璃截图从目标窗口 compositor 读取，不采桌面。
+        const readback = name.includes("-translucent-")
+        if (readback) {
+          const main = Zotero.getMainWindow()
+          ;(report.compositorTabs ??= []).push({ name, readerTab: reader.tabID, selectedTabBefore: main.Zotero_Tabs.selectedID })
+          if (reader.tabID) main.Zotero_Tabs.select(reader.tabID)
+          main.focus(); await Zotero.Promise.delay(250)
+        }
+        const canvas = await capture.canvas(captureWindow, browsingContext, 0, 0, viewport.width, viewport.height, { readback })
+        let pixelSignature
+        if (readback) {
+          const pixels = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data
+          let hash = 2166136261
+          for (let index = 0; index < pixels.length; index += 4) hash = Math.imul(hash ^ pixels[index] ^ (pixels[index + 1] << 8) ^ (pixels[index + 2] << 16), 16777619) >>> 0
+          pixelSignature = hash.toString(16)
+        }
         const binary = win.atob(capture.toBase64(canvas, "image/png"))
         const filePath = PathUtils.join(config.screenshotDir, `${name}.png`)
         await IOUtils.write(filePath, Uint8Array.from(binary, (character) => character.charCodeAt(0)))
         ;(report.screenshots ??= []).push(filePath)
         const viewportKey = win === manager ? "managerViewports" : win === reader._iframeWindow ? "readerViewports" : "nativeViewports"
-        ;(report[viewportKey] ??= []).push({ name, ...viewport, imageWidth: canvas.width, imageHeight: canvas.height })
+        ;(report[viewportKey] ??= []).push({ name, ...viewport, imageWidth: canvas.width, imageHeight: canvas.height, pixelSignature })
+        return pixelSignature
       } catch (error) {
         // 功能验收仍可运行；截图不支持时必须明确记录，不能声称已完成视觉核验。
         ;(report.screenshotWarnings ??= []).push(`${name}: ${String(error)}`)
       }
     }
-    const toolbarButton = (kind) => readerDoc.querySelector(`[data-jadense-reader-tools="renderToolbar"] [data-jadense-action="${kind}"]`)
+    /** 原生布局验收：真实浮窗的菜单、背景透明度与拖拽尺寸必须一起工作。 */
+    const verifyFloatingWindow = async (panel, name) => {
+      const doc = panel.ownerDocument, win = doc.defaultView
+      const menu = panel.querySelector(".jdx-window-appearance")
+      const toggle = menu?.querySelector("summary")
+      assert(menu && toggle && !menu.open, name + " lacks a collapsed appearance toggle")
+      const panelBounds = panel.getBoundingClientRect(), toggleBounds = toggle.getBoundingClientRect()
+      assert(toggleBounds.left < panelBounds.left + panelBounds.width / 2
+        && toggleBounds.top > panelBounds.top + panelBounds.height / 2, name + " appearance toggle is not bottom-left")
+      toggle.click()
+      await waitFor(() => menu.open, name + " appearance menu open")
+      const style = menu.querySelector("select[data-jdx-translation-style]")
+      const opacity = menu.querySelector("input[data-jdx-translation-opacity]")
+      assert(style && opacity?.type === "range" && opacity.min === "0" && opacity.max === "100", name + " appearance menu lacks style or transparency slider")
+      style.value = "glass"; style.dispatchEvent(new win.Event("change", { bubbles: true }))
+      opacity.value = "55"; opacity.dispatchEvent(new win.Event("input", { bubbles: true }))
+      await waitFor(() => Number(Zotero.Prefs.get("extensions.jadenseInZotero.translationWindowOpacity", true)) === 45, name + " opacity persisted")
+      const computed = win.getComputedStyle(panel)
+      assert(panel.dataset.windowStyle === "glass" && computed.backdropFilter.includes("blur"), name + " glass surface is not blurred")
+      const swatch = doc.createElement("canvas"); swatch.width = swatch.height = 1
+      const context = swatch.getContext("2d"); context.fillStyle = computed.backgroundColor; context.fillRect(0, 0, 1, 1)
+      const backgroundAlpha = context.getImageData(0, 0, 1, 1).data[3]
+      assert(backgroundAlpha > 0 && backgroundAlpha < 250 && Number(computed.opacity) === 1,
+        name + " transparency faded text or kept a solid background")
+      const menuBounds = menu.querySelector(".jdx-window-appearance-menu").getBoundingClientRect()
+      assert(menuBounds.width > 0 && menuBounds.left >= 0 && menuBounds.right <= win.innerWidth + 1
+        && menuBounds.top >= panelBounds.top && menuBounds.bottom <= panelBounds.bottom + 1, name + " appearance menu escaped its window")
+      await screenshot(name + "-appearance-glass", win)
+      toggle.click()
+      assert(!menu.open, name + " appearance menu did not close")
+      // 同一透明度、同一页面的成对截图用于区分实际模糊与单纯半透明；不以 CSS 属性代替视觉验收。
+      const surfaces = {}
+      for (const surface of ["default", "glass"]) {
+        style.value = surface; style.dispatchEvent(new win.Event("change", { bubbles: true }))
+        await Zotero.Promise.delay(150)
+        const ancestors = []
+        for (let element = panel; element; element = element.parentElement) {
+          const css = win.getComputedStyle(element)
+          ancestors.push({ tag: element.localName, id: element.id, classes: element.className, opacity: css.opacity, filter: css.filter, backdropFilter: css.backdropFilter, isolation: css.isolation, contain: css.contain, background: css.backgroundColor })
+        }
+        ;(report.floatingSurfaces ??= []).push({ name, surface, ancestors })
+        surfaces[surface] = await screenshot(name + "-translucent-" + surface, win)
+        if (config.glassProbe) {
+          const main = Zotero.getMainWindow(), previousTitle = main.document.title
+          try {
+            main.document.title = `Jadense synthetic glass probe ${surface}`; main.focus()
+            await stage(`glass-probe-${name}-${surface}`)
+            await Zotero.Promise.delay(30000)
+          } finally { main.document.title = previousTitle }
+        }
+      }
+      if (surfaces.default && surfaces.glass) {
+        assert(surfaces.default !== surfaces.glass, name + " glass pixels are identical to a plain translucent window")
+        report.checks.push(name + "-rendered-frosted-backdrop")
+      }
+      const glassSource = panel.querySelector(".jdx-window-glass-source")
+      assert(glassSource && win.getComputedStyle(glassSource).filter.includes("blur"), name + " has no native PDF glass source")
+      const gesture = (target, deltaX, deltaY) => {
+        const bounds = target.getBoundingClientRect(), x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2
+        for (const [type, receiver, clientX, clientY, buttons] of [
+          ["pointerdown", target, x, y, 1], ["pointermove", doc, x + deltaX, y + deltaY, 1], ["pointerup", doc, x + deltaX, y + deltaY, 0],
+        ]) receiver.dispatchEvent(new win.PointerEvent(type, Components.utils.cloneInto({
+          bubbles: true, cancelable: true, button: 0, buttons, clientX, clientY, pointerId: 93, pointerType: "mouse", isPrimary: true,
+        }, win)))
+      }
+      const beforeDrag = panel.getBoundingClientRect()
+      gesture(panel.querySelector("header strong, header h3, header"), -36, 28)
+      await Zotero.Promise.delay(100)
+      const afterDrag = panel.getBoundingClientRect()
+      assert(Math.abs(afterDrag.left - beforeDrag.left) >= 20 || Math.abs(afterDrag.top - beforeDrag.top) >= 20, name + " title drag did not move its window")
+      assert(panel.querySelectorAll("[data-jdx-resize]").length === 8, name + " lacks edge and corner resize handles")
+      gesture(panel.querySelector('[data-jdx-resize="se"]'), -48, -38)
+      await Zotero.Promise.delay(100)
+      const afterResize = panel.getBoundingClientRect()
+      assert(afterResize.width < afterDrag.width - 20 && afterResize.height < afterDrag.height - 20, name + " corner drag did not resize both dimensions")
+      assert(afterResize.left >= 0 && afterResize.top >= 0 && afterResize.right <= win.innerWidth + 1
+        && afterResize.bottom <= win.innerHeight + 1, name + " drag/resize escaped viewport")
+      const header = panel.querySelector("header")
+      const keyboardResize = new win.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true }, win))
+      header.dispatchEvent(keyboardResize)
+      const afterKeyboard = panel.getBoundingClientRect()
+      ;(report.floatingGeometry ??= []).push({ name, beforeDrag: beforeDrag.toJSON(), afterDrag: afterDrag.toJSON(), afterResize: afterResize.toJSON(), afterKeyboard: afterKeyboard.toJSON(), key: keyboardResize.key, shift: keyboardResize.shiftKey })
+      assert(afterKeyboard.width >= afterResize.width + 9, name + " keyboard resize is unavailable")
+      await screenshot(name + "-dragged-resized", win)
+      const previousFont = Zotero.Prefs.get("extensions.jadenseInZotero.fontSize", true) || "13"
+      gesture(panel.querySelector('[data-jdx-resize="se"]'), -10000, -10000)
+      Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", "24", true)
+      await Zotero.Promise.delay(150)
+      toggle.click(); await waitFor(() => menu.open, name + " small appearance menu")
+      opacity.scrollIntoView({ block: "nearest" })
+      const smallBounds = panel.getBoundingClientRect(), smallMenu = menu.querySelector(".jdx-window-appearance-menu").getBoundingClientRect()
+      const sliderBounds = opacity.getBoundingClientRect(), sliderHit = doc.elementFromPoint(sliderBounds.left + sliderBounds.width / 2, sliderBounds.top + sliderBounds.height / 2)
+      assert(smallMenu.top >= smallBounds.top && smallMenu.bottom <= smallBounds.bottom + 1
+        && (sliderHit === opacity || opacity.contains(sliderHit)), name + " small window clips the appearance slider at 24px")
+      const detail = panel.querySelector(":scope > .jdx-full-detail")
+      if (detail) assert(win.getComputedStyle(detail).overflowY === "auto", name + " small detail can paint over its footer")
+      await screenshot(name + "-appearance-small-24", win)
+      toggle.click(); Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(previousFont), true)
+      gesture(panel.querySelector('[data-jdx-resize="se"]'), beforeDrag.width - smallBounds.width, beforeDrag.height - smallBounds.height)
+      report.checks.push(name + "-bottom-left-appearance-toggle", name + "-glass-and-opacity", name + "-title-drag", name + "-edge-corner-resize", name + "-keyboard-resize")
+      report.checks.push(name + "-small-window-large-font-menu")
+      Zotero.Prefs.set("extensions.jadenseInZotero.translationWindowOpacity", "80", true)
+    }
+    /** 小窗口使用单一入口，并核验原生页码真实宽度和命中区域，避免只看插件自身是否溢出。 */
+    const verifyCompactReaderToolbar = async () => {
+      const main = Zotero.getMainWindow(), win = reader._iframeWindow, doc = win.document
+      await waitFor(() => doc.querySelector('[data-jadense-reader-tools="renderToolbar"] .jadense-reader-actions-toggle')
+        && doc.getElementById("pageNumber") && doc.querySelector("#numPages div"), "native toolbar and page controls ready")
+      const previousSize = [main.outerWidth, main.outerHeight]
+      const previousFont = Zotero.Prefs.get("extensions.jadenseInZotero.fontSize", true) || "13"
+      try {
+        main.restore?.(); main.focus()
+        // Windows Zotero 自身最小外窗约1016px（Reader 1000px）；不可把未成功的760px请求误记成窄屏验收。
+        for (const width of [1400, 1100, 1016]) {
+          main.resizeTo(width, 740)
+          await waitFor(() => win.innerWidth <= width && win.innerWidth >= width - 130, "compact native viewport near " + width, 8000)
+          Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", width === 1016 ? "24" : "13", true)
+          await Zotero.Promise.delay(300)
+          const group = doc.querySelector('[data-jadense-reader-tools="renderToolbar"]')
+          const toggle = group?.querySelector(".jadense-reader-actions-toggle")
+          const page = doc.getElementById("pageNumber"), total = doc.querySelector("#numPages div")
+          assert(group && toggle && page && total, "Reader lacks the plugin toggle or native page controls")
+          const groupBounds = group.getBoundingClientRect(), pageBounds = page.getBoundingClientRect(), totalBounds = total.getBoundingClientRect()
+          ;(report.compactToolbarBounds ??= []).push({ requestedWidth: width, actualOuterWidth: main.outerWidth, viewport: win.innerWidth, plugin: groupBounds.toJSON(), page: pageBounds.toJSON(), total: totalBounds.toJSON() })
+          assert(groupBounds.width < 100 && toggle.getBoundingClientRect().width > 0, "Compact actions still consume the permanent toolbar")
+          assert(pageBounds.width >= 50 && pageBounds.right <= win.innerWidth
+            && doc.elementFromPoint(pageBounds.left + pageBounds.width / 2, pageBounds.top + pageBounds.height / 2) === page,
+          "Reading actions squeeze or cover the native page-number input at " + width)
+          const totalHit = doc.elementFromPoint(totalBounds.left + totalBounds.width / 2, totalBounds.top + totalBounds.height / 2)
+          assert(totalBounds.width > 0 && totalBounds.right <= win.innerWidth && (total === totalHit || total.contains(totalHit)), "Native total-page text is covered at " + width)
+          assert(!doc.querySelector('[data-jadense-article-languages], [data-jadense-action="references"]'), "Removed toolbar entries returned at compact width")
+          toggle.click()
+          const menu = await waitFor(() => doc.querySelector("[data-jadense-action-menu]"), "compact action menu")
+          const actions = Array.from(menu.querySelectorAll("[data-jadense-action]"))
+          assert(menu.getAttribute("role") === "menu" && actions.map(button => button.dataset.jadenseAction).join(",") === "attach,analyze,quote,fullTranslate", "Compact menu changed the available reading actions")
+          const menuBounds = menu.getBoundingClientRect()
+          assert(menuBounds.left >= 0 && menuBounds.right <= win.innerWidth + 1 && menuBounds.top >= 0
+            && menuBounds.bottom <= win.innerHeight + 1 && actions.every(button => button.getBoundingClientRect().height >= 24), "Compact action menu is clipped or compressed")
+          assert(actions.at(-1).textContent.trim() === "全文翻译", "Compact menu full translation label changed")
+          await screenshot("reader-actions-" + width)
+          menu.dispatchEvent(new win.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Escape", bubbles: true, cancelable: true }, win)))
+          assert(toggle.getAttribute("aria-expanded") === "false" && !doc.querySelector("[data-jadense-action-menu]"), "Escape did not close compact actions")
+        }
+        report.checks.push("reader-actions-single-compact-toggle", "reader-actions-menu-viewport", "reader-native-page-controls-unobscured", "reader-actions-keyboard-dismissal")
+      } finally {
+        Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(previousFont), true)
+        main.resizeTo(...previousSize)
+        await Zotero.Promise.delay(200)
+      }
+    }
+    if (!config.documentsOnly) {
+    const toolbarButton = (kind) => readerDoc.querySelector(`[data-jadense-reader-tools="renderToolbar"] [data-jadense-action="${kind}"], [data-jadense-action-menu] [data-jadense-action="${kind}"]`)
     const pressKey = (win, key, modifiers = {}, target = win.document.body) => {
       const event = new win.KeyboardEvent("keydown", Components.utils.cloneInto({
         key, bubbles: true, cancelable: true, ...modifiers,
@@ -742,25 +933,17 @@ async function runHarness(config) {
     assert(brand.parentElement.textContent.trim() === "" && brand.getBBox().width > 0 && brand.getBoundingClientRect().width === 20, "Reader brand is still text or is not visibly sized")
     assert(brand.closest("[data-jadense-reader-tools]").getAttribute("aria-label") === "Jadense 阅读工具", "Reader icon lost the toolbar accessible name")
     report.checks.push("reader-inline-brand-logo")
-    const articleLanguages = await waitFor(() => readerDoc.querySelector("[data-jadense-article-languages]"), "article translation language controls")
-    const articleSourceLanguage = articleLanguages.querySelector('select[aria-label="文章源语言"]')
-    const articleTargetLanguage = articleLanguages.querySelector('select[aria-label="文章目标语言"]')
-    await waitFor(() => articleSourceLanguage?.value === "en" && articleTargetLanguage?.value === "zh-CN", "default English-to-Chinese article languages")
-    assert(articleSourceLanguage.querySelector('option[value="auto"]')
-      && !articleTargetLanguage.querySelector('option[value="auto"]')
-      && articleTargetLanguage.options.length >= 8, "Reader source detection or multiple target languages are unavailable")
+    assert(!readerDoc.querySelector('[data-jadense-article-languages], button[aria-label="文章翻译语言设置"]')
+      && !toolbarButton("references") && !toolbarButton("translate"), "Reader still exposes removed language, selection translation or references toolbar entries")
+    assert(toolbarButton("fullTranslate")?.textContent.trim() === "全文翻译", "Full translation toolbar label is incorrect")
     const changeLanguage = (select, value) => {
       select.value = value
       select.dispatchEvent(new reader._iframeWindow.Event("change", Components.utils.cloneInto({ bubbles: true }, reader._iframeWindow)))
     }
-    const toggleArticleLanguages = (expanded) => {
-      const toggle = readerDoc.querySelector('button[aria-label="文章翻译语言设置"]')
-      if (toggle?.getBoundingClientRect().width > 0 && toggle.getAttribute("aria-expanded") !== String(expanded)) toggle.click()
-    }
-    report.checks.push("reader-article-language-controls", "translation-default-english-to-chinese", "translation-multiple-targets-and-source-detection")
+    report.checks.push("reader-toolbar-simplified-actions", "reader-full-translation-label")
     await stage("empty-selection-hint")
     view._setSelectionRanges()
-    toolbarButton("translate").click()
+    toolbarButton("quote").click()
     const notice = await waitFor(() => readerDoc.querySelector("[data-jadense-reader-notice]:not([hidden])"), "local missing-selection hint")
     assert(notice.textContent.includes("先选中") && notice.getAttribute("role") === "status", "Missing selection hint is not visible and accessible")
     assert(!findManager() && messages().length === 0, "Missing selection unexpectedly opened Manager or created a Chat message")
@@ -1380,7 +1563,11 @@ async function runHarness(config) {
     assert(sentenceSourceLanguage?.value === "en" && sentenceTargetLanguage?.value === "zh-CN"
       && translationState().records[0].result.sourceLanguage === "英文"
       && translationState().records[0].result.targetLanguage === "简体中文", "Initial translation did not inherit and store the default languages")
+    assert(sentenceSourceLanguage.querySelector('option[value="auto"]')
+      && !sentenceTargetLanguage.querySelector('option[value="auto"]')
+      && sentenceTargetLanguage.options.length >= 8, "Sentence translation lost source detection or target languages")
     await screenshot("reader-translation-panel")
+    await verifyFloatingWindow(translationPanel, "selection-translation")
     await stage("reader-sentence-language-override")
     const historyBeforeOverride = translationState().records.length
     // 点击语言控件会失去原生选区；重译必须继续使用浮窗保存的原句快照。
@@ -1398,18 +1585,13 @@ async function runHarness(config) {
     assert(overrideRecord.source.text === first.annotationText && overrideRecord.source.pageIndex === 0
       && overrideRecord.result.sourceLanguage === "自动识别" && overrideRecord.result.targetLanguage === "日语",
     "Sentence retranslation lost its source snapshot or selected language labels")
-    assert(articleSourceLanguage.value === "en" && articleTargetLanguage.value === "zh-CN", "Sentence language override changed the article preferences")
+    const articlePreferenceKey = `extensions.jadenseInZotero.articleTranslationLanguages.${parent.libraryID}.${encodeURIComponent(parent.key)}`
+    assert(!Zotero.Prefs.get(articlePreferenceKey, true), "Sentence language override changed the article preferences")
     await screenshot("reader-translation-sentence-languages")
     report.checks.push("sentence-language-explicit-retranslation", "sentence-retranslation-preserves-source-snapshot", "sentence-language-isolated-from-article", "translation-history-language-labels")
-    await stage("reader-article-language-preferences")
-    toggleArticleLanguages(true)
-    changeLanguage(articleSourceLanguage, "fr")
-    const articlePreferenceKey = `extensions.jadenseInZotero.articleTranslationLanguages.${parent.libraryID}.${encodeURIComponent(parent.key)}`
-    const savedArticleLanguages = () => JSON.parse(Zotero.Prefs.get(articlePreferenceKey, true) || "{}")
-    await waitFor(() => savedArticleLanguages().sourceLanguage === "fr", "article source language autosave")
-    changeLanguage(articleTargetLanguage, "de")
-    await waitFor(() => savedArticleLanguages().sourceLanguage === "fr" && savedArticleLanguages().targetLanguage === "de", "article target language autosave")
-    toggleArticleLanguages(false)
+    await stage("reader-legacy-article-language-preferences")
+    // 工具条语言入口已移除；旧 profile 的文章偏好仍须兼容，合成值仅属于隔离资料库。
+    Zotero.Prefs.set(articlePreferenceKey, JSON.stringify({ sourceLanguage: "fr", targetLanguage: "de" }), true)
     await stage("reader-configured-translation-shortcut")
     translationPanel.querySelector(".jadense-translation-close").click()
     const historyBeforeShortcut = translationState().records.length
@@ -1445,6 +1627,7 @@ async function runHarness(config) {
       && manager.document.querySelector("#jadense-translation-history .jdx-markdown math annotation")?.textContent === "\\epsilon = 0.2",
     "Translation history did not render Markdown while preserving formula notation")
     const translationTitle = manager.document.querySelector("#jadense-translation-history .jdx-translation-title")
+    if (translationTitle?.closest("details")) translationTitle.closest("details").open = true
     assert(translationTitle?.localName === "button" && translationTitle.type === "button" && translationTitle.getAttribute("aria-label")?.includes("Zotero 阅读器"),
       "Translation history title is not an accessible native button")
     await reader.navigate({ pageIndex: JSON.parse(second.annotationPosition).pageIndex })
@@ -1921,34 +2104,20 @@ async function runHarness(config) {
         await Zotero.Promise.delay(200)
         toolbarButton("quote").click()
         await screenshot("reader-toolbar-compact-hint")
-        const languageToggle = readerDoc.querySelector('button[aria-label="文章翻译语言设置"]')
-        assert(languageToggle?.getBoundingClientRect().width > 0, "Compact Reader lacks a permanent article language settings button")
-        toggleArticleLanguages(true)
-        assert(languageToggle.getAttribute("aria-expanded") === "true", "Compact article language button did not open its settings")
-        const compactLanguageBounds = articleLanguages.getBoundingClientRect()
-        report.compactArticleLanguageBounds = {
-          viewportWidth: reader._iframeWindow.innerWidth,
-          left: compactLanguageBounds.left, right: compactLanguageBounds.right, width: compactLanguageBounds.width,
-        }
-        await screenshot("reader-article-languages-compact")
-        assert(compactLanguageBounds.width > 0 && compactLanguageBounds.left >= 0
-          && compactLanguageBounds.right <= reader._iframeWindow.innerWidth + 1,
-        "Compact Reader placed article language controls outside its viewport")
-        for (const select of [articleSourceLanguage, articleTargetLanguage]) {
-          const bounds = select.getBoundingClientRect()
-          const hit = readerDoc.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
-          assert(hit === select || select.contains(hit), "Compact article language select is covered by another Reader layer: " + select.getAttribute("aria-label"))
-        }
+        const actionToggle = readerDoc.querySelector(".jadense-reader-actions-toggle")
+        assert(actionToggle?.getBoundingClientRect().width > 0, "Compact Reader lacks its reading actions toggle")
+        actionToggle.click()
+        assert(actionToggle.getAttribute("aria-expanded") === "true", "Compact reading actions did not open")
+        await screenshot("reader-action-menu-compact")
         reader.setColorScheme("dark")
         await Zotero.Promise.delay(200)
-        report.compactArticleLanguageDarkColors = [articleLanguages, articleSourceLanguage, articleTargetLanguage].map((element) => {
+        report.compactActionMenuDarkColors = [readerDoc.querySelector("[data-jadense-action-menu]"), toolbarButton("fullTranslate")].map((element) => {
           const style = reader._iframeWindow.getComputedStyle(element)
           return { label: element.getAttribute("aria-label"), color: style.color, background: style.backgroundColor }
         })
-        await screenshot("reader-article-languages-compact-dark")
-        toggleArticleLanguages(false)
-        assert(languageToggle.getAttribute("aria-expanded") === "false", "Compact article language settings did not close")
-        report.checks.push("article-language-compact-visible-unobscured")
+        await screenshot("reader-action-menu-compact-dark")
+        actionToggle.click()
+        assert(actionToggle.getAttribute("aria-expanded") === "false", "Compact reading actions did not close")
       } finally {
         reader.setColorScheme(previousScheme)
         mainWindow.resizeTo(...previousSize)
@@ -2043,25 +2212,22 @@ async function runHarness(config) {
       }
     }
 
-    await stage("reader-article-languages-reopen")
+    await stage("reader-simplified-toolbar-reopen")
     // report 的 chars 等早期原生诊断对象也属于旧 Reader；在关闭前将它们固化为普通 JSON。
     Object.assign(report, JSON.parse(JSON.stringify(report)))
     // 关闭后的 PDFView 是 Gecko dead object；先释放诊断引用，避免掩盖重开阶段的原始错误。
     view = undefined
     reader.close()
     await waitFor(() => !Zotero.Reader._readers.includes(reader), "closed synthetic reader")
-    await stage("reader-article-languages-reopening")
+    await stage("reader-simplified-toolbar-reopening")
     reader = await Zotero.Reader.open(attachment.id)
     await reader._initPromise
     view = reader._internalReader._primaryView
-    const reopenedLanguages = await waitFor(() => {
-      const group = reader._iframeWindow.document.querySelector("[data-jadense-article-languages]")
-      return group?.querySelector('select[aria-label="文章源语言"]')?.value === "fr"
-        && group?.querySelector('select[aria-label="文章目标语言"]')?.value === "de" ? group : null
-    }, "persisted article languages after reader reopen")
-    assert(reopenedLanguages.closest('[data-jadense-reader-tools="renderToolbar"]'), "Article languages moved out of the permanent toolbar")
-    await screenshot("reader-article-languages-reopened")
-    report.checks.push("article-language-autosave", "article-language-inherited-by-next-selection", "article-language-reader-reopen")
+    await waitFor(() => reader._iframeWindow.document.querySelector('[data-jadense-action="fullTranslate"]'), "simplified toolbar after reader reopen")
+    assert(!reader._iframeWindow.document.querySelector('[data-jadense-article-languages], [data-jadense-action="references"], [data-jadense-reader-tools="renderToolbar"] [data-jadense-action="translate"], [data-jadense-action-menu] [data-jadense-action="translate"]'), "Reopened Reader restored removed toolbar entries")
+    assert(JSON.parse(Zotero.Prefs.get(articlePreferenceKey, true)).targetLanguage === "de", "Reader reopen lost legacy article language preference")
+    await screenshot("reader-simplified-toolbar-reopened")
+    report.checks.push("legacy-article-language-inherited-by-next-selection", "legacy-article-language-reader-reopen")
 
     report.annotationCount = 2
     await stage("chat-image-upload-and-reload")
@@ -2148,7 +2314,170 @@ async function runHarness(config) {
     await waitFor(() => manager.document !== beforeMissingImageReload && manager.document.querySelector(`[data-message-id="${firstFigureUser.id}"] .jdx-chat-message-image`)?.textContent.includes("图片不可用"), "missing image local fallback")
     assert(currentSession().messages.length > 2, "Missing image removed readable conversation history")
     report.checks.push("chat-image-upload-preview-remove", "chat-image-draft-session-isolation", "chat-image-paste-drop", "chat-image-only-send", "chat-image-message-expand", "chat-image-history-reload", "chat-image-reloaded-followup", "figure-images-history-reload", "missing-image-history-fallback")
+    }
+    await stage("document-research-042")
+    await verifyCompactReaderToolbar()
+    Zotero.Prefs.set("extensions.jadenseInZotero.translationModel", JSON.stringify({ route: "jadense", selection: { kind: "model", modelId: "synthetic-platform-model" } }))
+    const jobs = Zotero.__jadenseDocumentJobs
+    assert(jobs, "Plugin lifecycle did not own the document jobs")
+    const documentReaderDoc = reader._iframeWindow.document
+    const fullButton = documentReaderDoc.querySelector('[data-jadense-action="fullTranslate"]')
+    assert(!documentReaderDoc.querySelector('[data-jadense-reader-tools="renderToolbar"] [data-jadense-action="translate"], [data-jadense-action-menu] [data-jadense-action="translate"]'), "Selection translation leaked into the full-document toolbar")
+    assert(fullButton, "Reader full translation entry is missing")
+    fullButton.click()
+    const fullWindow = await waitFor(() => documentReaderDoc.querySelector(".jdx-full-translation-window"), "full translation floating window")
+    await waitFor(() => { if (fullWindow.textContent.includes("Error") || fullWindow.textContent.includes("not defined")) throw new Error(fullWindow.textContent); return jobs.list("translation").length }, "full PDF task")
+    const fullTask = jobs.list("translation")[0]
+    await waitFor(() => fullTask.status === "running" || fullTask.status === "error" || fullTask.completed > 0, "full translation dispatch")
+    fullWindow.querySelector("header").querySelectorAll("button")[1].click()
+    assert(fullWindow.hidden, "Full translation did not hide")
+    await waitFor(() => fullTask.status !== "running", "hidden full translation completion")
+    assert(fullTask.status === "complete" && fullTask.completed === fullTask.total && fullTask.totalPages === 2, `Incomplete translation: ${JSON.stringify(fullTask)}`)
+    assert((await jobs.copy(fullTask.id)).includes("全文测试译文"), "Full copy lost translations")
+    fullButton.click()
+    await waitFor(() => !fullWindow.hidden && fullWindow.querySelector(".katex"), "full translation safe math rendering")
+    assert(jobs.list("translation").length === 1, "Opening an existing result created another task")
+    assert(!fullWindow.querySelector("details").open, "Original paragraphs were not collapsed")
+    await verifyFloatingWindow(fullWindow, "full-translation")
+    await reader.navigate({ pageIndex: 1 })
+    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, "PDF before full-text selection")
+    const translated = fullWindow.querySelector(".jdx-document-paragraph .jdx-markdown")
+    const range = documentReaderDoc.createRange(); range.selectNodeContents(translated)
+    documentReaderDoc.defaultView.getSelection().addRange(range)
+    assert(view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, "Selecting translated text navigated the PDF")
+    documentReaderDoc.defaultView.getSelection().removeAllRanges()
+    fullWindow.querySelector(".jdx-document-paragraph button").click()
+    await Zotero.Promise.delay(500)
+    report.fullReaderLocations = Zotero.Reader._readers.map(value => ({ itemID: value.itemID, closed: value._isTabClosed, page: value._internalReader?._primaryView?._iframeWindow?.PDFViewerApplication?.pdfViewer?.currentPageNumber }))
+    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 1, "full paragraph coordinate navigation", 10000)
+    assert(view._highlightedPosition?.pageIndex === 0 && view._highlightedPosition.rects.length > 0, "Native paragraph highlight is missing")
+    const clipboard = Zotero.getMainWindow().navigator.clipboard, previousWrite = clipboard.writeText
+    let copied = ""
+    try {
+      clipboard.writeText = async text => { copied = text }
+      fullWindow.querySelector(".jdx-document-controls").querySelectorAll("button")[1].click()
+      await waitFor(() => copied.includes("全文测试译文"), "full-copy clipboard invocation")
+    } finally { clipboard.writeText = previousWrite }
+    report.checks.push("full-paragraph-native-location", "translated-selection-no-navigation", "full-copy-clipboard-api")
+    const pdfFontBefore = view._iframeWindow.getComputedStyle(view._iframeWindow.document.body).fontSize
+    for (const theme of ["light", "dark"]) {
+      Zotero.Prefs.set("extensions.jadenseInZotero.theme", theme, true)
+      for (const size of [12, 13, 18, 24]) {
+        Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", String(size), true)
+        Zotero.Prefs.set("extensions.jadenseInZotero.translationWindowStyle", size >= 18 ? "glass" : "default", true)
+        await Zotero.Promise.delay(150)
+        assert(Math.abs(parseFloat(reader._iframeWindow.getComputedStyle(fullWindow).fontSize) - size) < .1, `Reader font ${size} did not update`)
+        const rect = fullWindow.getBoundingClientRect()
+        assert(rect.right <= reader._iframeWindow.innerWidth + 1 && rect.left >= 0 && rect.bottom <= reader._iframeWindow.innerHeight + 1, "Floating translation escaped viewport")
+        assert(fullWindow.querySelector(".jdx-document-pages").getBoundingClientRect().height >= 60, "Font settings left no readable translation viewport")
+        assert(fullWindow.querySelector("select[data-jdx-translation-style]").value === (size >= 18 ? "glass" : "default"), "Style selector did not follow the shared preference")
+        await screenshot(`full-translation-${theme}-${size}`)
+      }
+    }
+    assert(view._iframeWindow.getComputedStyle(view._iframeWindow.document.body).fontSize === pdfFontBefore, "Plugin font changed native PDF font")
+    Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", "13", true)
+    const min = fullWindow.querySelector("header").querySelectorAll("button")[0]; min.click()
+    assert(fullWindow.dataset.minimized === "true", "Minimize failed"); min.click()
+    fullWindow.querySelector("header").querySelectorAll("button")[1].click()
+    report.checks.push("full-pdf-native-all-pages", "full-pdf-hidden-completion", "full-pdf-existing-task-reuse", "full-pdf-safe-math", "full-pdf-copy", "font-12-13-18-24", "font-native-pdf-isolation", "full-window-themes-styles-minimize")
+    await stage("references-042")
+    const referenceAttachment = await Zotero.Attachments.importFromFile({ file: config.referencePdfPath, parentItemID: parent.id, contentType: "application/pdf" })
+    Zotero.Prefs.set("extensions.jadenseInZotero.paperAnalysisModel", JSON.stringify({ route: "byok", modelId: "unconfigured-fixture" }))
+    const NativeSearch = Zotero.Translate.Search
+    let lookupCount = 0
+    Zotero.Translate.Search = class {
+      setIdentifier() {}
+      async getTranslators() { return [{}] }
+      setTranslator() {}
+      async translate(options) {
+        assert(options.libraryID === false && options.saveAttachments === false, "Verification attempted a library write")
+        lookupCount++
+        return [{ title: "Reliable scientific evidence", DOI: "10.1234/evidence", date: "2020", creators: [{ firstName: "J.", lastName: "Smith", creatorType: "author" }], itemType: "journalArticle" }]
+      }
+    }
+    try {
+      const task = await jobs.start("references", referenceAttachment.id)
+      await jobs.idle()
+      let entries = await jobs.store.references(task.id)
+      assert(entries.length === 3 && entries.map(row => row.label).join(",") === "1,2,3", `Reference source coverage failed: ${JSON.stringify(entries)}`)
+      assert(entries[0].verification === "verified" && entries[2].verification === "verified" && entries[1].verification === "unverified", "Reference verification statuses are wrong")
+      assert(lookupCount === 1, "Successful DOI query was not cached")
+      const refReader = Zotero.Reader._readers.find(value => value.itemID === referenceAttachment.id)
+      const refButton = refReader._iframeWindow.document.querySelector('[data-jadense-action="analyze"]')
+      assert(refButton && !refReader._iframeWindow.document.querySelector('[data-jadense-action="references"]'), "References were not consolidated under literature analysis"); refButton.click()
+      manager = await waitFor(findManager, "reference Manager")
+      manager.document.getElementById("jadense-analysis-tab-references").click()
+      await waitFor(() => manager.document.querySelectorAll(".jdx-reference-row").length === 3, "reference result rows")
+      const staticRow = manager.document.querySelector('[data-verification="unverified"]')
+      assert(staticRow && !staticRow.querySelector("button,a,input,select,textarea,[tabindex]"), "Unverified reference exposes an interactive action")
+      await screenshot("references-verified-and-static", manager)
+      const rawBefore = entries.map(row => row.raw).join("\n")
+      await jobs.import(task.id, entries.map(row => row.id), parent.libraryID)
+      entries = await jobs.store.references(task.id)
+      assert(entries.length === 3 && entries.map(row => row.raw).join("\n") === rawBefore, "Import changed the original reference list")
+      assert(entries[0].imported?.itemID && entries[0].imported.itemID === entries[2].imported?.itemID && !entries[1].imported, `Verified-only import and duplicate detection failed: ${JSON.stringify(entries)}`)
+      const saved = Zotero.Items.get(entries[0].imported.itemID)
+      assert(saved.getField("DOI") === "10.1234/evidence" && saved.getAttachments().length === 0, "Metadata import changed DOI or downloaded an attachment")
+      // 从同一 Manager 刷新后再次接收阅读器动作，不能开出第二个工作台或调用旧内层窗口。
+      const previousDocument = manager.document
+      manager.location.reload()
+      await waitFor(() => manager.document !== previousDocument && manager.receiveJadenseContext && manager.document.querySelector(".jdx-reading-preferences"), "reloaded Manager action receiver")
+      refButton.click()
+      manager.document.getElementById("jadense-analysis-tab-references").click()
+      await waitFor(() => manager.document.querySelectorAll(".jdx-reference-row").length === 3, "references after Manager reload")
+      assert(findManagers().length === 1, "Reader opened a duplicate Manager after reload")
+      manager.document.getElementById("jadense-manager-nav-settings").click()
+      manager.document.getElementById("jadense-settings-tab-general").click()
+      const readingControls = manager.document.querySelector("#jadense-settings-panel-general .jdx-manager-settings-card .jdx-reading-preferences")
+      assert(readingControls && readingControls.querySelectorAll(".jdx-reading-preference-row").length === 3, "New reading preferences are outside the General settings card")
+      const sizeInput = readingControls.querySelector("input[data-jdx-font-size]")
+      const opacityInput = readingControls.querySelector("input[data-jdx-translation-opacity]")
+      const styleControl = readingControls.querySelector("[data-jdx-translation-style]")
+      assert(sizeInput && opacityInput && styleControl?.querySelector(".jdx-select-trigger"), "General reading preferences lack the existing styled controls")
+      await Promise.resolve(Zotero.Utilities.Internal.openPreferences("jadense-in-zotero-preferences"))
+      const preferences = await waitFor(() => findWindowContaining("jadense-in-zotero-preferences-pane"), "document native Preferences")
+      const preferenceRoot = preferences.document.getElementById("jadense-in-zotero-preferences-pane")
+      await waitFor(() => preferenceRoot.querySelector('.jdx-reading-preferences input[type="number"]'), "native font preference")
+      const nativeOpacity = preferenceRoot.querySelector("input[data-jdx-translation-opacity]")
+      assert(nativeOpacity?.closest('[data-settings-section="general"]'), "Native opacity setting is outside General")
+      styleControl.querySelector(".jdx-select-trigger").click()
+      styleControl.querySelectorAll('[role="option"]')[1].click()
+      opacityInput.value = "65"; opacityInput.dispatchEvent(new manager.Event("input", { bubbles: true }))
+      await waitFor(() => nativeOpacity.value === "65" && fullWindow.querySelector("input[data-jdx-translation-opacity]").value === "65", "shared General opacity across native and floating windows")
+      assert(preferenceRoot.querySelector("[data-jdx-translation-opacity-value]").textContent === "65%"
+        && fullWindow.dataset.windowStyle === "glass", "Style or transparency label failed to synchronize")
+      nativeOpacity.value = "30"; nativeOpacity.dispatchEvent(new preferences.Event("input", { bubbles: true }))
+      await waitFor(() => opacityInput.value === "30" && readingControls.querySelector("[data-jdx-translation-opacity-value]").textContent === "30%", "native opacity updates Manager")
+      for (const theme of ["light", "dark"]) {
+        Zotero.Prefs.set("extensions.jadenseInZotero.theme", theme, true)
+        for (const size of [12, 13, 18, 24]) {
+          sizeInput.value = String(size); sizeInput.dispatchEvent(new manager.Event("change", { bubbles: true }))
+          await Zotero.Promise.delay(120)
+          assert(preferenceRoot.querySelector('input[type="number"]').value === String(size), "Native Preferences font control is stale")
+          assert(Math.abs(parseFloat(manager.getComputedStyle(manager.document.documentElement).fontSize) - size) < .1, "Manager font is stale")
+          const card = readingControls.closest(".jdx-manager-settings-card").getBoundingClientRect()
+          for (const control of [sizeInput, opacityInput, styleControl]) {
+            const bounds = control.getBoundingClientRect()
+            assert(bounds.width > 0 && bounds.left >= card.left && bounds.right <= card.right + 1,
+              "General reading control escaped its card at font size " + size)
+          }
+          await screenshot(`document-general-${config.appearanceLanguage || "zh-CN"}-${theme}-${size}`, manager)
+          if (size === 24) await screenshot(`document-native-general-${theme}-${size}`, preferences)
+        }
+      }
+      Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", "13", true); preferences.close()
+      report.checks.push("references-native-text-order-duplicates", "references-zero-write-lookup", "references-success-cache", "references-unverified-static-dom", "references-batch-verification-guard", "references-native-import-and-doi-dedup", "references-source-retained-after-import")
+      report.checks.push("references-manager-reload-reuses-window", "font-shared-manager-native-preferences")
+      report.checks.push("reading-preferences-integrated-general-card", "reading-preferences-styled-controls", "opacity-shared-manager-native-floating", "references-within-literature-analysis")
+    } finally { Zotero.Translate.Search = NativeSearch }
     report.assistantMessages = completed().length
+    if (config.documentRestart) {
+      // 只修改合成任务：保留前面成果，模拟最后一个请求尚未完成时进程退出。
+      const page = await jobs.store.page(fullTask.id, fullTask.totalPages - 1)
+      delete page.translations[page.pieces.at(-1).id]
+      await jobs.store.savePage(fullTask.id, page)
+      fullTask.completed--; fullTask.status = "running"; await jobs.store.save(fullTask)
+    }
     report.state = "passed"
     report.stage = "complete"
     await persist()
@@ -2157,6 +2486,7 @@ async function runHarness(config) {
     report.error = `${String(error)}\n${error?.stack || ""}`
     report.managerStatus = manager?.document?.getElementById("jadense-chat-status")?.textContent ?? ""
     report.analysisStatus = manager?.document?.getElementById("jadense-analysis-status")?.textContent ?? ""
+    report.documentUI = reader?._iframeWindow?.document?.querySelector(".jdx-full-translation-window")?.textContent
     report.analysisUi = manager ? {
       sectionHidden: manager.document.getElementById("jadense-manager-section-analysis")?.hidden,
       stopHidden: manager.document.getElementById("jadense-analysis-stop")?.hidden,
@@ -2246,6 +2576,7 @@ async function main() {
   const dataDir = path.join(smokeRoot, "data")
   const reportPath = path.join(smokeRoot, "research-report.json")
   const pdfPath = path.join(smokeRoot, "synthetic-research.pdf")
+  const referencePdfPath = path.join(smokeRoot, "synthetic-references.pdf")
   const extensionsDir = path.join(profileDir, "extensions")
   const stub = await startStub()
   let child
@@ -2256,11 +2587,12 @@ async function main() {
     await mkdir(extensionsDir, { recursive: true })
     await mkdir(dataDir, { recursive: true })
     await writeFile(pdfPath, createResearchFixturePdf())
+    await writeFile(referencePdfPath, createResearchFixturePdf(true))
     await copyFile(upgradeFrom ? path.resolve(upgradeFrom) : artifact, path.join(extensionsDir, `${pluginID}.xpi`))
     const upgradeXpi = upgradeFrom ? path.join(smokeRoot, "upgrade.xpi") : undefined
     if (upgradeXpi) await copyFile(artifact, upgradeXpi)
-    await writeCompanion(extensionsDir, {
-      pluginID, profileDir, dataDir, pdfPath, reportPath, origin: stub.origin, upgradeXpi,
+    const companionConfig = {
+      pluginID, profileDir, dataDir, pdfPath, referencePdfPath, reportPath, origin: stub.origin, upgradeXpi,
       token: SYNTHETIC_TOKEN, uploadFolderId: UPLOAD_FOLDER_ID,
       sentences: PDF_SENTENCES, translationMarker: TRANSLATION_MARKER, byokMarker: BYOK_MARKER,
       figureCaption: FIGURE_CAPTION, figureMarker: FIGURE_MARKER,
@@ -2272,8 +2604,9 @@ async function main() {
         user: createMarkdownFixture("user", stub.origin),
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
-      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage,
-    })
+      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+    }
+    await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [
       'user_pref("extensions.autoDisableScopes", 0);',
       'user_pref("extensions.enabledScopes", 15);',
@@ -2304,12 +2637,30 @@ async function main() {
       await delay(250)
     }
     if (report?.state !== "passed") throw new Error(`Research smoke timed out at ${report?.stage ?? "companion startup"}`)
+    if (argv.includes("--document-restart")) {
+      const requestsBefore = stub.requests.filter(row => row.kind === "full-translation").length
+      await stopIsolatedProcess(child, profileDir)
+      const resumeReportPath = path.join(smokeRoot, "document-restart-report.json")
+      await writeCompanion(extensionsDir, { ...companionConfig, resumeOnly: true, upgradeXpi: undefined, reportPath: resumeReportPath })
+      child = spawn(executable, ["-no-remote", "-profile", profileDir, "-datadir", dataDir, "-ZoteroDebugText"], { windowsHide: true, stdio: ["ignore", stdout.fd, stderr.fd] })
+      const resumeDeadline = Date.now() + 60_000
+      let resumed
+      while (Date.now() < resumeDeadline) {
+        resumed = await readFile(resumeReportPath, "utf8").then(JSON.parse).catch(() => undefined)
+        if (resumed?.state === "failed") throw new Error(resumed.error)
+        if (resumed?.state === "passed") break
+        await delay(250)
+      }
+      if (resumed?.state !== "passed") throw new Error("Native document restart timed out")
+      if (stub.requests.filter(row => row.kind === "full-translation").length !== requestsBefore + 1) throw new Error("Native resume redispatched completed chunks")
+      report.checks.push(...resumed.checks)
+    }
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (!appearanceLanguage && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!appearanceLanguage && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -2326,7 +2677,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!appearanceLanguage) report.checks.push("markdown-no-automatic-network-resources")
+    if (!appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

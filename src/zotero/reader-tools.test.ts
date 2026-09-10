@@ -420,7 +420,7 @@ class ElementStub {
   children: ElementStub[] = []
   attributes = new Map<string, string>()
   handlers = new Map<string, (event?: { key?: string; preventDefault?: () => void }) => void>()
-  style = { cssText: "", left: "", top: "", colorScheme: "" }
+  style = { cssText: "", left: "", top: "", right: "", width: "", height: "", colorScheme: "" }
   dataset: Record<string, string> = {}
   className = ""
   title = ""
@@ -436,10 +436,16 @@ class ElementStub {
     if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this)
   })
   setAttribute(key: string, value: string) { this.attributes.set(key, value) }
+  getAttribute(key: string) { return this.attributes.get(key) ?? null }
   removeAttribute(key: string) { this.attributes.delete(key) }
   contains(node: ElementStub): boolean { return node === this || this.children.some(child => child.contains(node)) }
   addEventListener(event: string, handler: () => void) { this.handlers.set(event, handler) }
-  getBoundingClientRect() { return { left: 700, bottom: 33 } }
+  removeEventListener(name: string) { this.handlers.delete(name) }
+  focus() { this.ownerDocument.activeElement = this }
+  closest() { return null }
+  querySelectorAll(selector: string) { return descendants(this).filter(node => selector.startsWith(".") ? node.className.split(" ").includes(selector.slice(1)) : node.tagName === selector) }
+  querySelector(selector: string) { return this.querySelectorAll(selector)[0] }
+  getBoundingClientRect() { return { left: 700, top: 5, bottom: 33, width: 170, height: 28, right: 870 } }
   append(...children: ElementStub[]) {
     for (const child of children) {
       if (child.parent) child.parent.children = child.parent.children.filter((node) => node !== child)
@@ -449,6 +455,7 @@ class ElementStub {
 }
 
 class DocumentStub {
+  activeElement: ElementStub | null = null
   head = new ElementStub(this, "head")
   body = new ElementStub(this, "body")
   handlers = new Map<string, (event: { key: string }) => void>()
@@ -460,6 +467,7 @@ class DocumentStub {
     addEventListener: (name: string, listener: () => void) => this.windowHandlers.set(name, listener),
     removeEventListener: (name: string) => this.windowHandlers.delete(name),
   }
+  getElementById(id: string) { return [...descendants(this.head), ...descendants(this.body)].find(node => (node as ElementStub & { id?: string }).id === id) }
   createElement(tagName: string) { return new ElementStub(this, tagName) }
   createElementNS(_namespace: string, tagName: string) { return this.createElement(tagName) }
   addEventListener(name: string, handler: (event: { key: string }) => void) { this.handlers.set(name, handler) }
@@ -467,7 +475,7 @@ class DocumentStub {
 }
 
 function actionButtons(group: ElementStub): ElementStub[] {
-  return group.children.filter((child) => child.attributes.has("data-jadense-action"))
+  return descendants(group).filter((child) => child.attributes.has("data-jadense-action"))
 }
 
 function descendants(element: ElementStub): ElementStub[] {
@@ -499,9 +507,9 @@ describe("native reader toolbars", () => {
     const toolbar = append.mock.calls[0][0]
     const panel = doc.body.children.find(node => node.attributes.has("data-jadense-translation-panel"))!
     const notice = doc.body.children.find(node => node.attributes.has("data-jadense-reader-notice"))!
-    const source = descendants(toolbar).find(node => node.attributes.get("aria-label") === "Document source language")!
+    const source = descendants(panel).find(node => node.attributes.get("aria-label") === "Selection source language")!
     expect(actionButtons(toolbar).map(node => node.attributes.get("aria-label"))).toEqual([
-      "Start a new AI chat about this document", "Analyze document", "AI translation", "Quote selection",
+      "Start a new AI chat about this document", "Analyze document", "Quote selection", "Full translation",
     ])
     expect(source.children.find(node => node.value === "en")?.textContent).toBe("English")
     expect(panel.attributes.get("aria-label")).toBe("AI translation result")
@@ -529,48 +537,67 @@ describe("native reader toolbars", () => {
     expect(observers.size).toBe(0)
   })
 
-  it("synchronizes open article toolbars and refreshes externally changed preferences on focus", async () => {
-    const fixture = host()
-    const values = new Map<string, unknown>()
-    fixture.zotero.Prefs = { get: (key) => values.get(key), set: (key, value) => { values.set(key, value) } }
-    const register = vi.fn()
+  it("collapses all actions into one accessible menu and dismisses without changing selection actions", async () => {
+    const fixture = host(), register = vi.fn(), onAction = vi.fn(), doc = new DocumentStub()
     fixture.zotero.Reader!.registerEventListener = register
-    const cleanup = registerReaderTools(fixture.zotero, "test@jadense", vi.fn())
-    const readers = [new DocumentStub(), new DocumentStub()].map((doc) => {
-      const append = vi.fn((node: ElementStub) => doc.body.append(node))
-      register.mock.calls[0][1]({ reader: fixture.reader, doc, append })
-      const toolbar = append.mock.calls[0][0]
-      return {
-        doc,
-        source: descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章源语言")!,
-        target: descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章目标语言")!,
-        toggle: descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章翻译语言设置")!,
-      }
-    })
-    try {
-      await vi.waitFor(() => expect(readers.every(({ source }) => !source.disabled)).toBe(true))
-      readers[0].source.value = "fr"
-      readers[0].source.handlers.get("change")!()
-      await vi.waitFor(() => expect(readers[1].source.value).toBe("fr"))
-      readers[1].target.value = "ja"
-      readers[1].target.handlers.get("change")!()
-      await vi.waitFor(() => expect(readers[0].target.value).toBe("ja"))
-      expect(await readArticleTranslationLanguages(fixture.zotero, 11)).toEqual({ sourceLanguage: "fr", targetLanguage: "ja" })
-      await writeArticleTranslationLanguages(fixture.zotero, 11, { sourceLanguage: "de", targetLanguage: "en" })
-      readers[0].doc.windowHandlers.get("focus")!()
-      await vi.waitFor(() => expect(readers[0].source.value).toBe("de"))
-      expect(readers[0].target.value).toBe("en")
-      readers[0].toggle.handlers.get("click")!()
-      expect(readers[0].toggle.attributes.get("aria-expanded")).toBe("true")
-      expect(readers[0].doc.body.children.some((node) => node.attributes.has("data-jadense-language-popover"))).toBe(true)
-      readers[0].doc.handlers.get("keydown")!({ key: "Escape" })
-      expect(readers[0].toggle.attributes.get("aria-expanded")).toBe("false")
-      expect(readers[0].doc.body.children.some((node) => node.attributes.has("data-jadense-language-popover"))).toBe(false)
-    } finally { cleanup() }
-    expect(readers.every(({ doc }) => doc.windowHandlers.size === 0)).toBe(true)
+    const cleanup = registerReaderTools(fixture.zotero, "test@jadense", onAction)
+    const append = vi.fn((node: ElementStub) => doc.body.append(node))
+    register.mock.calls[0][1]({ reader: fixture.reader, doc, append })
+    const toolbar = append.mock.calls[0][0]
+    const toggle = descendants(toolbar).find(node => node.className === "jadense-reader-actions-toggle")!
+    expect(toolbar.attributes.get("data-compact")).toBe("true")
+    expect(toggle.attributes.get("aria-haspopup")).toBe("menu")
+    expect(descendants(toolbar).some(node => node.attributes.has("data-jadense-article-languages"))).toBe(false)
+    const preserveSelection = vi.fn()
+    toggle.handlers.get("mousedown")!({ preventDefault: preserveSelection })
+    expect(preserveSelection).toHaveBeenCalledOnce()
+    toggle.handlers.get("click")!({ detail: 1 })
+    expect(toggle.attributes.get("aria-expanded")).toBe("true")
+    expect(doc.activeElement).toBeNull()
+    toggle.handlers.get("click")!({ detail: 1 })
+    toggle.handlers.get("click")!()
+    const menu = doc.body.children.find(node => node.attributes.has("data-jadense-action-menu"))!
+    expect(menu.attributes.get("role")).toBe("menu")
+    expect(actionButtons(menu).map(node => node.attributes.get("data-jadense-action"))).toEqual(["attach", "analyze", "quote", "fullTranslate"])
+    expect(doc.activeElement).toBe(actionButtons(menu)[0])
+    menu.handlers.get("keydown")!({ key: "End", preventDefault: vi.fn() })
+    expect(doc.activeElement).toBe(actionButtons(menu).at(-1))
+    doc.handlers.get("keydown")!({ key: "Escape" })
+    expect(toggle.attributes.get("aria-expanded")).toBe("false")
+    expect(doc.activeElement).toBe(toggle)
+    expect(menu.parent).toBe(toolbar)
+    toggle.handlers.get("click")!()
+    actionButtons(menu)[0].handlers.get("click")!()
+    await Promise.resolve()
+    expect(onAction).toHaveBeenCalledWith({ kind: "attach", itemID: 11 })
+    expect(toggle.attributes.get("aria-expanded")).toBe("false")
+    let expandedWidth = 1800
+    const nativeToolbar = {
+      clientWidth: 1600,
+      get scrollWidth() { return toolbar.attributes.get("data-compact") === "true" ? 1550 : expandedWidth },
+    }
+    toolbar.closest = () => nativeToolbar
+    doc.defaultView.innerWidth = 1600
+    doc.windowHandlers.get("resize")!()
+    expect(toolbar.attributes.get("data-compact")).toBe("true")
+    doc.windowHandlers.get("resize")!()
+    expect(toolbar.attributes.get("data-compact")).toBe("true")
+    toggle.handlers.get("click")!()
+    const focused = actionButtons(menu)[2]
+    focused.focus()
+    expandedWidth = 1580
+    doc.windowHandlers.get("resize")!()
+    expect(toolbar.attributes.get("data-compact")).toBe("false")
+    expect(doc.activeElement).toBe(focused)
+    doc.defaultView.innerWidth = 1200
+    doc.windowHandlers.get("resize")!()
+    expect(doc.activeElement).toBe(toggle)
+    cleanup()
+    expect(doc.handlers.size).toBe(0)
+    expect(doc.windowHandlers.size).toBe(0)
   })
 
-  it("saves article languages while sentence overrides retain the source snapshot and fence stale results", async () => {
+  it("retains saved article languages while sentence overrides retain the source snapshot and fence stale results", async () => {
     const fixture = host()
     const values = new Map<string, unknown>()
     fixture.zotero.Prefs = { get: (key) => values.get(key), set: (key, value) => { values.set(key, value) } }
@@ -585,23 +612,14 @@ describe("native reader toolbars", () => {
     const toolbarEvent = { reader: fixture.reader, doc, append }
     try {
       register.mock.calls[0][1](toolbarEvent)
-      const toolbar = append.mock.calls[0][0]
-      const articleSource = descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章源语言")!
-      const articleTarget = descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章目标语言")!
-      await vi.waitFor(() => expect(articleSource.disabled).toBe(false))
-      expect([articleSource.value, articleTarget.value]).toEqual(["en", "zh-CN"])
-      expect(articleSource.children.some((option) => option.value === "auto")).toBe(true)
-      expect(articleTarget.children.some((option) => option.value === "auto")).toBe(false)
-      articleSource.value = "fr"
-      articleTarget.value = "de"
-      articleTarget.handlers.get("change")!()
-      await vi.waitFor(() => expect(articleTarget.disabled).toBe(false))
+      await writeArticleTranslationLanguages(fixture.zotero, 11, { sourceLanguage: "fr", targetLanguage: "de" })
       expect(await readArticleTranslationLanguages(fixture.zotero, 11)).toEqual({ sourceLanguage: "fr", targetLanguage: "de" })
 
       fixture.reader._internalReader._state.primaryViewSelectionPopup = {
         annotation: { text: "Original sentence", pageLabel: "S2", position: { pageIndex: 1 } },
       }
-      actionButtons(toolbar)[2].handlers.get("click")!()
+      register.mock.calls[1][1](toolbarEvent)
+      actionButtons(append.mock.calls[1][0])[0].handlers.get("click")!()
       await vi.waitFor(() => expect(pending).toHaveLength(1))
       expect(onAction.mock.calls[0][0]).toMatchObject({ languages: { sourceLanguage: "fr", targetLanguage: "de" } })
       const panel = doc.body.children.find((node) => node.attributes.has("data-jadense-translation-panel"))!
@@ -629,16 +647,12 @@ describe("native reader toolbars", () => {
       await Promise.resolve()
       await Promise.resolve()
       expect(result.textContent).toBe("日本語の訳文")
-      expect([articleSource.value, articleTarget.value]).toEqual(["fr", "de"])
-      register.mock.calls[0][1](toolbarEvent)
-      const reopened = descendants(append.mock.calls[1][0]).find((node) => node.attributes.get("aria-label") === "文章目标语言")!
-      await vi.waitFor(() => expect(reopened.disabled).toBe(false))
-      expect(reopened.value).toBe("de")
+      expect(await readArticleTranslationLanguages(fixture.zotero, 11)).toEqual({ sourceLanguage: "fr", targetLanguage: "de" })
 
       fixture.reader._internalReader._state.primaryViewSelectionPopup = {
         annotation: { text: "Next sentence", pageLabel: "S3", position: { pageIndex: 2 } },
       }
-      actionButtons(toolbar)[2].handlers.get("click")!()
+      actionButtons(append.mock.calls[1][0])[0].handlers.get("click")!()
       await vi.waitFor(() => expect(pending).toHaveLength(3))
       expect(onAction.mock.calls[2][0]).toMatchObject({ text: "Next sentence", languages: { sourceLanguage: "fr", targetLanguage: "de" } })
       pending[2].finish({ translation: "" })
@@ -658,18 +672,11 @@ describe("native reader toolbars", () => {
     const append = vi.fn((node: ElementStub) => doc.body.append(node))
     try {
       register.mock.calls[0][1]({ reader: fixture.reader, doc, append })
-      const toolbar = append.mock.calls[0][0]
-      const articleTarget = descendants(toolbar).find((node) => node.attributes.get("aria-label") === "文章目标语言")!
-      await vi.waitFor(() => expect(articleTarget.disabled).toBe(false))
-      articleTarget.value = "ja"
-      articleTarget.handlers.get("change")!()
-      await vi.waitFor(() => expect(articleTarget.disabled).toBe(false))
-      expect(articleTarget.value).toBe("zh-CN")
-      expect(doc.body.children.find((node) => node.attributes.has("data-jadense-reader-notice"))!.textContent).toContain("未能保存")
       fixture.reader._internalReader._state.primaryViewSelectionPopup = {
         annotation: { text: "Sentence", pageLabel: "1", position: { pageIndex: 0 } },
       }
-      actionButtons(toolbar)[2].handlers.get("click")!()
+      register.mock.calls[1][1]({ reader: fixture.reader, doc, append })
+      actionButtons(append.mock.calls[1][0])[0].handlers.get("click")!()
       const panel = doc.body.children.find((node) => node.attributes.has("data-jadense-translation-panel"))!
       const result = panel.children[1].children[3]
       await vi.waitFor(() => expect(result.textContent).toBe("Provider failed"))
@@ -879,8 +886,9 @@ describe("native reader toolbars", () => {
     expect(onOpenManager).toHaveBeenCalledWith()
     expect(onAction).not.toHaveBeenCalled()
     const buttons = actionButtons(toolbar)
-    expect(buttons.map((button) => button.attributes.get("aria-label"))).toEqual(["发起新对话，向 AI 提问（当前文献）", "解析文献", "智能翻译", "引用选文"])
-    expect(buttons.map((button) => button.children[1].textContent)).toEqual(["提问", "解析", "翻译", "引用"])
+    expect(buttons.map((button) => button.attributes.get("aria-label"))).toEqual(["发起新对话，向 AI 提问（当前文献）", "解析文献", "引用选文", "全文翻译"])
+    expect(buttons.map((button) => button.children[1].textContent)).toEqual(["提问", "解析", "引用", "全文翻译"])
+    expect(descendants(toolbar).some(node => node.attributes.has("data-jadense-article-languages"))).toBe(false)
     expect(buttons[0].title).toBe("Jadense · 发起新对话，向 AI 提问（当前文献）")
     buttons[0].handlers.get("click")!()
     await Promise.resolve()
@@ -902,7 +910,7 @@ describe("native reader toolbars", () => {
       annotation: { text: "Current selection only", pageLabel: "iv", position: { pageIndex: 3 } },
     }
     fixture.reader._internalReader._lastViewPrimary = false
-    buttons[3].handlers.get("click")!()
+    buttons[2].handlers.get("click")!()
     fixture.reader._internalReader._state.secondaryViewSelectionPopup = null
     await Promise.resolve()
     expect(onAction).toHaveBeenLastCalledWith({ kind: "quote", itemID: 11, text: "Current selection only", pageIndex: 3, pageLabel: "iv" })
@@ -914,7 +922,7 @@ describe("native reader toolbars", () => {
     const popupButtons = actionButtons(popup)
     expect(popup.children).toHaveLength(2)
     expect(popupButtons.map((button) => button.children[1].textContent)).toEqual(["智能翻译", "引用选文"])
-    expect(doc.head.children).toHaveLength(1)
+    expect(doc.head.children).toHaveLength(2)
     popupButtons[0].handlers.get("click")!()
     await vi.waitFor(() => expect(onAction).toHaveBeenCalledTimes(3))
     expect(onAction).toHaveBeenLastCalledWith(
@@ -965,7 +973,11 @@ describe("native reader toolbars", () => {
       expect.objectContaining({ kind: "translate", text: "Selected source" }),
       expect.objectContaining({ onTranslationText: expect.any(Function) }),
     )
-    panel.children[2].children[0].handlers.get("click")!()
+    expect(panel.children[2].children[0].className).toBe("jdx-window-appearance")
+    expect(panel.children[2].children[0].children[0].textContent).toBe("外观")
+    expect(descendants(panel.children[2]).some(node => node.attributes.has("data-jdx-translation-opacity"))).toBe(true)
+    expect(panel.children.filter(node => node.dataset.jdxResize)).toHaveLength(8)
+    panel.children[2].children[1].handlers.get("click")!()
     expect(doc.clipboardWrite).toHaveBeenCalledWith("## 完整译文\n\n- 公式：$E = mc^2$")
     cleanup()
   })
@@ -996,8 +1008,9 @@ describe("native reader toolbars", () => {
       expect(notice.style.left).toBe("532px")
       doc.handlers.get("keydown")!({ key: "Escape" })
       expect(notice.hidden).toBe(true)
-      buttons[3].handlers.get("click")!()
-      expect(notice.textContent).toContain("引用")
+      register.mock.calls[1][1]({ reader: fixture.reader, doc, append })
+      actionButtons(append.mock.calls[1][0])[0].handlers.get("click")!()
+      expect(notice.textContent).toContain("翻译")
       await vi.advanceTimersByTimeAsync(5000)
       expect(notice.hidden).toBe(true)
       expect(onAction).not.toHaveBeenCalled()

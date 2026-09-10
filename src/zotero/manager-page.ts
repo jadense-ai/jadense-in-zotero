@@ -30,7 +30,7 @@ import {
 import { TemporaryChatClient } from "@/chat/temporary-chat"
 import { updateChatMarkdown } from "@/chat/markdown"
 import { readPaperAnalysisHistory, type PaperAnalysisRecord } from "@/chat/paper-analysis-history"
-import { readTranslationHistory, type TranslationPreferenceStore, type TranslationRecord } from "@/chat/translation-history"
+import { type TranslationRecord } from "@/chat/translation-history"
 import { createQuoteSource, groupChatSources, type ChatSource } from "@/chat/research-context"
 import { ANALYSIS_CATEGORIES } from "@/chat/paper-analysis"
 import { parseResearchPresentation, resolveResearchPage, type ResearchMessageContext } from "@/chat/research-presentation"
@@ -90,7 +90,8 @@ import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-an
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
-import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText } from "./ui-preferences"
+import { renderDocumentHistory, mountReferenceWorkspace } from "./document-ui"
+import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import { localizeManagerStaticContent } from "./manager-localization"
 
 export type ManagerPageState = {
@@ -758,10 +759,6 @@ function chatPreferences(zotero: ZoteroLike): LocalChatPreferenceStore {
   return zotero.Prefs
 }
 
-function translationPreferences(zotero: ZoteroLike): TranslationPreferenceStore {
-  if (!zotero.Prefs) throw new Error(uiText("当前 Zotero 环境不支持本地翻译存储。", "This Zotero environment does not support local translation storage."))
-  return zotero.Prefs
-}
 
 /** 新记录严格核验附件身份；无稳定身份的旧 v1 记录只按当前 itemID 重新读取后尝试打开。 */
 export async function openTranslationHistoryRecord(zotero: ZoteroLike, record: TranslationRecord) {
@@ -806,78 +803,11 @@ export async function openPaperAnalysisHistoryRecord(zotero: ZoteroLike, record:
 }
 
 function renderTranslationHistory(elements: ManagerElements, zotero: ZoteroLike) {
-  const records = readTranslationHistory(translationPreferences(zotero)).records
-  if (!records.length) {
-    const empty = create("div", "jdx-translation-empty")
-    const title = create("h3")
-    title.textContent = uiText("还没有翻译记录", "No translations yet")
-    const guide = create("p")
-    guide.textContent = uiText("在 PDF 阅读器中选中文字并点击“智能翻译”，原文与译文会自动保存在这台电脑上。", "Select text in the PDF reader and click Smart translation. The original and translation are saved on this computer.")
-    empty.append(title, guide)
-    elements.translationHistory.replaceChildren(empty)
-    return
-  }
-
-  elements.translationHistory.replaceChildren(...records.map((record) => {
-    const card = create("article", "jdx-translation-record")
-    const header = create("header")
-    const sourceTitle = create("button", "jdx-translation-title") as HTMLButtonElement
-    sourceTitle.type = "button"
-    sourceTitle.textContent = record.source.title || uiText("PDF 选文", "PDF passage")
-    sourceTitle.title = uiText(`在 Zotero 阅读器中打开：${sourceTitle.textContent}`, `Open in Zotero Reader: ${sourceTitle.textContent}`)
-    sourceTitle.setAttribute("aria-label", uiText(`${sourceTitle.title}${record.source.pageLabel ? `，第 ${record.source.pageLabel} 页` : ""}`, `${sourceTitle.title}${record.source.pageLabel ? `, page ${record.source.pageLabel}` : ""}`))
-    sourceTitle.addEventListener("click", () => {
-      setStatus(elements.translationHistoryStatus, uiText("正在 Zotero 阅读器中打开文献…", "Opening the paper in Zotero Reader…"))
-      void openTranslationHistoryRecord(zotero, record).then((opened) => {
-        setStatus(
-          elements.translationHistoryStatus,
-          opened ? uiText("已在 Zotero 阅读器中打开原文。", "Opened the original in Zotero Reader.") : uiText("无法打开原附件；它可能已被删除、移动到其他文库或身份已失效。", "Cannot open the original attachment. It may have been deleted, moved to another library, or no longer match its saved identity."),
-          opened ? "success" : "error",
-        )
-      }).catch(() => setStatus(elements.translationHistoryStatus, uiText("无法打开原附件；请确认文件仍在当前 Zotero 资料库中。", "Cannot open the original attachment. Check that it is still in this Zotero library."), "error"))
-    })
-    const time = create("time") as HTMLTimeElement
-    time.dateTime = record.createdAt
-    const date = new Date(record.createdAt)
-    time.textContent = Number.isNaN(date.getTime()) ? record.createdAt : date.toLocaleString(getUiLocale())
-    header.append(sourceTitle, time)
-
-    const metadata = create("p", "jdx-translation-meta")
-    metadata.textContent = [
-      record.source.citation,
-      record.source.pageLabel ? uiText(`第 ${record.source.pageLabel} 页`, `Page ${record.source.pageLabel}`) : undefined,
-    ].filter(Boolean).join(" · ")
-    metadata.hidden = !metadata.textContent
-
-    const columns = create("div", "jdx-translation-columns")
-    const source = create("section")
-    const sourceLabel = create("h4")
-    sourceLabel.textContent = uiText("原文", "Original")
-    const sourceText = create("p", "jdx-translation-source-text")
-    sourceText.textContent = record.source.text
-    source.append(sourceLabel, sourceText)
-
-    const result = create("section")
-    const resultHeader = create("div", "jdx-translation-result-header")
-    const resultLabel = create("h4")
-    resultLabel.textContent = uiText("译文", "Translation")
-    const copy = create("button") as HTMLButtonElement
-    copy.type = "button"
-    copy.textContent = uiText("复制", "Copy")
-    copy.addEventListener("click", () => {
-      void copyTextToClipboard(zotero, record.result.text).then((copied) => {
-        copy.textContent = copied ? uiText("已复制", "Copied") : uiText("复制失败", "Copy failed")
-        window.setTimeout(() => { copy.textContent = uiText("复制", "Copy") }, 1500)
-      })
-    })
-    resultHeader.append(resultLabel, copy)
-    const resultText = create("div", "jdx-markdown")
-    updateChatMarkdown(resultText, record.result.text)
-    result.append(resultHeader, resultText)
-    columns.append(source, result)
-    card.append(header, metadata, columns)
-    return card
-  }))
+  renderDocumentHistory(elements.translationHistory, zotero, async record => {
+    const opened = await openTranslationHistoryRecord(zotero, record)
+    setStatus(elements.translationHistoryStatus, opened ? uiText("已打开原文", "Original opened") : uiText("原附件不可用", "Original unavailable"), opened ? "success" : "error")
+    return opened
+  })
 }
 
 function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLike) {
@@ -1031,7 +961,7 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   elements.settingsSection.hidden = section !== "settings"
 }
 
-type AnalysisTab = "history" | "config"
+type AnalysisTab = "history" | "config" | "references"
 
 /** 内置指南只切换本页章节；无需账号、网络或 Zotero API，离开页面时保留当前章节。 */
 export function wireGuideNavigation(section: HTMLElement) {
@@ -1060,14 +990,15 @@ export function wireGuideNavigation(section: HTMLElement) {
 }
 
 function setAnalysisTab(elements: ManagerElements, tab: AnalysisTab, focus = false) {
-  const history = tab === "history"
-  elements.analysisTabHistory.setAttribute("aria-selected", String(history))
-  elements.analysisTabConfig.setAttribute("aria-selected", String(!history))
-  elements.analysisTabHistory.tabIndex = history ? 0 : -1
-  elements.analysisTabConfig.tabIndex = history ? -1 : 0
-  elements.analysisHistoryPanel.hidden = !history
-  elements.analysisConfigPanel.hidden = history
-  if (focus) (history ? elements.analysisTabHistory : elements.analysisTabConfig).focus()
+  for (const name of ["history", "config", "references"] as const) {
+    const button = document.getElementById(`jadense-analysis-tab-${name}`)
+    const panel = document.getElementById(`jadense-analysis-panel-${name}`)
+    if (!button || !panel) continue
+    button.setAttribute("aria-selected", String(tab === name)); button.tabIndex = tab === name ? 0 : -1
+    panel.hidden = tab !== name
+    if (focus && tab === name) button.focus()
+  }
+
 }
 
 const CONNECTION_TABS = ["config", "account", "sync"] as const
@@ -2834,11 +2765,12 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.analysisTabConfig.addEventListener("click", () => setAnalysisTab(elements, "config"))
   elements.analysisTabs.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const current = document.activeElement === elements.analysisTabConfig ? 1 : 0
-    const next = event.key === "Home" ? 0 : event.key === "End" ? 1
-      : (current + (event.key === "ArrowRight" ? 1 : -1) + 2) % 2
+    const tabs = ["history", "config", "references"] as const
+    const current = tabs.findIndex(name => document.activeElement?.id === `jadense-analysis-tab-${name}`)
+    const next = event.key === "Home" ? 0 : event.key === "End" ? 2
+      : (current + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3
     event.preventDefault()
-    setAnalysisTab(elements, next === 0 ? "history" : "config", true)
+    setAnalysisTab(elements, tabs[next], true)
   })
   const selectFeatureModel = (feature: AiFeature, value: string) => {
     if (chatBusy) return
@@ -3274,6 +3206,8 @@ export function initJadenseManagerPage() {
   window.matchMedia?.("(max-width: 820px)").addEventListener("change", () => {
     if (zotero) applySidebarCollapsed(elements, readSidebarCollapsed(zotero))
   })
+  const stopReadingPreferences = wireReadingPreferences(zotero, document.getElementById("jadense-settings-panel-general")!)
+  window.addEventListener("unload", stopReadingPreferences, { once: true })
   const stopObservingAppearance = wireManagerAppearance(elements, zotero, document.documentElement)
   window.addEventListener("unload", stopObservingAppearance, { once: true })
   if (!zotero) {
@@ -3305,8 +3239,24 @@ export function initJadenseManagerPage() {
   renderTranslationHistory(elements, zotero)
   renderPaperAnalysisHistory(elements, zotero)
   wireEvents(elements, zotero)
+  const referencesPanel = document.getElementById("jadense-analysis-panel-references")!
+  mountReferenceWorkspace(referencesPanel, zotero)
+  document.getElementById("jadense-analysis-tab-references")!.addEventListener("click", () => setAnalysisTab(elements, "references"))
   const receive = (context: Pick<ManagerContext, "section" | "actions">) => {
-    const actions = context.actions ?? []
+    const actions = (context.actions ?? []).filter(action => {
+      // 解析入口同时绑定同一 PDF 的参考文献任务；提取失败由参考文献页局部展示，摘要/笔记独立继续。
+      if (action.kind === "analyze") mountReferenceWorkspace(referencesPanel, zotero, action.itemID)
+      if (action.kind === "references") {
+        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "references")
+        mountReferenceWorkspace(referencesPanel, zotero, action.itemID); return false
+      }
+      if (action.kind === "fullTranslate") {
+        setActiveSection(elements, "translations")
+        renderDocumentHistory(elements.translationHistory, zotero, record => openTranslationHistoryRecord(zotero, record), action.taskID)
+        return false
+      }
+      return true
+    })
     readerActionQueue.push(...actions)
     if (chatBusy && actions.length) {
       const status = activeOperation === "analysis" ? elements.analysisStatus : elements.chatStatus

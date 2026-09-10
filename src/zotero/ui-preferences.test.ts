@@ -1,6 +1,6 @@
 /** 展示偏好回归：语言按进程快照隔离，主题跨窗口即时更新并释放监听。 */
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { DISPLAY_LANGUAGE_PREF, THEME_PREF, getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
+import { DISPLAY_LANGUAGE_PREF, THEME_PREF, TRANSLATION_OPACITY_PREF, getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, readTranslationOpacity, saveDisplayLanguage, saveTheme, saveTranslationOpacity, translationOpacityControl, uiText, type UiPreferenceHost } from "./ui-preferences"
 
 function host(locale = "zh-CN") {
   const values = new Map<string, unknown>()
@@ -27,6 +27,52 @@ function host(locale = "zh-CN") {
 }
 
 afterEach(() => initializeUiLocale({ locale: "zh-CN" }))
+
+describe("translation background transparency", () => {
+  it("defaults old settings locally, normalizes numeric values, and contains unavailable persistence", () => {
+    const { zotero, values } = host()
+    expect(readTranslationOpacity(zotero)).toBe(80)
+    for (const value of [undefined, null, "", " ", "invalid", { future: true }, false, Infinity, Symbol("future")]) {
+      values.set(TRANSLATION_OPACITY_PREF, value)
+      expect(readTranslationOpacity(zotero)).toBe(80)
+    }
+    for (const [value, expected] of [[0, 0], [100, 100], ["62.4", 62], [-12, 0], [120, 100]] as const) {
+      expect(saveTranslationOpacity(zotero, value)).toBe(true)
+      expect(values.get(TRANSLATION_OPACITY_PREF)).toBe(String(expected))
+      expect(readTranslationOpacity(zotero)).toBe(expected)
+    }
+    const broken = { Prefs: { get: () => { throw Error("closed") }, set: () => { throw Error("closed") } } }
+    expect(readTranslationOpacity(broken)).toBe(80)
+    expect(saveTranslationOpacity(broken, 60)).toBe(false)
+  })
+
+  it("maps the transparency slider to background opacity and updates every owned window without fading text", () => {
+    const { zotero, observers } = host()
+    const makeWindow = () => {
+      const attributes = new Map<string, string>(), events = new Map<string, () => void>(), properties = new Map<string, string>()
+      const output = { textContent: "" }
+      const range = { value: "", parentElement: { querySelector: () => output }, setAttribute: (key: string, value: string) => attributes.set(key, value), addEventListener: (event: string, callback: () => void) => events.set(event, callback) } as unknown as HTMLInputElement
+      const doc = { createElementNS: () => range } as unknown as Document
+      translationOpacityControl(zotero, doc)
+      const root = { dataset: {}, style: { setProperty: (key: string, value: string) => properties.set(key, value) }, ownerDocument: {}, querySelectorAll: (selector: string) => selector === "input[data-jdx-translation-opacity]" ? [range] : [] } as unknown as HTMLElement
+      return { range, attributes, events, properties, output, stop: observeTheme(zotero, root) }
+    }
+    const first = makeWindow(), second = makeWindow()
+    expect(first.range.value).toBe("20")
+    first.range.value = "65"; first.events.get("input")!()
+    expect(readTranslationOpacity(zotero)).toBe(35)
+    for (const window of [first, second]) {
+      expect(window.range.value).toBe("65")
+      expect(window.attributes.get("aria-valuetext")).toBe("65% 透明")
+      expect(window.output.textContent).toBe("65%")
+      expect(window.properties.get("--jdx-window-opacity")).toBe("35%")
+      expect(window.properties.get("--jdx-translation-opacity")).toBe("0.35")
+      expect(window.properties.has("opacity")).toBe(false)
+      window.stop(); window.stop()
+    }
+    expect(observers.size).toBe(0)
+  })
+})
 
 describe("display language", () => {
   it("synchronizes pending selections between settings windows without changing active UI copy", () => {

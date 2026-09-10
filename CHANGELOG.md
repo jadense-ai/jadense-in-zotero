@@ -1,5 +1,53 @@
 # 更新说明 / Changelog
 
+## 0.4.2 — 2026-09-10
+
+[简体中文](#release-042-zh) · [English](#release-042-en)
+
+<a id="release-042-zh"></a>
+
+本次更新将翻译从选文扩展到整篇 PDF，并把参考文献核验、导入与文献解析放在一起。阅读浮窗和字号也可以按习惯调整。
+
+**[下载 0.4.2 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.2/jadense-in-zotero-v0.4.2.xpi)** · [安装与快速开始](README.md#quick-start)
+
+### 功能与体验
+
+- **可恢复的全文翻译**：从阅读操作选择「全文翻译」，按段阅读、复制译文并跳回原文核对。隐藏浮窗后继续处理；中断或重启后可手动继续，已完成内容保留。全文翻译与实时翻译共用模型配置。
+- **参考文献核验与导入**：「解析」同时提取同一 PDF 的参考文献，在「文献解析 → 参考文献」查看原文、核验 DOI 并导入已确认条目。保留引用顺序、编号、重复项及未确认内容；同库 DOI 去重，不覆盖已有文献，不自动下载 PDF。
+- **更合适的阅读外观**：「设置 → 常规」新增 12–24px 字号、普通/毛玻璃浮窗及背景透明度。选文与全文浮窗均支持标题拖动和边角缩放，也可从左下角「外观」直接调整。
+- **阅读器入口更清楚**：空间不足时，提问、解析、引用与全文翻译收在「•••」菜单内，为 Zotero 页码和批注工具留出空间；点击 Jadense 图标打开工作台。选文翻译使用选区弹出栏的「智能翻译」或 `Ctrl+Alt+T`（macOS：`⌘+Alt+T`），顶部不再放置选文翻译按钮。
+
+### 升级与兼容
+
+从 GitHub 0.4.0 / 0.4.1 可直接从文件安装更新，插件 ID 保持 `jadense-in-zotero@jadense.cn`，保留设置和本地历史。使用旧 `.com` 身份的版本（包括官网 0.3.2）需先禁用旧插件，再安装新版；不要删除 profile 或同时启用两个身份。GitHub 发布不推进官网自动更新清单。
+
+全文翻译需要可提取文字的 PDF，不提供 OCR 或覆盖原版式；重启后不会自动恢复模型请求，需要手动继续。参考文献核验可能因来源信息不足或服务不可用而保留为未确认；只有已验证条目可导入。毛玻璃效果依赖宿主图形能力，不可用时保留普通背景。
+
+已知界面现象：原生截图验收中曾出现窄窗口导航未自动收起，同包复跑恢复正常，根因尚未确认；遇到时可使用侧栏收起按钮。
+
+Manifest 声明 Zotero **8.0–10.0.***；本版原生验收使用 **Windows 11 / Zotero 10.0.1**、隔离 profile、合成资料与模拟服务。其他系统、Zotero 8/9、真实 Provider 翻译品质及实际 Crossref 命中率未实测。最终安装包校验和原生验收结果见 [v0.4.2 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2)。
+
+<a id="release-042-en"></a>
+
+### English
+
+Translate a whole PDF, verify and import its references alongside literature analysis, and adjust the reading panels to your preferences.
+
+**[Download version 0.4.2](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.4.2/jadense-in-zotero-v0.4.2.xpi)** · [Installation and quick start](README.en.md#quick-start)
+
+- **Resumable full-document translation**: choose Full translation in the reading actions, read or copy paragraph translations, and navigate to their source. Processing continues while the panel is hidden. After interruption or restart, resume manually while keeping completed parts. It uses the real-time translation model setting.
+- **Reference verification and import**: Analyze also extracts references from the same PDF. Inspect sources, verify DOIs, and import confirmed entries under Literature analysis → References. Original order, numbering, duplicates, and unconfirmed text are retained. Import deduplicates by DOI within the same library without overwriting existing items or downloading PDFs.
+- **Adjustable reading appearance**: General settings now offer a 12–24px font, standard or frosted-glass panels, and background transparency. Drag either translation panel by its title and resize its edges or corners; the bottom-left Appearance menu offers the same style controls.
+- **Clearer reader actions**: when space is limited, Ask, Analyze, Quote, and Full translation appear under the ••• menu. The Jadense icon opens the workbench. Translate selected text from the selection popup's AI translation action or `Ctrl+Alt+T` (`⌘+Alt+T` on macOS); the top toolbar no longer has a selection-translation button.
+
+Install the XPI over GitHub 0.4.0 or 0.4.1 to keep settings and local history under the same `.cn` plugin ID. Disable older `.com` ID builds, including website 0.3.2, before installing; do not delete your profile or enable both identities. GitHub releases do not update the website's automatic update manifest.
+
+Full translation requires extractable PDF text, provides no OCR or original-layout overlay, and resumes only on request after restart. Incomplete source information or unavailable services can leave references unverified; only verified entries can be imported. Frosted glass depends on host graphics support and falls back to a standard background.
+
+Known UI behavior: a native screenshot run intermittently failed to collapse navigation in a narrow window; the same package passed on rerun, and the cause remains unconfirmed. Use the sidebar collapse button if needed.
+
+The manifest declares Zotero **8.0–10.0.***. Native validation uses **Windows 11 / Zotero 10.0.1**, isolated profiles, synthetic documents, and mocked services. Other platforms, Zotero 8/9, real-provider translation quality, and real Crossref matching accuracy were not tested. See the [v0.4.2 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for final artifact checksums and validation results.
+
 ## 0.4.1 — 2026-09-09
 
 [简体中文](#release-041-zh) · [English](#release-041-en)

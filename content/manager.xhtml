@@ -148,12 +148,16 @@
                 <ol>
                   <li data-ui-en="Open the PDF in Zotero. Make sure the attachment is downloaded and its text is readable.">在 Zotero 中打开要解析的 PDF，确认附件已下载且可以读取文字。</li>
                   <li data-ui-en="To choose an analysis model, open Literature analysis → Analysis settings and select a Jadense or saved BYOK model. This choice is independent of Chat and translation.">如需指定解析模型，先到「文献解析 → 解析配置」选择攻玉或已保存的 BYOK 模型。这里的选择独立于对话和翻译。</li>
-                  <li data-ui-en="Click Analyze at the top of the PDF reader. The workbench opens Literature analysis → Analysis history and shows progress. Click Stop to interrupt it.">点击 PDF 阅读器顶部的「解析」。工作台会打开「文献解析 → 解析历史」，显示解析进度；需要中断时点击「停止」。</li>
+                  <li data-ui-en="Click Analyze in the PDF reader (inside Reading actions in a narrow window). The workbench shows analysis progress and extracts references for the same PDF. Click Stop to interrupt the analysis.">点击 PDF 阅读器的「解析」（窄窗口先展开「阅读操作」菜单）。工作台显示解析进度，同时提取当前 PDF 的参考文献；需要中断解析时点击「停止」。</li>
                   <li data-ui-en="Read the summary, then return to the categorized PDF annotations to check the claims against the source.">完成后查看摘要，并回到 PDF 阅读对应的分类批注，核对论点与原文证据。</li>
                 </ol>
                 <h4 data-ui-en="Where to find results">在哪里查看结果</h4>
                 <p data-ui-en="Analysis history saves paper metadata and summaries. Expand View analysis notes for a detailed backup, or use Copy notes. Click a history title to reopen its local PDF.">「解析历史」保存文献信息和摘要。展开「查看解析笔记」可阅读详细备份，使用「复制笔记」带走内容；点击历史记录标题可重新打开对应的本地 PDF。</p>
                 <p data-ui-en="Content that can be located in the source becomes native Zotero annotations, which you can edit, filter, and export. Unlocated or unwritten content remains in analysis notes. Analysis does not create an AI conversation.">能够定位到原文的解析内容会写为 Zotero 原生批注，可以继续编辑、筛选和导出。无法定位或未成功写入的内容仍可在解析笔记中查看。解析不会创建 AI 对话。</p>
+                <h4 data-ui-en="Extract references">解析参考文献</h4>
+                <p data-ui-en="Analyze extracts references for the current PDF. Open Literature analysis → References to view them, or choose another PDF there. Text and layout rules identify entries first. Only uncertain local fragments may use the Literature analysis model; a missing DOI alone never triggers AI. Raw citations, numbering, order and repeated occurrences are retained, including unresolved fragments.">点击阅读器「解析」会同时提取当前 PDF 的参考文献。在「文献解析 → 参考文献」查看结果，也可在该页面选择其他 PDF。先按文字和排版规则提取，只有不确定局部才使用文献解析模型兜底；仅缺少 DOI 不会调用 AI。原始引用、编号、顺序、重复出现和待识别片段都会保留。</p>
+                <p data-ui-en="Use Identify uncertain fragments to retry local recognition. Skip AI and verify cancels only AI and continues metadata checks. Pause stops the entire task; Verify all again never calls AI.">「识别待定片段」可重试局部识别；「跳过 AI，继续核验」仅取消 AI 并继续元数据核验。「暂停」停止整个任务；「统一重新核验」不会调用 AI。</p>
+                <p data-ui-en="Verification uses Zotero DOI translators and Crossref, without AI or library writes. Unverified entries have no actions. A verified DOI must also match the source title, author and year before location, publication link and import controls appear. Choose a writable library and collection, then import individual or checked verified entries. Same-library DOI duplicates are kept in the list without creating another item. Attachments are not downloaded.">核验仅使用 Zotero DOI 转换器和 Crossref，不调用 AI、不写文库。未验证条目没有操作按钮；DOI 还必须与原引用的题名、作者和年份匹配，才显示定位、原文链接及导入操作。选择可写文库和分类后，可导入单条或勾选的已验证条目。同库 DOI 重复时保留列表条目，但不重复创建；不下载附件。</p>
                 <h4 data-ui-en="If something goes wrong">遇到问题时</h4>
                 <ul>
                   <li data-ui-en="Scanned, encrypted, or undownloaded files may not yield text. Check that the PDF opens and that you can select its text.">扫描件、加密文件或尚未下载的附件可能无法提取正文。先检查 PDF 是否可读、可选中文字。</li>
@@ -194,16 +198,20 @@
                 <h4 data-ui-en="Translate selected text">翻译选中的文字</h4>
                 <ol>
                   <li data-ui-en="Select the text you want to translate in the PDF.">在 PDF 中选中需要翻译的文字。</li>
-                  <li><span data-ui-en="Click Translate in the top toolbar, Smart translation in the selection toolbar, or press ">点击顶部「翻译」、选文浮动工具条中的「智能翻译」，或按 </span><kbd>Ctrl + Alt + T</kbd><span data-ui-en="(on macOS, ">（macOS 为 </span><kbd>⌘ + Alt + T</kbd><span data-ui-en=").">）。</span></li>
+                  <li><span data-ui-en="Click Smart translation in the selection toolbar, or press ">点击选文浮动工具条中的「智能翻译」，或按 </span><kbd>Ctrl + Alt + T</kbd><span data-ui-en="(on macOS, ">（macOS 为 </span><kbd>⌘ + Alt + T</kbd><span data-ui-en="). The top toolbar provides Full translation.">）。顶部工具条提供「全文翻译」。</span></li>
                   <li data-ui-en="Read the result in the translation panel. The default direction is English → Simplified Chinese. Change the source and target languages, or set the source to Auto-detect, then click Translate again.">在翻译浮窗中查看结果。默认方向为「英文 → 简体中文」，可修改源语言和目标语言，也可将源语言设为「自动识别」，然后点击「重新翻译」。</li>
                   <li data-ui-en="Click Copy translation to take the result with you.">需要带走译文时点击「复制译文」。</li>
                 </ol>
+                <h4 data-ui-en="Translate the full PDF">全文翻译</h4>
+                <p data-ui-en="Click Full translation in the reader to translate every extractable page using the paper's language settings and the Live translation model. Drag or resize the floating window; minimize or hide it while translation continues. Use Locate original beside a passage to jump to its source; selecting translated text does not navigate the PDF.">点击阅读器「全文翻译」，按文章语言设置，使用实时翻译模型处理所有可提取文字的页面。浮窗可拖动、调整大小、最小化或隐藏；隐藏后继续执行。每段独立的「定位原文」可跳回来源，选择译文不会触发跳转。</p>
+                <p data-ui-en="Pause and continue from the window or details. After restarting Zotero, resume manually; completed chunks are retained. Blank, scanned or unreadable pages are marked and result in partial completion. If the attachment changes, start a new task. Use Appearance at the bottom left of either translation window to toggle its style and background transparency menu. Both windows share these preferences and support title dragging and resizing from any edge or corner.">可在浮窗或详情暂停、继续；重启 Zotero 后需手动继续，已完成分块会保留。空白、扫描或读取失败页会明确标记，并显示部分完成。附件变化后需重新建立任务。两种翻译浮窗均可拖动标题移动、拖拽任意边缘或角落缩放；左下角「外观」展开样式与背景透明度菜单，设置在两种浮窗间共用。</p>
                 <h4 data-ui-en="Review translation history">回看翻译历史</h4>
-                <p data-ui-en="Completed translations are saved in Translation history, with source and translated text together. Click a title to return to the relevant page in the original PDF. Translation records are stored separately from AI conversations.">成功完成的翻译会保存到工作台的「翻译历史」，原文与译文对应展示。点击记录标题可回到原 PDF 的对应页面，继续查看上下文。翻译记录与 AI 对话分开保存。</p>
+                <p data-ui-en="Translation history shows compact summaries. Expand a selected-text record to read its source and translation; open a full-PDF record for page-by-page details, copying, resuming, retranslating or deleting. These local records are separate from AI conversations. A storage warning means you should copy the session result before closing Zotero.">翻译历史默认显示摘要。点击选文记录展开原文和译文；点击全文记录进入按页详情，可复制、续译、重新翻译或删除。记录在本地独立保存，不属于 AI 对话。出现保存失败提示时，请在关闭 Zotero 前复制会话结果。</p>
+                <p data-ui-en="Settings → General offers an interface font size from 12 to 24 px (default 13), translation window style, and background transparency. It updates plugin surfaces immediately and preserves the original PDF and Zotero interface.">「设置 → 常规」可调整界面字号 12–24px（默认 13px）、翻译浮窗样式和背景透明度，即时作用于插件界面，PDF 原文与 Zotero 自有界面不变。</p>
                 <h4 data-ui-en="Tips">使用提示</h4>
                 <ul>
                   <li data-ui-en="Select text before translating. If a scanned document does not allow selection, prepare a PDF with extractable text first.">先选中文字，再触发翻译；扫描件如果无法选文，需要先准备可提取文字的 PDF。</li>
-                  <li data-ui-en="Languages at the top of the PDF sets the default translation direction for that paper. Language changes in the floating panel apply only to the current passage.">PDF 顶部「语言」设置这篇文章的默认翻译方向；浮窗中的语言修改仅作用于本次选文。</li>
+                  <li data-ui-en="Change source and target languages in the translation panel, then click Translate again. These changes apply only to the current passage.">在翻译浮窗中修改源语言和目标语言，再点击「重新翻译」；语言修改仅作用于本次选文。</li>
                   <li data-ui-en="Translation uses the independent live-translation model selected in Settings → Feature settings.">翻译使用「设置 → 功能配置」中独立选择的实时翻译模型。</li>
                   <li data-ui-en="After changing the translation shortcut in Settings → Keyboard shortcuts, click Save to apply it.">在「设置 → 快捷键设置」修改翻译快捷键后，点击「保存」生效。</li>
                 </ul>
@@ -260,7 +268,9 @@
           <div id="jadense-analysis-tabs" class="jdx-tabs" role="tablist" aria-label="文献解析页面" data-ui-en-aria-label="Literature analysis pages">
             <button id="jadense-analysis-tab-history" type="button" role="tab" aria-selected="true" aria-controls="jadense-analysis-panel-history" tabindex="0" data-ui-en="Analysis history">解析历史</button>
             <button id="jadense-analysis-tab-config" type="button" role="tab" aria-selected="false" aria-controls="jadense-analysis-panel-config" tabindex="-1" data-ui-en="Analysis settings">解析配置</button>
+            <button id="jadense-analysis-tab-references" type="button" role="tab" aria-selected="false" aria-controls="jadense-analysis-panel-references" tabindex="-1" data-ui-en="References">参考文献</button>
           </div>
+          <section id="jadense-analysis-panel-references" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-references" hidden="hidden"></section>
           <section id="jadense-analysis-panel-history" class="jdx-analysis-panel" role="tabpanel" aria-labelledby="jadense-analysis-tab-history">
             <div class="jdx-analysis-run">
               <div id="jadense-analysis-status" class="jdx-manager-inline-status" role="status" data-ui-en="Click Analyze in the PDF reader toolbar to start an independent literature analysis.">从 PDF 阅读器工具栏点击“解析”，即可开始独立文献解析。</div>
@@ -457,11 +467,11 @@
               <div><div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label"></div><p id="jadense-feature-chat-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
             <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-translation-label" data-ui-en="Live translation">实时翻译</h3><p data-ui-en="Translate selected PDF text. Set translation direction in the translation panel.">翻译 PDF 选文，语言方向仍在翻译浮窗中设置。</p></div>
+              <div><h3 id="jadense-feature-translation-label" data-ui-en="Live translation">实时翻译</h3><p data-ui-en="Translate selected text and full PDFs. Full translation uses the paper's language settings.">用于 PDF 选文与全文翻译；全文沿用文章语言设置。</p></div>
               <div><div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label"></div><p id="jadense-feature-translation-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
             <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3><p data-ui-en="Generate paper summaries, analysis notes, and source annotations. Shared with Analysis settings.">生成文献总结、解析笔记与原文批注；与解析配置保持一致。</p></div>
+              <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3><p data-ui-en="Summaries, analysis notes, source annotations, and local fallback for uncertain references. Reference verification never uses AI.">生成总结、解析笔记与原文批注，并为不确定引用提供局部识别兜底；参考文献核验不使用 AI。</p></div>
               <div><div id="jadense-feature-analysis-model" aria-labelledby="jadense-feature-analysis-label"></div><p id="jadense-feature-analysis-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
             <div class="jdx-feature-model-row">
