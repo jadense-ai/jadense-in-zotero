@@ -16,8 +16,11 @@ import {
 } from "@/chat/translation-languages"
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
 import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
+import { showFullTranslation, makeTranslationWindowInteractive, translationAppearanceControl, removeDocumentSurfaces } from "./document-ui"
+import type { ZoteroLike } from "./runtime"
 import { READER_UI_THEME_CSS } from "./reader-ui-theme"
-import { readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
+import { bindReaderActionMenu } from "./reader-toolbar-menu"
+import { readArticleTranslationLanguages } from "./translation-settings"
 
 type Rect = [number, number, number, number]
 type PdfPosition = { pageIndex: number; rects: Rect[] }
@@ -123,7 +126,8 @@ export type ZoteroReaderHost = UiPreferenceHost & {
 }
 
 type ReaderToolbarAction = {
-  kind: "attach" | "quote" | "translate" | "analyze"
+  kind: "attach" | "quote" | "translate" | "analyze" | "fullTranslate" | "references"
+  taskID?: string
   itemID: number
   text?: string
   pageIndex?: number
@@ -701,22 +705,22 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
   display:flex;align-items:center;justify-content:center;flex:none;padding:0 6px 0 4px;margin-inline-end:2px;
   border-inline-end:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));
 }
-[data-jadense-reader-tools] > button {
+:is([data-jadense-reader-tools], .jadense-reader-actions) > button {
   appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
   gap:5px;min-width:28px;height:28px;margin:0;padding:0 6px;border:0;border-radius:5px;
-  background:transparent;color:inherit;font:inherit;font-size:12px;font-weight:500;line-height:1;
+  background:transparent;color:inherit;font:inherit;font-size:calc(12px * var(--jdx-font-scale,1));font-weight:500;line-height:1;
   white-space:nowrap;cursor:pointer;-moz-window-dragging:no-drag;
 }
-[data-jadense-reader-tools] > button:hover {
+:is([data-jadense-reader-tools], .jadense-reader-actions) > button:hover {
   background:var(--jdx-reader-hover,rgba(17,21,16,.06));
 }
-[data-jadense-reader-tools] > button:active {
+:is([data-jadense-reader-tools], .jadense-reader-actions) > button:active {
   background:var(--jdx-reader-active,rgba(17,21,16,.12));
 }
-[data-jadense-reader-tools] > button:focus-visible {
+:is([data-jadense-reader-tools], .jadense-reader-actions) > button:focus-visible {
   outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;
 }
-[data-jadense-reader-tools] svg {width:16px;height:16px;flex:none;pointer-events:none;}
+:is([data-jadense-reader-tools], .jadense-reader-actions) svg {width:16px;height:16px;flex:none;pointer-events:none;}
 [data-jadense-reader-tools] .jadense-reader-brand svg {width:20px;height:20px;}
 [data-jadense-reader-tools="renderTextSelectionPopup"] {
   margin-top:4px;padding:3px;background:var(--jdx-reader-surface,transparent);
@@ -725,25 +729,25 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
   position:fixed;z-index:10001;box-sizing:border-box;width:260px;max-width:calc(100vw - 16px);
   padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
   color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
-  box-shadow:0 2px 8px rgba(0,0,0,.1);font:12px/1.6 system-ui,sans-serif;pointer-events:none;
+  box-shadow:0 2px 8px rgba(0,0,0,.1);font:calc(12px * var(--jdx-font-scale,1))/1.6 system-ui,sans-serif;pointer-events:none;
 }
 [data-jadense-reader-notice][hidden] {display:none;}
 [data-jadense-translation-panel] {
   position:fixed;z-index:10000;top:56px;right:16px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
-  box-sizing:border-box;width:min(430px,calc(100vw - 32px));max-height:calc(100vh - 72px);overflow:hidden;
-  border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:10px;
+  box-sizing:border-box;width:min(430px,calc(100vw - 16px));min-width:min(300px,calc(100vw - 16px));min-height:min(220px,calc(100vh - 16px));max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:hidden;
+  border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:8px;
   color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
-  box-shadow:0 12px 32px rgba(0,0,0,.18);font:13px/1.65 system-ui,sans-serif;
+  box-shadow:0 8px 24px rgba(0,0,0,.14);font:calc(13px * var(--jdx-font-scale,1))/1.65 system-ui,sans-serif;
 }
 [data-jadense-translation-panel][hidden] {display:none;}
 [data-jadense-translation-panel] header {display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
-[data-jadense-translation-panel] header strong {font-size:13px;}
+[data-jadense-translation-panel] header strong {font-size:calc(13px * var(--jdx-font-scale,1));}
 [data-jadense-translation-panel] button {appearance:none;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;padding:5px 9px;color:inherit;background:transparent;font:inherit;cursor:pointer;}
 [data-jadense-translation-panel] button:hover:not(:disabled) {background:var(--jdx-reader-hover,rgba(17,21,16,.06));}
 [data-jadense-translation-panel] button:disabled {cursor:default;opacity:.5;}
-[data-jadense-translation-panel] .jadense-translation-close {border:0;padding:2px 7px;font-size:18px;line-height:1.2;}
+[data-jadense-translation-panel] .jadense-translation-close {border:0;padding:2px 7px;font-size:calc(18px * var(--jdx-font-scale,1));line-height:1.2;}
 .jadense-translation-content {min-height:0;overflow-y:auto;padding:12px;}
-.jadense-translation-label {margin:0 0 4px;color:var(--jdx-reader-muted,currentColor);font-size:11px;font-weight:650;letter-spacing:.02em;}
+.jadense-translation-label {margin:0 0 4px;color:var(--jdx-reader-muted,currentColor);font-size:calc(11px * var(--jdx-font-scale,1));font-weight:650;letter-spacing:.02em;}
 .jadense-translation-text {margin:0 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;}
 .jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--jdx-reader-surface,rgba(17,21,16,.04));}
 .jadense-translation-result[data-error="true"] {color:var(--jdx-reader-error,#b42318);}
@@ -762,29 +766,27 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 .jadense-translation-result .katex {font-size:1.04em;}
 .jadense-translation-result .katex-display {display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;padding-block:2px;}
 .jadense-translation-result .jdx-math-error {color:var(--jdx-reader-error,#b42318);}
-.jadense-translation-actions {display:flex;justify-content:flex-end;padding:9px 12px;border-top:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
+.jadense-translation-actions {display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:9px 12px;border-top:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
 .jadense-translation-languages {display:inline-flex;align-items:center;gap:4px;min-width:0;}
 [data-jadense-reader-tools] .jadense-translation-languages {margin-inline-start:4px;padding-inline-start:5px;border-inline-start:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
-.jadense-translation-languages select {box-sizing:border-box;width:82px;min-width:0;height:28px;padding:2px 3px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;color:inherit;background:var(--jdx-reader-background,Canvas);font:12px system-ui,sans-serif;}
+.jadense-translation-languages select {box-sizing:border-box;width:82px;min-width:0;height:28px;padding:2px 3px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;color:inherit;background:var(--jdx-reader-background,Canvas);font:calc(12px * var(--jdx-font-scale,1)) system-ui,sans-serif;}
 .jadense-translation-languages select:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;}
 [data-jadense-translation-panel] header {flex-wrap:wrap;gap:6px;}
 [data-jadense-sentence-languages] {flex-basis:100%;flex-wrap:wrap;}
 [data-jadense-sentence-languages] button {margin-inline-start:auto;}
-.jadense-translation-language-hint {flex-basis:100%;margin:0;color:var(--jdx-reader-muted,currentColor);font-size:11px;}
-.jadense-article-language-menu {display:inline-flex;align-items:center;}
-.jadense-article-language-toggle {display:none;}
-[data-jadense-language-popover] {position:fixed;z-index:10002;top:44px;right:8px;margin:0;padding:8px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:6px;background:var(--jdx-reader-background,Canvas);box-shadow:0 2px 8px rgba(0,0,0,.1);}
-@media (max-width:1100px) {
-  [data-jadense-reader-tools="renderToolbar"] .jadense-reader-label {display:none;}
-  [data-jadense-reader-tools="renderToolbar"] > button[data-jadense-action] {padding:0;width:28px;}
-  .jadense-article-language-toggle {display:inline-flex;flex:none;align-items:center;justify-content:center;min-width:36px;height:28px;padding:0 6px;white-space:nowrap;border:0;border-radius:5px;color:inherit;background:transparent;font:12px system-ui,sans-serif;cursor:pointer;}
-  .jadense-article-language-toggle:hover {background:var(--jdx-reader-hover,rgba(17,21,16,.06));}
-  .jadense-article-language-toggle:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;}
-  [data-jadense-reader-tools] [data-jadense-article-languages] {display:none;}
-}
+.jadense-translation-language-hint {flex-basis:100%;margin:0;color:var(--jdx-reader-muted,currentColor);font-size:calc(11px * var(--jdx-font-scale,1));}
+[data-jadense-reader-tools] .jadense-reader-actions-toggle {display:none;width:28px;padding:0;font-size:14px;letter-spacing:1px;}
+.jadense-reader-actions {display:inline-flex;align-items:center;gap:2px;color:var(--jdx-reader-text,CanvasText);}
+[data-jadense-reader-tools][data-compact=true] > .jadense-reader-actions {display:none;}
+[data-jadense-reader-tools][data-compact=true] > .jadense-reader-actions-toggle {display:inline-flex;}
+[data-jadense-action-menu] {position:fixed;z-index:10003;display:flex;flex-direction:column;align-items:stretch;gap:3px;box-sizing:border-box;width:max-content;min-width:170px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto;padding:6px;border:1px solid var(--jdx-reader-line);border-radius:9px;background:var(--jdx-reader-background,Canvas);box-shadow:0 8px 28px rgba(0,0,0,.18);}
+[data-jadense-action-menu] > button {justify-content:flex-start;min-height:34px;height:auto;padding:9px 10px;white-space:normal;text-align:start;}
+
 `
 
 const READER_ACTION_ICONS: Record<ReaderToolbarAction["kind"], string> = {
+  fullTranslate: "M4 3h16v18H4z M8 7h8 M8 11h8 M8 15h6",
+  references: "M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h6",
   attach: "M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M8 9h8 M8 13h5",
   analyze: "M11 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v3 M14 2v6h6 M8 12h2 M8 16h1 M20 16a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M19 19l3 3",
   translate: "M3 5h12 M9 3v2 M5 5c0 5 6 9 8 9 M13 5c0 5-6 9-8 9 M14 21l4-10 4 10 M15.5 17h5",
@@ -909,8 +911,7 @@ export function registerReaderTools(
   const nodes = new Set<HTMLElement>()
   const handlers = new Map<ReaderEventType, ReaderHandler>()
   const shortcutCleanups = new Map<Document, () => void>()
-  const articleLanguageRefreshes = new Map<HTMLElement, () => void>()
-  const articleLanguageClosers = new Map<HTMLElement, () => boolean>()
+  const toolbarMenus = new Map<HTMLElement, ReturnType<typeof bindReaderActionMenu>>()
   const documents = new Map<Document, {
     show: (anchor: HTMLElement, text: string) => void
     hide: () => void
@@ -962,7 +963,7 @@ export function registerReaderTools(
     sentenceLanguages.element.append(retranslate)
     const languageHint = doc.createElement("p")
     languageHint.className = "jadense-translation-language-hint"
-    languageHint.textContent = uiText("仅修改本句；文章默认语言在顶部工具条设置。", "Changes apply to this selection only. Set document defaults in the top toolbar.")
+    languageHint.textContent = uiText("语言修改仅用于当前选文。", "Language changes apply to this selection only.")
     translationHeader.append(sentenceLanguages.element, languageHint)
     const translationContent = doc.createElement("div")
     translationContent.className = "jadense-translation-content"
@@ -984,9 +985,11 @@ export function registerReaderTools(
     copyTranslation.type = "button"
     copyTranslation.textContent = uiText("复制译文", "Copy translation")
     copyTranslation.disabled = true
-    translationActions.append(copyTranslation)
+    const appearance = translationAppearanceControl(zotero as unknown as ZoteroLike, doc)
+    translationActions.append(appearance.element, copyTranslation)
     translationPanel.append(translationHeader, translationContent, translationActions)
     noticeHost.append(translationPanel)
+    const interaction = makeTranslationWindowInteractive(translationPanel, translationHeader)
     themeRoot(notice)
     themeRoot(translationPanel)
     let translationRequestID = 0
@@ -1003,9 +1006,10 @@ export function registerReaderTools(
       notice.hidden = true
       notice.textContent = ""
     }
-    const closeTranslation = () => { translationRequestID += 1; translationPanel.hidden = true }
+    const closeTranslation = () => { translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
     const dismiss = () => {
-      for (const [node, close] of articleLanguageClosers) if (node.ownerDocument === doc && close()) return true
+      if (appearance.close()) return true
+      for (const [node, menu] of toolbarMenus) if (node.ownerDocument === doc && menu.close()) return true
       if (!translationPanel.hidden) { closeTranslation(); return true }
       if (!notice.hidden) { hide(); return true }
       return false
@@ -1013,11 +1017,6 @@ export function registerReaderTools(
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       dismiss()
-    }
-    const refreshArticleLanguages = () => {
-      for (const [node, refresh] of articleLanguageRefreshes) {
-        if (node.ownerDocument === doc && node.isConnected) refresh()
-      }
     }
     translationClose.addEventListener("click", closeTranslation)
     const changeSentenceLanguages = () => {
@@ -1048,13 +1047,15 @@ export function registerReaderTools(
       shortcutCleanups.get(doc)?.()
       doc.removeEventListener("keydown", onKeyDown)
       doc.defaultView?.removeEventListener("pagehide", remove)
-      doc.defaultView?.removeEventListener("focus", refreshArticleLanguages, true)
       style.remove()
       notice.remove()
+      appearance.remove()
+      interaction.remove()
       translationPanel.remove()
+      removeDocumentSurfaces(doc)
       for (const node of nodes) if (node.ownerDocument === doc) {
-        articleLanguageClosers.get(node)?.()
-        node.remove(); nodes.delete(node); articleLanguageRefreshes.delete(node); articleLanguageClosers.delete(node)
+        toolbarMenus.get(node)?.remove()
+        node.remove(); nodes.delete(node); toolbarMenus.delete(node)
       }
       documents.delete(doc)
     }
@@ -1075,6 +1076,7 @@ export function registerReaderTools(
         resultText.setAttribute("data-error", "false")
         copyTranslation.disabled = true
         translationPanel.hidden = false
+        interaction.clamp()
         return translationRequestID
       },
       setTranslationLanguages: (requestID: number, languages: TranslationLanguages) => {
@@ -1114,7 +1116,6 @@ export function registerReaderTools(
     documents.set(doc, entry)
     doc.addEventListener("keydown", onKeyDown)
     doc.defaultView?.addEventListener("pagehide", remove, { once: true })
-    doc.defaultView?.addEventListener("focus", refreshArticleLanguages, true)
     return entry
   }
   /** 点击与快捷键共用翻译请求、流式浮窗与本地错误，避免产生第二条对话入口。 */
@@ -1236,14 +1237,15 @@ export function registerReaderTools(
     { kind: "analyze", label: uiText("解析文献", "Analyze document"), short: uiText("解析", "Analyze") },
     { kind: "translate", label: uiText("智能翻译", "AI translation"), short: uiText("翻译", "Translate") },
     { kind: "quote", label: uiText("引用选文", "Quote selection"), short: uiText("引用", "Quote") },
+    { kind: "fullTranslate", label: uiText("全文翻译", "Full translation"), short: uiText("全文翻译", "Full translation") },
   ] as const
   for (const type of ["renderToolbar", "renderTextSelectionPopup"] as const) {
     const handler: ReaderHandler = (event) => {
       if (!active || !Number.isInteger(event.reader.itemID)) return
       for (const node of nodes) if (!node.isConnected) {
-        articleLanguageClosers.get(node)?.()
+        toolbarMenus.get(node)?.remove()
         for (const [root, stop] of themeCleanups) if (root === node || node.contains?.(root)) { stop(); themeCleanups.delete(root) }
-        nodes.delete(node); articleLanguageRefreshes.delete(node); articleLanguageClosers.delete(node)
+        nodes.delete(node); toolbarMenus.delete(node)
       }
       const feedback = documentTools(event.doc)
       if (type === "renderToolbar") bindTranslationShortcut(event)
@@ -1262,7 +1264,7 @@ export function registerReaderTools(
         // 仅打开或聚焦工作台，不触发阅读器提问，也不附加当前文献。
         brand.addEventListener("click", () => {
           if (!active) return
-          articleLanguageClosers.get(group)?.()
+          toolbarMenus.get(group)?.close()
           feedback.hide()
           try { onOpenManager?.() } catch {
             feedback.show(brand, uiText("无法打开攻玉工作台，请稍后重试。", "The Jadense workspace could not be opened. Please try again."))
@@ -1270,7 +1272,18 @@ export function registerReaderTools(
         })
         group.append(brand)
       }
+      const actionList = type === "renderToolbar" ? event.doc.createElement("span") : group
+      if (actionList !== group) {
+        actionList.className = "jadense-reader-actions jadense-reader-action-menu"
+        themeRoot(actionList)
+        const toggle = event.doc.createElement("button")
+        toggle.type = "button"
+        toggle.className = "jadense-reader-actions-toggle"
+        toggle.textContent = "•••"
+        group.append(toggle, actionList)
+      }
       for (const action of actions) {
+        if (type === "renderToolbar" && action.kind === "translate") continue
         if (type === "renderTextSelectionPopup" && action.kind !== "translate" && action.kind !== "quote") continue
         const button = event.doc.createElement("button")
         button.type = "button"
@@ -1284,96 +1297,34 @@ export function registerReaderTools(
         button.addEventListener("mousedown", (mouseEvent) => mouseEvent.preventDefault())
         button.addEventListener("click", () => {
           if (!active) return
-          articleLanguageClosers.get(group)?.()
           const selection = selectedAction(action.kind, event.reader, event.params?.annotation)
+          toolbarMenus.get(group)?.close()
+          const anchor = group.getAttribute("data-compact") === "true"
+            ? group.querySelector<HTMLButtonElement>(".jadense-reader-actions-toggle") || button : button
           if ((action.kind === "translate" || action.kind === "quote") && !selection.text) {
-            feedback.show(button, uiText(`请先选中文献中的文字，再点击「${action.short}」。`, `Select text in the document before clicking “${action.short}”.`))
+            feedback.show(anchor, uiText(`请先选中文献中的文字，再点击「${action.short}」。`, `Select text in the document before clicking “${action.short}”.`))
             return
           }
           feedback.hide()
+          if (selection.kind === "fullTranslate") {
+            void showFullTranslation(zotero as unknown as ZoteroLike, event.doc, selection.itemID, taskID => { void onAction({ ...selection, taskID }) })
+            return
+          }
           // 在原生点击同步阶段保留选区；让焦点变化或 popup 关闭发生后仍引用同一段文字。
           if (selection.kind === "translate") {
-            translate(event.doc, button, selection)
+            translate(event.doc, anchor, selection)
             return
           }
           void Promise.resolve().then(() => { if (active) return onAction(selection) })
             .catch(() => {
-              if (active && documents.has(event.doc)) feedback.show(button, uiText("操作未完成，请稍后重试，或打开 Jadense 对话查看。", "The action did not complete. Try again or open Jadense Chat for details."))
+              if (active && documents.has(event.doc)) feedback.show(anchor, uiText("操作未完成，请稍后重试，或打开 Jadense 对话查看。", "The action did not complete. Try again or open Jadense Chat for details."))
             })
         })
-        group.append(button)
-      }
-      if (type === "renderToolbar") {
-        const articleLanguages = translationLanguageControls(event.doc, "文章")
-        themeRoot(articleLanguages.element)
-        articleLanguages.disable(true)
-        const menu = event.doc.createElement("span")
-        menu.className = "jadense-article-language-menu"
-        const toggle = event.doc.createElement("button")
-        toggle.type = "button"
-        toggle.className = "jadense-article-language-toggle"
-        toggle.textContent = uiText("语言", "Languages")
-        toggle.title = uiText("当前文章的翻译语言", "Translation languages for this document")
-        toggle.setAttribute("aria-label", uiText("文章翻译语言设置", "Document translation language settings"))
-        toggle.setAttribute("aria-expanded", "false")
-        let open = false
-        const setOpen = (value: boolean) => {
-          open = value
-          toggle.setAttribute("aria-expanded", String(open))
-          // 原生 toolbar 自有堆叠上下文；展开时挂到 body，避免被翻译结果与提示遮住。
-          if (open) {
-            articleLanguages.element.setAttribute("data-jadense-language-popover", "")
-            ;(event.doc.body || event.doc.documentElement).append(articleLanguages.element)
-          } else {
-            articleLanguages.element.removeAttribute("data-jadense-language-popover")
-            menu.append(articleLanguages.element)
-          }
-        }
-        toggle.addEventListener("click", () => { setOpen(!open); if (open) articleLanguageRefreshes.get(group)?.() })
-        articleLanguageClosers.set(group, () => {
-          if (!open) return false
-          setOpen(false)
-          if (event.doc.activeElement && menu.contains(event.doc.activeElement)) toggle.focus()
-          return true
-        })
-        menu.append(toggle, articleLanguages.element)
-        group.append(menu)
-        let saving = false
-        let revision = 0
-        const refresh = () => {
-          if (saving) return
-          const current = ++revision
-          void readArticleTranslationLanguages(zotero, event.reader.itemID).then((languages) => {
-            if (!active || !group.isConnected || current !== revision) return
-            articleLanguages.set(languages)
-            toggle.title = `${uiText("当前文章", "Current document")}: ${translationLanguageDisplayLabel(languages.sourceLanguage)} → ${translationLanguageDisplayLabel(languages.targetLanguage)}`
-            articleLanguages.disable(false)
-          })
-        }
-        articleLanguageRefreshes.set(group, refresh)
-        refresh()
-        const saveLanguages = async () => {
-          if (saving) return
-          saving = true
-          revision += 1
-          articleLanguages.disable(true)
-          const saved = await writeArticleTranslationLanguages(zotero, event.reader.itemID, articleLanguages.get())
-          if (!active || !group.isConnected) return
-          if (!saved) {
-            articleLanguages.set(await readArticleTranslationLanguages(zotero, event.reader.itemID))
-            if (!active || !group.isConnected) return
-            feedback.show(articleLanguages.element, uiText("未能保存文章翻译语言，请稍后重试；仍可在翻译浮窗修改本句语言。", "Document translation languages could not be saved. Try again; you can still change languages for this selection in the translation panel."))
-          }
-          saving = false
-          articleLanguages.disable(false)
-          // 同篇多附件窗口共享文章偏好；重新读取各自身份，不把本句快照一并覆盖。
-          if (saved) for (const refresh of articleLanguageRefreshes.values()) refresh()
-        }
-        articleLanguages.source.addEventListener("change", () => { void saveLanguages() })
-        articleLanguages.target.addEventListener("change", () => { void saveLanguages() })
+        actionList.append(button)
       }
       nodes.add(group)
       event.append(group)
+      if (actionList !== group) toolbarMenus.set(group, bindReaderActionMenu(group, actionList, group.querySelector<HTMLButtonElement>(".jadense-reader-actions-toggle")!))
     }
     handlers.set(type, handler)
     try { zotero.Reader.registerEventListener(type, handler, pluginID) } catch { cleanup(); break }

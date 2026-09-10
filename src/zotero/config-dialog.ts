@@ -61,7 +61,7 @@ function resetDocument(doc: Document) {
   style.textContent = `
     :root {
       color-scheme: light;
-      font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: calc(13px * var(--jdx-font-scale,1)) system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: #17211b;
       background: #f7f9f8;
     }
@@ -83,7 +83,7 @@ function resetDocument(doc: Document) {
     }
     h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: calc(20px * var(--jdx-font-scale,1));
       font-weight: 650;
       letter-spacing: 0;
     }

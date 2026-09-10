@@ -27,6 +27,23 @@ type OpenedManager = Window & {
 
 const managerWindows = new WeakMap<ZoteroLike, OpenedManager>()
 
+/** 页面刷新会替换 Gecko 内层窗口；通过窗口管理器找回当前页面，避免继续使用失效回调或新开重复工作台。 */
+function liveManager(zotero: ZoteroLike): OpenedManager | undefined {
+  const cached = managerWindows.get(zotero)
+  try { if (cached?.closed === false && cached.document?.readyState === "complete") return cached } catch { /* 内层窗口已销毁。 */ }
+  try {
+    const services = (globalThis as typeof globalThis & { Services?: { wm?: { getEnumerator(type: null): { hasMoreElements(): boolean; getNext(): OpenedManager } } } }).Services
+    const windows = services?.wm?.getEnumerator(null)
+    while (windows?.hasMoreElements()) {
+      const candidate = windows.getNext()
+      if (!candidate.closed && String(candidate.location?.href).startsWith(chromeContentUrl(JADENSE_MANAGER_RESOURCE))) {
+        managerWindows.set(zotero, candidate); return candidate
+      }
+    }
+  } catch { /* 未出现过窗口时使用普通打开流程。 */ }
+  return cached
+}
+
 /** 卸载时关闭本插件窗口，让正在生成的请求随窗口中止。 */
 export function closeManagerWindow(zotero: ZoteroLike) {
   const manager = managerWindows.get(zotero)
@@ -58,7 +75,7 @@ export function openManagerWindow(input: {
     ...(input.action ? { actions: [input.action] } : {}),
   }
 
-  const existing = managerWindows.get(input.zotero)
+  const existing = liveManager(input.zotero)
   if (existing && existing.closed === false) {
     if (existing.receiveJadenseContext) {
       existing.receiveJadenseContext(managerContext)

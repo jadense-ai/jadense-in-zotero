@@ -164,7 +164,7 @@ const PANEL_STYLES = `
     gap: 10px;
     color: var(--jdx-text);
     background: var(--jdx-subtle);
-    font: 12px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font: calc(12px * var(--jdx-font-scale,1))/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   .jdx-sync-panel[data-theme="dark"] {
     --jdx-text: #e4eae6;
@@ -184,7 +184,7 @@ const PANEL_STYLES = `
   .jdx-sync-hint {
     margin: 0;
     color: var(--jdx-muted);
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--jdx-font-scale,1));
   }
   .jdx-sync-card {
     display: grid;

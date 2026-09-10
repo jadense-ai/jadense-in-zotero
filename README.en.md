@@ -26,7 +26,17 @@ Click **Ask (提问)** to start a conversation about the current paper. You can 
 
 ### Translate difficult passages as you read
 
-Select text and click **Translate (翻译)**, or press `Ctrl+Alt+T` (`⌘+Alt+T` on macOS), to view a translation in a floating reader panel. Choose from 32 language options, save a translation direction for a paper, or change it for the current selection. Translation history lets you return to the original PDF page.
+Select text and click **AI translation (智能翻译)** in the selection popup, or press `Ctrl+Alt+T` (`⌘+Alt+T` on macOS), to view a translation in a floating reader panel. Choose from 32 language options for the current selection; existing per-paper language preferences remain effective. The top toolbar's **Full translation (全文翻译)** handles the whole PDF; use the selection popup or shortcut for selected text.
+
+### Translate a whole PDF and check the original passages
+
+Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Hiding the panel keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Full translation uses the model selected for real-time translation. It requires extractable PDF text and does not provide OCR or replace the original page layout.
+
+### Follow the evidence through references
+
+**Analyze** also extracts the current PDF's references. Under **Literature analysis → References (文献解析 → 参考文献)**, inspect the source, verify DOIs, and select verified entries to import into Zotero. Original order, numbering, duplicates, and unconfirmed text are retained. Import deduplicates by DOI within the same library and saves metadata and links without downloading PDFs.
+
+When reader space is limited, Ask, Analyze, Quote, and Full translation appear under the **•••** reading actions menu. Click the Jadense icon to open the workbench directly.
 
 ### Interpret figures with the paper's context
 
@@ -42,7 +52,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### Install
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The current version is **0.4.1**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The current version is **0.4.2**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 
@@ -59,6 +69,7 @@ Open **Settings → General (设置 → 常规)** to choose your display languag
 
 - **Display language**: follow Zotero, Simplified Chinese, or English; the default follows Zotero. Chinese Zotero locales use Simplified Chinese, and other locales use English. Restart Zotero after saving; reopening the workbench alone does not switch languages. This does not change translation direction, AI output requirements, papers, or existing history.
 - **Theme**: follow Zotero, light, or dark; the default follows Zotero and updates open plugin interfaces immediately. Existing light/dark choices are preserved. The sidebar button also saves your theme choice, while drafts and active generation continue.
+- **Font size and translation panels**: choose a 12–24px plugin font, a standard or frosted-glass panel, and background transparency. Drag either translation panel by its title or resize its edges and corners; the bottom-left Appearance menu offers the same style controls. Transparency affects only the background. Frosted glass requires host graphics support and falls back to a standard background when unavailable.
 
 The workbench, reader tools, guide, native settings, menus, and notices support both languages. Zotero continues to control window frames, system title bars, and PDF page appearance.
 
@@ -124,6 +135,7 @@ The following describes data handling in the **Zotero plugin**.
 | --- | --- |
 | Saving settings, conversations, image attachments, translation history, and analysis history | Your local Zotero profile. API keys and Jadense tokens are also stored there; do not share the profile publicly. |
 | BYOK model requests | Directly from the plugin to the selected provider, including the text, paper context, and images needed for the request. The API key authenticates with that provider. |
+| Reference recognition, verification, and import | Uncertain fragments may be sent to the selected analysis model; Zotero lookup and Crossref verify DOI and bibliographic information. Selected verified metadata is imported into your local library. |
 | Jadense AI features | Jadense receives temporary requests and their required context, authenticated with the plugin token. It also receives the plugin version and feature type for troubleshooting. The server handles processing, billing, and operational records under its own rules. |
 | Literature upload | The metadata of papers you explicitly upload, plus local PDFs only when you choose to include them. |
 | Plugin updates | Zotero requests the update manifest and installation package from the Jadense website. |
@@ -132,7 +144,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.1 was tested on **Windows 11 / Zotero 10.0.1**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.1) for the full validation record and scope.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.2 was tested on **Windows 11 / Zotero 10.0.1**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.2) for the full validation record and scope.
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 
@@ -140,11 +152,11 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-To upgrade from GitHub 0.4.0, install 0.4.1 from the XPI file. Both use the same `.cn` plugin ID, preserving existing settings and local history.
+To upgrade from GitHub 0.4.0 or 0.4.1, install 0.4.2 from the XPI file. Both use the same `.cn` plugin ID, preserving existing settings and local history.
 
-If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install 0.4.1 from the XPI file**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
+If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install 0.4.2 from the XPI file**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 
-The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved explicit models, routes, and BYOK selections are preserved. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-041-en) for version differences.
+The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved explicit models, routes, and BYOK selections are preserved. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-042-en) for version differences.
 
 ## Contribute and share feedback
 

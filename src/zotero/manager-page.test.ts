@@ -363,7 +363,7 @@ describe("reader document conversation lifecycle", () => {
     const bootstrap = readFileSync(new URL("../bootstrap.ts", import.meta.url), "utf8")
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
     const analyze = manager.match(/async function analyzePaper[\s\S]*?\n}\n\nfunction compactFigureText/)?.[0] ?? ""
-    expect(bootstrap).toContain('openManager(action.kind === "analyze" ? "analysis" : "chat", action)')
+    expect(bootstrap).toContain('openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)')
     expect(analyze).toContain("runIndependentPaperAnalysis")
     expect(analyze).not.toContain("createLocalChatSession")
     expect(analyze).not.toContain("appendLocalChatMessage")
@@ -704,9 +704,10 @@ describe("manager page state", () => {
   it("renders translation titles as native accessible buttons backed by local Reader navigation", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
     const renderer = manager.match(/function renderTranslationHistory[\s\S]*?\n}\n\nfunction renderPaperAnalysisHistory/)?.[0] ?? ""
-    expect(renderer).toContain('create("button", "jdx-translation-title")')
-    expect(renderer).toContain('sourceTitle.type = "button"')
-    expect(renderer).toContain('sourceTitle.setAttribute("aria-label"')
+    const ui = readFileSync(new URL("./document-ui.ts", import.meta.url), "utf8")
+    expect(renderer).toContain("renderDocumentHistory")
+    expect(ui).toContain('sourceTitle.className = "jdx-translation-title"')
+    expect(ui).toContain('sourceTitle.setAttribute("aria-label"')
     expect(renderer).toContain("openTranslationHistoryRecord")
     expect(renderer).toContain("translationHistoryStatus")
   })

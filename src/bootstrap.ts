@@ -34,6 +34,7 @@ import {
 } from "@/zotero/manager-window"
 import { registerReaderTools, type ReaderAction } from "@/zotero/reader-tools"
 import { registerReaderFigureTools } from "@/zotero/reader-figure-tools"
+import { documentJobs, stopDocumentJobs } from "@/zotero/document-jobs"
 import { translateReaderSelection } from "@/zotero/reader-translation"
 import { formatJadenseSyncResult } from "@/zotero/sync-result"
 import {
@@ -305,6 +306,14 @@ async function startup(data: BootstrapData = {}) {
 
   await waitForMainWindowUi()
   initializeUiLocale(Zotero)
+  // 后台任务不依附 Manager；bootstrap sandbox 缺少的 Web API 从常驻 Zotero 主窗口取得。
+  const windowRuntime = mainWindow() as unknown as Record<string, unknown> | null
+  const backgroundRuntime = globalThis as unknown as Record<string, unknown>
+  if (windowRuntime) for (const name of ["AbortController", "DOMException", "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "crypto", "structuredClone", "setTimeout", "clearTimeout"]) {
+    if (backgroundRuntime[name] !== undefined) continue
+    const value = windowRuntime[name]
+    backgroundRuntime[name] = typeof value === "function" && ["structuredClone", "setTimeout", "clearTimeout"].includes(name) ? value.bind(windowRuntime) : value
+  }
 
   loadLocalizationIntoOpenWindows()
 
@@ -325,6 +334,7 @@ async function startup(data: BootstrapData = {}) {
   }
 
   registerMenus()
+  documentJobs(Zotero)
   try {
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
@@ -337,7 +347,7 @@ async function startup(data: BootstrapData = {}) {
           onTextDelta: hooks?.onTranslationText,
         }).then((record) => ({ translation: record.result.text }))
       }
-      openManager(action.kind === "analyze" ? "analysis" : "chat", action)
+      openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)
     }, () => {
       if (!openManager()) throw new Error(uiText("无法打开攻玉工作台。", "Could not open Jadense Workspace."))
     })
@@ -360,6 +370,7 @@ async function startup(data: BootstrapData = {}) {
 }
 
 function shutdown() {
+  stopDocumentJobs(Zotero)
   unregisterReaderFigureTools?.()
   unregisterReaderFigureTools = null
   unregisterReaderTools?.()

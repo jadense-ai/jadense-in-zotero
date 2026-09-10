@@ -144,7 +144,7 @@ const FIGURE_CSS = `${READER_UI_THEME_CSS}
   position:fixed;z-index:9999;top:12px;right:12px;box-sizing:border-box;width:280px;max-width:calc(100vw - 24px);
   padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
   color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
-  box-shadow:0 2px 8px rgba(0,0,0,.12);font:12px/1.6 system-ui,sans-serif;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);font:calc(12px * var(--jdx-font-scale,1))/1.6 system-ui,sans-serif;
 }
 [data-jadense-figure-notice][hidden] {display:none;}
 `

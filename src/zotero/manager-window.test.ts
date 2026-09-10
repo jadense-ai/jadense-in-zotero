@@ -9,6 +9,15 @@ import {
 import type { ZoteroLike } from "./runtime"
 
 describe("manager window helpers", () => {
+  it("recovers a reloaded Manager from the native window registry without opening another window", () => {
+    const receiveJadenseContext = vi.fn(), opened = { closed: false, location: { href: "chrome://jadense-in-zotero/content/manager.xhtml?section=chat" }, focus: vi.fn(), receiveJadenseContext }
+    const openDialog = vi.fn(); let read = false
+    vi.stubGlobal("Services", { wm: { getEnumerator: () => ({ hasMoreElements: () => !read, getNext: () => { read = true; return opened } }) } })
+    try {
+      openManagerWindow({ zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" }, section: "analysis", action: { kind: "references", itemID: 2 } })
+      expect(openDialog).not.toHaveBeenCalled(); expect(receiveJadenseContext).toHaveBeenCalledWith(expect.objectContaining({ actions: [{ kind: "references", itemID: 2 }] }))
+    } finally { vi.unstubAllGlobals() }
+  })
   it("builds an internal manager resource URL with a section", () => {
     expect(managerWindowUrl({
       pluginID: "plugin@example.com",

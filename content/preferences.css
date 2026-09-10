@@ -19,6 +19,7 @@
   --jdx-pref-button-text: #07351f;
   color: var(--jdx-pref-text);
   background: var(--jdx-pref-surface);
+  font-size: calc(13px * var(--jdx-font-scale, 1));
 }
 
 #jadense-in-zotero-preferences-pane[data-theme="dark"] {
@@ -58,6 +59,8 @@
   line-height: 1.45;
 }
 
+#jadense-in-zotero-preferences-pane :is(label, input, select, button) { font-size: inherit; }
+
 #jadense-in-zotero-preferences-pane .jdx-pref-grid {
   display: grid;
   gap: 14px;
@@ -76,7 +79,7 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-card-title {
   margin: 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--jdx-font-scale,1));
   font-weight: 650;
   color: var(--jdx-pref-text);
 }
@@ -84,7 +87,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-card-note {
   margin: 0;
   color: var(--jdx-pref-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
   line-height: 1.5;
 }
 
@@ -132,7 +135,7 @@
   display: grid;
   gap: 4px;
   color: var(--jdx-pref-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-endpoint code,
@@ -146,7 +149,7 @@
   border-left: 3px solid var(--jdx-pref-warning);
   padding-left: 9px;
   color: var(--jdx-pref-warning-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
   line-height: 1.5;
 }
 
@@ -190,7 +193,7 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-connection-updated {
   color: var(--jdx-pref-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
   font-weight: 400;
 }
 
@@ -215,7 +218,7 @@
   background: var(--jdx-pref-subtle);
   color: var(--jdx-pref-text);
   font-family: monospace;
-  font-size: 13px;
+  font-size: calc(13px * var(--jdx-font-scale,1));
   letter-spacing: 0.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -236,7 +239,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-token-actions button {
   min-height: 28px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-token-row input {
@@ -256,7 +259,7 @@
   padding: 0;
   background: none;
   color: var(--jdx-pref-green-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
   text-decoration: underline;
 }
 
@@ -279,7 +282,7 @@
   margin: 0;
   padding-left: 20px;
   color: var(--jdx-pref-text);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
   line-height: 1.55;
 }
 
@@ -446,7 +449,7 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-status {
   min-height: 18px;
   color: var(--jdx-pref-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="error"] {
@@ -498,3 +501,20 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-danger {
   color: var(--jdx-pref-error);
 }
+
+/* 与原生常规卡片共用字体、主题和下拉组件；滑块保留平台键盘操作。 */
+#jadense-in-zotero-preferences-pane .jdx-reading-preferences { display: grid; min-width: 0; }
+#jadense-in-zotero-preferences-pane .jdx-reading-preference-row { display: grid; min-width: 0; gap: 8px; padding: 14px 0; border-top: 1px solid var(--jdx-pref-line-subtle); }
+#jadense-in-zotero-preferences-pane .jdx-reading-preference-row:last-of-type { padding-bottom: 0; }
+#jadense-in-zotero-preferences-pane .jdx-reading-preference-row h3 { margin: 0 0 4px; font-size: inherit; font-weight: 600; }
+#jadense-in-zotero-preferences-pane .jdx-reading-preference-row p { margin: 0; font-size: .92em; line-height: 1.5; color: var(--jdx-pref-muted); }
+#jadense-in-zotero-preferences-pane .jdx-reading-font-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+#jadense-in-zotero-preferences-pane .jdx-reading-stepper { display: inline-flex; align-items: center; border: 1px solid var(--jdx-pref-line); border-radius: 6px; }
+#jadense-in-zotero-preferences-pane .jdx-reading-stepper button { min-width: 32px; border: 0; padding-inline: 8px; }
+#jadense-in-zotero-preferences-pane .jdx-reading-stepper input { width: 3.3em; border: 0; border-radius: 0; padding: 4px 0; text-align: center; appearance: textfield; }
+#jadense-in-zotero-preferences-pane .jdx-reading-stepper > span { padding-right: 9px; color: var(--jdx-pref-muted); font-size: .85em; }
+#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls { display: flex; min-width: 0; align-items: center; gap: 12px; }
+#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls input { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; accent-color: var(--jdx-pref-green-text); background: transparent; cursor: pointer; }
+#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--jdx-pref-muted); }
+#jadense-in-zotero-preferences-pane .jdx-reading-preferences-status { margin: 0; color: var(--jdx-pref-error); font-size: .92em; }
+#jadense-in-zotero-preferences-pane .jdx-reading-preferences-status:empty { display: none; }
