@@ -1,13 +1,13 @@
-/** 功能模型偏好回归：旧配置迁移、独立目的地、目录故障与图片追问。 */
+/** 功能模型偏好回归：自动跟随、逐功能配置、旧配置迁移与图片追问。 */
 import { describe, expect, it } from "vitest"
 import { createLocalChatSession } from "@/chat/local-chat-store"
 import { buildFeatureModelSelectOptions } from "./ai-model-select"
 import {
-  AI_FEATURES, FEATURE_MODEL_PREF_KEYS, featureModelState, initializeFeatureModelSelections,
-  readFeatureModelSelection, saveFeatureModelSelection, selectByokModel, deleteByokModel,
+  AI_FEATURES, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, FEATURE_MODEL_PREF_KEYS, featureModelState, initializeFeatureModelSelections,
+  readAutoFollowChatModel, readFeatureModelSelection, saveAutoFollowChatModel, saveFeatureModelSelection, saveByokModel, saveByokProvider, selectByokModel, deleteByokModel,
 } from "./ai-settings"
 import { activeAiState, createReaderFigureChatSession } from "./manager-page"
-import type { ZoteroLike } from "./runtime"
+import { saveConnection, type ZoteroLike } from "./runtime"
 
 function fixture(initial: Record<string, unknown> = {}) {
   const values = new Map<string, unknown>(Object.entries({
@@ -17,37 +17,86 @@ function fixture(initial: Record<string, unknown> = {}) {
       providers: ["one", "two"].map(id => ({ id, name: id, protocol: "openai-chat-completions", baseUrl: `https://${id}.test/v1`, apiKey: `${id}-key` })),
       models: ["one", "two"].map(id => ({ id: `${id}-model`, providerId: id, name: `${id} display`, model: `${id}-api-model` })),
     }),
+    [AUTO_FOLLOW_CHAT_MODEL_PREF_KEY]: false,
     ...initial,
   }))
   const zotero: ZoteroLike = { Prefs: { get: key => values.get(key), set: (key, value) => { values.set(key, value) }, clear: key => { values.delete(key) } } }
   return { zotero, values }
 }
 
-describe("independent feature models", () => {
+describe("feature model configuration modes", () => {
+  it("follows the Chat model by default and restores saved feature models when disabled", () => {
+    const { zotero } = fixture({ [AUTO_FOLLOW_CHAT_MODEL_PREF_KEY]: undefined })
+    saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "two-model" })
+    saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "one-model" })
+
+    expect(readAutoFollowChatModel(zotero)).toBe(true)
+    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+
+    saveAutoFollowChatModel(zotero, false)
+    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "one-api-model" } })
+    saveAutoFollowChatModel(zotero, true)
+    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+  })
+
   it.each(AI_FEATURES)("preserves an explicitly saved previous default for %s", feature => {
     const selection = { route: "jadense", selection: { kind: "model", modelId: "glm-5.3-flash" } } as const
     const { zotero } = fixture({ [FEATURE_MODEL_PREF_KEYS[feature]]: JSON.stringify(selection) })
     expect(readFeatureModelSelection(zotero, feature)).toEqual(selection)
   })
 
-  it.each(AI_FEATURES)("uses DeepSeek V4 Flash Vision Exp for new and legacy default %s selections without overriding explicit choices", feature => {
-    const expected = { route: "jadense", selection: { kind: "model", modelId: "deepseek-v4-flash-vision-exp" } }
-    for (const stored of [undefined, { route: "jadense" }, { route: "jadense", selection: { kind: "default" } }]) {
-      const { zotero } = fixture({ [FEATURE_MODEL_PREF_KEYS[feature]]: JSON.stringify(stored) })
-      expect(featureModelState(zotero, feature)).toMatchObject({ ready: true, selection: expected })
-      const options = buildFeatureModelSelectOptions(zotero, { options: [], defaultSelection: null }, readFeatureModelSelection(zotero, feature))
-      expect(options.map(option => option.value)).toContain("model:deepseek-v4-flash-vision-exp")
-      expect(options.map(option => option.value)).not.toContain("default")
-      saveFeatureModelSelection(zotero, feature, { route: "jadense", selection: { kind: "model", modelId: "chosen-model" } })
-      expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "jadense", selection: { kind: "model", modelId: "chosen-model" } })
-    }
+  it.each(AI_FEATURES)("leaves new %s selections empty until the first Jadense configuration", feature => {
+    const { zotero, values } = fixture({
+      "extensions.jadenseInZotero.token": "",
+    })
+    expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "jadense" })
+    expect(featureModelState(zotero, feature)).toMatchObject({ ready: false, selection: { route: "jadense" } })
+    expect(values.has(FEATURE_MODEL_PREF_KEYS[feature])).toBe(false)
+
+    saveConnection(zotero, { token: "synthetic-token" })
+    expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "jadense", selection: { kind: "model", modelId: "deepseek-v4-flash-vision-exp" } })
+    expect(featureModelState(zotero, feature).ready).toBe(true)
+  })
+
+  it("uses the first complete BYOK model for every still-unconfigured feature", () => {
+    const { zotero } = fixture({ "extensions.jadenseInZotero.token": "", "extensions.jadenseInZotero.byokConfig": "" })
+    saveByokProvider(zotero, {
+      id: "provider", name: "Provider", protocol: "openai-chat-completions",
+      baseUrl: "https://provider.test/v1", apiKey: "provider-key",
+    })
+    saveByokModel(zotero, { id: "first-model", providerId: "provider", name: "First", model: "first" })
+    for (const feature of AI_FEATURES) expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "byok", modelId: "first-model" })
+    saveByokModel(zotero, { id: "second-model", providerId: "provider", name: "Second", model: "second" })
+    for (const feature of AI_FEATURES) expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "byok", modelId: "first-model" })
+  })
+
+  it("keeps the Jadense initial choice when BYOK is configured later", () => {
+    const { zotero } = fixture({ "extensions.jadenseInZotero.token": "", "extensions.jadenseInZotero.byokConfig": "" })
+    saveConnection(zotero, { token: "synthetic-token" })
+    saveByokProvider(zotero, {
+      id: "provider", name: "Provider", protocol: "openai-chat-completions",
+      baseUrl: "https://provider.test/v1", apiKey: "provider-key",
+    })
+    saveByokModel(zotero, { id: "first-model", providerId: "provider", name: "First", model: "first" })
+    for (const feature of AI_FEATURES) expect(readFeatureModelSelection(zotero, feature).route).toBe("jadense")
+  })
+
+  it("keeps the BYOK initial choice when Jadense is configured later", () => {
+    const { zotero } = fixture({ "extensions.jadenseInZotero.token": "", "extensions.jadenseInZotero.byokConfig": "" })
+    saveByokProvider(zotero, {
+      id: "provider", name: "Provider", protocol: "openai-chat-completions",
+      baseUrl: "https://provider.test/v1", apiKey: "provider-key",
+    })
+    saveByokModel(zotero, { id: "first-model", providerId: "provider", name: "First", model: "first" })
+    saveConnection(zotero, { token: "synthetic-token" })
+    for (const feature of AI_FEATURES) expect(readFeatureModelSelection(zotero, feature)).toEqual({ route: "byok", modelId: "first-model" })
   })
 
   it("activates the default only after connecting, while retaining explicit BYOK choices on connection changes", () => {
     const { zotero, values } = fixture({ "extensions.jadenseInZotero.token": "" })
     expect(featureModelState(zotero, "chat").ready).toBe(false)
     saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "two-model" })
-    values.set("extensions.jadenseInZotero.token", "synthetic-token")
+    saveConnection(zotero, { token: "synthetic-token" })
     expect(featureModelState(zotero, "chat")).toMatchObject({ ready: true, selection: { selection: { kind: "model", modelId: "deepseek-v4-flash-vision-exp" } } })
     expect(featureModelState(zotero, "translation")).toMatchObject({ ready: true, route: "byok", config: { model: "two-api-model" } })
     expect(featureModelState(zotero, "chat", "synthetic-token").ready).toBe(false)
@@ -73,7 +122,7 @@ describe("independent feature models", () => {
     const selections = initializeFeatureModelSelections(zotero)
     expect(selections.chat).toEqual({ route: "jadense", selection: { kind: "model", modelId: "legacy-model" } })
     expect(selections.figure).toEqual(selections.chat)
-    expect(selections.translation).toEqual({ route: "jadense", selection: { kind: "model", modelId: "deepseek-v4-flash-vision-exp" } })
+    expect(selections.translation).toEqual({ route: "jadense" })
     expect(selections.analysis).toEqual({ route: "byok", modelId: "two-model" })
   })
 

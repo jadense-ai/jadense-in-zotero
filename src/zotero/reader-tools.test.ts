@@ -1,8 +1,10 @@
+import { openChatSidebar } from './reader-sidebar'
+vi.mock('./reader-sidebar', () => ({ openChatSidebar: vi.fn(async () => {}), removeReaderDock: vi.fn() }))
 // 合成 Zotero 9 阅读器契约测试，不读取真实文库；验证坐标绑定、写入隔离和原生工具条生命周期。
 import { readFileSync } from "node:fs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { initializeUiLocale, saveTheme, THEME_PREF, DISPLAY_LANGUAGE_PREF } from "./ui-preferences"
-beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
+beforeEach(() => { initializeUiLocale({ locale: "zh-CN" }); vi.mocked(openChatSidebar).mockReset().mockResolvedValue(undefined) })
 import { readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 import {
   readPdfForAnalysis,
@@ -569,7 +571,7 @@ describe("native reader toolbars", () => {
     toggle.handlers.get("click")!()
     actionButtons(menu)[0].handlers.get("click")!()
     await Promise.resolve()
-    expect(onAction).toHaveBeenCalledWith({ kind: "attach", itemID: 11 })
+    expect(openChatSidebar).toHaveBeenCalledWith(fixture.zotero, doc, 11, fixture.reader)
     expect(toggle.attributes.get("aria-expanded")).toBe("false")
     let expandedWidth = 1800
     const nativeToolbar = {
@@ -892,7 +894,7 @@ describe("native reader toolbars", () => {
     expect(buttons[0].title).toBe("Jadense · 发起新对话，向 AI 提问（当前文献）")
     buttons[0].handlers.get("click")!()
     await Promise.resolve()
-    expect(onAction).toHaveBeenLastCalledWith({ kind: "attach", itemID: 11 })
+    expect(openChatSidebar).toHaveBeenLastCalledWith(fixture.zotero, doc, 11, fixture.reader)
     expect(buttons.every((button) => button.children[0].tagName === "svg" && button.children[0].attributes.get("aria-hidden") === "true")).toBe(true)
     expect(toolbar.children[0].className).toBe("jadense-reader-brand")
     expect(toolbar.attributes.get("aria-label")).toBe("Jadense 阅读工具")
@@ -924,7 +926,7 @@ describe("native reader toolbars", () => {
     expect(popupButtons.map((button) => button.children[1].textContent)).toEqual(["智能翻译", "引用选文"])
     expect(doc.head.children).toHaveLength(2)
     popupButtons[0].handlers.get("click")!()
-    await vi.waitFor(() => expect(onAction).toHaveBeenCalledTimes(3))
+    await vi.waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
     expect(onAction).toHaveBeenLastCalledWith(
       { kind: "translate", itemID: 11, text: "Popup source text", pageIndex: 1, pageLabel: "2", languages: { sourceLanguage: "en", targetLanguage: "zh-CN" } },
       { onTranslationText: expect.any(Function) },
@@ -1020,6 +1022,7 @@ describe("native reader toolbars", () => {
   })
 
   it("shows action failures locally and removes document styling when a reader closes", async () => {
+    vi.mocked(openChatSidebar).mockRejectedValueOnce(new Error("unavailable"))
     const fixture = host()
     const register = vi.fn()
     fixture.zotero.Reader!.registerEventListener = register
@@ -1030,7 +1033,7 @@ describe("native reader toolbars", () => {
     actionButtons(append.mock.calls[0][0])[0].handlers.get("click")!()
     const notice = doc.body.children.find((node) => node.attributes.has("data-jadense-reader-notice"))!
     await vi.waitFor(() => expect(notice.hidden).toBe(false))
-    expect(notice.textContent).toContain("操作未完成")
+    expect(notice.textContent).toContain("unavailable")
     doc.windowHandlers.get("pagehide")!()
     expect(doc.head.children).toHaveLength(0)
     expect(doc.body.children).toHaveLength(0)

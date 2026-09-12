@@ -7,20 +7,45 @@
     <link rel="stylesheet" href="ui.css" />
     <link rel="stylesheet" href="analysis.css" />
     <script defer="defer" src="manager.js"></script>
+    <link rel="stylesheet" href="chat.css"/>
   </head>
   <body>
     <main id="jadense-manager-shell" class="jdx-manager-shell">
-      <aside id="jadense-manager-sidebar" class="jdx-manager-sidebar">
-        <div class="jdx-manager-brand">
-          <img src="icons/logo-padded.png" alt="攻玉" data-ui-en-alt="Jadense" width="28" height="27" />
-          <button id="jadense-manager-sidebar-toggle" class="jdx-manager-sidebar-toggle" type="button" aria-expanded="true" aria-controls="jadense-manager-sidebar" title="收起导航" data-ui-en-title="Collapse navigation">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5 4.5 8 9 12.5M13 3.5 8.5 8l4.5 4.5"/></svg>
+      <header id="jadense-titlebar" class="jdx-titlebar">
+        <button id="jadense-manager-sidebar-toggle" class="jdx-manager-sidebar-toggle" type="button" aria-expanded="true" aria-controls="jadense-manager-sidebar" title="收起导航" data-ui-en-title="Collapse navigation">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2.5"/><path d="M7 3v10"/></svg>
           </button>
+        <button id="jadense-home" type="button" title="打开攻玉首页" data-ui-en-title="Open Jadense homepage" aria-label="攻玉首页" data-ui-en-aria-label="Jadense homepage">
+          <img src="icons/logo-padded.png" alt="" width="22" height="22" />
+        </button>
+        <button id="jadense-github" type="button" title="在浏览器打开 GitHub 仓库" data-ui-en-title="Open GitHub repository in browser" aria-label="GitHub 仓库" data-ui-en-aria-label="GitHub repository">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4c0-1-.3-2-1-2.5 4-.5 7-2 7-6a5 5 0 0 0-1.5-3.5A5 5 0 0 0 19 2s-1.5 0-4 1.5a14 14 0 0 0-6 0C6.5 2 5 2 5 2a5 5 0 0 0-.5 4A5 5 0 0 0 3 9.5c0 4 3 5.5 7 6-.7.5-1 1.5-1 2.5v4"/></svg>
+        </button>
+        <div class="jdx-help-anchor">
+          <button id="jadense-help-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="jadense-help-menu" title="帮助" data-ui-en-title="Help" data-ui-en="Help">帮助</button>
+          <div id="jadense-help-menu" class="jdx-help-menu" role="menu" aria-label="帮助" data-ui-en-aria-label="Help" hidden="hidden">
+          <button id="jadense-manager-nav-guide" type="button" role="menuitem" aria-controls="jadense-manager-section-guide" aria-label="上手指南" data-ui-en-aria-label="Getting started" title="上手指南" data-ui-en-title="Getting started">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4C6.5 2.5 4 2.5 1.5 3v10c2.5-.5 5-.5 6.5 1 1.5-1.5 4-1.5 6.5-1V3C12 2.5 9.5 2.5 8 4zm0 0v10"/></svg>
+            <span data-ui-en="Getting started">上手指南</span>
+          </button>
+            <button id="jadense-help-about" type="button" role="menuitem" data-ui-en="About">关于</button>
+            <button id="jadense-help-update" type="button" role="menuitem" data-ui-en="Check for updates">检查更新</button>
+          </div>
         </div>
+        <button id="jadense-check-in" type="button" title="签到领积分" aria-label="签到领积分" data-ui-en="Check in for points" data-ui-en-title="Check in for points" data-ui-en-aria-label="Check in for points">签到领积分</button>
+        <div class="jdx-titlebar-space"></div>
+        <div id="jadense-window-controls" class="jdx-window-controls" hidden="hidden">
+          <button id="jadense-window-minimize" type="button" title="最小化" data-ui-en-title="Minimize" aria-label="最小化" data-ui-en-aria-label="Minimize">&#x2212;</button>
+          <button id="jadense-window-maximize" type="button" title="最大化" data-ui-en-title="Maximize" aria-label="最大化" data-ui-en-aria-label="Maximize">&#x25A1;</button>
+          <button id="jadense-window-close" type="button" title="关闭窗口" data-ui-en-title="Close window" aria-label="关闭窗口" data-ui-en-aria-label="Close window">&#x00D7;</button>
+        </div>
+      </header>
+      <aside id="jadense-manager-sidebar" class="jdx-manager-sidebar">
+
         <nav class="jdx-manager-nav" aria-label="工作台导航" data-ui-en-aria-label="Workbench navigation">
-          <button id="jadense-manager-nav-chat" type="button" role="tab" aria-controls="jadense-manager-section-chat" aria-label="对话" data-ui-en-aria-label="Chat" title="对话" data-ui-en-title="Chat">
+          <button id="jadense-manager-nav-chat" type="button" role="tab" aria-controls="jadense-manager-section-chat" aria-label="新对话" data-ui-en-aria-label="New conversation" title="新对话" data-ui-en-title="New conversation">
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.7h10a1.3 1.3 0 0 1 1.3 1.3v6a1.3 1.3 0 0 1-1.3 1.3H8.2l-3.4 2.5v-2.5H3a1.3 1.3 0 0 1-1.3-1.3v-6A1.3 1.3 0 0 1 3 2.7z"/></svg>
-            <span class="jdx-manager-nav-label" data-ui-en="Chat">对话</span>
+            <span class="jdx-manager-nav-label" data-ui-en="New conversation">新对话</span>
           </button>
           <button id="jadense-manager-nav-translations" type="button" role="tab" aria-controls="jadense-manager-section-translations" aria-label="翻译历史" data-ui-en-aria-label="Translation history" title="翻译历史" data-ui-en-title="Translation history">
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h7M5.5 1.8V3M3.2 3c0 3 2.7 5.2 5.3 5.8M8.2 3c0 2.8-2.4 5.1-5.2 6M9.5 13.5l2.2-5.8 2.3 5.8M10.3 11.5h2.9"/></svg>
@@ -30,15 +55,17 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h7l3 3v8H3zM10 2.5v3h3M5.5 8h5M5.5 10.5h4"/></svg>
             <span class="jdx-manager-nav-label" data-ui-en="Literature analysis">文献解析</span>
           </button>
-          <button id="jadense-manager-nav-migrate" type="button" role="tab" aria-controls="jadense-manager-section-migrate" aria-label="连接攻玉" data-ui-en-aria-label="Connect Jadense" title="连接攻玉" data-ui-en-title="Connect Jadense">
-            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 9.8 9.8 6.2M5.1 11.9l-1 1a2.1 2.1 0 0 1-3-3l2.6-2.6a2.1 2.1 0 0 1 3 0M10.9 4.1l1-1a2.1 2.1 0 1 1 3 3l-2.6 2.6a2.1 2.1 0 0 1-3 0"/></svg>
-            <span class="jdx-manager-nav-label" data-ui-en="Connect Jadense">连接攻玉</span>
+          <button id="jadense-manager-nav-migrate" type="button" role="tab" aria-controls="jadense-manager-section-migrate" aria-label="攻玉学术" data-ui-en-aria-label="Jadense academic" title="攻玉学术" data-ui-en-title="Jadense academic">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 14c.7-2.5 2.3-3.7 5-3.7s4.3 1.2 5 3.7"/></svg>
+            <span class="jdx-manager-nav-label" data-ui-en="Jadense academic">攻玉学术</span>
           </button>
-          <button id="jadense-manager-nav-guide" type="button" role="tab" aria-controls="jadense-manager-section-guide" aria-label="上手指南" data-ui-en-aria-label="Getting started" title="上手指南" data-ui-en-title="Getting started">
-            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4C6.5 2.5 4 2.5 1.5 3v10c2.5-.5 5-.5 6.5 1 1.5-1.5 4-1.5 6.5-1V3C12 2.5 9.5 2.5 8 4zm0 0v10"/></svg>
-            <span class="jdx-manager-nav-label" data-ui-en="Getting started">上手指南</span>
-          </button>
+
         </nav>
+        <section id="jadense-chat-sessions" class="jdx-chat-sessions" aria-label="对话列表" data-ui-en-aria-label="Conversations">
+          <div class="jdx-session-heading"><strong data-ui-en="Conversations">对话列表</strong></div>
+          <label class="jdx-session-search"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="jadense-chat-session-search" type="search" placeholder="搜索会话" data-ui-en-placeholder="Search conversations" aria-label="搜索会话" data-ui-en-aria-label="Search conversations" /></label>
+          <div id="jadense-chat-session-list" class="jdx-chat-session-list" role="list"></div>
+        </section>
         <div class="jdx-manager-sidebar-footer" role="group" aria-label="面板操作" data-ui-en-aria-label="Panel actions">
           <span id="jadense-manager-connection-status" class="jdx-manager-connection-status" role="status" tabindex="0" title="未连接攻玉" data-ui-en-title="Not connected to Jadense" aria-label="未连接攻玉" data-ui-en-aria-label="Not connected to Jadense" data-kind="idle"></span>
           <button id="jadense-manager-theme-toggle" class="jdx-manager-icon-button jdx-manager-theme-toggle" type="button" aria-pressed="false" aria-label="切换主题" data-ui-en-aria-label="Change theme" title="切换为深色模式" data-ui-en-title="Switch to dark mode">
@@ -54,27 +81,18 @@
       <section class="jdx-manager-content">
         <section id="jadense-manager-section-chat" class="jdx-manager-section jdx-chat-section" role="tabpanel" aria-labelledby="jadense-manager-nav-chat">
           <div id="jadense-chat-workbench" class="jdx-chat-workbench">
-            <aside id="jadense-chat-sessions" class="jdx-chat-sessions" aria-label="对话列表" data-ui-en-aria-label="Conversations">
-              <button id="jadense-chat-new-session" class="jdx-manager-primary" type="button" data-ui-en="New conversation">新建对话</button>
-              <div id="jadense-chat-session-list" class="jdx-chat-session-list" role="list"></div>
-              <button id="jadense-chat-delete-session" class="jdx-manager-danger" type="button" data-ui-en="Delete current conversation">删除当前对话</button>
-            </aside>
             <div class="jdx-chat-main">
               <div class="jdx-chat-toolbar" role="group" aria-label="对话面板" data-ui-en-aria-label="Chat panels">
-                <button id="jadense-chat-sessions-toggle" type="button" aria-expanded="true" aria-controls="jadense-chat-sessions" aria-label="收起对话列表" data-ui-en-aria-label="Collapse conversations" title="收起对话列表" data-ui-en-title="Collapse conversations">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M7 3v14M4.5 7h.5M4.5 10h.5"/></svg>
-                  <span data-ui-en="Conversations">对话列表</span>
-                </button>
+                <strong id="jadense-chat-title" class="jdx-chat-title"></strong>
                 <button id="jadense-chat-details-toggle" type="button" aria-expanded="true" aria-controls="jadense-chat-source-panel" aria-label="收起对话详情" data-ui-en-aria-label="Collapse conversation details" title="收起对话详情" data-ui-en-title="Collapse conversation details">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M12 3v14M14.5 7h.5M14.5 10h.5"/></svg>
-                  <span data-ui-en="Conversation details">对话详情</span><span id="jadense-chat-details-count" class="jdx-chat-details-count">0</span>
                 </button>
               </div>
               <div class="jdx-chat-reading">
                 <div id="jadense-chat-message-list" class="jdx-chat-message-list" role="log" aria-live="polite" tabindex="0" aria-label="对话消息记录" data-ui-en-aria-label="Conversation messages"></div>
                 <button id="jadense-chat-latest" class="jdx-chat-latest" type="button" hidden="hidden" data-ui-en="↓ Back to latest">↓ 回到最新</button>
                 <div id="jadense-chat-dock" class="jdx-chat-dock">
-                  <div id="jadense-chat-status" class="jdx-manager-inline-status" role="status"></div>
+                  <div class="jdx-chat-status-panel"><div id="jadense-chat-status" class="jdx-manager-inline-status" role="status"></div></div>
                   <form id="jadense-chat-form" class="jdx-chat-composer">
                     <div class="jdx-chat-compose-field">
                       <div id="jadense-chat-image-preview" class="jdx-chat-image-preview" aria-label="待发送图片" data-ui-en-aria-label="Image ready to send" hidden="hidden"></div>
@@ -82,17 +100,17 @@
                       <textarea id="jadense-chat-input" rows="2" maxlength="20000" aria-label="对话消息" data-ui-en-aria-label="Chat message" aria-describedby="jadense-chat-compose-hint" placeholder="向攻玉提问…" data-ui-en-placeholder="Ask Jadense…"></textarea>
                       <div class="jdx-chat-composer-footer">
                         <div class="jdx-chat-composer-meta">
+                          <button id="jadense-chat-attach-image" class="jdx-chat-icon-button" type="button" title="上传 PNG 或 JPEG 图片，也可粘贴或拖入图片" data-ui-en-title="Upload a PNG or JPEG image, or paste or drop an image" aria-label="上传图片" data-ui-en-aria-label="Upload image"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9"/></svg></button>
                           <div id="jadense-chat-model-select" class="jdx-chat-model-select"></div>
-                          <small id="jadense-chat-compose-hint" data-ui-en="Ctrl / ⌘ + Enter to send · Enter for a new line">Ctrl / ⌘ + Enter 发送 · Enter 换行</small>
                         </div>
                         <div class="jdx-chat-composer-actions">
-                          <button id="jadense-chat-attach-image" type="button" title="上传 PNG 或 JPEG 图片，也可粘贴或拖入图片" data-ui-en-title="Upload a PNG or JPEG image, or paste or drop an image" data-ui-en="Upload image">上传图片</button>
-                          <button id="jadense-chat-stop" type="button" hidden="hidden" data-ui-en="Stop">停止</button>
-                          <button id="jadense-chat-send" class="jdx-manager-primary" type="submit" data-ui-en="Send">发送</button>
+                          <button id="jadense-chat-stop" class="jdx-chat-icon-button" type="button" hidden="hidden" title="停止" data-ui-en-title="Stop" aria-label="停止" data-ui-en-aria-label="Stop"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg></button>
+                          <button id="jadense-chat-send" class="jdx-manager-primary jdx-chat-icon-button" type="submit" title="发送" data-ui-en-title="Send" aria-label="发送" data-ui-en-aria-label="Send"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
                         </div>
                       </div>
                     </div>
                   </form>
+                  <small id="jadense-chat-compose-hint" data-ui-en="Ctrl / ⌘ + Enter to send · Enter for a new line">Ctrl / ⌘ + Enter 发送 · Enter 换行</small>
                 </div>
               </div>
             </div>
@@ -100,9 +118,6 @@
               <div class="jdx-chat-details-heading">
                 <strong data-ui-en="Conversation details">对话详情</strong>
                 <button id="jadense-chat-details-stop" class="jdx-chat-details-stop" type="button" title="停止当前操作" data-ui-en-title="Stop the current operation" hidden="hidden" data-ui-en="Stop">停止</button>
-                <button id="jadense-chat-details-close" class="jdx-manager-icon-button" type="button" aria-label="收起对话详情" data-ui-en-aria-label="Collapse conversation details" title="收起对话详情" data-ui-en-title="Collapse conversation details" aria-controls="jadense-chat-source-panel">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m8 5 5 5-5 5"/></svg>
-                </button>
               </div>
               <div class="jdx-chat-tools" role="toolbar" aria-label="关联资源" data-ui-en-aria-label="Linked resources">
                 <button id="jadense-chat-attach-items" type="button" title="从 Zotero 资料库选择文献，关联引用信息和摘要" data-ui-en-title="Choose papers from the Zotero library to link citations and abstracts">
@@ -133,88 +148,119 @@
               <div class="jdx-guide-tabs" role="tablist" aria-label="上手指南章节" data-ui-en-aria-label="Getting started chapters" aria-orientation="vertical">
                 <button id="jadense-guide-tab-analysis" type="button" role="tab" aria-controls="jadense-guide-panel-analysis" aria-selected="true"><span aria-hidden="true">01</span><span data-ui-en="Literature analysis">文献解析</span></button>
                 <button id="jadense-guide-tab-figures" type="button" role="tab" aria-controls="jadense-guide-panel-figures" aria-selected="false" tabindex="-1"><span aria-hidden="true">02</span><span data-ui-en="Image interpretation">图片解读</span></button>
-                <button id="jadense-guide-tab-translation" type="button" role="tab" aria-controls="jadense-guide-panel-translation" aria-selected="false" tabindex="-1"><span aria-hidden="true">03</span><span data-ui-en="Live translation">实时翻译</span></button>
+                <button id="jadense-guide-tab-translation" type="button" role="tab" aria-controls="jadense-guide-panel-translation" aria-selected="false" tabindex="-1"><span aria-hidden="true">03</span><span data-ui-en="Translation">翻译功能</span></button>
                 <button id="jadense-guide-tab-chat" type="button" role="tab" aria-controls="jadense-guide-panel-chat" aria-selected="false" tabindex="-1"><span aria-hidden="true">04</span><span data-ui-en="AI Chat">AI 对话</span></button>
               </div>
             </aside>
             <div class="jdx-guide-content">
               <div class="jdx-guide-setup">
                 <strong data-ui-en="Before you start">开始之前</strong>
-                <p data-ui-en="Open Tools → Jadense → Open Jadense Workbench in Zotero. In Settings → Feature settings, choose a Jadense or BYOK model for each feature. For Jadense, first generate and save a token in Connect Jadense → Connection. For BYOK, add a provider, API key, and model in Settings → BYOK, then choose the model in Feature settings.">从 Zotero「工具 → Jadense → 打开攻玉工作台」进入，在「设置 → 功能配置」为各项功能选择攻玉内置模型或 BYOK 自配置模型。使用攻玉时，先到「连接攻玉 → 连接配置」生成并保存令牌；使用 BYOK 时，先到「设置 → BYOK」添加提供商、API 密钥和模型，再回到功能配置选择模型。</p>
+                <p data-ui-en="Open Tools → Jadense → Open Jadense Workbench in Zotero. In Settings → Feature settings, choose a Jadense model or your own model for each feature. To use Jadense, first generate and save a token in Settings → Connect Jadense. To use your own model (BYOK), add its provider, API key, and model in Settings → BYOK, then choose it in Feature settings.">从 Zotero「工具 → Jadense → 打开攻玉工作台」进入，在「设置 → 功能配置」为各项功能选择攻玉模型或自己的模型。使用攻玉模型前，先到「设置 → 连接攻玉」生成并保存令牌；使用自己的模型（BYOK）时，先到「设置 → BYOK」添加服务商、API 密钥和模型，再回到功能配置选择它。</p>
               </div>
               <article id="jadense-guide-panel-analysis" class="jdx-guide-chapter" role="tabpanel" aria-labelledby="jadense-guide-tab-analysis" tabindex="0">
                 <p class="jdx-guide-eyebrow" data-ui-en="01 / Read a paper">01 / 阅读文献</p>
                 <h3 data-ui-en="Literature analysis">文献解析</h3>
-                <p class="jdx-guide-lead" data-ui-en="Understand a paper&#x27;s questions, methods, and findings. Keep analysis beside the original text so you can check the evidence while reading.">梳理论文的研究问题、方法与发现，把解读留在原文旁，方便边读边核对。</p>
+                <p class="jdx-guide-lead" data-ui-en="Get a quick map of a paper&#x27;s question, method, evidence, and conclusion, then return to the PDF to check the important parts.">先快速看懂论文在研究什么、怎么做、得出了什么结论，再回到 PDF 核对重要内容。</p>
+                <h4 data-ui-en="When it helps">适合什么时候使用</h4>
+                <ul>
+                  <li data-ui-en="Use it for a first pass when you want to know whether a paper is worth reading closely.">第一次接触一篇论文，想先判断它值不值得精读。</li>
+                  <li data-ui-en="Use it before a group meeting to organize the question, method, results, and limitations.">准备组会或汇报，想快速整理研究问题、方法、结果和局限。</li>
+                  <li data-ui-en="Use it as a reading outline when a paper is long or its structure is hard to follow.">论文较长、结构比较复杂，需要一份阅读提纲。</li>
+                </ul>
                 <h4 data-ui-en="How to start">如何开始</h4>
                 <ol>
                   <li data-ui-en="Open the PDF in Zotero. Make sure the attachment is downloaded and its text is readable.">在 Zotero 中打开要解析的 PDF，确认附件已下载且可以读取文字。</li>
-                  <li data-ui-en="To choose an analysis model, open Literature analysis → Analysis settings and select a Jadense or saved BYOK model. This choice is independent of Chat and translation.">如需指定解析模型，先到「文献解析 → 解析配置」选择攻玉或已保存的 BYOK 模型。这里的选择独立于对话和翻译。</li>
+                  <li data-ui-en="If you want to change the model, open Literature analysis → Analysis settings and choose an available Jadense or saved BYOK model. This does not change the Chat or translation model.">如需更换模型，到「文献解析 → 解析配置」选择可用的攻玉模型或已保存的 BYOK 模型。这里的选择不会改变对话和翻译模型。</li>
                   <li data-ui-en="Click Analyze in the PDF reader (inside Reading actions in a narrow window). The workbench shows analysis progress and extracts references for the same PDF. Click Stop to interrupt the analysis.">点击 PDF 阅读器的「解析」（窄窗口先展开「阅读操作」菜单）。工作台显示解析进度，同时提取当前 PDF 的参考文献；需要中断解析时点击「停止」。</li>
-                  <li data-ui-en="Read the summary, then return to the categorized PDF annotations to check the claims against the source.">完成后查看摘要，并回到 PDF 阅读对应的分类批注，核对论点与原文证据。</li>
+                  <li data-ui-en="Read the summary first, then return to the PDF annotations and original pages to check important claims against the source.">完成后先看摘要，再回到 PDF 批注和原文页面，核对重要结论是否有依据。</li>
                 </ol>
                 <h4 data-ui-en="Where to find results">在哪里查看结果</h4>
-                <p data-ui-en="Analysis history shows the latest result for each PDF. Click a title to open its Summary, Analysis notes and References tabs; Open PDF is a separate action. Returning restores your list position, and each tab retains its reading position. Copy summary or notes to keep a text backup.">「解析历史」按 PDF 展示每篇最新结果。点击标题进入详情，通过「解析总结 / 解析笔记 / 参考文献」切换阅读；「打开原文」是独立操作。返回恢复列表位置，各标签保留阅读位置，可复制总结或笔记备份。</p>
-                <p data-ui-en="Content that can be located in the source becomes native Zotero annotations, which you can edit, filter, and export. Unlocated or unwritten content remains in analysis notes. Analysis does not create an AI conversation.">能够定位到原文的解析内容会写为 Zotero 原生批注，可以继续编辑、筛选和导出。无法定位或未成功写入的内容仍可在解析笔记中查看。解析不会创建 AI 对话。</p>
+                <p data-ui-en="Analysis history shows the latest result for each PDF. Click a title to open Summary, Analysis notes, and References. Open PDF is a separate action. Copy the summary or notes if you want to keep a text version for your own notes.">「解析历史」按 PDF 展示每篇文献最近一次的结果。点击标题进入详情，在「解析总结 / 解析笔记 / 参考文献」之间切换；「打开原文」单独用于回到 PDF。需要整理成自己的笔记时，可以复制总结或解析笔记。</p>
+                <p data-ui-en="Parts that can be matched to the source may be written as Zotero annotations. You can edit, filter, and export them. If a passage cannot be placed back into the PDF, it stays in Analysis notes. Analysis results and AI Chat are separate.">能够对应到原文位置的内容会写成 Zotero 批注，你可以继续编辑、筛选和导出。暂时无法放回 PDF 的内容，会保留在「解析笔记」中。解析结果和 AI 对话彼此独立。</p>
                 <h4 data-ui-en="Extract references">解析参考文献</h4>
-                <p data-ui-en="Analyze extracts references when that PDF starts processing. Open the paper's References tab to search, filter and select verified entries, then choose a destination library and collection before importing. Browsing never starts extraction; if no result exists, click Extract references. Stop analysis cancels generation and pauses its references while retaining received content. Text and layout rules identify entries first; only uncertain fragments may use AI. Raw citations, numbering, order and repeated occurrences are retained.">解析实际开始时会同步提取该 PDF 的参考文献。在论文详情的「参考文献」标签中搜索、筛选和勾选已核验条目，选择目标文库与分类后导入。浏览不会启动提取；没有结果时可点击「提取参考文献」。「停止本次解析」同时中断生成并暂停关联参考文献，已收到内容保留。先按文字和排版规则提取，仅不确定片段使用 AI；原始引用、编号、顺序和重复出现均保留。</p>
-                <p data-ui-en="Use Identify uncertain fragments to retry local recognition. Skip AI and verify cancels only AI and continues metadata checks. Pause stops the entire task; Verify all again never calls AI.">「识别待定片段」可重试局部识别；「跳过 AI，继续核验」仅取消 AI 并继续元数据核验。「暂停」停止整个任务；「统一重新核验」不会调用 AI。</p>
-                <p data-ui-en="Verification uses Zotero DOI translators and Crossref, without AI or library writes. Unverified entries have no actions. A verified DOI must also match the source title, author and year before location, publication link and import controls appear. Choose a writable library and collection, then import individual or checked verified entries. Same-library DOI duplicates are kept in the list without creating another item. Attachments are not downloaded.">核验仅使用 Zotero DOI 转换器和 Crossref，不调用 AI、不写文库。未验证条目没有操作按钮；DOI 还必须与原引用的题名、作者和年份匹配，才显示定位、原文链接及导入操作。选择可写文库和分类后，可导入单条或勾选的已验证条目。同库 DOI 重复时保留列表条目，但不重复创建；不下载附件。</p>
+                <p data-ui-en="When analysis starts, the plugin also reads the paper&#x27;s reference list. If no list is shown, open References and click Extract references. A pause stops both tasks, while content already received is kept.">开始解析时，插件会同时整理论文末尾的参考文献。如果没有看到参考文献结果，可以打开「参考文献」标签，点击「提取参考文献」。暂停会同时暂停两项任务，但已经得到的内容会保留。</p>
+                <h4 data-ui-en="What you can do after references are ready">参考文献解析成功后，可以做什么</h4>
+                <ol>
+                  <li data-ui-en="Search by title, author, or DOI, and filter the list to find references that are ready, still being checked, or already in your library.">按标题、作者或 DOI 搜索，也可以按状态筛选，快速找到已核验、待核验或已经在文库中的条目。</li>
+                  <li data-ui-en="Click Locate original to jump to where the citation appears in the paper. Use Search publication or Publication link to continue looking for the referenced paper online.">点击「定位原文」回到这条引用在当前论文中的位置；需要继续找被引用的论文时，可以使用「搜索文献」或「原文链接」。</li>
+                  <li data-ui-en="For verified references, select a writable library and collection, then import one or several entries into Zotero. Existing items are not added again.">对于已核验的条目，选择可写入的文库和分类，就可以单条或批量「导入 Zotero」。文库中已经有的条目不会重复添加。</li>
+                  <li data-ui-en="Use the imported references to build a reading list, trace the background of the paper, or start a new Chat discussion around the sources you selected.">导入后，可以把它们作为后续阅读清单，追溯这篇论文的研究背景，或围绕选中的来源开启新的对话。</li>
+                </ol>
+                <p data-ui-en="Only references with reliable bibliographic information can be imported. For an uncertain entry, keep the original text, search it yourself, or wait for verification to finish.">只有书目信息比较可靠的条目可以导入。遇到待核验条目时，可以先保留原始引用、手动搜索，或等核验完成后再处理。</p>
                 <h4 data-ui-en="If something goes wrong">遇到问题时</h4>
                 <ul>
                   <li data-ui-en="Scanned, encrypted, or undownloaded files may not yield text. Check that the PDF opens and that you can select its text.">扫描件、加密文件或尚未下载的附件可能无法提取正文。先检查 PDF 是否可读、可选中文字。</li>
                   <li data-ui-en="Long papers are analyzed within extraction limits. A summary does not establish that the entire paper was covered.">长文按上限选取内容进行解析，不能将摘要视为已经覆盖整篇论文。</li>
-                  <li data-ui-en="If generation stops or fails, received text is retained where possible and marked incomplete; no PDF annotations are written. Stopping during annotation writing keeps annotations already saved. If results are not saved, copy the notes before closing the window.">生成中断或失败时，已收到的文字会尽量保留并标明不完整，不会写入 PDF 批注；若在批注写入阶段停止，已保存的批注会保留。若提示结果未保存，请在关闭窗口前复制笔记。</li>
+                  <li data-ui-en="If generation stops or fails, received text is kept where possible and marked incomplete. If a result is not saved, copy the notes before closing the window.">生成中断或失败时，已经收到的文字会尽量保留并标明不完整。如果提示结果未保存，请在关闭窗口前复制解析笔记。</li>
                 </ul>
+                <p class="jdx-guide-note" data-ui-en="A good first question is: What problem does this paper solve, how was it tested, and what evidence supports the conclusion? Use the result as a reading map, then make final judgments from the original paper.">可以先问自己三个问题：这篇论文解决什么问题？作者怎么验证？哪些证据支持结论？把解析结果当作阅读地图，最终判断仍要回到论文原文。</p>
               </article>
               <article id="jadense-guide-panel-figures" class="jdx-guide-chapter" role="tabpanel" aria-labelledby="jadense-guide-tab-figures" tabindex="0" hidden="hidden">
                 <p class="jdx-guide-eyebrow" data-ui-en="02 / Understand figures">02 / 理解图表</p>
                 <h3 data-ui-en="Image interpretation">图片解读</h3>
-                <p class="jdx-guide-lead" data-ui-en="Understand variables, trends, and conclusions. Automatically detect paper images or manually capture the region you want to discuss.">读懂图中的变量、趋势与结论。可以自动识别论文图片，也可以手动截取需要解读的区域。</p>
-                <h4 data-ui-en="Automatic detection">自动识别</h4>
+                <p class="jdx-guide-lead" data-ui-en="Ask about a figure, formula, table, or diagram without leaving the PDF. Use automatic detection when it works, and manual capture when you need to choose the exact area.">不用离开 PDF，就可以询问图片、公式、表格或示意图。能自动选中时用自动识别，需要精确选择区域时用手动截图。</p>
+                <h4 data-ui-en="Automatic detection: quick selection">自动识别：适合快速选中图片</h4>
+                <p data-ui-en="Automatic detection uses the image information provided by Zotero. Because PDF files can store images and layout in complicated ways, some figures may be outlined with an offset or only part of the intended region may be detected. This is a limitation of the automatic selection, not a reason to stop using image interpretation.">自动识别使用 Zotero 提供的图片信息。PDF 文件内部的图片和排版方式比较复杂，部分图片可能出现轮廓错位，或只识别到一部分区域。这是自动选区可能遇到的情况，不影响你继续使用图片解读。</p>
                 <ol>
                   <li data-ui-en="Move the pointer over a recognizable image in the Zotero PDF reader. When a green outline appears, click the image to lock the selection.">在 Zotero PDF 阅读器中，将鼠标移到可识别的图片上。出现绿色轮廓后，点击图片锁定选区。</li>
                   <li data-ui-en="Choose Interpret image (new conversation) or Interpret image (current conversation). The plugin captures the image and sends an interpretation request.">选择「图片解读（开启新对话）」或「图片解读（追加在当前对话）」，插件会截取图片并发送解读请求。</li>
                   <li data-ui-en="Read the result in the workbench and ask follow-up questions, such as “What conclusion does the control group support?”">在工作台阅读解读结果，继续提问，例如「图中的对照组支持了什么结论？」。</li>
                 </ol>
-                <h4 data-ui-en="Manual capture">截图识别</h4>
+                <h4 data-ui-en="Manual capture: a useful backup">手动截图：自动识别的补充</h4>
+                <p data-ui-en="Manual capture is designed for cases where automatic detection is missing, shifted, or incomplete. It is also useful for formulas, tables, legends, subfigures, and other content that is easier to explain when you can choose exactly what is visible.">自动识别没有反应、位置不准或区域不完整时，可以使用手动截图。公式、表格、图例、子图，以及其他需要看清局部细节的内容，也适合用手动截图。</p>
                 <ol>
                   <li><span data-ui-en="Focus the PDF reading area and press the default shortcut ">让 PDF 阅读区域获得焦点，按默认快捷键 </span><kbd>Ctrl + Alt + S</kbd><span data-ui-en="; on macOS, use ">；macOS 使用 </span><kbd>⌘ + Alt + S</kbd><span data-ui-en=".">。</span></li>
                   <li data-ui-en="Drag a rectangle around an image, subfigure, or table on one PDF page, then choose a new conversation or the current conversation.">在同一 PDF 页面内拖动框选图片、子图或表格区域，再选择开启新对话或追加到当前对话。</li>
                   <li><span data-ui-en="Press ">按 </span><kbd>Esc</kbd><span data-ui-en=" or click Exit to leave capture mode. To select a different region, exit and press the capture shortcut again."> 或点击退出按钮离开截图模式。选错区域时，退出后再次按截图快捷键重新框选。</span></li>
                 </ol>
-                <p data-ui-en="If no automatic outline appears, use manual capture. Automatic detection needs the reader&#x27;s image structure, available in Zotero 10.0.1 and later. Manual capture still requires reader region-cropping support.">没有出现自动识别轮廓时，可以直接使用截图识别。自动识别依赖阅读器提供图片结构，Zotero 10.0.1 及以上版本支持此能力；截图仍需阅读器支持区域裁剪。</p>
+                <h4 data-ui-en="Which one should I use?">怎么选择</h4>
+                <ul>
+                  <li data-ui-en="Use automatic detection when a green outline follows the complete figure and includes the needed labels.">绿色轮廓能完整跟随图片，并且包含需要的标签、坐标和图例时，使用自动识别。</li>
+                  <li data-ui-en="Use manual capture when there is no outline, the outline is shifted, only part of the figure is selected, or you want to include a formula or table.">没有轮廓、轮廓错位、只选中局部，或想包含公式和表格时，改用手动截图。</li>
+                  <li data-ui-en="Automatic detection requires a compatible Zotero reader on Zotero 10.0.1 or later. Manual capture is an additional option when the reader supports region cropping.">自动识别需要 Zotero 10.0.1 及以上版本的兼容阅读器；阅读器支持区域裁剪时，还可以使用手动截图作为补充。</li>
+                </ul>
                 <h4 data-ui-en="Choose a conversation">选择哪一种对话</h4>
                 <ul>
                   <li><strong data-ui-en="New conversation: ">开启新对话：</strong><span data-ui-en="Start discussing a new image. The current paper&#x27;s metadata and extractable PDF text are linked automatically as context.">适合开始读一张新图。自动关联当前文献的信息与可提取的 PDF 正文，作为解读背景。</span></li>
                   <li><strong data-ui-en="Current conversation: ">追加在当前对话：</strong><span data-ui-en="Continue an existing discussion while keeping its title, messages, and linked sources.">适合接着已有问题讨论，保留当前对话的标题、消息与已关联来源。</span></li>
                 </ul>
                 <h4 data-ui-en="Follow-ups and settings">继续追问与设置</h4>
-                <p data-ui-en="Image interpretation requires a model that accepts images. Images appear below their messages, can be enlarged, and are saved locally with the conversation. Follow-ups use the most recent image, including after reopening the workbench. Images not saved by older versions must be detected or captured again.">图片解读需要支持图片输入的模型。图片会显示在对应消息下方，可点击放大，并随对话保存在本机。追加新图后，后续追问携带最近一张图；重新打开工作台后也可继续看图和追问。旧版本未保存的原图需要重新识别或截图。</p>
-                <p data-ui-en="Change and save the capture shortcut in Settings → Keyboard shortcuts. Captions may not be detected; check numbers, axes, and AI inferences against the original image.">截图快捷键可在「设置 → 快捷键设置」修改并保存。图注不一定能被识别，请结合原图核对数字、坐标和 AI 的推断。</p>
+                <p data-ui-en="Choose a model that accepts images. Images appear below their messages, can be enlarged, and are saved locally with the conversation. Follow-ups use the most recent image, including after reopening the workbench. Images not saved by older versions must be detected or captured again.">请为图片解读选择支持图片输入的模型。图片会显示在对应消息下方，可点击放大，并随对话保存在本机。追加新图后，后续追问会带上最近一张图；重新打开工作台后也可以继续查看和追问。旧版本未保存的图片需要重新识别或截图。</p>
+                <p data-ui-en="Include axes, units, legends, and the necessary caption when you capture a region. You can ask what each curve means, how groups differ, or whether the figure really supports the author&#x27;s conclusion. Check numbers and conclusions against the original paper.">截图时尽量包含坐标轴、单位、图例和必要的图注。你可以问「每条曲线代表什么」「各组有什么差异」「这张图是否真的支持作者的结论」。数字和结论仍要结合原图与论文核对。</p>
+                <p data-ui-en="Change and save the capture shortcut in Settings → Keyboard shortcuts. Sending an interpretation provides the selected image to the AI service you chose.">截图快捷键可在「设置 → 快捷键设置」修改并保存。发送图片解读时，所选图片会提供给你选择的 AI 服务。</p>
               </article>
               <article id="jadense-guide-panel-translation" class="jdx-guide-chapter" role="tabpanel" aria-labelledby="jadense-guide-tab-translation" tabindex="0" hidden="hidden">
-                <p class="jdx-guide-eyebrow" data-ui-en="03 / Read across languages">03 / 跨语言阅读</p>
-                <h3 data-ui-en="Live translation">实时翻译</h3>
-                <p class="jdx-guide-lead" data-ui-en="Select a passage and read its translation as it is generated directly in the reader.">选中一段原文，在阅读器内直接查看逐步生成的译文，保持阅读节奏。</p>
-                <h4 data-ui-en="Translate selected text">翻译选中的文字</h4>
+                <p class="jdx-guide-eyebrow" data-ui-en="03 / Read across languages">03 / 读懂外文</p>
+                <h3 data-ui-en="Translation">翻译功能</h3>
+                <p class="jdx-guide-lead" data-ui-en="Translate only the passage you need while reading, or translate a full PDF when you need a quick overview. The two options suit different situations.">阅读时可以只翻译当前需要的句子或段落，也可以处理整篇 PDF。两种方式适合的场景不同。</p>
+                <h4 data-ui-en="Which translation should I use?">怎么选择</h4>
+                <ul>
+                  <li><strong data-ui-en="Selected-text translation: ">选中翻译：</strong><span data-ui-en="Best for unfamiliar terms, difficult sentences, and important paragraphs. It is more focused and usually uses fewer tokens.">适合查术语、看难句和理解关键段落，内容更集中，通常也更省 token。</span></li>
+                  <li><strong data-ui-en="Full-PDF translation: ">全文翻译：</strong><span data-ui-en="Best only when you need to browse a paper quickly. It sends a large amount of text for processing, so it takes longer and uses more tokens.">只在需要快速浏览整篇材料时考虑。它会处理大量文字，等待更久，也会消耗更多 token。</span></li>
+                </ul>
+                <h4 data-ui-en="Selected-text translation">选中翻译</h4>
                 <ol>
                   <li data-ui-en="Select the text you want to translate in the PDF.">在 PDF 中选中需要翻译的文字。</li>
-                  <li><span data-ui-en="Click Smart translation in the selection toolbar, or press ">点击选文浮动工具条中的「智能翻译」，或按 </span><kbd>Ctrl + Alt + T</kbd><span data-ui-en="(on macOS, ">（macOS 为 </span><kbd>⌘ + Alt + T</kbd><span data-ui-en="). The top toolbar provides Full translation.">）。顶部工具条提供「全文翻译」。</span></li>
+                  <li><span data-ui-en="Click Smart translation in the selection toolbar, or press ">点击选文浮动工具条中的「智能翻译」，或按 </span><kbd>Ctrl + Alt + T</kbd><span data-ui-en=" (on macOS, ">（macOS 为 </span><kbd>⌘ + Alt + T</kbd><span data-ui-en=").">）。</span></li>
                   <li data-ui-en="Read the result in the translation panel. The default direction is English → Simplified Chinese. Change the source and target languages, or set the source to Auto-detect, then click Translate again.">在翻译浮窗中查看结果。默认方向为「英文 → 简体中文」，可修改源语言和目标语言，也可将源语言设为「自动识别」，然后点击「重新翻译」。</li>
                   <li data-ui-en="Click Copy translation to take the result with you.">需要带走译文时点击「复制译文」。</li>
                 </ol>
-                <h4 data-ui-en="Translate the full PDF">全文翻译</h4>
-                <p data-ui-en="Click Full translation in the reader to translate every extractable page using the paper's language settings and the Live translation model. Drag or resize the floating window; minimize or hide it while translation continues. Use Locate original beside a passage to jump to its source; selecting translated text does not navigate the PDF.">点击阅读器「全文翻译」，按文章语言设置，使用实时翻译模型处理所有可提取文字的页面。浮窗可拖动、调整大小、最小化或隐藏；隐藏后继续执行。每段独立的「定位原文」可跳回来源，选择译文不会触发跳转。</p>
-                <p data-ui-en="Pause and continue from the window or details. After restarting Zotero, resume manually; completed chunks are retained. Blank, scanned or unreadable pages are marked and result in partial completion. If the attachment changes, start a new task. Use Appearance at the bottom left of either translation window to toggle its style and background transparency menu. Both windows share these preferences and support title dragging and resizing from any edge or corner.">可在浮窗或详情暂停、继续；重启 Zotero 后需手动继续，已完成分块会保留。空白、扫描或读取失败页会明确标记，并显示部分完成。附件变化后需重新建立任务。两种翻译浮窗均可拖动标题移动、拖拽任意边缘或角落缩放；左下角「外观」展开样式与背景透明度菜单，设置在两种浮窗间共用。</p>
+                <h4 data-ui-en="Full-PDF translation">全文翻译</h4>
+                <p class="jdx-guide-note" data-ui-en="Full translation is not recommended for most reading. It processes many pages and sends much more text to the model, which can waste tokens on passages you do not need. Start with Literature analysis or selected-text translation when you only want to understand the main points.">不建议把全文翻译作为常规阅读方式：它会处理很多页面，把大量文字交给模型，可能在不需要翻译的内容上浪费 token。想先了解重点时，建议先用「文献解析」或「选中翻译」。</p>
+                <ol>
+                  <li data-ui-en="Click Full translation in the PDF reader. Read the reminder, and click Continue translation only when you still need the whole document.">点击 PDF 阅读器中的「全文翻译」。先阅读提示，确认确实需要处理整篇文献后，再点击「仍要翻译」。</li>
+                  <li data-ui-en="The task translates readable pages according to the paper's language settings. Blank, scanned, or unreadable pages are marked instead of being silently treated as translated.">任务会按照文章的语言设置处理可读取的页面。空白页、扫描页或无法读取的页面会被标记，不会被默认为已经翻译。</li>
+                  <li data-ui-en="Pause or continue from the translation window or its details. Completed pages are kept, so you can continue later. After restarting Zotero, resume the task manually.">可以在翻译浮窗或详情中暂停、继续。已经完成的页面会保留，之后可以接着做；重启 Zotero 后需要手动点击继续。</li>
+                </ol>
+                <p data-ui-en="You can drag or resize the translation window, minimize it, or hide it while the task continues. Use Locate original beside a passage to return to its PDF page.">翻译进行时，可以拖动或调整浮窗大小，也可以最小化或隐藏浮窗；隐藏后任务仍会继续。点击段落旁的「定位原文」可以回到 PDF 对应页面。</p>
                 <h4 data-ui-en="Review translation history">回看翻译历史</h4>
-                <p data-ui-en="Translation history shows compact summaries. Expand a selected-text record to read its source and translation; open a full-PDF record for page-by-page details, copying, resuming, retranslating or deleting. These local records are separate from AI conversations. A storage warning means you should copy the session result before closing Zotero.">翻译历史默认显示摘要。点击选文记录展开原文和译文；点击全文记录进入按页详情，可复制、续译、重新翻译或删除。记录在本地独立保存，不属于 AI 对话。出现保存失败提示时，请在关闭 Zotero 前复制会话结果。</p>
-                <p data-ui-en="Settings → General offers an interface font size from 12 to 24 px (default 13), translation window style, and background transparency. It updates plugin surfaces immediately and preserves the original PDF and Zotero interface.">「设置 → 常规」可调整界面字号 12–24px（默认 13px）、翻译浮窗样式和背景透明度，即时作用于插件界面，PDF 原文与 Zotero 自有界面不变。</p>
-                <h4 data-ui-en="Tips">使用提示</h4>
+                <p data-ui-en="Translation history keeps selected passages and full-PDF tasks separately. Expand a selected-text record to read and copy the source and translation; open a full-PDF record for page-by-page results, copying, resuming, retranslating, or deleting. These records are stored locally and are separate from AI Chat.">「翻译历史」会分别保存选中翻译和全文翻译。展开选文记录可以查看、复制原文和译文；打开全文记录可以按页查看、复制、续译、重新翻译或删除。翻译记录保存在本机，与 AI 对话分开。</p>
+                <p data-ui-en="Settings → General lets you change the plugin font size, translation window style, and background transparency. Settings → Feature settings lets you choose the model used by translation.">「设置 → 常规」可以调整插件字号、翻译浮窗样式和背景透明度；「设置 → 功能配置」可以选择翻译功能使用的模型。</p>
+                <h4 data-ui-en="Reading tips">使用建议</h4>
                 <ul>
-                  <li data-ui-en="Select text before translating. If a scanned document does not allow selection, prepare a PDF with extractable text first.">先选中文字，再触发翻译；扫描件如果无法选文，需要先准备可提取文字的 PDF。</li>
-                  <li data-ui-en="Change source and target languages in the translation panel, then click Translate again. These changes apply only to the current passage.">在翻译浮窗中修改源语言和目标语言，再点击「重新翻译」；语言修改仅作用于本次选文。</li>
-                  <li data-ui-en="Translation uses the independent live-translation model selected in Settings → Feature settings.">翻译使用「设置 → 功能配置」中独立选择的实时翻译模型。</li>
+                  <li data-ui-en="Select a complete sentence or a short paragraph so the translation has enough context without sending an unnecessarily large passage.">尽量选完整句子或较短段落，既给译文足够上下文，也避免一次发送太多文字。</li>
+                  <li data-ui-en="Change source and target languages in the translation panel, then click Translate again. These changes apply only to the current passage.">在翻译浮窗中修改源语言和目标语言，再点击「重新翻译」；语言修改只作用于当前选文。</li>
+                  <li data-ui-en="If a scanned PDF does not allow text selection, use OCR text or another readable PDF before using selected-text translation.">扫描 PDF 如果无法选中文字，先准备带有可读取文字的版本，再使用选中翻译。</li>
                   <li data-ui-en="After changing the translation shortcut in Settings → Keyboard shortcuts, click Save to apply it.">在「设置 → 快捷键设置」修改翻译快捷键后，点击「保存」生效。</li>
                 </ul>
               </article>
@@ -224,7 +270,7 @@
                 <p class="jdx-guide-lead" data-ui-en="Ask about one or more papers, bringing metadata, attachment text, and quoted passages into one discussion.">围绕一篇或多篇文献提问，把文献信息、附件正文和引用选文放入同一段讨论。</p>
                 <h4 data-ui-en="Start a conversation">开始一段对话</h4>
                 <ol>
-                  <li data-ui-en="Click New conversation on the workbench Chat page. Alternatively, click Ask at the top of the PDF reader to create a paper-named conversation with its sources linked.">在工作台「对话」页点击「新建对话」；也可在 PDF 阅读器顶部点击「提问」，直接创建以当前文献命名并关联来源的新对话。</li>
+                  <li data-ui-en="Click New conversation on the workbench sidebar. Alternatively, click Ask at the top of the PDF reader to create a paper-named conversation with its sources linked.">在工作台侧边栏点击「新对话」；也可在 PDF 阅读器顶部点击「提问」，直接创建以当前文献命名并关联来源的新对话。</li>
                   <li data-ui-en="Expand Conversation details. Use Link items for paper metadata or Link files for extractable attachment text. You can also drop Zotero items or attachments into Chat.">展开「对话详情」，通过「关联条目」添加文献信息，或通过「关联文件」加入附件中可提取的正文。也可以将 Zotero 条目或附件拖入对话。</li>
                   <li><span data-ui-en="Enter a question, then click Send or press ">输入问题，点击「发送」或按 </span><kbd>Ctrl / ⌘ + Enter</kbd><span data-ui-en=". ">。</span><kbd>Enter</kbd><span data-ui-en=" inserts a new line."> 用于换行。</span></li>
                   <li data-ui-en="Ask follow-ups, copy answers, or click Stop to interrupt generation. Use the conversation list to return to existing discussions.">继续追问、复制回答，或点击「停止」中断生成。对话列表可切换已有讨论。</li>
@@ -303,49 +349,15 @@
         <section id="jadense-manager-section-migrate" class="jdx-manager-section" role="tabpanel" aria-labelledby="jadense-manager-nav-migrate" hidden="hidden">
           <header class="jdx-manager-section-header">
             <div>
-              <h2 data-ui-en="Connect Jadense">连接攻玉</h2>
-              <p data-ui-en="Connect your Jadense account to use AI Chat in Zotero and upload papers to Jadense folders. Check in on the Jadense website. Connection details are stored only on this computer.">连接攻玉账号后，可以在 Zotero 中使用 AI 对话，并把文献上传到攻玉收藏夹。每日签到请前往攻玉网页。连接信息只保存在这台电脑上。</p>
+              <h2 data-ui-en="Jadense academic">攻玉学术</h2>
+              <p data-ui-en="View your Jadense account and upload papers to Jadense folders. Check in on the Jadense website. Connection details are stored only on this computer.">查看攻玉账号并把文献上传到攻玉收藏夹。每日签到请前往攻玉网页。连接信息只保存在这台电脑上。</p>
             </div>
           </header>
 
-          <div id="jadense-connection-tabs" class="jdx-tabs" role="tablist" aria-label="连接攻玉分区" data-ui-en-aria-label="Connect Jadense sections">
-            <button id="jadense-connection-tab-config" type="button" role="tab" aria-selected="true" aria-controls="jadense-connection-panel-config" tabindex="0" data-ui-en="Connection">连接配置</button>
-            <button id="jadense-connection-tab-account" type="button" role="tab" aria-selected="false" aria-controls="jadense-connection-panel-account" tabindex="-1" data-ui-en="Your account">用户信息</button>
+          <div id="jadense-connection-tabs" class="jdx-tabs" role="tablist" aria-label="攻玉学术分区" data-ui-en-aria-label="Jadense academic sections">
+            <button id="jadense-connection-tab-account" type="button" role="tab" aria-selected="true" aria-controls="jadense-connection-panel-account" tabindex="0" data-ui-en="Your account">用户信息</button>
             <button id="jadense-connection-tab-sync" type="button" role="tab" aria-selected="false" aria-controls="jadense-connection-panel-sync" tabindex="-1" data-ui-en="Literature sync">文献同步</button>
           </div>
-
-          <section id="jadense-connection-panel-config" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-config">
-            <section class="jdx-manager-settings-card jdx-connection-config-card" data-connection-section="configuration">
-              <div class="jdx-manager-settings-card-header">
-                <h3 data-ui-en="Jadense token">攻玉令牌</h3>
-                <p data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
-              </div>
-              <div class="jdx-manager-form">
-                <div id="jadense-manager-token-display" class="jdx-manager-token-row">
-                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
-                  <code id="jadense-manager-token-mask" class="jdx-manager-token-mask"></code>
-                  <span class="jdx-manager-token-actions">
-                    <button id="jadense-manager-token-copy" type="button" data-ui-en="Copy">复制</button>
-                    <button id="jadense-manager-token-edit" type="button" data-ui-en="Edit">编辑</button>
-                  </span>
-                </div>
-                <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
-                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
-                  <input id="jadense-manager-token-input" type="password" autocomplete="off" placeholder="粘贴新的攻玉令牌" data-ui-en-placeholder="Paste a new Jadense token" />
-                  <span class="jdx-manager-token-actions">
-                    <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
-                    <button id="jadense-manager-token-cancel" type="button" data-ui-en="Cancel">取消</button>
-                  </span>
-                </div>
-              </div>
-              <p class="jdx-manager-settings-note" data-ui-en="Need a token? Click Generate / update token to open Settings → Integrations on the Jadense website. Create a Zotero token and paste it above. A complete token should include Chat, account, points, and upload permissions; missing permissions affect the corresponding features.">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
-              <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
-              <div class="jdx-manager-actions jdx-manager-actions-end">
-                <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>
-                <button id="jadense-manager-disconnect" type="button" class="jdx-manager-danger" data-ui-en="Disconnect">断开连接</button>
-              </div>
-            </section>
-          </section>
 
           <section id="jadense-connection-panel-account" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-account" hidden="hidden">
             <div class="jdx-manager-actions jdx-manager-account-links">
@@ -445,6 +457,7 @@
             <button id="jadense-settings-tab-general" type="button" role="tab" aria-controls="jadense-settings-panel-general" aria-selected="true" data-ui-en="General">常规</button>
             <button id="jadense-settings-tab-features" type="button" role="tab" aria-controls="jadense-settings-panel-features" aria-selected="false" tabindex="-1" data-ui-en="Feature settings">功能配置</button>
             <button id="jadense-settings-tab-shortcuts" type="button" role="tab" aria-controls="jadense-settings-panel-shortcuts" aria-selected="false" tabindex="-1" data-ui-en="Keyboard shortcuts">快捷键设置</button>
+            <button id="jadense-settings-tab-connection" type="button" role="tab" aria-controls="jadense-settings-panel-connection" aria-selected="false" tabindex="-1" data-ui-en="Connect Jadense">连接攻玉</button>
             <button id="jadense-settings-tab-ai" type="button" role="tab" aria-controls="jadense-settings-panel-ai" aria-selected="false" tabindex="-1">BYOK</button>
           </div>
           <section id="jadense-settings-panel-general" role="tabpanel" aria-labelledby="jadense-settings-tab-general">
@@ -461,10 +474,14 @@
             </div>
           </section>
           <section id="jadense-settings-panel-features" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
-            <p class="jdx-manager-settings-note" data-ui-en="Each feature can use a Jadense or BYOK model. First connect your account in Connect Jadense, or add a provider and model in BYOK.">每项功能均可选择攻玉内置模型或 BYOK 自配置模型。请先在「连接攻玉」连接账号，或在「BYOK」添加提供商与模型。</p>
+            <p class="jdx-manager-settings-note" data-ui-en="Other features follow the current Chat model by default. The Chat model remains editable; turn this off to configure other features separately. First connect your account in Connect Jadense, or add a provider and model in BYOK.">其他功能默认自动跟随当前对话模型；AI 对话模型始终可调整，关闭后可分别配置其他功能。请先在「连接攻玉」连接账号，或在「BYOK」添加提供商与模型。</p>
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p data-ui-en="Everyday questions and paper discussions. Shared with the model selector in the Chat input.">日常问答与文献对话；与对话输入栏的模型选择保持一致。</p></div>
               <div><div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label"></div><p id="jadense-feature-chat-model-status" class="jdx-manager-inline-status" role="status"></p></div>
+            </div>
+            <div class="jdx-feature-model-row jdx-feature-model-follow-row">
+              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, other features use the current Chat model. Turn it off to configure them separately.">开启后，其他功能使用当前对话模型；关闭后可分别配置其他功能模型。</p></div>
+              <label class="jdx-manager-checkbox"><input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" /><span data-ui-en="Enabled">启用</span></label>
             </div>
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-translation-label" data-ui-en="Live translation">实时翻译</h3><p data-ui-en="Translate selected text and full PDFs. Full translation uses the paper's language settings.">用于 PDF 选文与全文翻译；全文沿用文章语言设置。</p></div>
@@ -487,82 +504,93 @@
                 <h3 data-ui-en="BYOK settings">BYOK 配置</h3>
                 <p data-ui-en="Configure a provider first, then manage its model catalog. Keys, messages, and linked papers go directly from this computer to the provider, without passing through Jadense servers.">先配置提供商，再为它维护模型目录。密钥、消息与关联文献会从本机直接发送到提供商，不经过攻玉服务器。</p>
               </div>
-              <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-provider-heading">
-                <div class="jdx-manager-byok-panel-header">
-                  <h4 id="jadense-manager-provider-heading" data-ui-en="Provider">提供商</h4>
-                  <div class="jdx-manager-actions">
-                    <button id="jadense-manager-byok-provider-new" type="button" data-ui-en="Add">新增</button>
+              <div class="jdx-manager-byok-layout">
+                <aside class="jdx-manager-byok-sidebar" aria-labelledby="jadense-manager-provider-heading">
+                  <div class="jdx-manager-byok-panel-header">
+                    <div>
+                      <h4 id="jadense-manager-provider-heading" data-ui-en="Providers">提供商</h4>
+                      <p data-ui-en="Switch or edit a saved provider">切换或编辑已保存的提供商</p>
+                    </div>
+                    <button id="jadense-manager-byok-provider-new" type="button" class="jdx-manager-icon-button" title="新增提供商" data-ui-en-title="Add provider" aria-label="新增提供商" data-ui-en-aria-label="Add provider">+</button>
+                  </div>
+                  <div id="jadense-manager-byok-provider-select" class="jdx-manager-byok-provider-list" role="listbox" aria-label="提供商" data-ui-en-aria-label="Providers"></div>
+                </aside>
+                <div class="jdx-manager-byok-editor">
+                  <div class="jdx-manager-byok-panel-header">
+                    <div>
+                      <h4 data-ui-en="Provider connection">提供商连接</h4>
+                      <p data-ui-en="Each provider keeps its own endpoint and key">每个提供商独立保存地址和密钥</p>
+                    </div>
                     <button id="jadense-manager-byok-provider-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
                   </div>
-                </div>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Current provider">当前提供商</span>
-                  <div id="jadense-manager-byok-provider-select"></div>
-                </label>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Display name">显示名称</span>
-                  <input id="jadense-manager-byok-provider-name" type="text" autocomplete="off" placeholder="例如 mimo" data-ui-en-placeholder="e.g. mimo" />
-                </label>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Protocol">协议</span>
-                  <div id="jadense-manager-byok-protocol"></div>
-                </label>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="API base URL">API 基础地址</span>
-                  <input id="jadense-manager-byok-base-url" type="url" autocomplete="off" />
-                </label>
-                <div class="jdx-manager-byok-endpoint-row">
-                  <span data-ui-en="Request URL">请求地址</span>
-                  <code id="jadense-manager-byok-endpoint"></code>
-                </div>
-                <div class="jdx-manager-byok-key-summary">
-                  <span class="jdx-manager-field-label" data-ui-en="Saved API key">已保存 API 密钥</span>
-                  <code id="jadense-manager-byok-key-mask" class="jdx-manager-token-mask"></code>
-                </div>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Replace API key">替换 API 密钥</span>
-                  <input id="jadense-manager-byok-key-input" type="password" autocomplete="off" placeholder="留空则保留已保存的密钥" data-ui-en-placeholder="Leave blank to keep the saved key" />
-                </label>
-                <div class="jdx-manager-actions jdx-manager-actions-end">
-                  <button id="jadense-manager-byok-provider-save" type="button" class="jdx-manager-primary" data-ui-en="Save provider">保存提供商</button>
-                </div>
-              </div>
-              <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading">
-                <div class="jdx-manager-byok-panel-header">
-                  <div>
-                    <h4 id="jadense-manager-model-heading" data-ui-en="Model catalog">模型目录</h4>
-                    <p data-ui-en="Display names are only for the interface. Model IDs are sent unchanged to the provider.">显示名称只用于界面；模型 ID 会原样发送给提供商。</p>
-                  </div>
-                  <div class="jdx-manager-actions">
-                    <button id="jadense-manager-byok-model-new" type="button" data-ui-en="Add model">添加模型</button>
-                    <button id="jadense-manager-byok-model-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
-                  </div>
-                </div>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Current model">当前模型</span>
-                  <div id="jadense-manager-byok-model-select"></div>
-                </label>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Display name">显示名称</span>
-                  <input id="jadense-manager-byok-model-name" type="text" autocomplete="off" placeholder="例如 MiMo 2.5" data-ui-en-placeholder="e.g. MiMo 2.5" />
-                </label>
-                <label class="jdx-manager-field">
-                  <span data-ui-en="Model ID">模型 ID</span>
-                  <input id="jadense-manager-byok-model" type="text" autocomplete="off" placeholder="例如 mimo-v2.5" data-ui-en-placeholder="e.g. mimo-v2.5" />
-                </label>
-                <div class="jdx-manager-byok-metrics">
                   <label class="jdx-manager-field">
-                    <span data-ui-en="Context window (optional)">上下文窗口（可选）</span>
-                    <input id="jadense-manager-byok-context-window" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 1000000" data-ui-en-placeholder="e.g. 1000000" />
+                    <span data-ui-en="Display name">显示名称</span>
+                    <input id="jadense-manager-byok-provider-name" type="text" autocomplete="off" placeholder="例如 智谱 / DeepSeek / 本地模型" data-ui-en-placeholder="e.g. Zhipu / DeepSeek / Local" />
                   </label>
                   <label class="jdx-manager-field">
-                    <span data-ui-en="Maximum output tokens">最大输出量（词元）</span>
-                    <input id="jadense-manager-byok-max-output-tokens" type="number" min="1" step="1" inputmode="numeric" />
+                    <span data-ui-en="Protocol">协议</span>
+                    <div id="jadense-manager-byok-protocol"></div>
                   </label>
-                </div>
-                <div class="jdx-manager-actions jdx-manager-actions-end">
-                  <button id="jadense-manager-byok-test" type="button" data-ui-en="Test current form">测试当前表单</button>
-                  <button id="jadense-manager-byok-save" type="button" class="jdx-manager-primary" data-ui-en="Save model">保存模型</button>
+                  <label class="jdx-manager-field">
+                    <span data-ui-en="API base url">API base url</span>
+                    <input id="jadense-manager-byok-base-url" type="url" autocomplete="off" placeholder="例如 https://api.example.com/v1" data-ui-en-placeholder="e.g. https://api.example.com/v1" />
+                  </label>
+                  <div class="jdx-manager-byok-endpoint-row">
+                    <span data-ui-en="Request URL">请求地址</span>
+                    <code id="jadense-manager-byok-endpoint"></code>
+                  </div>
+                  <label class="jdx-manager-field">
+                    <span data-ui-en="API key">API key</span>
+                    <div class="jdx-manager-secret-input">
+                      <input id="jadense-manager-byok-key-input" type="password" autocomplete="new-password" placeholder="输入或替换 API 密钥" data-ui-en-placeholder="Enter or replace the API key" />
+                      <button id="jadense-manager-byok-key-toggle" type="button" class="jdx-manager-secret-toggle" aria-label="显示 API 密钥" data-ui-en-aria-label="Show API key" title="显示 API 密钥" data-ui-en-title="Show API key" aria-pressed="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
+                  </label>
+                  <span id="jadense-manager-byok-key-mask" hidden="hidden" aria-hidden="true"></span>
+                  <div class="jdx-manager-actions jdx-manager-actions-end">
+                    <button id="jadense-manager-byok-provider-save" type="button" class="jdx-manager-primary" data-ui-en="Save provider">保存提供商</button>
+                  </div>
+                  <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading">
+                    <div class="jdx-manager-byok-panel-header">
+                      <div>
+                        <h4 id="jadense-manager-model-heading" data-ui-en="Models for this provider">当前提供商的模型目录</h4>
+                        <p data-ui-en="Display names are only for the interface. Model IDs are sent unchanged to this provider.">显示名称只用于界面；模型 ID 会原样发送给当前提供商。</p>
+                      </div>
+                      <div class="jdx-manager-actions">
+                        <button id="jadense-manager-byok-model-new" type="button" data-ui-en="Add model">添加模型</button>
+                        <button id="jadense-manager-byok-model-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
+                      </div>
+                    </div>
+                    <div id="jadense-manager-byok-model-editor" class="jdx-manager-byok-model-editor" hidden="hidden" role="group" aria-label="编辑当前模型" data-ui-en-aria-label="Edit current model">
+                      <div class="jdx-manager-byok-model-fields">
+                        <label class="jdx-manager-field">
+                          <span data-ui-en="Display name">显示名称</span>
+                          <input id="jadense-manager-byok-model-name" type="text" autocomplete="off" placeholder="例如 MiMo 2.5" data-ui-en-placeholder="e.g. MiMo 2.5" />
+                        </label>
+                        <label class="jdx-manager-field">
+                          <span data-ui-en="Model id">Model id</span>
+                          <input id="jadense-manager-byok-model" type="text" autocomplete="off" placeholder="例如 mimo-v2.5" data-ui-en-placeholder="e.g. mimo-v2.5" />
+                        </label>
+                        <div class="jdx-manager-byok-metrics">
+                          <label class="jdx-manager-field">
+                            <span data-ui-en="Context window (optional)">上下文窗口（可选）</span>
+                            <input id="jadense-manager-byok-context-window" type="number" min="1" step="1" inputmode="numeric" placeholder="例如 1000000" data-ui-en-placeholder="e.g. 1000000" />
+                          </label>
+                          <label class="jdx-manager-field">
+                            <span data-ui-en="Maximum output tokens">最大输出量（词元）</span>
+                            <input id="jadense-manager-byok-max-output-tokens" type="number" min="1" step="1" inputmode="numeric" />
+                          </label>
+                        </div>
+                        <div class="jdx-manager-actions jdx-manager-actions-end">
+                          <button id="jadense-manager-byok-test" type="button" data-ui-en="Test current form">测试当前表单</button>
+                          <button id="jadense-manager-byok-save" type="button" class="jdx-manager-primary" data-ui-en="Save model">保存模型</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="jadense-manager-byok-model-select" class="jdx-manager-byok-model-list" role="listbox" aria-label="模型" data-ui-en-aria-label="Models for this provider"></div>
+                  </div>
                 </div>
               </div>
               <p class="jdx-manager-settings-note" data-ui-en="Changing a provider&#x27;s protocol or base URL continues to use its saved key. Check that the destination is trusted. Testing sends a real request with the unsaved form, up to 3000 tokens, and may incur charges.">更改当前提供商的协议或基础地址会继续复用它已保存的密钥。请确认目标可信；测试会使用未保存表单发起一次最多 3000 个词元的真实请求，可能计费。</p>
@@ -601,8 +629,98 @@
             </div>
             <div id="jadense-shortcut-status" class="jdx-manager-inline-status" role="status"></div>
           </section>
+          <section id="jadense-settings-panel-connection" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-settings-tab-connection" hidden="hidden">
+            <section class="jdx-manager-settings-card jdx-connection-config-card" data-connection-section="configuration">
+              <div class="jdx-manager-settings-card-header">
+                <h3 data-ui-en="Jadense token">攻玉令牌</h3>
+                <p data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
+              </div>
+              <div class="jdx-manager-form">
+                <div id="jadense-manager-token-display" class="jdx-manager-token-row">
+                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
+                  <code id="jadense-manager-token-mask" class="jdx-manager-token-mask"></code>
+                  <span class="jdx-manager-token-actions">
+                    <button id="jadense-manager-token-copy" type="button" data-ui-en="Copy">复制</button>
+                    <button id="jadense-manager-token-edit" type="button" data-ui-en="Edit">编辑</button>
+                  </span>
+                </div>
+                <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
+                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
+                  <input id="jadense-manager-token-input" type="password" autocomplete="off" placeholder="粘贴新的攻玉令牌" data-ui-en-placeholder="Paste a new Jadense token" />
+                  <span class="jdx-manager-token-actions">
+                    <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
+                    <button id="jadense-manager-token-cancel" type="button" data-ui-en="Cancel">取消</button>
+                  </span>
+                </div>
+              </div>
+              <p class="jdx-manager-settings-note" data-ui-en="Need a token? Click Generate / update token to open Settings → Integrations on the Jadense website. Create a Zotero token and paste it above. A complete token should include Chat, account, points, and upload permissions; missing permissions affect the corresponding features.">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
+              <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
+              <div class="jdx-manager-actions jdx-manager-actions-end">
+                <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>
+                <button id="jadense-manager-disconnect" type="button" class="jdx-manager-danger" data-ui-en="Disconnect">断开连接</button>
+              </div>
+            </section>
+          </section>
         </section>
       </section>
     </main>
+
+    <div id="jadense-delete-conversation-dialog" class="jdx-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="jadense-delete-conversation-title" hidden="hidden" tabindex="-1">
+      <div class="jdx-confirm-dialog-backdrop" aria-hidden="true"></div>
+      <section class="jdx-confirm-dialog-panel" role="document">
+        <div class="jdx-confirm-dialog-heading">
+          <span class="jdx-confirm-dialog-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.5h.01"/></svg>
+          </span>
+          <h2 id="jadense-delete-conversation-title"></h2>
+        </div>
+        <div class="jdx-confirm-dialog-actions">
+          <button id="jadense-delete-conversation-cancel" type="button" data-ui-en="Cancel">取消</button>
+          <button id="jadense-delete-conversation-confirm" type="button" class="jdx-confirm-dialog-danger" data-ui-en="Delete">删除</button>
+        </div>
+      </section>
+    </div>
+
+    <dialog id="jadense-quick-start-dialog" class="jdx-help-dialog jdx-quick-start-dialog" aria-labelledby="jadense-quick-start-title">
+      <img src="icons/logo-padded.png" alt="Jadense" width="40" height="40" />
+      <h2 id="jadense-quick-start-title" data-ui-en="Quick start">快速开始</h2>
+      <p data-ui-en="Before using AI features, choose one of the following configuration methods:">开始使用 AI 功能前，请先选择一种配置方式：</p>
+      <ol class="jdx-quick-start-options">
+        <li>
+          <strong data-ui-en="Connect a Jadense token">连接攻玉令牌</strong>
+          <p data-ui-en="Generate a Zotero token in Jadense Settings → Integrations → Connect Jadense in Zotero, then paste and save it under Settings → Connect Jadense.">在攻玉学术「设置 → 集成 → 连接 Jadense in Zotero」生成 Zotero 令牌，然后在「设置 → 连接攻玉」中粘贴并保存。</p>
+        </li>
+        <li>
+          <strong data-ui-en="Configure BYOK">BYOK 配置</strong>
+          <p data-ui-en="Add your provider, API key, and model under Settings → BYOK. Requests go directly from this Zotero client to your provider.">在「设置 → BYOK」添加提供商、API 密钥和模型，请求会从本机直接发送到你的提供商。</p>
+        </li>
+      </ol>
+      <p class="jdx-quick-start-note" data-ui-en="After either method is ready, go to Settings → Feature settings to choose a model for each AI feature.">完成任一种配置后，请前往「设置 → 功能配置」为各项 AI 功能选择模型。</p>
+      <div class="jdx-help-actions">
+        <button id="jadense-quick-start-settings" type="button" class="jdx-manager-primary" data-ui-en="Open feature settings">前往功能配置</button>
+        <button id="jadense-quick-start-close" type="button" autofocus="autofocus" data-ui-en="Maybe later">稍后再说</button>
+      </div>
+    </dialog>
+
+    <dialog id="jadense-help-dialog" class="jdx-help-dialog" aria-labelledby="jadense-help-title">
+      <img src="icons/logo-padded.png" alt="Jadense" width="40" height="40" />
+      <h2 id="jadense-help-title">Jadense in Zotero</h2>
+      <div id="jadense-help-description" class="jdx-help-description">
+        <p data-ui-en="Jadense in Zotero brings AI conversations, selected-text translation, PDF figure interpretation, and literature analysis into your Zotero reading workflow. It helps you stay in one place while reading, asking questions, organizing sources, and returning to the original text.">Jadense in Zotero 是攻玉学术的 Zotero 研究工作台扩展，将 AI 对话、选文翻译、PDF 图片解读和文献解析带到你的阅读流程中，帮助你在阅读、提问、整理来源和回到原文之间保持连续。</p>
+        <p data-ui-en="Connect your Jadense account to use Jadense AI and sync selected Zotero items to a Jadense folder. You can also configure BYOK and use your own model provider. The Jadense academic app focuses on research reading and knowledge management, with AI conversations, literature and file management, favorites, and workspaces. This extension works with the app while remaining an independently installed and open-source Zotero client.">连接攻玉学术后，你可以使用攻玉 AI，并将 Zotero 中选定的条目同步到攻玉收藏夹；也可以配置 BYOK，使用自己的模型服务。攻玉学术主应用面向科研阅读与知识管理，提供 AI 对话、文献与文件管理、收藏夹和工作空间等能力。本插件与主应用相互配合，同时保持独立安装、独立开源的 Zotero 客户端定位。</p>
+        <p class="jdx-help-star" data-ui-en="If Jadense in Zotero is useful to your research, please visit the GitHub repository and give it a Star. Your support helps us keep improving the extension and the Jadense academic ecosystem.">如果 Jadense in Zotero 对你的研究工作有帮助，欢迎前往 GitHub 开源仓库点个 Star。你的支持会帮助我们持续改进插件与攻玉学术生态。</p>
+      </div>
+      <p id="jadense-help-version"></p>
+      <p id="jadense-help-status" role="status" aria-live="polite"></p>
+      <div class="jdx-help-actions">
+        <button id="jadense-help-website" type="button" data-ui-en="Website">官网</button>
+        <button id="jadense-help-repository" class="jdx-help-repository" type="button" title="打开 GitHub 开源仓库" data-ui-en-title="Open GitHub repository" aria-label="打开 GitHub 开源仓库" data-ui-en-aria-label="Open GitHub repository">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4c0-1-.3-2-1-2.5 4-.5 7-2 7-6a5 5 0 0 0-1.5-3.5A5 5 0 0 0 19 2s-1.5 0-4 1.5a14 14 0 0 0-6 0C6.5 2 5 2 5 2a5 5 0 0 0-.5 4A5 5 0 0 0 3 9.5c0 4 3 5.5 7 6-.7.5-1 1.5-1 2.5v4"/></svg>
+        </button>
+        <button id="jadense-help-retry" type="button" data-ui-en="Retry">重试</button>
+        <button id="jadense-help-release" type="button" data-ui-en="Open releases">打开发布页</button>
+        <button id="jadense-help-close" type="button" data-ui-en="Close" autofocus="autofocus">关闭</button>
+      </div>
+    </dialog>
   </body>
 </html>

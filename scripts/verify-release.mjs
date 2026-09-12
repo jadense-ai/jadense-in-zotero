@@ -83,6 +83,8 @@ check(bundledFiles.includes("content/analysis.css"), "XPI is missing literature 
 check(bundledFiles.includes("content/manager.js"), "XPI is missing Jadense Manager script.")
 check(bundledFiles.includes("locale/en-US/jadense-in-zotero.ftl"), "XPI is missing en-US Fluent strings.")
 check(bundledFiles.includes("locale/zh-CN/jadense-in-zotero.ftl"), "XPI is missing zh-CN Fluent strings.")
+check(bundledFiles.includes("_locales/en/messages.json"), "XPI is missing English manifest strings.")
+check(bundledFiles.includes("_locales/zh/messages.json"), "XPI is missing Chinese manifest strings.")
 check(bundledFiles.includes("icons/jadense-16.svg"), "XPI is missing item pane header icon.")
 check(bundledFiles.includes("icons/jadense-20.svg"), "XPI is missing item pane sidenav icon.")
 check(bundledFiles.includes("content/icons/logo-padded.png"), "XPI is missing Jadense brand logo.")

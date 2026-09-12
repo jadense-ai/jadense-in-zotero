@@ -97,3 +97,12 @@ describe("resolvePopupMaxHeight", () => {
     expect(resolvePopupMaxHeight(10)).toBe(48)
   })
 })
+
+// 模型目录允许更高的列表，但仍受窗口可用空间约束；普通下拉沿用原上限。
+describe("compact catalog height", () => {
+  it("uses the requested cap without overflowing the available space", () => {
+    expect(resolvePopupMaxHeight(600, 448)).toBe(448)
+    expect(resolvePopupMaxHeight(180, 448)).toBe(180)
+    expect(resolvePopupMaxHeight(600)).toBe(240)
+  })
+})

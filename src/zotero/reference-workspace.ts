@@ -12,10 +12,17 @@ import { createJdxSelect } from "./ui/select"
 
 export type ReferencePreparation = { running: boolean; message?: string; error?: string }
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
-export const canImportReference = (entry: ReferenceEntry) => entry.verification === "verified" && Boolean(entry.verified?.doi) && !entry.imported && !entry.importUncertain
+export const canImportReference = (entry: ReferenceEntry) => entry.verification === "verified" && Boolean(entry.verified?.title) && !entry.imported && !entry.importUncertain
+/** 只使用原文规则字段或本机查询结果构造链接；AI 不提供 URL 或交互权限。 */
+export function referenceURL(entry: ReferenceEntry) {
+  const fields = entry.verified || entry.fields
+  const url = fields.url || (fields.doi ? `https://doi.org/${fields.doi}` : "")
+  return /^https?:\/\//iu.test(url) ? url : ""
+}
+export function referenceSearchURL(entry: ReferenceEntry) { return `https://search.crossref.org/?q=${encodeURIComponent(entry.fields.title || entry.raw)}` }
 export function filterReferences(entries: ReferenceEntry[], query: string, filter: string) {
   const text = query.trim().toLocaleLowerCase()
-  return entries.filter(entry => (!text || [entry.raw, entry.fields.title, entry.fields.doi, ...entry.fields.authors].join(" ").toLocaleLowerCase().includes(text))
+  return entries.filter(entry => (!text || [entry.raw, entry.fields.title, entry.fields.doi, ...entry.fields.authors, entry.verified?.title, entry.verified?.doi, ...(entry.verified?.authors || [])].join(" ").toLocaleLowerCase().includes(text))
     && (filter === "all" || (filter === "imported" ? Boolean(entry.imported) : !entry.imported && entry.verification === filter)))
 }
 function entryState(entry: ReferenceEntry) {
@@ -23,16 +30,18 @@ function entryState(entry: ReferenceEntry) {
     : entry.verification === "verified" ? uiText("已核验", "Verified") : entry.verification === "pending" ? uiText("待核验", "Pending") : uiText("未验证", "Unverified")
 }
 
-/** 保留既有导出；未验证条目仍仅有静态原文，不使模型 URL 或不确定识别获得动作能力。 */
+/** 原文定位和主动搜索独立于核验；只有原生写入需要匹配证据。 */
 export function referenceRow(doc: Document, entry: ReferenceEntry, onImport: () => unknown, onLocate: () => unknown, onURL: (url: string) => unknown, onSelect: (checked: boolean) => void) {
   const row = element(doc, "article", "jdx-reference-row"); row.dataset.verification = entry.verification; row.dataset.referenceId = entry.id
   row.append(element(doc, "p", "jdx-reference-raw", entry.raw), element(doc, "p", "jdx-reference-state", [entryState(entry), entry.reason].filter(Boolean).join(" · ")))
-  if (entry.verification !== "verified" || !entry.verified?.doi) return row
+  row.append(action(doc, uiText("定位原文", "Locate original"), () => { void onLocate() }), action(doc, uiText("搜索文献", "Search publication"), () => { void onURL(referenceSearchURL(entry)) }))
+  if (referenceURL(entry)) row.append(action(doc, uiText("原文链接", "Publication link"), () => { void onURL(referenceURL(entry)) }))
+  if (entry.verification !== "verified" || !entry.verified?.title) return row
   const checkbox = element(doc, "input"); checkbox.type = "checkbox"; checkbox.disabled = !canImportReference(entry)
   checkbox.setAttribute("aria-label", uiText(`选择引用 ${entry.label || entry.order + 1}`, `Select reference ${entry.label || entry.order + 1}`))
   checkbox.addEventListener("change", () => onSelect(checkbox.checked))
   const save = action(doc, uiText("导入 Zotero", "Import to Zotero"), () => { void onImport() }); save.disabled = !canImportReference(entry)
-  row.append(checkbox, action(doc, uiText("定位原文", "Locate original"), () => { void onLocate() }), action(doc, uiText("原文链接", "Publication link"), () => { void onURL(entry.verified!.url || `https://doi.org/${entry.verified!.doi}`) }), save)
+  row.append(checkbox, save)
   return row
 }
 
@@ -72,13 +81,13 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   let task: DocumentTask | undefined, preparation: ReferencePreparation | undefined, entries: ReferenceEntry[] = [], importing = false, disposed = false, generation = 0
   let extracting: AbortController | undefined
   const selected = new Set<string>()
-  type Row = { root: HTMLElement; raw: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; entry: ReferenceEntry }
+  type Row = { root: HTMLElement; raw: HTMLElement; metadata: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; publication?: HTMLButtonElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; entry: ReferenceEntry }
   const rows = new Map<string, Row>()
   const operate = (callback: (id: string) => void) => { if (task && !importing) { feedback.textContent = ""; callback(task.id) } }
   const extract = action(doc, uiText("提取参考文献", "Extract references"), () => {
     if (extracting || preparation?.running) return
     extracting = new AbortController(); preparation = { running: true, message: uiText("正在读取 PDF…", "Reading PDF…") }; render()
-    void jobs.start("references", source.itemID, false, { signal: extracting.signal, onProgress: message => { preparation = { running: true, message }; render() } }).then(value => {
+    void jobs.start("references", source.itemID, Boolean(task), { signal: extracting.signal, onProgress: message => { preparation = { running: true, message }; render() } }).then(value => {
       if (disposed) return
       task = value; onTask(value)
     }).catch(error => { if (!disposed && !extracting?.signal.aborted) feedback.textContent = errorText(error) }).finally(() => { extracting = undefined; preparation = undefined; if (!disposed) void refresh() })
@@ -114,11 +123,13 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     if (disposed) return
     const phase = task ? jobs.referencePhase(task.id) : undefined, running = task?.status === "running", preparing = Boolean(preparation?.running || extracting)
     const busy = importing || phase === "importing"
+    const blocksImport = running && phase !== "identifying"
     const label = phase === "stopping" ? uiText("正在停止…", "Stopping…") : phase === "queued" ? uiText("等待处理", "Queued") : phase === "identifying" ? uiText("识别待定片段", "Identifying fragments") : phase === "verifying" ? uiText("正在核验", "Verifying") : phase === "importing" ? uiText("正在导入", "Importing")
       : task?.status === "paused" ? uiText("已暂停", "Paused") : task?.status === "error" ? uiText("核验失败", "Verification failed") : task ? uiText("提取完成", "Extraction finished") : ""
     status.textContent = [preparing ? preparation?.message : label && `${label} · ${task?.completed ?? 0} / ${task?.total ?? 0}`, preparation?.error, task?.error, ...(task?.warnings || []), task?.storageWarning ? uiText("结果尚未完整保存，关闭前请保留所需内容。", "Results are not fully saved. Keep needed content before closing.") : ""].filter(Boolean).join("\n")
     status.dataset.kind = task?.error || preparation?.error || task?.storageWarning ? "error" : "neutral"
-    extract.hidden = Boolean(task) || preparing; extract.disabled = busy
+    extract.hidden = preparing || running; extract.disabled = busy
+    extract.textContent = task ? uiText("重新提取参考文献", "Extract references again") : uiText("提取参考文献", "Extract references")
     pause.hidden = !running && !extracting; pause.disabled = busy
     resume.hidden = !task || running || !["paused", "error"].includes(task.status); resume.disabled = busy || phase === "stopping"
     verify.hidden = !task || running || task.status === "paused"; verify.disabled = busy
@@ -132,8 +143,8 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     for (const id of selected) if (!validIDs.has(id)) selected.delete(id)
     count.textContent = uiText(`${entries.length} 条 · ${entries.filter(entry => entry.verification === "verified").length} 已核验`, `${entries.length} references · ${entries.filter(entry => entry.verification === "verified").length} verified`)
     selectionText.textContent = selected.size ? uiText(`已选择 ${selected.size} 条`, `${selected.size} selected`) : uiText("全选可导入", "Select importable")
-    all.checked = importable.length > 0 && importable.every(entry => selected.has(entry.id)); all.indeterminate = !all.checked && importable.some(entry => selected.has(entry.id)); all.disabled = !importable.length || busy || running
-    importButton.disabled = !selected.size || !library.getValue() || busy || running
+    all.checked = importable.length > 0 && importable.every(entry => selected.has(entry.id)); all.indeterminate = !all.checked && importable.some(entry => selected.has(entry.id)); all.disabled = !importable.length || busy || blocksImport
+    importButton.disabled = !selected.size || !library.getValue() || busy || blocksImport
     importButton.textContent = busy ? uiText("正在导入…", "Importing…") : selected.size ? uiText(`导入 ${selected.size} 条`, `Import ${selected.size}`) : uiText("导入 Zotero", "Import to Zotero")
     importBar.hidden = !entries.length
     for (const entry of entries) {
@@ -141,33 +152,40 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
       if (!row) {
         const container = element(doc, "article", "jdx-reference-row"), number = element(doc, "span", "jdx-reference-number")
         const body = element(doc, "div", "jdx-reference-body"), raw = element(doc, "p", "jdx-reference-raw"), meta = element(doc, "div", "jdx-reference-meta")
+        const metadata = element(doc, "p", "jdx-reference-raw")
         const state = badge(doc, ""), reason = element(doc, "span", "jdx-reference-reason"), controls = element(doc, "div", "jdx-reference-actions")
-        meta.append(state, reason); body.append(raw, meta, controls); container.append(number, body); container.dataset.referenceId = entry.id
-        row = { root: container, raw, state, reason, number, controls, entry }; rows.set(entry.id, row)
+        meta.append(state, reason); body.append(raw, metadata, meta, controls); container.append(number, body); container.dataset.referenceId = entry.id
+        row = { root: container, raw, metadata, state, reason, number, controls, entry }; rows.set(entry.id, row)
       }
       row.entry = entry; row.root.hidden = !visibleIDs.has(entry.id); row.root.dataset.verification = entry.verification
       if (row.raw.textContent !== entry.raw) row.raw.textContent = entry.raw
+      row.metadata.textContent = entry.verified ? [entry.verified.title, entry.verified.authors.join("; "), entry.verified.year, entry.verified.publicationTitle, entry.verified.doi].filter(Boolean).join(" · ") : ""
+      row.metadata.hidden = !entry.verified
       row.number.textContent = entry.label || String(entry.order + 1); row.state.textContent = entryState(entry); row.state.dataset.state = entry.verification === "verified" ? "success" : "neutral"
       row.reason.textContent = [entry.uncertain ? uiText("识别待定，原文保留", "Uncertain extraction; original retained") : "", entry.reason].filter(Boolean).join(" · ")
-      if (entry.verification === "verified" && entry.verified?.doi && !row.checkbox) {
+      if (!row.checkbox) {
         const view = row, checkbox = element(doc, "input"); checkbox.type = "checkbox"
         checkbox.setAttribute("aria-label", uiText(`选择引用 ${entry.label || entry.order + 1}`, `Select reference ${entry.label || entry.order + 1}`))
         checkbox.addEventListener("change", () => { if (checkbox.checked) selected.add(view.entry.id); else selected.delete(view.entry.id); render() })
         const locate = action(doc, uiText("定位原文", "Locate original"), () => { void showSource(view.entry) })
         const publication = action(doc, uiText("原文链接 ↗", "Publication ↗"), () => {
-          const url = view.entry.verified?.url || `https://doi.org/${view.entry.verified?.doi}`
+          const url = referenceURL(view.entry)
           if (/^https?:\/\//iu.test(url)) { try { (host as ZoteroLike & { launchURL?(url: string): void }).launchURL?.(url) } catch (error) { feedback.textContent = errorText(error) } }
         })
+        const search = action(doc, uiText("搜索文献", "Search publication"), () => {
+          try { (host as ZoteroLike & { launchURL?(url: string): void }).launchURL?.(referenceSearchURL(view.entry)) } catch (error) { feedback.textContent = errorText(error) }
+        })
         const save = action(doc, uiText("导入", "Import"), () => { void importSelected([view.entry.id]) })
-        view.controls.append(checkbox, locate, publication, save); view.checkbox = checkbox; view.save = save
+        view.controls.append(checkbox, locate, search, publication, save); view.checkbox = checkbox; view.save = save; view.publication = publication
       }
       if (row.checkbox) {
-        row.checkbox.checked = selected.has(entry.id); row.checkbox.disabled = busy || running || !canImportReference(entry)
+        row.checkbox.hidden = entry.verification !== "verified"; row.save!.hidden = entry.verification !== "verified"
+        row.publication!.hidden = !referenceURL(entry)
+        row.checkbox.checked = selected.has(entry.id); row.checkbox.disabled = busy || blocksImport || !canImportReference(entry)
         // 未确认写入仅允许显式核对文库；执行层先查 DOI，找不到时仍禁止再次写入。
         row.save!.textContent = entry.importUncertain ? uiText("核对文库", "Check library") : uiText("导入", "Import")
-        row.save!.disabled = busy || running || Boolean(entry.imported) || entry.verification !== "verified"
+        row.save!.disabled = busy || blocksImport || Boolean(entry.imported) || entry.verification !== "verified"
       }
-      row.controls.hidden = entry.verification !== "verified"
     }
     // 只插入新增/位置变化的节点；普通核验进度不移动已有节点、选择或焦点。
     let cursor = list.firstElementChild

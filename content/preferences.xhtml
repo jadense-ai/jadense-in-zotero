@@ -25,6 +25,11 @@
           <html:span id="jadense-in-zotero-feature-chat-label" class="jdx-pref-field-label" data-i18n-key="featureChatLabel"></html:span>
           <html:div id="jadense-in-zotero-feature-chat-model" aria-labelledby="jadense-in-zotero-feature-chat-label"></html:div>
         </html:div>
+        <html:label class="jdx-pref-checkbox">
+          <html:input id="jadense-in-zotero-auto-follow-chat-model" type="checkbox" checked="checked" />
+          <html:span data-i18n-key="autoFollowChatModelLabel"></html:span>
+        </html:label>
+        <html:p class="jdx-pref-card-note" data-i18n-key="autoFollowChatModelNote"></html:p>
         <html:div class="jdx-pref-field">
           <html:span id="jadense-in-zotero-feature-translation-label" class="jdx-pref-field-label" data-i18n-key="featureTranslationLabel"></html:span>
           <html:div id="jadense-in-zotero-feature-translation-model" aria-labelledby="jadense-in-zotero-feature-translation-label"></html:div>
@@ -98,83 +103,93 @@
         <html:h3 class="jdx-pref-card-title" data-i18n-key="byokSectionTitle"></html:h3>
         <html:p class="jdx-pref-card-note" data-i18n-key="byokSectionNote"></html:p>
 
-        <html:div class="jdx-pref-byok-panel">
-          <html:div class="jdx-pref-byok-panel-header">
-            <html:h4 class="jdx-pref-card-title" data-i18n-key="byokProviderTitle"></html:h4>
-            <html:div class="jdx-pref-inline-actions">
-              <html:button id="jadense-in-zotero-byok-provider-new" type="button" data-i18n-key="byokProviderNew"></html:button>
+        <html:div class="jdx-pref-byok-layout">
+          <html:aside class="jdx-pref-byok-sidebar" aria-labelledby="jadense-pref-provider-heading">
+            <html:div class="jdx-pref-byok-panel-header">
+              <html:div>
+                <html:h4 id="jadense-pref-provider-heading" class="jdx-pref-card-title" data-i18n-key="byokProviderTitle"></html:h4>
+                <html:p class="jdx-pref-card-note" data-i18n-key="byokProviderSidebarNote"></html:p>
+              </html:div>
+              <html:button id="jadense-in-zotero-byok-provider-new" type="button" class="jdx-pref-icon-button" data-i18n-key="byokProviderNew" data-i18n-aria-label="byokProviderNew" aria-label="新增提供商"></html:button>
+            </html:div>
+            <html:div id="jadense-in-zotero-byok-provider-select" class="jdx-pref-provider-list" role="listbox" data-i18n-aria-label="byokProviderTitle" aria-label="提供商"></html:div>
+          </html:aside>
+          <html:div class="jdx-pref-byok-editor">
+            <html:div class="jdx-pref-byok-panel-header">
+              <html:div>
+                <html:h4 class="jdx-pref-card-title" data-i18n-key="byokProviderConnectionTitle"></html:h4>
+                <html:p class="jdx-pref-card-note" data-i18n-key="byokProviderConnectionNote"></html:p>
+              </html:div>
               <html:button id="jadense-in-zotero-byok-provider-delete" type="button" class="jdx-pref-danger" data-i18n-key="byokProviderDelete"></html:button>
             </html:div>
-          </html:div>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokProviderSelectLabel"></html:span>
-            <html:div id="jadense-in-zotero-byok-provider-select"></html:div>
-          </html:label>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokProviderNameLabel"></html:span>
-            <html:input id="jadense-in-zotero-byok-provider-name" type="text" autocomplete="off" />
-          </html:label>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokProtocolLabel"></html:span>
-            <html:div id="jadense-in-zotero-byok-protocol"></html:div>
-          </html:label>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokBaseUrlLabel"></html:span>
-            <html:input id="jadense-in-zotero-byok-base-url" type="url" autocomplete="url" />
-          </html:label>
-          <html:div class="jdx-pref-endpoint">
-            <html:span data-i18n-key="byokEndpointLabel"></html:span>
-            <html:code id="jadense-in-zotero-byok-endpoint"></html:code>
-          </html:div>
-          <html:div id="jadense-in-zotero-byok-key-mask-row" class="jdx-pref-key-summary">
-            <html:span data-i18n-key="byokSavedKeyLabel"></html:span>
-            <html:code id="jadense-in-zotero-byok-key-mask"></html:code>
-          </html:div>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokKeyLabel"></html:span>
-            <html:input id="jadense-in-zotero-byok-key-input" type="password" autocomplete="new-password" />
-          </html:label>
-          <html:div class="jdx-pref-actions">
-            <html:button id="jadense-in-zotero-byok-provider-save" type="button" class="jdx-pref-primary" data-i18n-key="byokProviderSave"></html:button>
-          </html:div>
-        </html:div>
-
-        <html:div class="jdx-pref-byok-panel">
-          <html:div class="jdx-pref-byok-panel-header">
-            <html:div>
-              <html:h4 class="jdx-pref-card-title" data-i18n-key="byokModelCatalogTitle"></html:h4>
-              <html:p class="jdx-pref-card-note" data-i18n-key="byokModelCatalogNote"></html:p>
-            </html:div>
-            <html:div class="jdx-pref-inline-actions">
-              <html:button id="jadense-in-zotero-byok-model-new" type="button" data-i18n-key="byokModelNew"></html:button>
-              <html:button id="jadense-in-zotero-byok-model-delete" type="button" class="jdx-pref-danger" data-i18n-key="byokModelDelete"></html:button>
-            </html:div>
-          </html:div>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokModelSelectLabel"></html:span>
-            <html:div id="jadense-in-zotero-byok-model-select"></html:div>
-          </html:label>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokModelNameLabel"></html:span>
-            <html:input id="jadense-in-zotero-byok-model-name" type="text" autocomplete="off" />
-          </html:label>
-          <html:label class="jdx-pref-field">
-            <html:span class="jdx-pref-field-label" data-i18n-key="byokModelLabel"></html:span>
-            <html:input id="jadense-in-zotero-byok-model" type="text" autocomplete="off" />
-          </html:label>
-          <html:div class="jdx-pref-model-metrics">
             <html:label class="jdx-pref-field">
-              <html:span class="jdx-pref-field-label" data-i18n-key="byokContextWindowLabel"></html:span>
-              <html:input id="jadense-in-zotero-byok-context-window" type="number" min="1" step="1" inputmode="numeric" />
+              <html:span class="jdx-pref-field-label" data-i18n-key="byokProviderNameLabel"></html:span>
+              <html:input id="jadense-in-zotero-byok-provider-name" type="text" autocomplete="off" />
             </html:label>
             <html:label class="jdx-pref-field">
-              <html:span class="jdx-pref-field-label" data-i18n-key="byokMaxTokensLabel"></html:span>
-              <html:input id="jadense-in-zotero-byok-max-output-tokens" type="number" min="1" step="1" inputmode="numeric" />
+              <html:span class="jdx-pref-field-label" data-i18n-key="byokProtocolLabel"></html:span>
+              <html:div id="jadense-in-zotero-byok-protocol"></html:div>
             </html:label>
-          </html:div>
-          <html:div class="jdx-pref-actions">
-            <html:button id="jadense-in-zotero-byok-test" type="button" data-i18n-key="byokTest"></html:button>
-            <html:button id="jadense-in-zotero-byok-save" type="button" class="jdx-pref-primary" data-i18n-key="byokSave"></html:button>
+            <html:label class="jdx-pref-field">
+              <html:span class="jdx-pref-field-label" data-i18n-key="byokBaseUrlLabel"></html:span>
+              <html:input id="jadense-in-zotero-byok-base-url" type="url" autocomplete="url" data-i18n-placeholder="byokBaseUrlPlaceholder" />
+            </html:label>
+            <html:div class="jdx-pref-endpoint">
+              <html:span data-i18n-key="byokEndpointLabel"></html:span>
+              <html:code id="jadense-in-zotero-byok-endpoint"></html:code>
+            </html:div>
+            <html:label class="jdx-pref-field">
+              <html:span class="jdx-pref-field-label" data-i18n-key="byokKeyLabel"></html:span>
+              <html:div class="jdx-pref-secret-input">
+                <html:input id="jadense-in-zotero-byok-key-input" type="password" autocomplete="new-password" />
+                <html:button id="jadense-in-zotero-byok-key-toggle" type="button" class="jdx-pref-secret-toggle" aria-label="显示 API 密钥" aria-pressed="false">
+                  <html:svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><html:path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"/><html:circle cx="12" cy="12" r="2.5"/></html:svg>
+                </html:button>
+              </html:div>
+            </html:label>
+            <html:span id="jadense-in-zotero-byok-key-mask" hidden="hidden" aria-hidden="true"></html:span>
+            <html:div class="jdx-pref-actions">
+              <html:button id="jadense-in-zotero-byok-provider-save" type="button" class="jdx-pref-primary" data-i18n-key="byokProviderSave"></html:button>
+            </html:div>
+            <html:div class="jdx-pref-byok-panel">
+              <html:div class="jdx-pref-byok-panel-header">
+                <html:div>
+                  <html:h4 class="jdx-pref-card-title" data-i18n-key="byokModelCatalogTitle"></html:h4>
+                  <html:p class="jdx-pref-card-note" data-i18n-key="byokModelCatalogNote"></html:p>
+                </html:div>
+                <html:div class="jdx-pref-inline-actions">
+                  <html:button id="jadense-in-zotero-byok-model-new" type="button" data-i18n-key="byokModelNew"></html:button>
+                  <html:button id="jadense-in-zotero-byok-model-delete" type="button" class="jdx-pref-danger" data-i18n-key="byokModelDelete"></html:button>
+                </html:div>
+              </html:div>
+              <html:div id="jadense-in-zotero-byok-model-editor" class="jdx-pref-model-editor" hidden="hidden" role="group" aria-label="编辑当前模型" data-i18n-aria-label="byokModelEditorTitle">
+                <html:div class="jdx-pref-model-fields">
+                  <html:label class="jdx-pref-field">
+                    <html:span class="jdx-pref-field-label" data-i18n-key="byokModelNameLabel"></html:span>
+                    <html:input id="jadense-in-zotero-byok-model-name" type="text" autocomplete="off" />
+                  </html:label>
+                  <html:label class="jdx-pref-field">
+                    <html:span class="jdx-pref-field-label" data-i18n-key="byokModelLabel"></html:span>
+                    <html:input id="jadense-in-zotero-byok-model" type="text" autocomplete="off" />
+                  </html:label>
+                  <html:div class="jdx-pref-model-metrics">
+                    <html:label class="jdx-pref-field">
+                      <html:span class="jdx-pref-field-label" data-i18n-key="byokContextWindowLabel"></html:span>
+                      <html:input id="jadense-in-zotero-byok-context-window" type="number" min="1" step="1" inputmode="numeric" />
+                    </html:label>
+                    <html:label class="jdx-pref-field">
+                      <html:span class="jdx-pref-field-label" data-i18n-key="byokMaxTokensLabel"></html:span>
+                      <html:input id="jadense-in-zotero-byok-max-output-tokens" type="number" min="1" step="1" inputmode="numeric" />
+                    </html:label>
+                  </html:div>
+                  <html:div class="jdx-pref-actions">
+                    <html:button id="jadense-in-zotero-byok-test" type="button" data-i18n-key="byokTest"></html:button>
+                    <html:button id="jadense-in-zotero-byok-save" type="button" class="jdx-pref-primary" data-i18n-key="byokSave"></html:button>
+                  </html:div>
+                </html:div>
+              </html:div>
+              <html:div id="jadense-in-zotero-byok-model-select" class="jdx-pref-model-list" role="listbox" data-i18n-aria-label="byokModelCatalogTitle" aria-label="模型"></html:div>
+            </html:div>
           </html:div>
         </html:div>
         <html:p class="jdx-pref-warning" data-i18n-key="byokWarning"></html:p>

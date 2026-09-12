@@ -1,10 +1,10 @@
 /** 0.4.2 行为回归：完整来源覆盖、零 AI 常规引用、无副作用核验与恢复。 */
 import { describe, it, expect, vi } from "vitest"
-// 本文件验证文档调度；传输认领/磁盘/恢复在 reliable-temporary-chat.test.ts 独立使用真实客户端验证。
+// 本文件验证文档调度；全文翻译经过普通 temporary chat 客户端，参考文献 AI 的可靠传输单独测试。
 vi.mock('@/chat/reliable-temporary-chat', async () => ({ ReliableTemporaryChatClient: (await import('@/chat/temporary-chat')).TemporaryChatClient }))
 vi.mock('@/chat/reliable-byok-chat', async () => ({ ReliableByokChatClient: (await import('@/chat/byok-chat')).ByokChatClient }))
 import { extractReferences, applyReferenceSuggestion, metadataMatches, parseReferenceFields } from "@/chat/reference-list"
-import { DocumentJobs, acceptTranslations, splitTranslationText } from "./document-jobs"
+import { DocumentJobs, acceptTranslations, splitTranslationText, estimateTokens } from "./document-jobs"
 import { DocumentStore, type TaskIO, type TranslationPage } from "./document-store"
 import { readTextDocument, textPage, orderColumnLines, validateDocument, navigateDocument, isLiveDocumentReader, type PdfTextDocument, type PdfLine } from "./pdf-document"
 import { importReference, ReferenceVerifier } from "./reference-verification"
@@ -29,7 +29,7 @@ function memoryStore() {
   const paths = { profileDir: "/fixture", join: (...parts: string[]) => parts.join("/"), filename: (path: string) => path.split("/").at(-1)! }
   return { store: new DocumentStore(io, paths), reload: () => new DocumentStore(io, paths), files, io }
 }
-const configured = () => new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-only"], ['extensions.jadenseInZotero.referenceAIEnabled', true]])
+const configured = () => new Map<string, unknown>([["extensions.jadenseInZotero.token", "synthetic-only"], ['extensions.jadenseInZotero.referenceAIEnabled', true], ['extensions.jadenseInZotero.autoFollowChatModel', false]])
 function response(value: unknown) { return new Response(`data: ${JSON.stringify({ type: "text-delta", delta: JSON.stringify(value) })}\n\ndata: ${JSON.stringify({ type: "finish" })}\n\n`, { status: 200 }) }
 function translateRequest(options: RequestInit) {
   const serialized = JSON.stringify(JSON.parse(String(options.body)))
@@ -38,6 +38,79 @@ function translateRequest(options: RequestInit) {
 }
 
 describe("complete PDF and reference evidence", () => {
+  it("imports a matched reference by cancelling optional AI instead of waiting for its result", async () => {
+    const fixture = host([['References', citation, '[2] Unknown fragment']], configured()), memory = memoryStore()
+    const save = vi.fn(async () => {})
+    Object.assign(fixture.zotero, {
+      Translate: { Search: class { setIdentifier() {} async getTranslators() { return [{}] } setTranslator() {} async translate() { return [{ title: 'Reliable scientific evidence', DOI: '10.1234/evidence' }] } } },
+      Libraries: { get: () => ({ editable: true }) }, Search: class { libraryID = 1; addCondition() {} async search() { return [] } },
+      Item: class { id = 50; key = 'IMPORTED'; libraryID = 1; setField() {} setCreators() {} saveTx = save },
+    })
+    let aiSignal: AbortSignal | undefined
+    const fetchImpl = vi.fn((_url: unknown, options?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      aiSignal = options?.signal ?? undefined
+      aiSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as typeof fetch, memory.store)
+    const task = await jobs.start('references', 11)
+    await vi.waitFor(() => expect(aiSignal).toBeDefined())
+    const entries = await memory.store.references(task.id)
+    expect(entries[0].verification).toBe('verified')
+    expect(await jobs.import(task.id, [entries[0].id], 1)).toEqual({ imported: 1, failed: 0, uncertain: 0 })
+    expect(aiSignal!.aborted).toBe(true); expect(save).toHaveBeenCalledOnce()
+    expect((await memory.store.references(task.id))[0].imported?.itemID).toBe(50)
+    jobs.dispose()
+  })
+  it("does not pause local lookup when AI connection preferences change", async () => {
+    const fixture = host(), memory = memoryStore(), observers = new Map<string, () => void>()
+    Object.assign(fixture.zotero.Prefs!, { registerObserver: (key: string, cb: () => void) => { observers.set(key, cb); return key }, unregisterObserver() {} })
+    const fetchImpl = vi.fn(async (_url: string, options?: RequestInit) => {
+      observers.get('extensions.jadenseInZotero.token')!()
+      expect(options?.signal?.aborted).toBe(false)
+      return new Response(JSON.stringify({ message: { title: ['Reliable scientific evidence'], DOI: '10.1234/evidence' } }))
+    })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as typeof fetch, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(task.status).toBe('complete'); expect((await memory.store.references(task.id))[0].verification).toBe('verified')
+    expect(task.models).toEqual([]); jobs.dispose()
+  })
+  it("extracts IEEE, GB/T and year-first citations with wrapped titles without AI", () => {
+    const refs = extractReferences(document([["References",
+      '[1] J. Smith et al., “Reliable scientific', 'evidence,” Research Journal, 2020.',
+      '[2] 张三, 李四, 等. 深度学习的证据组合[J]. 科学通报, 2021, 10: 1-4.',
+      '(3) Smith, J. 2020. Reliable scientific evidence. Research Journal.',
+      '[4] Smith, J. (2020). Reliable scien-', 'tific evidence. Research Journal.',
+      '[5] J. Smith et al. Reliable scientific evidence. Research Journal. 2020.',
+    ]]))
+    expect(refs).toHaveLength(5)
+    expect(refs.map(row => row.fields.title)).toEqual(['Reliable scientific evidence', '深度学习的证据组合', 'Reliable scientific evidence', 'Reliable scientific evidence', 'Reliable scientific evidence'])
+    expect(refs[1].fields.authors).toEqual(['张三', '李四'])
+    expect(refs[0].raw).toContain('\n'); expect(refs[3].raw).toContain('scien-\ntific')
+  })
+  it("does not split numbered citations on author-year continuation lines", () => {
+    const refs = extractReferences(document([['References', '[1] First author,', 'Smith, J. (2020). Reliable scientific evidence.', '[2] Next author,', 'Jones, K. (2021). Another study.']]))
+    expect(refs).toHaveLength(2); expect(refs[0].lines).toHaveLength(2)
+  })
+  it("finishes direct title lookup before AI and excludes matched incomplete author/year entries from fallback", async () => {
+    const prefs = configured(), fixture = host([['References', '[1] J. Smith, “Reliable scientific evidence,” Journal.', '[2] Unknown fragment']], prefs), memory = memoryStore()
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async (url: string, options?: RequestInit) => {
+      calls.push(url)
+      if (url.startsWith('https://api.crossref.org/works?')) {
+        expect(options?.credentials).toBe('omit'); expect(options?.headers).toBeUndefined()
+        return new Response(JSON.stringify({ message: { items: [{ title: ['Reliable scientific evidence'], DOI: '10.1234/matched', author: [], published: { 'date-parts': [[1999]] } }] } }))
+      }
+      const saved = await memory.store.references(jobs.list('references')[0].id)
+      expect(saved[0].verification).toBe('verified')
+      expect(String(options?.body)).not.toContain('Reliable scientific evidence')
+      return response({ items: [] })
+    })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as typeof fetch, memory.store)
+    const task = await jobs.start('references', 11); await jobs.idle()
+    expect(calls).toHaveLength(2); expect(calls[0]).toContain('query.title=')
+    expect((await memory.store.references(task.id))[0].verified?.doi).toBe('10.1234/matched')
+    expect(task.completed).toBe(2); jobs.dispose()
+  })
   it('continues later batches after malformed JSON without repair requests', async () => {
     const fixture = host([['References', ...Array.from({ length: 17 }, (_, i) => `[${i + 1}] Unknown ${i}`)]], configured()), memory = memoryStore()
     const fetchImpl = vi.fn(async () => response({ items: [] }))
@@ -215,13 +288,14 @@ describe("complete PDF and reference evidence", () => {
     expect(applyReferenceSuggestion(original, { references: [{ startLine: 0, endLine: 1, title: "Invented publication", DOI: "10.1234/fake" }], future: true })[0].fields).toMatchObject({ title: "" })
     expect(applyReferenceSuggestion(original, { references: [{ startLine: 0, endLine: 1 }] })[0].raw).toBe(original.raw)
   })
-  it("requires matching bibliographic evidence rather than merely a resolving DOI", () => {
+  it("accepts DOI or title without author or year gates", () => {
     const fields = parseReferenceFields(citation)
-    expect(metadataMatches(fields, { ...fields, title: "Different paper" })).toBe(false)
-    expect(metadataMatches(fields, { ...fields, authors: [] })).toBe(false)
+    expect(metadataMatches(fields, { ...fields, title: "Different paper" })).toBe(true)
+    expect(metadataMatches(fields, { ...fields, title: "Different paper", doi: "10.1234/other" })).toBe(false)
+    expect(metadataMatches(fields, { ...fields, authors: [] })).toBe(true)
     expect(metadataMatches(fields, { ...fields, title: fields.title.toUpperCase() })).toBe(true)
-    expect(metadataMatches(fields, { ...fields, authors: ["Smith, K."] })).toBe(false)
-    expect(metadataMatches({ ...fields, authors: ["Smith", "Jones"] }, { ...fields, authors: ["Smith", "Doe"] })).toBe(false)
+    expect(metadataMatches({ ...fields, doi: undefined }, { ...fields, authors: ["Smith, K."], year: "2025" })).toBe(true)
+    expect(metadataMatches({ ...fields, doi: undefined, authors: ["Smith", "et al."] }, { ...fields, authors: ["Smith", "Doe"] })).toBe(true)
   })
   it("orders interleaved two-column lines, retaining hanging continuation and all source ranges", () => {
     const line = (id: string, x: number, y: number, text: string): PdfLine => ({ id, text, pageIndex: 0, pageLabel: "1", rects: [[x, y - 10, x + 180, y]] })
@@ -264,6 +338,47 @@ describe("complete PDF and reference evidence", () => {
 })
 
 describe("non-AI verification and static rows", () => {
+  it("queries title without DOI, authors, year or Zotero translators and imports a DOI-less result", async () => {
+    const entry = extractReferences(document())[0]
+    entry.fields = { title: 'A book without DOI', authors: [], year: '' }
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ message: { items: [null, { title: ['A book without DOI'], type: 'book', author: [{ family: 'Jones', given: 'K' }], issued: { 'date-parts': [[2021]] }, URL: 'https://publisher.example/book', future: true }] } })))
+    await new ReferenceVerifier({}, fetchImpl).verify(entry)
+    expect(entry.verification).toBe('verified')
+    expect(entry.verified).toMatchObject({ title: 'A book without DOI', url: 'https://publisher.example/book', itemType: 'book', year: '2021' })
+    expect(entry.verified?.doi).toBeUndefined()
+    const saved = new Map<string, string>(), save = vi.fn(async () => {}), condition = vi.fn()
+    const native = { Libraries: { get: () => ({ editable: true }) }, Search: class { libraryID = 1; addCondition = condition; async search() { return [] } }, Item: class { id = 8; key = 'BOOK0008'; libraryID = 1; setField(key: string, value: string) { saved.set(key, value) } setCreators() {} saveTx = save } }
+    await importReference(native, entry, 1)
+    expect(save).toHaveBeenCalledOnce(); expect(saved.get('url')).toBe('https://publisher.example/book'); expect(saved.has('DOI')).toBe(false)
+    expect(condition).toHaveBeenCalledWith('title', 'contains', 'A book without DOI')
+    const Item = vi.fn()
+    const existing = { id: 9, key: 'EXISTING', libraryID: 1, getField: (key: string) => key === 'title' ? 'A BOOK WITHOUT DOI' : '' }
+    const duplicateHost = { ...native, Item, Items: { get: () => existing }, Search: class { libraryID = 1; addCondition() {} async search() { return [9] } } }
+    expect(await importReference(duplicateHost as never, entry, 1)).toEqual({ libraryID: 1, itemID: 9, itemKey: 'EXISTING' })
+    expect(Item).not.toHaveBeenCalled()
+  })
+  it("falls back to direct DOI lookup when Zotero translators are absent, without sending credentials", async () => {
+    const entry = extractReferences(document())[0]
+    const fetchImpl = vi.fn(async (_url: string, _options?: RequestInit) => new Response(JSON.stringify({ message: { title: ['Publisher title variant'], DOI: entry.fields.doi, author: [], published: { 'date-parts': [[2024]] } } })))
+    const verifier = new ReferenceVerifier({}, fetchImpl as typeof fetch)
+    await verifier.verify(entry)
+    await verifier.verify(extractReferences(document())[0])
+    expect(entry.verification).toBe('verified')
+    expect(fetchImpl).toHaveBeenCalledOnce(); expect(fetchImpl.mock.calls[0][0]).toBe('https://api.crossref.org/works/10.1234%2Fevidence')
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ credentials: 'omit', redirect: 'error' })
+    expect(fetchImpl.mock.calls[0][1]?.headers).toBeUndefined()
+  })
+  it("contains lookup outages and cancellation without losing source or calling another server", async () => {
+    const entry = extractReferences(document())[0], raw = entry.raw
+    const fetchImpl = vi.fn(async () => new Response('', { status: 429 }))
+    const verifier = new ReferenceVerifier({}, fetchImpl)
+    await verifier.verify(entry)
+    expect(entry.verification).toBe('unverified'); expect(entry.raw).toBe(raw)
+    expect(fetchImpl.mock.calls.every(call => String(call[0]).startsWith('https://api.crossref.org/works'))).toBe(true)
+    const controller = new AbortController(); controller.abort(); fetchImpl.mockClear()
+    await expect(verifier.verify(entry, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
   it("looks up DOI without saving items or attachments and retains failed records", async () => {
     const entries = extractReferences(document())
     const translate = vi.fn(async () => [{ title: "Reliable scientific evidence", DOI: "10.1234/evidence", creators: [{ lastName: "Smith", creatorType: "author" }], date: "2020", future: true }])
@@ -275,26 +390,30 @@ describe("non-AI verification and static rows", () => {
     await new ReferenceVerifier({}, fetchImpl).verify(entries[0])
     expect(entries).toHaveLength(1); expect(entries[0].raw).toBe(original); expect(entries[0].verification).toBe("unverified")
   })
-  it("leaves unverified references without any controls, including raw URL text", () => {
+  it("keeps unverified source navigation and search interactive without import", () => {
     const tags: string[] = []
-    const doc = { createElementNS: (_ns: string, tag: string) => { tags.push(tag); return { textContent: "", dataset: {}, append() {}, className: "" } } }
+    const buttons: Array<{ textContent: string; click?: () => void }> = []
+    const doc = { createElementNS: (_ns: string, tag: string) => { tags.push(tag); const node = { textContent: "", dataset: {}, append() {}, className: "", click: undefined as (() => void) | undefined, addEventListener(_event: string, handler: () => void) { this.click = handler } }; if (tag === "button") buttons.push(node); return node } }
     const entry = extractReferences(document())[0]
-    referenceRow(doc as never, entry, vi.fn(), vi.fn(), vi.fn(), vi.fn())
-    expect(tags.every(tag => ["article", "p"].includes(tag))).toBe(true)
+    const locate = vi.fn(), open = vi.fn(), save = vi.fn()
+    referenceRow(doc as never, entry, save, locate, open, vi.fn())
+    buttons[0].click!(); buttons[1].click!()
+    expect(locate).toHaveBeenCalledOnce(); expect(open.mock.calls[0][0]).toContain("https://search.crossref.org/")
+    expect(tags).not.toContain("input"); expect(save).not.toHaveBeenCalled()
   })
   it("blocks direct imports of unverified entries before touching native constructors", async () => {
     const Item = vi.fn(); const entry = extractReferences(document())[0]
     await expect(importReference({ Item } as never, entry, 1)).rejects.toThrow()
     expect(Item).not.toHaveBeenCalled()
   })
-  it("accepts one exact Crossref candidate only after native verification, without AI or writes", async () => {
+  it("accepts one title candidate directly without requiring native verification, AI or writes", async () => {
     const entry = extractReferences(document([["References", citation.split(" https:")[0]]]))[0]
     const translate = vi.fn(async () => [{ title: entry.fields.title, DOI: "10.1234/found", date: "2020", creators: [{ lastName: "Smith" }] }])
     class Search { setIdentifier = vi.fn(); getTranslators = async () => [{}]; setTranslator = vi.fn(); translate = translate }
     const candidate = { title: [entry.fields.title], DOI: "10.1234/found", author: [{ family: "Smith" }], published: { "date-parts": [[2020]] } }
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ message: { items: [candidate] } })))
     await new ReferenceVerifier({ Translate: { Search } }, fetchImpl).verify(entry)
-    expect(entry.verification).toBe("verified"); expect(String(fetchImpl.mock.calls[0][0])).toContain("api.crossref.org")
+    expect(entry.verification).toBe("verified"); expect(String(fetchImpl.mock.calls[0][0])).toContain("api.crossref.org"); expect(translate).not.toHaveBeenCalled()
     entry.verification = "pending"; translate.mockClear()
     fetchImpl.mockImplementation(async () => new Response(JSON.stringify({ message: { items: [candidate, { ...candidate, DOI: "10.1234/another" }] } })))
     await new ReferenceVerifier({ Translate: { Search } }, fetchImpl).verify(entry)
@@ -313,6 +432,66 @@ describe("non-AI verification and static rows", () => {
 })
 
 describe("document jobs, durability and appearance", () => {
+  it.each([32768, 4096])("packs BYOK requests against actual input and output capacity (%s output tokens)", async maxOutputTokens => {
+    const prefs = configured(), contextWindow = 65536
+    prefs.set("extensions.jadenseInZotero.translationModel", JSON.stringify({ route: "byok", modelId: "m" }))
+    prefs.set("extensions.jadenseInZotero.byokConfig", JSON.stringify({ version: 2,
+      providers: [{ id: "p", name: "Fixture", protocol: "openai-chat-completions", baseUrl: "https://fixture.test/v1", apiKey: "synthetic-only" }],
+      models: [{ id: "m", providerId: "p", name: "Fixture", model: "fixture", contextWindow, maxOutputTokens }],
+    }))
+    const texts = ["First scientific argument. ".repeat(300).trim(), "Methods", "Another scientific argument. ".repeat(300).trim()]
+    const fixture = host([texts], prefs), memory = memoryStore(), prompts: string[] = []
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => {
+      const body = JSON.parse(String(options.body)), prompt = body.messages[0].content as string
+      prompts.push(prompt)
+      expect(estimateTokens(prompt) + body.max_completion_tokens).toBeLessThanOrEqual(contextWindow)
+      expect(body.max_completion_tokens).toBeLessThanOrEqual(maxOutputTokens)
+      const rows = JSON.parse(prompt.split("\n").at(-1)!) as Array<{ id: string }>
+      const text = JSON.stringify({ translations: rows.map(row => ({ id: row.id, text: "完整译文" })) })
+      return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: text }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`)
+    })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    expect(task.status).toBe("complete"); expect(task.total).toBe(3); expect(task.completed).toBe(3)
+    if (maxOutputTokens > 4096) { expect(fetchImpl).toHaveBeenCalledTimes(1); expect(estimateTokens(prompts[0])).toBeGreaterThan(4000) }
+    else { expect(prompts.length).toBeGreaterThan(1); expect(prompts.some(prompt => prompt.includes('"before":{"text":'))).toBe(true) }
+    jobs.dispose()
+  })
+  it("splits oversized sentences losslessly at word and Unicode boundaries within budget", () => {
+    for (const source of ["Whole sentence. Next sentence. ".repeat(100), "long words without punctuation ".repeat(100), "科学🧪".repeat(200)]) {
+      const parts = splitTranslationText(source, 80)
+      expect(parts.join("")).toBe(source)
+      expect(parts.every(part => estimateTokens(part) <= 80)).toBe(true)
+      expect(parts.every(part => !/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u.test(part))).toBe(true)
+    }
+  })
+  it("keeps a long paragraph as one reading row and resumes only its unfinished internal pieces", async () => {
+    const source = "An entire scientific sentence with evidence. ".repeat(800).trim()
+    const fixture = host([[source]], configured()), memory = memoryStore()
+    let calls = 0, fail = true
+    const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => {
+      if (++calls === 2 && fail) throw new Error("offline")
+      return translateRequest(options)
+    })
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
+    const task = await jobs.start("translation", 11); await jobs.idle()
+    expect(task.status).toBe("error"); expect(task.total).toBe(1); expect(task.completed).toBe(0)
+    const page = (await memory.store.page(task.id, 0))!
+    expect(page.pieces.map(piece => piece.text).join("")).toBe(source)
+    expect(Object.keys(page.translations)).toHaveLength(1)
+    expect((await jobs.reading(task.id))[0].text).toBeUndefined()
+    fail = false; jobs.dispose()
+    const restored = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.reload())
+    await restored.ready; expect(calls).toBe(2)
+    restored.resume(task.id); await restored.idle()
+    const rows = await restored.reading(task.id)
+    expect(rows).toHaveLength(1); expect(rows[0].text).toBeTruthy()
+    expect(rows[0].paragraph?.text).toBe(source)
+    expect(restored.get(task.id)?.completed).toBe(1)
+    const remainingPrompts = fetchImpl.mock.calls.slice(2).map(call => JSON.parse(String(call[1].body)).messages[0].parts[0].text as string)
+    expect(remainingPrompts.every(prompt => !JSON.parse(prompt.split("\n").at(-1)!).some((row: { id: string }) => row.id === page.pieces[0].id))).toBe(true)
+    restored.dispose()
+  })
   it("dispatches restored paragraphs without margin Article and retains the raw source on disk", async () => {
     const fixture = host([["unused"], ["unused"]], configured()), memory = memoryStore()
     for (let i = 0; i < 2; i++) Object.assign(fixture.view._pdfPages[i], {
@@ -352,14 +531,21 @@ describe("document jobs, durability and appearance", () => {
     expect((await memory.store.page(task.id, 0))?.pieces.map(piece => piece.id)).toEqual(prompts[0].map(row => row.id))
     jobs.dispose()
   })
-  it("includes whole adjacent context and previous terminology without adding its IDs to the request", async () => {
+  it("translates a fitting multi-section document in one request", async () => {
     const fixture = host([["A complete preceding argument."], ["Methods"], ["It follows from that result."]], configured()), memory = memoryStore()
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => translateRequest(options))
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
     const task = await jobs.start("translation", 11); await jobs.idle()
-    const prompt = JSON.parse(String(fetchImpl.mock.calls[1][1].body)).messages[0].parts[0].text
-    expect(prompt).toContain('"before":{"text":"A complete preceding argument.","translation":"译文 p0-c0-0"}')
-    expect(JSON.parse(prompt.split("\n").at(-1))).toEqual([{ id: "p1-c0-0", text: "Methods" }, { id: "p2-c0-0", text: "It follows from that result." }])
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    const payload = JSON.parse(String(init.body))
+    expect(url).toContain("/api/chat")
+    expect(new Headers(init.headers).get("x-jadense-temporary-protocol")).toBeNull()
+    expect(payload).not.toHaveProperty("taskId")
+    expect(payload).not.toHaveProperty("operationId")
+    expect(payload).not.toHaveProperty("transportAttemptId")
+    const prompt = payload.messages[0].parts[0].text
+    expect(JSON.parse(prompt.split("\n").at(-1)).map((row: { text: string }) => row.text)).toEqual(["A complete preceding argument.", "Methods", "It follows from that result."])
     expect(task.status).toBe("complete"); jobs.dispose()
   })
   it("does not reuse legacy extraction while preserving its readable history", async () => {
@@ -383,13 +569,14 @@ describe("document jobs, durability and appearance", () => {
     expect((await memory.store.page(task.id, 82))?.translations).toEqual({ "p82-c0-0": "译文 p82-c0-0" })
     expect(fetchImpl).toHaveBeenCalledTimes(2); jobs.dispose()
   })
-  it("never splits a paragraph or retries an identical oversized paragraph on context errors", async () => {
+  it("bounds context retries while splitting new request pieces without losing the natural paragraph", async () => {
     const text = "Very long scientific sentence. ".repeat(200), fixture = host([[text]], configured()), memory = memoryStore()
     const fetchImpl = vi.fn(async () => { throw new Error("maximum context length exceeded") })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl, memory.store)
     const task = await jobs.start("translation", 11); await jobs.idle()
-    expect(task.status).toBe("error"); expect(fetchImpl).toHaveBeenCalledTimes(1)
-    expect((await memory.store.page(task.id, 0))?.pieces).toHaveLength(1)
+    expect(task.status).toBe("error"); expect(fetchImpl).toHaveBeenCalledTimes(4)
+    expect((await memory.store.page(task.id, 0))?.paragraphs).toHaveLength(1)
+    expect(task.total).toBe(1); expect(task.completed).toBe(0)
     expect((await memory.store.page(task.id, 0))?.pieces.map(piece => piece.text).join("")).toBe(text.trim())
     jobs.dispose()
   })
@@ -407,7 +594,8 @@ describe("document jobs, durability and appearance", () => {
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl, store)
     const task = await jobs.start("references", 11); await jobs.idle()
     const refs = await store.references(task.id)
-    expect(fetchImpl).not.toHaveBeenCalled(); expect(refs).toHaveLength(1); expect(refs[0].raw).toBe(citation); expect(refs[0].verification).toBe("unverified")
+    expect(fetchImpl.mock.calls.every(call => String(call[0]).startsWith("https://api.crossref.org/works"))).toBe(true)
+    expect(refs).toHaveLength(1); expect(refs[0].raw).toBe(citation); expect(refs[0].verification).toBe("unverified")
     jobs.dispose()
   })
   it("saves atomic pages, reloads a completed translation and never redispatches completed chunks", async () => {
@@ -429,7 +617,8 @@ describe("document jobs, durability and appearance", () => {
   })
   it("preserves unknown fields but ignores conflicting IDs and never loses split source characters", () => {
     const source = "Hello 世界. ".repeat(150)
-    expect(splitTranslationText(source, 80)).toEqual([source])
+    expect(splitTranslationText(source, 80).join("")).toBe(source)
+    expect(splitTranslationText(source, 80).length).toBeGreaterThan(1)
     const page = { translations: {} } as TranslationPage
     acceptTranslations(page, ["a", "b"], { translations: [{ id: "a", text: "one" }, { id: "a", text: "conflict" }, { id: "b", text: "two", future: true }, { id: "fake", text: "injected" }] })
     expect(page.translations).toEqual({ b: "two" })
@@ -446,12 +635,14 @@ describe("document jobs, durability and appearance", () => {
     const fetchImpl = vi.fn(async () => response({ references: [{ startLine: 0, endLine: 0, title: "Fabricated", DOI: "10.1234/fake" }] }))
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
     const task = await jobs.start("references", 11); await jobs.idle()
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const sent = String(fetchImpl.mock.calls[0][1].body)
+    const isCrossref = (call: typeof fetchImpl.mock.calls[number]) => String(call[0]).startsWith("https://api.crossref.org/works")
+    const aiCalls = () => fetchImpl.mock.calls.filter(call => !isCrossref(call))
+    expect(aiCalls()).toHaveLength(1)
+    const sent = String(aiCalls()[0][1]?.body)
     expect(sent).toContain("Uncertain source"); expect(sent).not.toContain("Sensitive body"); expect(sent).not.toContain("Reliable scientific evidence")
     const entries = await memory.store.references(task.id)
     expect(entries).toHaveLength(2); expect(entries[1].raw).toContain("continued"); expect(entries[1].fields.doi).toBeUndefined()
-    jobs.resume(task.id); await jobs.idle(); expect(fetchImpl).toHaveBeenCalledTimes(1); jobs.dispose()
+    jobs.resume(task.id); await jobs.idle(); expect(aiCalls()).toHaveLength(1); jobs.dispose()
   })
   it("cancels only AI identification while preserving raw fragments and continuing deterministic verification", async () => {
     const fixture = host([["References", citation, "[2] Uncertain source"]], configured()), memory = memoryStore()
@@ -459,10 +650,11 @@ describe("document jobs, durability and appearance", () => {
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
     const task = await jobs.start("references", 11); await jobs.idle(); await jobs.idle()
     expect(task.completed).toBe(2); expect((await memory.store.references(task.id)).map(row => row.raw)).toEqual([citation, "[2] Uncertain source"])
-    expect(fetchImpl).toHaveBeenCalledTimes(1); jobs.dispose()
+    const aiCalls = fetchImpl.mock.calls.filter(call => !String(call[0]).startsWith("https://api.crossref.org/works"))
+    expect(aiCalls).toHaveLength(1); jobs.dispose()
   })
   it("retains prior chunks after a network error, resumes only missing work and blocks a replaced file", async () => {
-    const fixture = host([["Introduction"], ["Methods"]], configured()), memory = memoryStore()
+    const fixture = host([["First argument. ".repeat(480)], ["Second argument. ".repeat(480)]], configured()), memory = memoryStore()
     let fail = true
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => { if (String(options.body).includes("p1-c0") && fail) throw new Error("offline"); return translateRequest(options) })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)

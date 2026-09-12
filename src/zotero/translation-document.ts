@@ -2,7 +2,7 @@
 import { orderColumnLines, type DocumentPage, type PdfLine, type PdfParagraph, type PdfTextDocument } from "./pdf-document"
 import { uiText } from "./ui-preferences"
 
-export const TRANSLATION_EXTRACTION_VERSION = 3
+export const TRANSLATION_EXTRACTION_VERSION = 4
 const terminal = /[.!?。！？][”’"')\]]*$/u
 const heading = /^(?:\d+(?:\.\d+)*\.?\s+)?(?:abstract|introduction|background|results(?: and discussion)?|discussion|conclusions?|methods|materials and methods|references|bibliography|acknowledg[e]?ments|摘要|引言|方法|结果|讨论|结论|参考文献)$/iu
 const caption = /^(?:fig(?:ure)?\.?|table|scheme|图|表)\s*\d+(?:[.:]\s|\s*[:：])/iu
@@ -37,6 +37,13 @@ function joinLines(lines: PdfLine[]) {
 /** 利用字号、行距、缩进和栏宽判断段落；宿主逐行 paragraphBreakAfter 不能单独切碎正文。 */
 function paragraphs(lines: PdfLine[], title: string): PdfParagraph[] {
   const result: PdfParagraph[] = [], group: PdfLine[] = []
+  // 同栏常见基线间距比单行字形高度更能反映实际行距，避免上下标/字号波动制造碎段。
+  const gaps = lines.slice(1).flatMap((line, index) => {
+    const previous = lines[index], a = previous.rects[0], b = line.rects[0], h = Math.max(height(previous), height(line))
+    const gap = a && b ? a[3] - b[3] : 0
+    return a && b && Math.abs(a[0] - b[0]) < h * 2 && gap > h * .8 && gap < h * 2.5 ? [gap] : []
+  }).sort((a, b) => a - b)
+  const lineSpacing = gaps[Math.floor(gaps.length / 2)]
   const flush = () => {
     if (!group.length) return
     const rects = group.flatMap(line => line.rects)
@@ -56,11 +63,11 @@ function paragraphs(lines: PdfLine[], title: string): PdfParagraph[] {
         const columnWidth = Math.max(...lines.filter(row => row.rects[0] && Math.abs(row.rects[0][0] - a[0]) < h * 2).map(row => row.rects[0][2] - a[0]))
         const shortEnd = a[2] - a[0] < columnWidth * .88
         const indent = b[0] - a[0] > h * .7
-        boundary = column ? terminal.test(previous.text) && shortEnd : gap <= 0 || gap > h * 1.6
-          || Math.abs(height(previous) - height(line)) > h * .2
+        boundary = column ? terminal.test(previous.text) && shortEnd : gap <= 0 || gap > Math.max(h * 1.6, (lineSpacing || 0) * 1.35)
+          || Math.abs(height(previous) - height(line)) > h * .25
           || terminal.test(previous.text) && (shortEnd || indent)
         if (caption.test(line.text) || isHeading(line.text) || isHeading(previous.text)
-          || Math.abs(height(previous) - height(line)) > h * .2) boundary = true
+          || Math.abs(height(previous) - height(line)) > h * .25) boundary = true
       }
       if (boundary) flush()
     }

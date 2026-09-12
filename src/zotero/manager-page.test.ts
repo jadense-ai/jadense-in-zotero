@@ -337,16 +337,17 @@ describe("reader document conversation lifecycle", () => {
     expect(message).not.toContain("data:image")
   })
 
-  it("reattaches the ephemeral image on every send and releases it with its session or window", () => {
+  it("shares image contexts and request ownership beyond the Manager window", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const send = manager.match(/async function sendChatMessage[\s\S]*?\/\*\* 独立解析/)?.[0] ?? ""
-    expect(send).toContain("figureChatContexts.get(session.id)")
-    expect(send).toContain("buildFigureInterpretationRequest(prepared.requestText, figureContext)")
-    expect(send).toContain("images: [requestImage]")
-    expect(send).toContain("readChatImage(latestAttachment)")
-    expect(send).toContain("image: storedImage.attachment")
-    expect(manager).toContain("figureChatContexts.delete(state.activeSessionId)")
-    expect(manager).toContain("figureChatContexts.clear()")
+    const runtime = readFileSync(new URL("./chat-runtime.ts", import.meta.url), "utf8")
+    expect(manager).toContain("figureChatContexts = runtime.figures")
+    expect(manager).toContain("buildFigureInterpretationRequest(text, figure)")
+    expect(runtime).toContain("readChatImage(attachment)")
+    expect(runtime).toContain("images: [image]")
+    expect(runtime).toContain("image: stored.attachment")
+    expect(manager).toContain("figureChatContexts.delete(session.id)")
+    expect(runtime).toContain("this.figures.clear()")
+    expect(manager).not.toContain("figureChatContexts.clear()")
     expect(manager).toContain("injected.actions = undefined")
     expect(manager).toContain("args.actions = undefined")
   })
@@ -369,7 +370,7 @@ describe("reader document conversation lifecycle", () => {
     expect(analyze).not.toContain("appendLocalChatMessage")
     expect(analyze).not.toContain("addLocalChatSources")
     const initialization = manager.match(/export function initJadenseManagerPage[\s\S]*$/)?.[0] ?? ""
-    expect(initialization).toContain('section !== "analysis" && readLocalChatState(preferences).sessions.length === 0')
+    expect(initialization).not.toContain('section !== "analysis" && readLocalChatState(preferences).sessions.length === 0')
   })
 })
 
@@ -597,7 +598,7 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain("html:head")
     expect(xhtml).not.toContain("html:body")
     expect(xhtml).not.toContain("局内对话")
-    expect(xhtml).toContain('<h2 data-ui-en="Connect Jadense">连接攻玉</h2>')
+    expect(xhtml).toContain('<h2 data-ui-en="Jadense academic">攻玉学术</h2>')
     expect(xhtml).toContain("上传到攻玉")
     expect(xhtml).not.toContain("Import Jadense folder")
   })
@@ -615,13 +616,17 @@ describe("manager page state", () => {
     expect(xhtml).toContain('id="jadense-manager-sidebar-toggle"')
     expect(xhtml).toContain('aria-controls="jadense-manager-sidebar"')
     expect(xhtml.match(/class="jdx-manager-nav-icon(?: [^"]+)?"/g)).toHaveLength(6)
-    expect(xhtml.match(/class="jdx-manager-nav-label"/g)).toHaveLength(5)
+    expect(xhtml.match(/class="jdx-manager-nav-label"/g)).toHaveLength(4)
+    const helpMenu = xhtml.match(/<div id="jadense-help-menu"[\s\S]*?<\/div>/)?.[0]
+    expect(helpMenu).toContain('id="jadense-manager-nav-guide"')
+    expect(helpMenu).toContain('role="menuitem"')
     expect(xhtml).toContain('id="jadense-manager-nav-translations"')
     expect(xhtml).toContain('id="jadense-manager-section-translations"')
     expect(xhtml).toContain('id="jadense-manager-nav-analysis"')
     expect(xhtml).toContain('id="jadense-manager-section-analysis"')
     const connectionNav = xhtml.match(/<button id="jadense-manager-nav-migrate"[\s\S]*?<\/button>/)?.[0] ?? ""
-    expect(connectionNav).toContain("连接攻玉")
+    expect(connectionNav).toContain("攻玉学术")
+    expect(connectionNav).toContain('<circle cx="8" cy="5.5" r="2.5"/>')
     expect(connectionNav).not.toContain(">上传<")
   })
 
@@ -635,14 +640,56 @@ describe("manager page state", () => {
     }
   })
 
-  it("keeps the sidebar header text-free: logo plus collapse toggle, no brand wordmark", () => {
+  it("gives About enough context and uses an icon-only GitHub action", () => {
+    const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
+    const dialog = xhtml.match(/<dialog id="jadense-help-dialog"[\s\S]*?<\/dialog>/)?.[0] ?? ""
+
+    expect(dialog).toContain("攻玉学术主应用")
+    expect(dialog).toContain("点个 Star")
+    expect(dialog).toContain('data-ui-en="Website"')
+    expect(dialog).toContain('class="jdx-help-repository"')
+    expect(dialog).toContain('data-ui-en-aria-label="Open GitHub repository"')
+    expect(dialog).toContain('<svg xmlns="http://www.w3.org/2000/svg"')
+  })
+
+  it("includes a first-use Quick start dialog for both AI setup paths", () => {
+    const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
+    const dialog = xhtml.match(/<dialog id="jadense-quick-start-dialog"[\s\S]*?<\/dialog>/)?.[0] ?? ""
+
+    expect(dialog).toContain("快速开始")
+    expect(dialog).toContain("连接攻玉令牌")
+    expect(dialog).toContain("BYOK 配置")
+    expect(dialog).toContain("设置 → 功能配置")
+    expect(dialog).toContain('id="jadense-quick-start-settings"')
+  })
+
+  it("uses a themed custom confirmation layer for local conversation deletion", () => {
+    const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
+    const source = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
+    const dialog = xhtml.match(/<div id="jadense-delete-conversation-dialog"[\s\S]*?<\/div>\s*<dialog id="jadense-quick-start-dialog"/)?.[0] ?? ""
+
+    expect(dialog).toContain('role="dialog"')
+    expect(dialog).toContain('class="jdx-confirm-dialog-backdrop"')
+    expect(dialog).toContain('id="jadense-delete-conversation-confirm"')
+    expect(source).toContain("对话将无法召回")
+    expect(source).not.toContain("window.confirm")
+  })
+
+  it("places the panel-style navigation toggle first in the shared titlebar", () => {
     const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
 
     expect(xhtml).not.toContain("jdx-manager-brand-text")
     expect(xhtml).not.toContain("Zotero workspace")
-    const brandRow = xhtml.match(/<div class="jdx-manager-brand">[\s\S]*?<\/div>/)?.[0] ?? ""
-    expect(brandRow).toContain('src="icons/logo-padded.png"')
-    expect(brandRow).toContain('id="jadense-manager-sidebar-toggle"')
+    expect(xhtml).not.toContain('class="jdx-manager-brand"')
+    const titlebar = xhtml.match(/<header id="jadense-titlebar"[\s\S]*?<\/header>/)?.[0] ?? ""
+    expect(titlebar).not.toContain('<strong>Jadense</strong>')
+    expect(titlebar.indexOf('id="jadense-manager-sidebar-toggle"')).toBeLessThan(titlebar.indexOf('<img'))
+    expect(titlebar.indexOf('id="jadense-home"')).toBeLessThan(titlebar.indexOf('id="jadense-github"'))
+    expect(titlebar.indexOf('id="jadense-github"')).toBeLessThan(titlebar.indexOf('id="jadense-help-toggle"'))
+    expect(titlebar.indexOf('id="jadense-help-toggle"')).toBeLessThan(titlebar.indexOf('id="jadense-check-in"'))
+    expect(titlebar).toContain('data-ui-en="Check in for points"')
+    expect(titlebar).toContain('aria-label="攻玉首页"')
+    expect(titlebar).toContain('<path d="M7 3v10"/>')
   })
 
   it("removes the content status strip and chat heading without replacement", () => {
@@ -684,15 +731,16 @@ describe("manager page state", () => {
     const connection = xhtml.match(/<section id="jadense-manager-section-migrate"[\s\S]*?<section id="jadense-manager-section-settings"/)?.[0] ?? ""
 
     expect(connection).toContain('role="tablist"')
-    for (const name of ["config", "account", "sync"]) {
+    for (const name of ["account", "sync"]) {
       expect(connection).toContain(`id="jadense-connection-tab-${name}"`)
       expect(connection).toContain(`id="jadense-connection-panel-${name}"`)
     }
-    expect(connection).toContain("连接配置")
+    expect(connection).not.toContain("连接配置")
+    expect(connection).toContain("攻玉学术")
     expect(connection).toContain("用户信息")
     expect(connection).toContain("文献同步")
     expect(connection).toContain('aria-selected="true"')
-    expect(connection.match(/data-connection-section=/g)).toHaveLength(4)
+    expect(connection.match(/data-connection-section=/g)).toHaveLength(3)
     expect(connection).not.toContain("Zotero profile")
     expect(connection).not.toContain("chat:temporary")
     expect(manager).toContain("setConnectionTab")
@@ -722,13 +770,30 @@ describe("manager page state", () => {
     expect(view).toContain('uiText("打开原文 ↗", "Open PDF ↗")')
   })
 
-  it("places resource management beside the conversation and exposes independent collapse controls", () => {
+  it("places resource management beside the conversation and keeps one details collapse control", () => {
     const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
     const details = xhtml.match(/<aside id="jadense-chat-source-panel"[\s\S]*?<\/aside>/)?.[0] ?? ""
-    expect(xhtml).toContain('id="jadense-chat-sessions-toggle"')
-    expect(xhtml).toContain('aria-controls="jadense-chat-sessions"')
+    expect(xhtml).toContain('id="jadense-manager-nav-chat"')
+    expect(xhtml).toContain('aria-label="新对话"')
+    expect(xhtml).toContain('data-ui-en="New conversation">新对话</span>')
+    expect(xhtml).not.toContain('id="jadense-chat-new-session"')
+    const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
+    expect(manager).toMatch(/elements\.navChat\.addEventListener\("click", \(\) => \{[\s\S]*?startNewConversationDraft\(zotero\)/)
+    expect(manager).not.toMatch(/elements\.navChat\.addEventListener\("click", \(\) => \{[\s\S]*?createLocalChatSession\(chatPreferences\(zotero\)\)/)
+    expect(manager).toMatch(/async function sendChatMessage[\s\S]*?if \(!sessionID\) sessionID = createConversationForSend\(zotero\)/)
+    expect(manager).not.toContain("elements.newSession")
+    expect(manager).toMatch(/if \(action\.kind === "attach"\) \{[\s\S]*?startNewConversationDraft\(zotero\)[\s\S]*?attachSources\(elements, zotero, "files", \[action\.itemID\]\)/)
+    expect(manager).not.toMatch(/if \(action\.kind === "attach"\) \{[\s\S]*?createReaderChatSession\(/)
+    expect(xhtml).not.toContain('<details class="jdx-session-menu"')
+    expect(manager).toContain('row.append(button, menu)')
+    expect(manager).toContain('renameLocalChatSession(chatPreferences(zotero), session.id, nextTitle)')
+    expect(manager).toContain('uiText("编辑标题", "Edit title")')
+    expect(manager).toContain('deleteLocalChatSession(chatPreferences(zotero), session.id)')
+    expect(xhtml).not.toContain('id="jadense-chat-sessions-toggle"')
+    expect(xhtml.indexOf('id="jadense-chat-sessions"')).toBeLessThan(xhtml.indexOf('id="jadense-manager-section-chat"'))
     expect(xhtml).toContain('id="jadense-chat-details-toggle"')
-    expect(details).toContain('id="jadense-chat-details-close"')
+    expect(xhtml).not.toContain('id="jadense-chat-details-count"')
+    expect(details).not.toContain('id="jadense-chat-details-close"')
     expect(details).toContain('id="jadense-chat-details-stop"')
     expect(details).toContain('id="jadense-chat-attach-items"')
     expect(details).toContain('id="jadense-chat-attach-files"')
@@ -770,9 +835,8 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain("<select")
   })
 
-  it("moves display-first connection controls into the connection page", () => {
+  it("moves display-first connection controls into Settings → Connect Jadense", () => {
     const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
-    const connectionStart = xhtml.indexOf('id="jadense-manager-section-migrate"')
     const settingsStart = xhtml.indexOf('id="jadense-manager-section-settings"')
 
     expect(xhtml).toContain('id="jadense-manager-token-mask"')
@@ -783,8 +847,7 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain('id="jadense-manager-folder-id"')
     expect(xhtml).not.toContain('id="jadense-manager-save"')
     expect(xhtml).not.toContain('id="jadense-manager-load-folders"')
-    expect(xhtml.indexOf('id="jadense-manager-token-mask"')).toBeGreaterThan(connectionStart)
-    expect(xhtml.indexOf('id="jadense-manager-token-mask"')).toBeLessThan(settingsStart)
+    expect(xhtml.indexOf('id="jadense-manager-token-mask"')).toBeGreaterThan(settingsStart)
   })
 
   it("groups AI and shortcut settings while connection owns account, points, and upload", () => {
@@ -793,10 +856,13 @@ describe("manager page state", () => {
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(1)
     expect(xhtml).not.toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
-    for (const name of ["general", "features", "shortcuts", "ai"]) {
+    for (const name of ["general", "features", "shortcuts", "connection", "ai"]) {
       expect(xhtml).toContain(`id="jadense-settings-tab-${name}"`)
       expect(xhtml).toContain(`id="jadense-settings-panel-${name}"`)
     }
+    const settingsTabOrder = ["general", "features", "shortcuts", "connection", "ai"].map((name) => xhtml.indexOf(`id="jadense-settings-tab-${name}"`))
+    expect(settingsTabOrder).toEqual([...settingsTabOrder].sort((a, b) => a - b))
+    expect(xhtml).toContain('>连接攻玉</button>')
     expect(xhtml).toContain('role="tablist" aria-label="设置分区"')
     expect(xhtml).toContain("快捷键设置")
     for (const action of ["capture", "translate"]) {
@@ -807,7 +873,20 @@ describe("manager page state", () => {
     expect(xhtml.match(/data-connection-section=/g)).toHaveLength(4)
     expect(xhtml).not.toContain("AI 请求通道")
     for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-feature-${feature}-model"`)
+    expect(xhtml.indexOf('id="jadense-feature-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-auto-follow-chat-model"'))
+    expect(xhtml.indexOf('id="jadense-auto-follow-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-feature-translation-model"'))
     expect(xhtml).toContain('id="jadense-manager-byok-key-mask"')
+    expect(xhtml).toContain('id="jadense-manager-byok-key-toggle"')
+    expect(xhtml).toContain('class="jdx-manager-byok-layout"')
+    expect(xhtml).toContain('class="jdx-manager-byok-provider-list"')
+    expect(xhtml).toContain('id="jadense-manager-byok-model-editor" class="jdx-manager-byok-model-editor" hidden="hidden"')
+    expect(xhtml).not.toContain('<details class="jdx-manager-byok-model-editor" open="open">')
+    expect(xhtml.indexOf('id="jadense-manager-byok-model-editor"')).toBeLessThan(xhtml.indexOf('id="jadense-manager-byok-model-select"'))
+    expect(xhtml.indexOf('class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading"')).toBeGreaterThan(xhtml.indexOf('<div class="jdx-manager-byok-editor">'))
+    const modelPanelIndex = xhtml.indexOf('class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading"')
+    const warningIndex = xhtml.indexOf('<p class="jdx-manager-settings-note"', modelPanelIndex)
+    expect(modelPanelIndex).toBeLessThan(xhtml.lastIndexOf('</div>', warningIndex))
+    expect(xhtml).not.toContain('value="https://api.openai.com/v1"')
     expect(xhtml).toContain('id="jadense-manager-byok-provider-select"')
     expect(xhtml).toContain('id="jadense-manager-byok-provider-save"')
     expect(xhtml).toContain('id="jadense-manager-byok-model-select"')
@@ -828,8 +907,8 @@ describe("manager page state", () => {
   it("opens native Configure connection commands on the internal migrate route", () => {
     const bootstrap = readFileSync(new URL("../bootstrap.ts", import.meta.url), "utf8")
     const configure = bootstrap.match(/function configureConnection\(\)[\s\S]*?\n}/)?.[0] ?? ""
-    expect(configure).toContain('openManager("migrate")')
-    expect(configure).not.toContain('openManager("settings")')
+    expect(configure).toContain('openManager("settings-connection")')
+    expect(configure).not.toContain('openManager("migrate")')
   })
 
   it("allows configured BYOK chat without a Jadense token while upload stays disconnected", () => {
@@ -855,7 +934,7 @@ describe("manager page state", () => {
       connected: false,
       aiReady: false,
       canExportItems: false,
-      uploadIssues: expect.arrayContaining(["攻玉令牌无效或已过期，请在「连接配置」中更新令牌。"]),
+      uploadIssues: expect.arrayContaining(["攻玉令牌无效或已过期，请在「设置 → 连接攻玉」中更新令牌。"]),
     })
     expect(jadense.Prefs?.get("extensions.jadenseInZotero.token")).toBe(token)
 
@@ -878,7 +957,7 @@ describe("manager page state", () => {
       canExportItems: false,
       canExportCollection: false,
       uploadIssues: [
-        "尚未配置攻玉令牌，请先在「连接配置」中粘贴并保存令牌。",
+        "尚未配置攻玉令牌，请先在「设置 → 连接攻玉」中粘贴并保存令牌。",
         "尚未选择攻玉收藏夹，请先在上方「保存到攻玉收藏夹」中选择。",
         "请先在 Zotero 主窗口选中文献条目或收藏夹。",
       ],

@@ -4,12 +4,13 @@ beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
 
 import { TRANSLATION_HISTORY_PREF_KEY, readTranslationHistory } from "@/chat/translation-history"
 import { defaultByokConfig } from "@/chat/byok-chat"
-import { saveAiRoute, saveByokConfig, saveFeatureModelSelection } from "./ai-settings"
+import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, saveAiRoute, saveByokConfig, saveFeatureModelSelection } from "./ai-settings"
 import { translateReaderSelection } from "./reader-translation"
 import { ARTICLE_TRANSLATION_LANGUAGES_PREF_PREFIX, readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 import type { ZoteroLike } from "./runtime"
 
 function zoteroWithPreferences(values: Map<string, unknown>, items?: ZoteroLike["Items"]): ZoteroLike {
+  if (!values.has(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY)) values.set(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, false)
   return {
     Prefs: {
       get: (key) => values.get(key),

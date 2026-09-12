@@ -49,7 +49,8 @@ export function defaultByokBaseUrl(protocol: ByokProtocol) {
 export function defaultByokConfig(): ByokConfig {
   return {
     protocol: DEFAULT_BYOK_PROTOCOL,
-    baseUrl: defaultByokBaseUrl(DEFAULT_BYOK_PROTOCOL),
+    // 新配置不预设供应商地址；用户必须明确选择自己的 Provider。
+    baseUrl: "",
     apiKey: "",
     model: "",
     maxOutputTokens: DEFAULT_BYOK_MAX_OUTPUT_TOKENS,

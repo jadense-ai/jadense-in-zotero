@@ -14,12 +14,13 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import type { JadenseChatSelection } from "@/jadense/api"
-import { readConnection, type ZoteroLike } from "./runtime"
+import { AI_INITIAL_MODEL_PREF_KEY, readConnection, type ZoteroLike } from "./runtime"
 
 const PREF_AI_ROUTE = "extensions.jadenseInZotero.aiRoute"
 const PREF_BYOK_CONFIG = "extensions.jadenseInZotero.byokConfig"
 export const JADENSE_CHAT_MODEL_PREF_KEY = "extensions.jadenseInZotero.jadenseChatModel"
 export const PAPER_ANALYSIS_MODEL_PREF_KEY = "extensions.jadenseInZotero.paperAnalysisModel"
+export const AUTO_FOLLOW_CHAT_MODEL_PREF_KEY = "extensions.jadenseInZotero.autoFollowChatModel"
 
 export type AiRoute = "jadense" | "byok"
 
@@ -93,9 +94,9 @@ function trimBaseUrl(value: string) {
 function defaultProvider(): ByokProvider {
   return {
     id: "default-provider",
-    name: "OpenAI",
+    name: "自定义提供商",
     protocol: DEFAULT_BYOK_PROTOCOL,
-    baseUrl: defaultByokBaseUrl(DEFAULT_BYOK_PROTOCOL),
+    baseUrl: "",
     apiKey: "",
   }
 }
@@ -114,7 +115,7 @@ function normalizeProvider(value: unknown): ByokProvider | null {
     id,
     name: text(row.name) || "自定义提供商",
     protocol,
-    baseUrl: trimBaseUrl(text(row.baseUrl)) || defaultByokBaseUrl(protocol),
+    baseUrl: trimBaseUrl(text(row.baseUrl)),
     apiKey: text(row.apiKey),
   }
 }
@@ -225,6 +226,16 @@ export function saveJadenseChatSelection(zotero: ZoteroLike, selection: JadenseC
   return normalized
 }
 
+/** 功能配置默认跟随对话模型；只有明确保存 false 时才启用逐功能模型。 */
+export function readAutoFollowChatModel(zotero: ZoteroLike) {
+  return zotero.Prefs?.get(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY) !== false
+}
+
+export function saveAutoFollowChatModel(zotero: ZoteroLike, enabled: boolean) {
+  zotero.Prefs?.set(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, enabled)
+  return enabled
+}
+
 export function jadenseChatSelectionKey(selection: JadenseChatSelection) {
   const normalized = normalizeJadenseChatSelection(selection)
   return normalized.kind === "route" ? `route:${normalized.routeTier}` : `model:${normalized.modelId}`
@@ -242,6 +253,7 @@ function normalizeFeatureModelSelection(value: unknown): FeatureModelSelection |
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const row = value as Record<string, unknown>
   if (row.route === "jadense") {
+    if (row.selection === undefined) return { route: "jadense" }
     const selection = normalizeJadenseChatSelection(row.selection)
     return { route: "jadense", selection }
   }
@@ -254,18 +266,45 @@ function storedFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature) {
   catch { return null }
 }
 
+function readInitialFeatureModelSelection(zotero: ZoteroLike): FeatureModelSelection | null {
+  try {
+    const row = JSON.parse(prefString(zotero, AI_INITIAL_MODEL_PREF_KEY)) as Record<string, unknown>
+    if (row?.route === "jadense") return { route: "jadense", selection: readJadenseChatSelection(zotero) }
+    if (row?.route === "byok" && text(row.modelId)) return { route: "byok", modelId: text(row.modelId) }
+  } catch { /* 未完成初始化时保持未选择。 */ }
+  return null
+}
+
+function readLegacyFeatureModelSelection(zotero: ZoteroLike): FeatureModelSelection | null {
+  if (readAiRoute(zotero) === "byok") {
+    const modelId = readByokSettings(zotero).activeModelId
+    return modelId ? { route: "byok", modelId } : null
+  }
+  // 迁移旧的显式 Chat 模型或已有令牌；没有任何配置的新 profile 保持未选择。
+  if (prefString(zotero, JADENSE_CHAT_MODEL_PREF_KEY) || readConnection(zotero).token) {
+    return { route: "jadense", selection: readJadenseChatSelection(zotero) }
+  }
+  return null
+}
+
+function isUnconfiguredFeatureModelSelection(selection: FeatureModelSelection) {
+  return selection.route === "jadense" && !selection.selection
+}
+
 /** 在首次读取或目录编辑前固定旧配置；迁移保存失败不影响原有请求能力。 */
 export function initializeFeatureModelSelections(zotero: ZoteroLike) {
-  const inherited: FeatureModelSelection = readAiRoute(zotero) === "byok"
-    ? { route: "byok", modelId: readByokSettings(zotero).activeModelId }
-    : { route: "jadense" }
+  const hasLegacyChatSelection = Boolean(prefString(zotero, JADENSE_CHAT_MODEL_PREF_KEY))
+  const initial = readInitialFeatureModelSelection(zotero)
+  const legacy = initial ? null : readLegacyFeatureModelSelection(zotero)
+  const inherited = initial ?? legacy ?? { route: "jadense" as const }
   const selections = {} as Record<AiFeature, FeatureModelSelection>
   for (const feature of AI_FEATURES) {
     const stored = storedFeatureModelSelection(zotero, feature)
-    const legacyChat = (feature === "chat" || feature === "figure") && inherited.route === "jadense"
-      ? { ...inherited, selection: readJadenseChatSelection(zotero) } : inherited
-    selections[feature] = stored ?? normalizeFeatureModelSelection(legacyChat)!
-    if (!stored) {
+    const fallback = legacy && hasLegacyChatSelection && inherited.route === "jadense" && feature !== "chat" && feature !== "figure"
+      ? { route: "jadense" as const }
+      : inherited
+    selections[feature] = stored ?? normalizeFeatureModelSelection(fallback)!
+    if (!stored && !isUnconfiguredFeatureModelSelection(selections[feature])) {
       try { zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(selections[feature])) }
       catch { /* 旧偏好仍可在本次请求中使用。 */ }
     }
@@ -275,6 +314,11 @@ export function initializeFeatureModelSelections(zotero: ZoteroLike) {
 
 export function readFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
   return storedFeatureModelSelection(zotero, feature) ?? initializeFeatureModelSelections(zotero)[feature]
+}
+
+/** 自动跟随时，所有功能共用 AI 对话模型；关闭后恢复各功能已保存的模型。 */
+export function effectiveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
+  return readAutoFollowChatModel(zotero) ? readFeatureModelSelection(zotero, "chat") : readFeatureModelSelection(zotero, feature)
 }
 
 /** 选择只写所属功能；不改变 BYOK 编辑器当前项或其他功能。 */
@@ -296,7 +340,7 @@ export function savePaperAnalysisModelSelection(zotero: ZoteroLike, selection: P
 }
 
 export function featureModelSelectionKey(selection: FeatureModelSelection) {
-  return selection.route === "byok" ? `byok:${selection.modelId}` : jadenseChatSelectionKey(selection.selection ?? { kind: "default" })
+  return selection.route === "byok" ? `byok:${selection.modelId}` : selection.selection ? jadenseChatSelectionKey(selection.selection) : ""
 }
 
 export function featureModelSelectionFromKey(value: string): FeatureModelSelection {
@@ -306,7 +350,10 @@ export function featureModelSelectionFromKey(value: string): FeatureModelSelecti
 
 /** 所选模型失效只影响所属功能，不跨提供商回退；目录加载不参与运行时准入。 */
 export function featureModelState(zotero: ZoteroLike, feature: AiFeature, invalidToken: string | null = null) {
-  const selection = readFeatureModelSelection(zotero, feature)
+  const selection = effectiveFeatureModelSelection(zotero, feature)
+  if (selection.route === "jadense" && !selection.selection) {
+    return { selection, route: selection.route, ready: false, label: uiText("未选择模型", "No model selected"), issue: uiText("请先连接攻玉或配置 BYOK，然后前往「设置 → 功能配置」选择模型。", "Connect Jadense or configure BYOK, then choose a model in Settings → Feature settings.") }
+  }
   if (selection.route === "jadense") {
     const token = readConnection(zotero).token
     const invalid = Boolean(token && token === invalidToken)
@@ -400,6 +447,12 @@ export function saveByokModel(zotero: ZoteroLike, input: ByokModel) {
   settings.activeProviderId = model.providerId
   settings.activeModelId = model.id
   persist(zotero, settings)
+  // 只有首个完整 BYOK 模型才会成为新用户的初始目的地；后续模型不覆盖它。
+  try {
+    if (!prefString(zotero, AI_INITIAL_MODEL_PREF_KEY) && readByokConfigForModel(zotero, model.id)) {
+      zotero.Prefs?.set(AI_INITIAL_MODEL_PREF_KEY, JSON.stringify({ route: "byok", modelId: model.id }))
+    }
+  } catch { /* 可选的默认选择记录失败时仍保留已保存的 BYOK 模型。 */ }
   return model
 }
 

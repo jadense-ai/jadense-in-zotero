@@ -1,0 +1,266 @@
+/* 工作台和阅读器共享消息与输入区样式。 */
+
+
+.jdx-chat-latest {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: calc(var(--jdx-chat-dock-height) + 12px);
+  min-height: 30px;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 20px;
+  padding: 4px 12px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  font-size: calc(12px * var(--jdx-font-scale,1));
+  cursor: pointer;
+}
+.jdx-chat-latest[hidden] { display: none; }
+
+/* 消息列表为悬浮输入 Dock 预留底部空间，末条消息从输入卡片下方滚过而不会被遮住。 */
+.jdx-chat-message-list {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px 16px calc(var(--jdx-chat-dock-height) + 12px);
+  background: var(--jdx-surface);
+}
+
+.jdx-chat-empty {
+  margin: auto;
+  max-width: 370px;
+  padding: 24px 12px;
+  color: var(--jdx-muted);
+  text-align: center;
+  line-height: 1.75;
+}
+.jdx-chat-empty h3 { margin: 0 0 12px; color: var(--jdx-text); font-size: calc(18px * var(--jdx-font-scale,1)); font-weight: 600; }
+.jdx-chat-empty p { margin: 8px 0; }
+.jdx-chat-empty-note { font-size: calc(11px * var(--jdx-font-scale,1)); }
+.jdx-chat-empty-connect { margin-top: 8px; min-height: 32px; padding: 5px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--jdx-active-text); cursor: pointer; }
+.jdx-chat-empty-connect:hover { background: var(--jdx-active-bg); }
+
+.jdx-chat-message {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-width: min(85%, 680px);
+}
+
+.jdx-chat-message[data-role="user"] {
+  justify-self: end;
+}
+
+.jdx-chat-message[data-role="assistant"] { max-width: 100%; width: 100%; }
+.jdx-chat-message-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 4px; }
+.jdx-chat-message[data-role="user"] .jdx-chat-message-actions { justify-content: flex-end; }
+.jdx-chat-message-actions button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--jdx-muted); font-size: calc(11px * var(--jdx-font-scale,1)); cursor: pointer; }
+.jdx-chat-message-actions svg { width: 16px; height: 16px; pointer-events: none; }
+.jdx-chat-message-actions button:hover:not(:disabled) { color: var(--jdx-text); background: var(--jdx-press-bg); }
+.jdx-chat-message-actions button:disabled { opacity: 0.4; cursor: default; }
+
+.jdx-chat-message-body {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 0;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* 用户、AI 与解析说明共用文档排版；长代码和表格只在消息内部横向滚动。 */
+.jdx-markdown { min-width: 0; overflow-wrap: anywhere; }
+.jdx-markdown > :first-child { margin-top: 0; }
+.jdx-markdown > :last-child { margin-bottom: 0; }
+.jdx-markdown p { margin: 8px 0; }
+.jdx-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 16px 0 8px; color: inherit; font-size: 1em; line-height: 1.5; font-weight: 650; }
+.jdx-markdown h1 { font-size: 1.35em; }
+.jdx-markdown h2 { font-size: 1.2em; }
+.jdx-markdown h3 { font-size: 1.08em; }
+.jdx-markdown :is(ul, ol) { margin: 8px 0; padding-left: 24px; }
+.jdx-markdown li { margin: 3px 0; }
+.jdx-markdown li > :is(p, ul, ol) { margin: 4px 0; }
+.jdx-markdown blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid var(--jdx-line-strong); color: var(--jdx-muted); }
+.jdx-markdown a { color: var(--jdx-green-deep); text-decoration: underline; text-underline-offset: 3px; }
+.jdx-markdown a:hover { color: var(--jdx-text); }
+.jdx-markdown a:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 3px; border-radius: 2px; }
+.jdx-markdown code { padding: 1px 4px; border-radius: 4px; background: var(--jdx-subtle); font: 0.92em/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; }
+.jdx-markdown pre { max-width: 100%; overflow-x: auto; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-subtle); white-space: pre; overflow-wrap: normal; }
+.jdx-markdown pre code { padding: 0; border-radius: 0; background: transparent; font-size: calc(12px * var(--jdx-font-scale,1)); }
+.jdx-markdown table { display: block; max-width: 100%; overflow-x: auto; margin: 10px 0; border-collapse: collapse; font-size: calc(12px * var(--jdx-font-scale,1)); }
+.jdx-markdown :is(th, td) { padding: 6px 10px; border: 1px solid var(--jdx-line); text-align: left; }
+.jdx-markdown th { background: var(--jdx-subtle); font-weight: 600; }
+.jdx-markdown hr { margin: 14px 0; border: 0; border-top: 1px solid var(--jdx-line); }
+.jdx-markdown .katex { font-size: 1.04em; }
+.jdx-markdown .katex-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; margin: 10px 0; padding-block: 2px; }
+.jdx-markdown .jdx-math-error { color: var(--jdx-red); }
+
+/* 解析按文档排版，保留正文、原句、AI 解释和本地页码导航的清楚层次。 */
+.jdx-chat-message[data-research="true"] .jdx-chat-message-body { padding: 14px; white-space: normal; }
+.jdx-chat-message[data-research="true"] .jdx-chat-message-body > .jdx-markdown { margin: 10px 0; }
+.jdx-analysis-heading { margin: 20px 0 8px; color: var(--jdx-text); font-size: calc(14px * var(--jdx-font-scale,1)); line-height: 1.5; }
+h3.jdx-analysis-heading { margin-top: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--jdx-line); font-size: calc(16px * var(--jdx-font-scale,1)); }
+.jdx-analysis-heading[style]::before, .jdx-analysis-category::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 2px; background: var(--annotation-color); }
+.jdx-analysis-annotation { margin-top: 12px; border: 1px solid var(--jdx-line); border-radius: 6px; padding: 10px 12px; }
+.jdx-analysis-annotation-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jdx-analysis-category { color: var(--jdx-text); font-size: calc(12px * var(--jdx-font-scale,1)); font-weight: 600; }
+.jdx-analysis-page { flex-shrink: 0; min-height: 28px; padding: 3px 7px; border: 1px solid var(--jdx-line); border-radius: 4px; font: inherit; font-size: calc(11px * var(--jdx-font-scale,1)); color: var(--jdx-muted); background: transparent; }
+button.jdx-analysis-page { appearance: none; border-color: transparent; color: var(--jdx-active-text); cursor: pointer; }
+button.jdx-analysis-page:hover { background: var(--jdx-active-bg); }
+.jdx-analysis-annotation > blockquote { margin: 9px 0; padding: 4px 0 4px 10px; border-left: 2px solid var(--jdx-line-strong); color: var(--jdx-muted); white-space: pre-wrap; }
+button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 2px; }
+.jdx-analysis-annotation > .jdx-markdown { margin-top: 8px; }
+.jdx-chat-message-body > .jdx-analysis-outcome { padding: 9px 10px; border-radius: 5px; background: var(--jdx-sidebar); font-size: calc(12px * var(--jdx-font-scale,1)); }
+
+.jdx-chat-message[data-role="user"] .jdx-chat-message-body {
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--jdx-subtle);
+}
+
+:root[data-theme="dark"] .jdx-chat-message[data-role="user"] .jdx-chat-message-body { background: var(--jdx-press-bg); }
+
+.jdx-chat-message[data-status="failed"] .jdx-chat-message-body {
+  padding: 10px 14px;
+  border-color: rgb(180 35 24 / 0.22);
+  color: var(--jdx-red);
+  background: rgb(180 35 24 / 0.04);
+}
+.jdx-chat-message[data-stopped="true"] .jdx-chat-message-body { border-color: var(--jdx-line); color: var(--jdx-muted); background: var(--jdx-sidebar); }
+
+/* 悬浮输入 Dock：状态行与输入卡片浮在消息列表上方（Z 轴分层），替代消息区与输入区之间的分界线。
+   Dock 自身不接收指针，消息在卡片之外的区域仍可点选、滚动。 */
+.jdx-chat-dock {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 0;
+  padding: 0 16px 12px;
+  pointer-events: none;
+}
+
+/* 工作台与 Reader 共用薄状态面板：贴在输入卡片后方，空状态不占位。 */
+.jdx-chat-status-panel {
+  min-width: 0;
+  margin: 0 12px -10px;
+  padding: 6px 10px 14px;
+  border-radius: 12px 12px 0 0;
+  background: var(--jdx-subtle);
+  color: var(--jdx-muted);
+  pointer-events: auto;
+  font-size: calc(11px * var(--jdx-font-scale,1));
+  line-height: 16px;
+}
+.jdx-chat-status-panel:not(:has(.jdx-chat-association)):has(.jdx-manager-inline-status:empty) { display: none; }
+/* 底部快捷键提示与上方状态区共用背景，贴合输入卡片下沿。 */
+.jdx-chat-dock [id$="-chat-compose-hint"] {
+  min-width: 0;
+  margin: 0 12px;
+  padding: 4px 10px;
+  border-radius: 0 0 12px 12px;
+  background: var(--jdx-subtle);
+  color: var(--jdx-muted);
+  pointer-events: auto;
+  text-align: center;
+  font-size: calc(11px * var(--jdx-font-scale,1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.jdx-chat-dock .jdx-manager-inline-status {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.jdx-chat-dock .jdx-manager-inline-status:empty { display: none; }
+.jdx-chat-dock .jdx-manager-inline-status[data-busy="true"]::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border: 1.5px solid var(--jdx-line); border-top-color: var(--jdx-green-deep); border-radius: 50%; animation: jdx-working 0.8s linear infinite; }
+
+/* 输入区无背景、无分界线：整张输入卡片浮在消息列表上方。 */
+.jdx-chat-composer {
+  min-width: 0;
+  margin: 0;
+}
+
+/* 文本与工具栏共用轻量圆角卡片，键盘说明移到卡片下方。 */
+.jdx-chat-compose-field {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--jdx-line-strong);
+  border-radius: 16px;
+  background: var(--jdx-surface);
+  box-shadow: none;
+  pointer-events: auto;
+  transition: border-color 0.12s ease;
+}
+.jdx-chat-compose-field:hover { border-color: var(--jdx-hover-line); }
+.jdx-chat-compose-field:focus-within { border-color: var(--jdx-green); outline: 2px solid rgb(22 207 140 / 0.18); outline-offset: 1px; }
+/* 提示可换行，发送/停止始终并排留在底栏。 */
+.jdx-chat-composer-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 8px 8px; }
+.jdx-chat-composer-meta { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.jdx-chat-model-select { width: auto; max-width: min(256px, 100%); min-width: 0; flex: 0 1 auto; }
+.jdx-chat-model-select .jdx-select-trigger { width: auto; max-width: 100%; min-height: 32px; height: 32px; gap: 6px; padding: 0 10px; border-color: transparent; border-radius: 6px; background: color-mix(in srgb, var(--jdx-subtle) 45%, transparent); font-size: calc(13px * var(--jdx-font-scale,1)); font-weight: 500; }
+.jdx-chat-model-select .jdx-select-trigger:hover:not(:disabled) { background: var(--jdx-press-bg); }
+.jdx-chat-composer button { min-height: 32px; }
+.jdx-chat-composer .jdx-chat-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--jdx-muted); cursor: pointer; }
+.jdx-chat-icon-button[hidden] { display: none; }
+
+.jdx-chat-composer textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  max-height: 200px;
+  resize: none;
+  appearance: none;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  padding: 10px 12px;
+  color: var(--jdx-text);
+  background: transparent;
+  line-height: 1.6;
+  overflow-y: auto;
+}
+
+.jdx-chat-composer textarea::placeholder {
+  color: var(--jdx-placeholder);
+}
+
+.jdx-chat-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.jdx-translation-columns .jdx-markdown { overflow-wrap: anywhere; line-height: 1.7; }
+.jdx-translation-columns .jdx-markdown > :first-child { margin-top: 0; }
+.jdx-translation-columns .jdx-markdown > :last-child { margin-bottom: 0; }
+/* 图片附件独立于 Markdown，仅显示用户明确提供并保存在本机的图片。 */
+.jdx-chat-image-preview { display: flex; align-items: center; gap: 8px; padding: 10px; min-width: 0; }
+.jdx-chat-image-preview[hidden] { display: none; }
+.jdx-chat-image-preview img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; }
+.jdx-chat-image-preview span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: calc(12px * var(--jdx-font-scale,1)); }
+.jdx-chat-image-preview button { flex-shrink: 0; }
+.jdx-chat-message-image { display: grid; gap: 6px; margin-top: 10px; min-width: 0; }
+.jdx-chat-message-image > button { padding: 0; border: 0; background: transparent; cursor: zoom-in; text-align: left; width: fit-content; max-width: 100%; }
+.jdx-chat-message-image img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; border-radius: 8px; }
+.jdx-chat-message-image > button[aria-expanded="true"] { cursor: zoom-out; }
+.jdx-chat-message-image > button[aria-expanded="true"] img { max-height: none; }
+.jdx-chat-message-image > span { font-size: calc(12px * var(--jdx-font-scale,1)); overflow-wrap: anywhere; opacity: .75; }
+/* 复用主应用的模型/智能路由/BYOK 图标语言；图标不参与文字收缩。 */
+.jdx-chat-model-select .jdx-select-leading-icon { display:inline-flex; width:18px; height:18px; flex:0 0 18px; align-items:center; color:var(--jdx-muted); }
+.jdx-chat-model-select .jdx-select-leading-icon svg { width:18px; height:18px; }
+
+.jdx-select-leading-icon img { width:18px; height:18px; object-fit:contain; }

@@ -50,7 +50,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 安装
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前版本为 **0.4.3**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前版本为 **0.4.4**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -142,7 +142,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 支持哪些版本？有哪些阅读限制？
 
-Manifest 声明兼容 Zotero **8.0 至 10.0.***；0.4.3 的实际验收环境是 **Windows 11 / Zotero 10.0.2**，使用合成资料与模拟接口。macOS、Linux、Zotero 8/9 及真实付费 Provider 未在该次发布中实测，完整验收记录与范围见 [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.3)。
+Manifest 声明兼容 Zotero **8.0 至 10.0.***；0.4.4 的实际验收环境是 **Windows 11 / Zotero 10.0.2**，使用合成资料与模拟接口。macOS、Linux、Zotero 8/9 及真实付费 Provider 未在该次发布中实测，完整验收记录与范围见 [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4)。
 
 扫描 PDF 需先 OCR 才能进行依赖正文提取的操作。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
 
@@ -150,9 +150,9 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.***；0.4.3 的实际验收环境是
 
 ### 从旧版怎样升级？
 
-从 GitHub 0.4.0 / 0.4.1 / 0.4.2 升级时，直接从文件安装 0.4.3；两者使用相同的 `.cn` 插件身份，保留已有设置与本地历史。
+从 GitHub 0.4.0 / 0.4.1 / 0.4.2 / 0.4.3 升级时，直接从文件安装 0.4.4；两者使用相同的 `.cn` 插件身份，保留已有设置与本地历史。
 
-安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装 0.4.3**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
+安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装 0.4.4**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 
 新版沿用原有偏好命名空间与历史保存位置，请勿删除 Zotero profile。已保存的具体模型、路由与 BYOK 选择会保留。插件仍读取[攻玉官方更新源](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)，GitHub 发布不会自动修改官网更新清单。版本差异见 [更新说明](CHANGELOG.md)。
 

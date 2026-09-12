@@ -1,3 +1,4 @@
+import { verifyReaderChat } from "./smoke-reader-chat.mjs"
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -462,6 +463,10 @@ async function startStub() {
             "- 误差模型：$\\epsilon = 0.2$",
           ].join("\n")
           requests.push({ kind: "translation", temporary: true, selectedTextVerified: true, formulaPromptVerified: true, ...languagePair })
+        } else if (prompt.includes('SYNTHETIC_SIDEBAR_QUESTION')) {
+          output = createMarkdownFixture('assistant', `http://127.0.0.1:${server.address().port}`)
+          markdownStream = true
+          requests.push({ kind: 'reader-chat', temporary: true, streamed: true })
         } else if (prompt.includes(MARKDOWN_MARKER)) {
           if (payload.modelId !== "synthetic-platform-model" || "routeTier" in payload) {
             throw new Error("Ordinary Chat did not send exactly the explicitly selected Jadense model")
@@ -506,7 +511,7 @@ async function startStub() {
 }
 
 /** 此函数序列化进临时伴随插件，仅在已核验的隔离 profile 内执行。 */
-async function runHarness(config, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers) {
+async function runHarness(config, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers, verifyReaderChat) {
   const report = { state: "running", stage: "startup", checks: [] }
   // Node 正在轮询报告；直接写入避免 Windows 的临时文件 rename 与读句柄竞争。
   // 读取端会忽略尚未写完整的 JSON，并在下一次轮询重试。
@@ -820,11 +825,15 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       const previousSize = [main.outerWidth, main.outerHeight]
       const previousFont = Zotero.Prefs.get("extensions.jadenseInZotero.fontSize", true) || "13"
       try {
+        if (reader.tabID) main.Zotero_Tabs?.select?.(reader.tabID)
         main.restore?.(); main.focus()
         // Windows Zotero 自身最小外窗约1016px（Reader 1000px）；不可把未成功的760px请求误记成窄屏验收。
         for (const width of [1400, 1100, 1016]) {
           main.resizeTo(width, 740)
-          await waitFor(() => win.innerWidth <= width && win.innerWidth >= width - 130, "compact native viewport near " + width, 8000)
+          await waitFor(() => {
+            report.compactResize = { requested: width, outerWidth: main.outerWidth, outerHeight: main.outerHeight, viewportWidth: win.innerWidth, viewportHeight: win.innerHeight }
+            return win.innerWidth > 0 && win.innerWidth <= width
+          }, "compact native viewport near " + width, 8000)
           Zotero.Prefs.set("extensions.jadenseInZotero.fontSize", width === 1016 ? "24" : "13", true)
           await Zotero.Promise.delay(300)
           const group = doc.querySelector('[data-jadense-reader-tools="renderToolbar"]')
@@ -869,6 +878,92 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       return event.defaultPrevented
     }
     await waitFor(() => toolbarButton("analyze"), "actual release toolbar")
+    if (config.shellOnly) {
+      await stage("unified-manager-shell")
+      readerDoc.querySelector(".jadense-reader-brand").click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), "unified Manager")
+      const doc = manager.document, element = id => doc.getElementById("jadense-" + id)
+      report.shellHost = { os: Services.appinfo.OS, version: Services.appinfo.version, build: Services.sysinfo.getProperty("build"), dpi: manager.devicePixelRatio, customtitlebar: doc.documentElement.getAttribute("customtitlebar") }
+      report.shellHost.capabilities = [typeof manager.ChromeUtils, typeof manager.Services, typeof manager.minimize, typeof manager.maximize, typeof manager.restore]
+      await persist()
+      assert(doc.documentElement.getAttribute("customtitlebar") === "true", "Verified Windows host did not enable its integrated titlebar")
+      assert(manager.getComputedStyle(element("titlebar")).getPropertyValue("-moz-window-dragging") === "drag", "Titlebar is not a native drag region")
+      assert(manager.getComputedStyle(element("github")).getPropertyValue("-moz-window-dragging") === "no-drag", "Interactive control remains draggable")
+      const launchURL = Zotero.launchURL, helpLinks = []
+      Zotero.launchURL = url => helpLinks.push(url)
+      try { element("home").click(); element("github").click(); element("check-in").click() } finally { Zotero.launchURL = launchURL }
+      assert(helpLinks.join(",") === "https://jadense.cn,https://github.com/jadense-ai/jadense-in-zotero,https://jadense.cn", "Shell links did not use the system-browser API with fixed destinations")
+      assert(element("titlebar").querySelector("button") === element("manager-sidebar-toggle"), "Navigation toggle is not the first shell control")
+      const original = manager
+      readerDoc.querySelector(".jadense-reader-brand").click()
+      assert(findManager() === original, "Reopening created another Manager")
+      element("help-toggle").click()
+      assert(!element("help-menu").hidden && doc.activeElement === element("manager-nav-guide"), "Help menu focus is incorrect")
+      pressKey(manager, "End", {}, element("help-menu"))
+      assert(doc.activeElement === element("help-update"), "Help End navigation failed")
+      pressKey(manager, "Escape", {}, element("help-menu"))
+      assert(element("help-menu").hidden && doc.activeElement === element("help-toggle"), "Help Escape/focus failed")
+      element("help-about").click()
+      await waitFor(() => element("help-version").textContent.includes("0.4.4"), "runtime installed version")
+      assert(element("help-dialog").open, "About is not modal")
+      element("help-dialog").close()
+      await Zotero.Promise.delay(50)
+      assert(doc.activeElement === element("help-toggle"), "Dialog did not restore focus")
+      // 使用真实 Gecko 比较器，并仅替换可选 GitHub GET；不发送外网请求。
+      const fetchBefore = manager.fetch
+      let updateRequests = 0, mode = "available"
+      manager.fetch = async (url, options) => {
+        if (String(url).includes("api.github.com/repos/jadense-ai/jadense-in-zotero/releases/latest")) {
+          updateRequests++
+          if (mode === "failure") return { ok: false, status: 429 }
+          const tag = mode === "latest" ? "v0.4.4" : mode === "ahead" ? "v0.4.2" : "v0.4.10"
+          return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, future: true }) }
+        }
+        return fetchBefore.call(manager, url, options)
+      }
+      try {
+        assert(updateRequests === 0, "Opening help checked updates automatically")
+        for (const state of ["available", "latest", "ahead", "failure"]) {
+          mode = state
+          element("help-update").click()
+          await waitFor(() => !element("help-retry").disabled, "manual update " + state)
+          const text = element("help-status").textContent
+          assert(state === "available" ? /发现新版本|New version available/.test(text) : state === "latest" ? /已是最新|up to date/.test(text) : state === "ahead" ? /无需降级|No downgrade/.test(text) : /检查失败|Check failed/.test(text), "Incorrect update state " + text)
+        }
+        mode = "latest"; element("help-retry").click()
+        await waitFor(() => !element("help-retry").disabled, "update retry")
+        assert(updateRequests === 5, "Unexpected update polling")
+      } finally { manager.fetch = fetchBefore; element("help-dialog").close() }
+      await waitFor(() => doc.activeElement === element("help-toggle"), "update dialog focus restored before window controls")
+      manager.restore()
+      await waitFor(() => manager.windowState === manager.STATE_NORMAL, "normal shell before controls")
+      element("window-minimize").click()
+      await waitFor(() => manager.windowState === manager.STATE_MINIMIZED, "titlebar minimize")
+      readerDoc.querySelector(".jadense-reader-brand").click()
+      await waitFor(() => manager.windowState === manager.STATE_NORMAL, "reopen restores minimized Manager")
+      element("window-maximize").click()
+      await waitFor(() => manager.windowState === manager.STATE_MAXIMIZED, "titlebar maximize")
+      await screenshot("unified-maximized", manager)
+      element("window-maximize").click()
+      await waitFor(() => manager.windowState === manager.STATE_NORMAL, "titlebar restore")
+      for (const [width, height] of [[1360, 860], [760, 620]]) {
+        manager.resizeTo(width + manager.outerWidth - manager.innerWidth, height + manager.outerHeight - manager.innerHeight)
+        await Zotero.Promise.delay(300)
+        for (const theme of ["light", "dark"]) {
+          Zotero.Prefs.set("extensions.jadenseInZotero.theme", theme, true)
+          await waitFor(() => doc.documentElement.dataset.theme === theme, "shell theme")
+          const panel = doc.querySelector(".jdx-manager-content"), workbench = element("chat-workbench")
+          const bounds = panel.getBoundingClientRect()
+          assert(bounds.bottom <= manager.innerHeight && bounds.right <= manager.innerWidth, "Unified panel escapes viewport")
+          assert(manager.getComputedStyle(panel).borderRadius === "8px" && manager.getComputedStyle(workbench).borderRadius === "0px", "Duplicate panel shell")
+          const send = element("chat-send").getBoundingClientRect()
+          assert(send.bottom <= manager.innerHeight && send.width > 0, "Composer outside viewport")
+          await screenshot("unified-" + (config.appearanceLanguage || "zh-CN") + "-" + theme + "-" + width, manager)
+        }
+      }
+      report.checks.push("unified-shell-geometry", "shell-home-github-and-check-in-links", "help-keyboard-and-focus", "runtime-installed-version", "gecko-version-numeric-order", "updates-manual-only-all-states-retry", "titlebar-minimize-maximize-restore", "window-reuse", "native-content-light-dark-compact")
+      report.state = "passed"; report.stage = "complete"; await persist(); return
+    }
     if (config.appearanceLanguage) {
       await stage("appearance-and-language")
       const english = config.appearanceLanguage === "en-US"
@@ -1027,6 +1122,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
 
     await stage("reader-logo-opens-manager")
     const logoButton = brand.parentElement
+    const beforeLogoChatState = JSON.stringify(localState())
     assert(logoButton.localName === "button" && logoButton.getAttribute("aria-label") === "打开攻玉工作台"
       && !logoButton.hasAttribute("aria-hidden") && logoButton.tabIndex === 0, "Reader logo is not an accessible Manager button")
     logoButton.click()
@@ -1035,9 +1131,19 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       return win?.receiveJadenseContext ? win : null
     }, "logo-opened Manager")
     assert(!manager.document.getElementById("jadense-manager-section-chat").hidden, "Reader logo did not open Chat")
-    assert(localState().sessions?.length === 1 && currentSession().messages.length === 0
-      && currentSession().sources.length === 0, "Reader logo dispatched a paper action")
-    const beforeLogoChatState = JSON.stringify(localState())
+    const quickStart = manager.document.getElementById("jadense-quick-start-dialog")
+    if (quickStart) {
+      await waitFor(() => quickStart.open || Zotero.Prefs.get("extensions.jadenseInZotero.quickStartShown") === true, "quick-start dialog")
+      if (quickStart.open) manager.document.getElementById("jadense-quick-start-close")?.click()
+      await waitFor(() => !quickStart.open, "quick-start dismissal")
+    }
+    const logoSession = currentSession()
+    assert(JSON.stringify(localState()) === beforeLogoChatState
+      && (!logoSession || (logoSession.messages.length === 0 && logoSession.sources.length === 0)), "Reader logo changed Chat state or dispatched a paper action")
+    if (config.chatSidebarOnly) {
+      await verifyReaderChat({ Zotero, reader, manager, assert, waitFor, screenshot, report })
+      report.state = 'passed'; await persist(); return
+    }
     const logoDraft = manager.document.getElementById("jadense-chat-input")
     logoDraft.value = "Synthetic unsent logo draft"
     logoButton.click()
@@ -1350,6 +1456,18 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       const image = manager.document.querySelector(`[data-message-id="${firstFigureUser.id}"] .jdx-chat-message-image img`)
       return image?.naturalWidth > 0 ? image : null
     }, "figure image rendered in its user message")
+    // 消息操作必须在正文和图片之后；长草稿只扩展输入框，不挤出发送入口。
+    const figureArticle = figureMessageImage.closest("article")
+    assert(figureArticle.lastElementChild.classList.contains("jdx-chat-message-actions"), "Message actions are not below the attachment")
+    assert(!figureArticle.querySelector("[data-copy-plain]").disabled, "Visible message cannot be copied as plain text")
+    const growingInput = manager.document.getElementById("jadense-chat-input")
+    growingInput.value = Array(30).fill("Synthetic multiline draft").join("\n")
+    growingInput.dispatchEvent(new manager.Event("input", { bubbles: true }))
+    assert(growingInput.getBoundingClientRect().height <= 200 && growingInput.scrollHeight > growingInput.clientHeight, "Long draft does not scroll within its height cap")
+    growingInput.value = ""
+    growingInput.dispatchEvent(new manager.Event("input", { bubbles: true }))
+    assert(growingInput.getBoundingClientRect().height < 200, "Cleared draft does not shrink")
+    report.checks.push("chat-actions-below-image", "chat-plain-copy-available", "chat-textarea-bounded-autogrow")
     const fixtureImageDataUrl = figureMessageImage.src
     assert(firstFigureUser.image?.origin === "figure", "Figure message did not persist its local attachment reference")
     const figureFollowupInput = manager.document.getElementById("jadense-chat-input")
@@ -1378,11 +1496,28 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-deepseek-v4-flash-vision-exp")
 
     await stage("reader-question-new-conversation")
+    const beforeQuestionState = JSON.stringify(localState())
+    const beforeQuestionIDs = new Set(localState().sessions.map(session => session.id))
+    assert(toolbarButton("attach").textContent.trim() === "提问" && toolbarButton("attach").title.includes("发起新对话"), "Reader question entry lost its new-conversation label")
     toolbarButton("attach").click()
+    const readerSidebar = await waitFor(() => Zotero.getMainWindow().document.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), "Reader Chat shell")
+    const readerChat = readerSidebar.querySelector(".jdx-reader-chat")
+    await waitFor(() => readerChat?.dataset.chatSession === "", "new Reader question draft")
+    assert(JSON.stringify(localState()) === beforeQuestionState
+      && readerChat.querySelector(".jdx-chat-association").textContent.includes("发送时将关联"), "Opening Reader question persisted a session before send")
+    const readerQuestionInput = readerChat.querySelector("textarea")
+    readerQuestionInput.value = "SYNTHETIC_SIDEBAR_QUESTION"
+    readerQuestionInput.dispatchEvent(new (Zotero.getMainWindow().Event)("input", { bubbles: true }))
+    readerChat.querySelector("form").requestSubmit()
+    const questionInSidebar = await waitFor(() => localState().sessions.find(session => !beforeQuestionIDs.has(session.id) && session.sources.some(source => source.itemID === attachment.id)), "new Reader question session")
+    const questionSessionId = questionInSidebar.id
+    await waitFor(() => localState().sessions.find(session => session.id === questionSessionId)?.messages.some(message => message.role === "assistant" && message.status === "complete") && managerIdle(), "Reader question response")
+    const questionInManager = await waitFor(() => manager.document.querySelector(`[data-session-id="${questionSessionId}"]`), "Reader session shared to Manager")
+    questionInManager.click()
     manager = await waitFor(findManager, "actual release Manager")
     await waitFor(() => managerIdle() && currentSession()?.sources?.some((source) => source.kind === "file" && source.itemID === attachment.id), "question document association")
-    const questionSessionId = currentSession().id
-    assert(currentSession().messages.length === 0 && currentSession().title.includes(parent.getField("title")), "Reader question entry sent a message or lost the paper title")
+    assert(currentSession().id === questionSessionId && currentSession().messages.some(message => message.role === "user" && message.text === "SYNTHETIC_SIDEBAR_QUESTION")
+      && currentSession().title.includes(parent.getField("title")), "Reader question session lost its sent prompt or paper title")
     assert(!manager.document.getElementById("jadense-chat-analyze-paper")
       && !manager.document.querySelector('[data-action="analyze"], .jdx-chat-source-analyze'), "Analysis remains an ambiguous action inside Chat")
     report.managerInitialWindow = {
@@ -1396,9 +1531,19 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     report.checks.push("reader-question-label", "reader-question-new-local-session", "analysis-reader-only", "wider-screen-bounded-manager")
 
     await stage("native-conversation-resource-picker")
-    manager.document.getElementById("jadense-chat-new-session").click()
-    await waitFor(() => currentSession()?.id !== questionSessionId && managerIdle(), "empty resource-picker conversation")
-    const pickerSessionId = currentSession().id
+    const beforePickerIDs = new Set(localState().sessions.map(session => session.id))
+    toolbarButton("attach").click()
+    await waitFor(() => readerChat.dataset.chatSession === "", "second Reader question draft")
+    const pickerInput = readerChat.querySelector("textarea")
+    pickerInput.value = "SYNTHETIC_SIDEBAR_QUESTION picker"
+    pickerInput.dispatchEvent(new (Zotero.getMainWindow().Event)("input", { bubbles: true }))
+    readerChat.querySelector("form").requestSubmit()
+    const pickerSession = await waitFor(() => localState().sessions.find(session => !beforePickerIDs.has(session.id) && session.sources.some(source => source.itemID === attachment.id)), "resource-picker conversation")
+    const pickerSessionId = pickerSession.id
+    await waitFor(() => localState().sessions.find(session => session.id === pickerSessionId)?.messages.some(message => message.role === "assistant" && message.status === "complete") && managerIdle(), "resource-picker conversation response")
+    const pickerInManager = await waitFor(() => manager.document.querySelector(`[data-session-id="${pickerSessionId}"]`), "resource conversation in Manager")
+    pickerInManager.click()
+    await waitFor(() => currentSession()?.id === pickerSessionId && managerIdle(), "resource conversation selected")
     await Zotero.getMainWindow().ZoteroPane.selectItem(otherPaper.id)
     const detailsToggle = manager.document.getElementById("jadense-chat-details-toggle")
     if (detailsToggle.getAttribute("aria-expanded") !== "true") detailsToggle.click()
@@ -1458,7 +1603,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       ;(report.nativePickers ??= []).push({ buttonId, canceled: selectedIDs === null, returnedToManager: Services.focus.activeWindow === manager })
     }
     await chooseSources("jadense-chat-attach-items", [parent.id])
-    assert(currentSession().sources.length === 1 && currentSession().sources[0].itemID === parent.id,
+    assert(currentSession().sources.length === 2
+      && currentSession().sources.some((source) => source.kind === "item" && source.itemID === parent.id)
+      && currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id),
       "Chat item association used the main-window selection instead of the picker")
     await chooseSources("jadense-chat-attach-files", [attachment.id])
     assert(currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id)
@@ -1476,7 +1623,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => currentSession().sources.length === 1, "remove visible literature while another group is collapsed")
     const remainingSummary = manager.document.querySelector(".jdx-chat-source-group > summary")
     assert(manager.document.activeElement === remainingSummary && remainingSummary.textContent.includes(otherPaper.getField("title")),
-      "Source removal focused the document body or a hidden resource instead of the remaining group summary")
+      `Source removal focused the wrong element: ${JSON.stringify({ active: manager.document.activeElement?.outerHTML?.slice(0, 240), remaining: remainingSummary?.outerHTML?.slice(0, 240) })}`)
     remainingSummary.click()
     manager.document.querySelector(".jdx-chat-source-group-remove").click()
     await waitFor(() => currentSession().sources.length === 0, "remove literature group from this conversation")
@@ -1504,7 +1651,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     pickerSessionButton.click()
     await waitFor(() => currentSession().id === pickerSessionId && draftInput.value === retainedDraft, "resource conversation draft restore")
     for (const [toggleID, panelID] of [
-      ["jadense-chat-sessions-toggle", "jadense-chat-sessions"],
+      ["jadense-manager-sidebar-toggle", "jadense-chat-sessions"],
       ["jadense-chat-details-toggle", "jadense-chat-source-panel"],
     ]) {
       const toggle = manager.document.getElementById(toggleID)
@@ -1517,8 +1664,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     }
     assert(draftInput.value === retainedDraft && JSON.stringify(currentSession().sources) === sourcesBeforeCancel,
       "Collapsing conversation panels changed the draft or resource associations")
-    manager.document.getElementById("jadense-chat-details-close").click()
-    assert(detailsToggle.getAttribute("aria-expanded") === "false", "Details close button did not collapse the panel")
+    assert(!manager.document.getElementById("jadense-chat-details-close"), "Conversation details still expose a duplicate sidebar collapse button")
+    assert(!manager.document.getElementById("jadense-chat-details-count"), "Conversation details header still exposes a linked-resource count")
+    detailsToggle.click()
+    assert(detailsToggle.getAttribute("aria-expanded") === "false", "Conversation details header toggle did not collapse the panel")
     detailsToggle.click()
     report.checks.push("conversation-list-collapse-expand", "conversation-details-collapse-expand", "panel-toggles-preserve-draft-and-sources")
 
@@ -1720,7 +1869,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 1
       && manager.document.getElementById("jadense-translation-history-status").dataset.kind === "success", "translation title exact-page Reader navigation")
     await screenshot("manager-translation-history", manager)
-    manager.document.getElementById("jadense-manager-nav-chat").click()
+    const restoredPickerButton = await waitFor(() => manager.document.querySelector(`[data-session-id="${pickerSessionId}"]`), "resource conversation after returning to Chat")
+    restoredPickerButton.click()
+    await waitFor(() => currentSession()?.id === pickerSessionId, "resource conversation restored after returning to Chat")
     report.checks.push("native-popup-translation", "translation-markdown-and-formula", "translation-no-chat-or-annotation-side-effects", "translation-history-page", "translation-title-native-reader-page")
 
     await stage("native-manager-window-controls")
@@ -1729,22 +1880,20 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       .getInterface(Components.interfaces.nsIAppWindow)
     const flags = appWindow.chromeFlags
     assert((flags & chrome.CHROME_OPENAS_DIALOG) === 0, "Manager is still a dialog without ordinary native window controls")
-    assert((flags & chrome.CHROME_TITLEBAR) !== 0 && (flags & chrome.CHROME_WINDOW_RESIZE) !== 0, "Manager is missing native titlebar/resize capabilities")
+    assert((flags & chrome.CHROME_TITLEBAR) !== 0 && (flags & chrome.CHROME_WINDOW_RESIZE) !== 0, "Manager lost native titlebar/resize capabilities required by either shell")
     assert(["minimize", "maximize", "restore"].every((method) => typeof manager[method] === "function"), "Native Manager window controls are unavailable")
-    report.managerChromeFlags = { value: flags >>> 0, dialog: false, titlebar: true, resizable: true }
+    report.managerChromeFlags = { value: flags >>> 0, dialog: false, titlebar: true, integrated: manager.document.documentElement.getAttribute("customtitlebar") === "true", resizable: true }
     const sessionBeforeControls = localState().activeSessionId
     const messageCountBeforeControls = messages().length
     const reopenManager = async (expectedState) => {
       // 必须走 release 的入口触发 focus；smoke 自己 restore 会掩盖最小化恢复缺陷。
       const previousSessionId = currentSession().id
-      toolbarButton("attach").click()
+      logoButton.click()
       await waitFor(() => manager.windowState === expectedState, "Manager restored by reader entry", 8_000)
-      await waitFor(() => managerIdle() && currentSession().id !== previousSessionId
-        && currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id), "new question in reused Manager")
       const opened = findManagers()
       assert(opened.length === 1 && opened[0] === manager, "Reader entry created another Manager")
-      assert(currentSession().messages.length === 0 && messages().length === messageCountBeforeControls,
-        "Reader question sent an implicit message or altered prior conversation messages")
+      assert(currentSession().id === previousSessionId && messages().length === messageCountBeforeControls,
+        "Reader brand entry changed the conversation")
     }
     manager.restore()
     await waitFor(() => manager.windowState === manager.STATE_NORMAL, "normal Manager window", 8_000)
@@ -1770,7 +1919,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       await waitFor(() => currentSession().id === sessionId, "previous local conversation")
       const restoredDraft = manager.document.getElementById("jadense-chat-input").value
       assert(restoredDraft.startsWith(retainedDraft) && restoredDraft.includes("引用原文"),
-        "Reader actions discarded the previous draft or its explicitly appended quote")
+        `Reader actions discarded the previous draft or its explicitly appended quote: ${JSON.stringify(restoredDraft)}`)
     }
     report.checks.push("native-manager-minimize-maximize-restore", "manager-entry-restores-normal-and-maximized", "manager-window-reused-with-new-question-session", "reader-actions-preserve-prior-draft")
 
@@ -1779,8 +1928,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-settings").hidden, "Manager settings section")
     manager.document.getElementById("jadense-settings-tab-ai").click()
     const featureTab = manager.document.getElementById("jadense-settings-tab-features")
-    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "常规 / 功能配置 / 快捷键设置 / BYOK", "Feature settings tab labels/order changed")
+    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "常规 / 功能配置 / 快捷键设置 / 连接攻玉 / BYOK", "Feature settings tab labels/order changed")
     assert(!manager.document.getElementById("jadense-manager-route-byok"), "Obsolete global channel is still visible")
+    featureTab.click()
+    const autoFollowChatModel = manager.document.getElementById("jadense-auto-follow-chat-model")
+    assert(autoFollowChatModel?.checked === true, "Feature model following is not enabled by default")
+    autoFollowChatModel.click()
+    await waitFor(() => autoFollowChatModel.checked === false, "Disable automatic feature model following")
     const byokBaseUrl = manager.document.getElementById("jadense-manager-byok-base-url")
     const byokKey = manager.document.getElementById("jadense-manager-byok-key-input")
     const byokModel = manager.document.getElementById("jadense-manager-byok-model")
@@ -1791,11 +1945,22 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     manager.document.getElementById("jadense-manager-byok-provider-name").value = "Synthetic Provider"
     manager.document.getElementById("jadense-manager-byok-provider-save").click()
     await waitFor(() => manager.document.getElementById("jadense-manager-byok-status").dataset.kind === "success", "BYOK provider save")
+    const managerModelEditor = manager.document.getElementById("jadense-manager-byok-model-editor")
+    const managerModelList = manager.document.getElementById("jadense-manager-byok-model-select")
+    assert(managerModelEditor.hidden && managerModelEditor.nextElementSibling === managerModelList, "BYOK model editor is visible in the normal state")
+    manager.document.getElementById("jadense-manager-byok-model-new").click()
+    assert(!managerModelEditor.hidden && managerModelEditor.nextElementSibling === managerModelList, "Add-model editor was not inserted before the model list")
     manager.document.getElementById("jadense-manager-byok-model-name").value = "Synthetic Model"
     byokModel.value = "synthetic-byok-model"
     byokMaxTokens.value = "96000"
     manager.document.getElementById("jadense-manager-byok-save").click()
     await waitFor(() => manager.document.getElementById("jadense-manager-byok-status").dataset.kind === "success", "BYOK form save")
+    assert(managerModelEditor.hidden && managerModelList.querySelectorAll('button[data-model-id]').length === 1, "Saved BYOK model did not return to list mode")
+    managerModelList.querySelector('button[data-model-id]').click()
+    assert(!managerModelEditor.hidden && managerModelEditor.parentElement === managerModelList, "Editing did not replace the model list in place")
+    assert(managerModelList.querySelector('button[data-model-id]').hidden, "Edited BYOK model remained visible below its editor")
+    manager.document.getElementById("jadense-manager-byok-save").click()
+    await waitFor(() => manager.document.getElementById("jadense-manager-byok-status").dataset.kind === "success", "BYOK edited model save")
     const settingsSections = Array.from(manager.document.querySelectorAll("[data-settings-section]"))
     assert(settingsSections.length === 1 && settingsSections[0].dataset.settingsSection === "byok",
       "Manager BYOK settings lost the provider catalog")
@@ -1871,6 +2036,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await screenshot("native-preferences-byok", preferencesWindow)
     const savedByokBeforeTest = Zotero.Prefs.get("extensions.jadenseInZotero.byokConfig")
     const messagesBeforeByokTest = messages().length
+    preferencesWindow.document.getElementById("jadense-in-zotero-byok-model-new").click()
     preferencesWindow.document.getElementById("jadense-in-zotero-byok-model").value = "synthetic-unsaved-test-model"
     preferencesWindow.document.getElementById("jadense-in-zotero-byok-test").click()
     await waitFor(() => preferencesWindow.document.getElementById("jadense-in-zotero-byok-status").dataset.kind === "success", "native BYOK test request")
@@ -1883,10 +2049,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-migrate").hidden, "Manager connection section")
     const connectionTab = (name) => manager.document.getElementById(`jadense-connection-tab-${name}`)
     const connectionPanel = (name) => manager.document.getElementById(`jadense-connection-panel-${name}`)
-    assert(connectionNav.textContent.includes("连接攻玉")
-      && ["config", "account", "sync"].every((name) => connectionTab(name) && connectionPanel(name))
-      && !connectionPanel("config").hidden
-      && connectionPanel("account").hidden
+    assert(connectionNav.textContent.includes("攻玉学术")
+      && ["account", "sync"].every((name) => connectionTab(name) && connectionPanel(name))
+      && !connectionPanel("account").hidden
       && connectionPanel("sync").hidden
       && !manager.document.getElementById("jadense-manager-migrate-folder-select")
       && !manager.document.getElementById("jadense-manager-migrate-include-pdf"),
@@ -2025,7 +2190,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     Array.from(featureChatSelect.querySelectorAll('[role="option"]')).find(option => option.textContent.includes("Synthetic Model")).click()
     assert(JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).modelId === selectedAnalysisModel.id, "Feature model control did not persist BYOK")
     manager.document.getElementById("jadense-manager-nav-chat").click()
-    manager.document.getElementById("jadense-chat-new-session").click()
+    manager.document.getElementById("jadense-manager-nav-chat").click()
     const byokInput = manager.document.getElementById("jadense-chat-input")
     byokInput.value = config.byokMarker
     byokInput.dispatchEvent(new manager.Event("input", Components.utils.cloneInto({ bubbles: true }, manager)))
@@ -2114,8 +2279,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     }
     const verifyMarkdown = () => {
       for (const role of ["user", "assistant"]) {
-        const body = markdownNode(role)?.querySelector(".jdx-chat-message-body")
-        assert(body, "Missing rendered " + role + " Markdown")
+        const node = markdownNode(role)
+        const body = node?.querySelector(".jdx-chat-message-body")
+        assert(body, `Missing rendered ${role} Markdown: ${JSON.stringify({ saved: messages().filter(message => message.role === role && message.text === config.markdown[role]).map(message => message.id), dom: Array.from(manager.document.querySelectorAll(".jdx-chat-message")).map(item => ({ id: item.dataset.messageId, role: item.dataset.role, text: item.textContent.slice(0, 80) })) })}`)
         for (const selector of ["h2", "strong", "em", "blockquote", "ul > li", "ul > li > p", "ol > li", "pre > code", "table thead", "table tbody", "a[href]"]) {
           assert(body.querySelector(selector), role + " Markdown is missing " + selector)
         }
@@ -2152,8 +2318,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const documentBeforeReload = manager.document
     manager.location.reload()
     await waitFor(() => manager.document !== documentBeforeReload && markdownNode("assistant")?.querySelector("table"), "Markdown history after Manager reload")
-    manager.document.getElementById("jadense-manager-nav-chat").click()
-    await waitFor(() => !manager.document.getElementById("jadense-manager-section-chat").hidden, "Chat after Manager reload")
+    const researchAfterReload = await waitFor(() => manager.document.querySelector(`[data-session-id="${sessionBeforeControls}"]`), "research conversation after Manager reload")
+    researchAfterReload.click()
+    await waitFor(() => !manager.document.getElementById("jadense-manager-section-chat").hidden && currentSession()?.id === sessionBeforeControls, "Chat after Manager reload")
     verifyMarkdown()
     report.checks.push("markdown-history-reload", "independent-analysis-history-preserved-after-chat-reload")
 
@@ -2316,8 +2483,6 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
 
     report.annotationCount = 2
     await stage("chat-image-upload-and-reload")
-    manager.document.getElementById("jadense-manager-nav-chat").click()
-    manager.document.getElementById("jadense-chat-new-session").click()
     const uploadSessionID = currentSession().id
     const uploadBlob = await manager.fetch(fixtureImageDataUrl).then(response => response.blob())
     const uploadFile = new manager.File(manager.Array.of(uploadBlob), "synthetic-upload.png", Components.utils.cloneInto({ type: "image/png" }, manager))
@@ -2345,7 +2510,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     }
     selectImage()
     await waitFor(() => managerIdle() && manager.document.querySelector('#jadense-chat-image-preview img')?.naturalWidth > 0, "upload preview")
-    manager.document.getElementById("jadense-chat-new-session").click()
+    manager.document.querySelector(`[data-session-id="${questionSessionId}"]`).click()
     assert(manager.document.getElementById("jadense-chat-image-preview").hidden, "Image draft leaked into another conversation")
     manager.document.querySelector(`[data-session-id="${uploadSessionID}"]`).click()
     await waitFor(() => manager.document.querySelector('#jadense-chat-image-preview img')?.naturalWidth > 0, "image draft restored after session switch")
@@ -2365,7 +2530,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const oldImageDocument = manager.document
     manager.location.reload()
     await waitFor(() => manager.document !== oldImageDocument && manager.document.querySelector('.jdx-chat-message-image img')?.naturalWidth > 0, "uploaded image after reload")
-    manager.document.getElementById("jadense-manager-nav-chat").click()
+    manager.document.querySelector(`[data-session-id="${uploadSessionID}"]`).click()
     assert(currentSession().id === uploadSessionID && !JSON.stringify(localState()).includes("data:image/"), "Image reload changed history or embedded image bytes")
     const imageButton = manager.document.querySelector('.jdx-chat-message-image button')
     imageButton.click()
@@ -2458,7 +2623,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       referenceTab.click()
       await waitFor(() => manager.document.querySelectorAll(".jdx-reference-row").length === 3, "reference result rows")
       const staticRow = manager.document.querySelector('[data-verification="unverified"]')
-      assert(staticRow && !staticRow.querySelector("button,a,input,select,textarea,[tabindex]"), "Unverified reference exposes an interactive action")
+      assert(staticRow && Array.from(staticRow.querySelectorAll("button")).some(button => /定位原文|Locate original/.test(button.textContent)), "Unverified reference lost source navigation")
+      assert(Array.from(staticRow.querySelectorAll("button")).some(button => /搜索文献|Search publication/.test(button.textContent)), "Unverified reference lost publication search")
+      assert(!Array.from(staticRow.querySelectorAll("input")).some(input => !input.hidden && !input.disabled), "Unmatched reference enabled import selection")
       await screenshot("references-verified-and-static", manager)
       const rawBefore = entries.map(row => row.raw).join("\n")
       const siblingAttachment = await Zotero.Attachments.importFromFile({ file: config.pdfPath, parentItemID: parent.id, contentType: 'application/pdf' })
@@ -2530,7 +2697,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const semanticDoc = semanticReader._iframeWindow.document
     const semanticButton = await waitFor(() => semanticDoc.querySelector('[data-jadense-action="fullTranslate"]'), "semantic full translation entry")
     semanticButton.click()
-    await Zotero.Promise.delay(500)
+    const semanticRoot = await waitFor(() => Zotero.getMainWindow().document.querySelector(`.jdx-reader-workspace[data-reader-item="${semanticAttachment.id}"]`), "semantic translation sidebar")
+    const semanticStart = semanticRoot.querySelector('.jdx-reader-translation-confirmation button')
+    assert(semanticStart, "Semantic full translation confirmation is missing")
+    await waitFor(() => !jobs.list("translation").some(row => row.source.itemID === semanticAttachment.id), "semantic translation confirmation before dispatch")
+    semanticStart.click()
     report.semanticOpen = { itemID: semanticAttachment.id, tab: semanticReader.tabID, window: semanticReader._window.document.URL, text: semanticDoc.body.textContent.slice(-1800), tasks: jobs.list('translation').map(task => ({ itemID: task.source.itemID, status: task.status })), roots: Array.from(Zotero.getMainWindow().document.querySelectorAll('.jdx-reader-workspace')).map(root => ({ item: root.dataset.readerItem, text: root.textContent.slice(0, 700) })) }
     const semanticTask = await waitFor(() => jobs.list("translation").find(row => row.source.itemID === semanticAttachment.id), "semantic task")
     await waitFor(() => semanticTask.status === "complete", "semantic translation completion")
@@ -2539,8 +2710,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     assert(sourcePage.excludedLines.some(line => line.text.includes("Article")), "Native Article header was retained in translation")
     const continued = sourcePage.paragraphs.find(row => row.text.startsWith("A complete scientific"))
     assert(continued?.text.includes("ends with its complete conclusion.") && continued.locations.length === 2, "Native cross-column/page argument was split")
-    const semanticRoot = await waitFor(() => Zotero.getMainWindow().document.querySelector(`.jdx-reader-workspace[data-reader-item="${semanticAttachment.id}"] .jdx-reading-body`), "semantic continuous prose")
-    assert(!semanticRoot.querySelector('button,details'), "Semantic prose contains source controls")
+    const semanticBody = await waitFor(() => semanticRoot.querySelector('.jdx-reading-body'), "semantic continuous prose")
+    assert(!semanticBody.querySelector('button,details'), "Semantic prose contains source controls")
     await screenshot("semantic-full-complete", Zotero.getMainWindow())
     report.checks.push("full-native-header-removal", "full-native-cross-column-page-paragraph", "full-semantic-continuous-layout")
     report.assistantMessages = completed().length
@@ -2590,11 +2761,12 @@ async function writeCompanion(extensionsDir, config) {
   }))
   zip.file("bootstrap.js", [
     `const SMOKE_CONFIG = ${JSON.stringify(config)};`,
+    verifyReaderChat.toString(),
     verifyAnalysisDetails.toString(),
     verifyTranslationSidebar.toString(),
     verifyTranslationPapers.toString(),
     runHarness.toString(),
-    "function startup() { void runHarness(SMOKE_CONFIG, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers).catch(error => Zotero.logError(error)); }",
+    "function startup() { void runHarness(SMOKE_CONFIG, verifyAnalysisDetails, verifyTranslationSidebar, verifyTranslationPapers, verifyReaderChat).catch(error => Zotero.logError(error)); }",
     "function shutdown() {}",
     "function install() {}",
     "function uninstall() {}",
@@ -2683,7 +2855,7 @@ async function main() {
         user: createMarkdownFixture("user", stub.origin),
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
-      screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [
@@ -2691,6 +2863,7 @@ async function main() {
       'user_pref("extensions.enabledScopes", 15);',
       'user_pref("extensions.update.enabled", false);',
       'user_pref("intl.locale.requested", "zh-CN");',
+      ...(argValue(argv, "--display-scale") === "1.5" ? ['user_pref("layout.css.devPixelsPerPx", "1.5");'] : []),
       'user_pref("extensions.jadenseInZotero.displayLanguage", ' + JSON.stringify(appearanceLanguage || "zh-CN") + ');',
       "",
     ].join("\n"))
@@ -2735,11 +2908,11 @@ async function main() {
       report.checks.push(...resumed.checks)
     }
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (!appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -2756,10 +2929,11 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true
+    if (argv.includes("--hold-open")) { console.log(`Isolated Manager held open: ${smokeRoot}`); await delay(900_000) }
     console.log(`Research XPI smoke passed: ${report.checks.join(", ")}.`)
   } finally {
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify({ requests: stub.requests, failures: stub.failures }, null, 2))

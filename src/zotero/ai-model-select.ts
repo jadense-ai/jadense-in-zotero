@@ -5,6 +5,15 @@ import type { ZoteroLike } from "./runtime"
 import type { JdxSelectOption } from "./custom-select"
 import { getUiLocale, uiText } from "./ui-preferences"
 
+import modelLogos from "../../model-logos/catalog.json"
+
+/** 根据实际模型 ID 匹配共享品牌素材；未知品牌保留现有后备图标。 */
+function modelLogo(modelID: string) {
+  const tokens = modelID.toLowerCase().split(/[^a-z0-9]+/)
+  const logo = modelLogos.find(entry => entry.aliases.some(alias => tokens.includes(alias)))
+  return logo ? { iconSrc: `chrome://jadense-in-zotero/content/model-logos/${logo.src.split("/").at(-1)}`, iconThemed: logo.mode === "themed" } : {}
+}
+
 function jadenseModelOptionKey(option: JadenseChatModelOption) {
   return option.kind === "route" ? `route:${option.routeTier}` : `model:${option.modelId}`
 }
@@ -36,6 +45,9 @@ export function buildJadenseChatModelSelectOptions(
     ].filter(Boolean).join(" · ")
     return {
       value: jadenseModelOptionKey(option),
+      ...(option.kind === "model" ? modelLogo(option.modelId) : {}),
+      iconPath: option.kind === "route" ? "M3 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0M7 12h2.5c4 0 5-5 7.5-5M7 12h2.5c4 0 5 5 7.5 5M17 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M17 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0"
+        : "M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4",
       label: `${option.displayName}${option.locked ? (english ? " (upgrade required)" : "（需升级）") : ""}`,
       description: [subscription, option.description, features ? `${english ? "Supports: " : "支持："}${features}` : ""]
         .filter(Boolean)
@@ -77,11 +89,14 @@ export function buildFeatureModelSelectOptions(zotero: ZoteroLike, catalog: Jade
   const settings = readByokSettings(zotero)
   options.push(...settings.models.map(model => ({
     value: `byok:${model.id}`,
+    ...modelLogo(model.model),
+    iconPath: "M5.5 8h3A2.5 2.5 0 0 1 11 10.5v3A2.5 2.5 0 0 1 8.5 16h-3A2.5 2.5 0 0 1 3 13.5v-3A2.5 2.5 0 0 1 5.5 8M6.4 12a.6.6 0 1 0 1.2 0a.6.6 0 1 0-1.2 0M11 12h10M17 12v3.5M20.5 12v2.5",
     label: model.name || model.model || (english ? "Unnamed model" : "未命名模型"),
     description: `${settings.providers.find(provider => provider.id === model.providerId)?.name || (english ? "Provider" : "提供商")} · ${model.model || (english ? "Model ID is missing" : "尚未填写模型 ID")}`,
     group: english ? "BYOK models" : "BYOK 自配置模型",
   })))
   const key = featureModelSelectionKey(selection)
+  if (!key) return options
   if (!options.some(option => option.value === key)) options.push({ value: key, label: english ? "Unavailable BYOK model" : "已失效的 BYOK 模型", group: english ? "Current selection" : "当前选择", disabled: true })
   return options
 }

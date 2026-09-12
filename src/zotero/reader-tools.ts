@@ -1,3 +1,4 @@
+import { openChatSidebar } from "./reader-sidebar"
 // Zotero 阅读器适配层：本地 PDF 字符坐标 -> 可引用原句 -> 原生批注；AI 只返回原句 ID。
 // 私有读取接口核对自 Zotero 9.0.5 的 reader 子模块 9643fac7a4e86c8d7ff9548af0191e9df63aa998。
 import {
@@ -1313,6 +1314,11 @@ export function registerReaderTools(
             return
           }
           feedback.hide()
+          if (selection.kind === 'attach') {
+            void openChatSidebar(zotero as unknown as ZoteroLike, event.doc, selection.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource)
+              .catch(error => feedback.show(anchor, error instanceof Error ? error.message : String(error)))
+            return
+          }
           if (selection.kind === "fullTranslate") {
             void showFullTranslation(zotero as unknown as ZoteroLike, event.doc, selection.itemID, taskID => { void onAction({ ...selection, taskID }) }, event.reader as unknown as import("./reader-sidebar").ReaderSidebarSource)
               .catch(error => feedback.show(anchor, `${uiText("无法打开全文阅读侧栏。", "Could not open the reading sidebar.")} ${error instanceof Error ? error.message : String(error)}`))
