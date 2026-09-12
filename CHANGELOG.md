@@ -1,5 +1,35 @@
 # 更新说明 / Changelog
 
+## 0.4.6 — 2026-09-13
+
+### 简体中文
+
+- 新增逐条编辑和删除参考文献。编辑后可重新核验；删除仅移除解析结果中的引用记录。
+- 去掉引用正文开头的文献序号，序号仍在列表侧边显示；原 PDF 定位保持可用。
+- 已有参考文献记录在打开时清理版式换行和开头序号，改善显示与检索。
+
+安装 0.4.6 后重启 Zotero，可保留已有设置与历史。参考文献匹配结果仍需结合原文核对。
+
+### English
+
+- Edit or delete individual references, then verify edited citations again. Deleting a reference removes only its analysis record.
+- Remove leading citation numbers from reference text while retaining the list numbering and PDF source navigation.
+- Normalize layout line breaks and leading numbers when opening saved reference records.
+
+Install 0.4.6 and restart Zotero. Existing settings and history are retained.
+
+## 0.4.5 — 2026-09-13
+
+### 简体中文
+
+- 新增独立 OCR 配置入口，改善首次安装、模型准备及启动提示。
+- 清理新提取参考文献的版式换行，恢复底部全选框，并优化工作台与阅读布局。
+
+### English
+
+- Add dedicated OCR settings and improve first-time installation and startup feedback.
+- Normalize layout line breaks in newly extracted references, restore the bottom select-all checkbox, and refine reading layouts.
+
 
 ## 0.4.4 — 2026-09-13
 
