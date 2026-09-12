@@ -1939,7 +1939,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-settings").hidden, "Manager settings section")
     manager.document.getElementById("jadense-settings-tab-ai").click()
     const featureTab = manager.document.getElementById("jadense-settings-tab-features")
-    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "常规 / 功能配置 / 快捷键设置 / 连接攻玉 / BYOK", "Feature settings tab labels/order changed")
+    assert(Array.from(manager.document.querySelectorAll('#jadense-settings-tabs [role="tab"]')).map(tab => tab.textContent.trim()).join(" / ") === "常规 / 功能配置 / OCR配置 / 快捷键设置 / 连接攻玉 / BYOK", "Feature settings tab labels/order changed")
     assert(!manager.document.getElementById("jadense-manager-route-byok"), "Obsolete global channel is still visible")
     featureTab.click()
     const autoFollowChatModel = manager.document.getElementById("jadense-auto-follow-chat-model")
