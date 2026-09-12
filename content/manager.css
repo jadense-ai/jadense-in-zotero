@@ -271,7 +271,8 @@ textarea {
 }
 
 .jdx-manager-section[hidden] {
-  display: none;
+  /* 页面切换优先于后加载的详情 flex 布局，保留详情状态也不能让隐藏页占位。 */
+  display: none !important;
 }
 
 .jdx-manager-section-header {

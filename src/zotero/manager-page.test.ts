@@ -52,6 +52,11 @@ describe("built-in getting started guide", () => {
 })
 
 describe("manager chat session navigation", () => {
+  it("keeps hidden manager pages above later detail layout rules in the cascade", () => {
+    const css = readFileSync(new URL("../../content/manager.css", import.meta.url), "utf8")
+    expect(css).toMatch(/\.jdx-manager-section\[hidden\]\s*\{[^}]*display:\s*none\s*!important/)
+  })
+
   it("does not mark a conversation active while another manager section is visible", () => {
     expect(isChatSessionActive(true, "chat-1", "chat-1")).toBe(true)
     expect(isChatSessionActive(false, "chat-1", "chat-1")).toBe(false)

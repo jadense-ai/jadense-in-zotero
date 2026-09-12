@@ -1,5 +1,17 @@
 # 更新说明 / Changelog
 
+## 0.4.7 — 2026-09-13
+
+### 简体中文
+
+- 修复解析历史详情与设置页面混杂的问题；切换到对话、攻玉学术和指南时也会正确隐藏旧页面。
+- 返回解析历史时保留原有详情，已有设置和历史无需迁移。安装 0.4.7 后重启 Zotero。
+
+### English
+
+- Fix analysis details remaining visible behind Settings, Chat, Jadense academic, or the guide.
+- Preserve the selected details when returning to analysis history. Existing settings and history require no migration. Install 0.4.7 and restart Zotero.
+
 ## 0.4.6 — 2026-09-13
 
 ### 简体中文

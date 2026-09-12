@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 <!-- release-summary:start -->
-> **[v0.4.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6)**：支持编辑、删除参考文献，清理引用正文中的文献序号，改善已有解析结果的显示与检索。[Release 详情与制品](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6) · [历史更新说明](CHANGELOG.md)
+> **[v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7)**: 修复从解析历史详情切换到设置或其他页面时，旧内容仍然显示、界面混杂的问题。 [Changelog](CHANGELOG.md)
 <!-- release-summary:end -->
 
 <a id="requirements"></a>

@@ -121,6 +121,16 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     await screenshot(`literature-workbench-${tab}`, manager)
   }
   report.checks.push('panel-gutters', 'transparent-source-toolbar', 'empty-toolbar-hidden', 'flat-analysis-tabs', 'no-saved-completion-banner')
+  // 详情状态会保留；切换主页面后同时核对 hidden 与实际布局，防止 CSS 将旧页重新显示。
+  for (const name of ['settings', 'chat', 'migrate']) {
+    md.getElementById(`jadense-manager-nav-${name}`).click()
+    const analysis = md.getElementById('jadense-manager-section-analysis')
+    assert(analysis.hidden && manager.getComputedStyle(analysis).display === 'none' && analysis.getBoundingClientRect().height === 0, `Analysis detail leaks into ${name}`)
+    assert([...md.querySelectorAll('.jdx-manager-section')].filter(section => manager.getComputedStyle(section).display !== 'none').length === 1, `Multiple manager pages visible in ${name}`)
+  }
+  md.getElementById('jadense-manager-nav-analysis').click()
+  assert(!md.getElementById('jadense-manager-section-analysis').hidden, 'Analysis detail cannot reopen')
+  report.checks.push('manager-detail-navigation-isolation')
   const historyTab = md.getElementById('jdx-literature-tab-history'); historyTab.click()
   await waitFor(() => md.querySelector('.jdx-literature-panel:not([hidden])')?.textContent.includes('SIBLING_PDF_ONLY'), 'all attachments in paper history')
   for (const width of [1360, 760]) {

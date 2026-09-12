@@ -25,7 +25,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
 <!-- release-summary:start -->
-> **[v0.4.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6)**: Edit and delete references, remove citation numbers from reference text, and improve display and search for saved results. [Release details and artifacts](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6) · [Changelog](CHANGELOG.md)
+> **[v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7)**: Fix overlapping pages when switching from analysis history details to Settings or another workspace page. [Changelog](CHANGELOG.md)
 <!-- release-summary:end -->
 
 <a id="requirements"></a>
