@@ -233,7 +233,28 @@ function installPreviewHost() {
     Zotero.Item = class { constructor() { this.fields = {}; this.id = 600 + items.size; this.key = `IM${this.id}` } setField(key, value) { this.fields[key] = value } getField(key) { return this.fields[key] || "" } setCreators() {} setCollections() {} async saveTx() { items.set(this.id, this) } }
   }
   const nativeFetch = window.fetch.bind(window)
+  // OCR 设置验收只模拟进程和内存文件，不安装用户依赖或访问模型服务。
+  const ocrFixture = new URLSearchParams(location.search).get('ocr-fixture')
+  if (ocrFixture) {
+    window.IOUtils.exists = async path => files.has(path)
+    let installed = false
+    window.ChromeUtils = { importESModule: () => ({ Subprocess: {
+      getEnvironment: () => ({}),
+      call: async options => {
+        const checking = options.arguments.includes('-CheckOnly') || options.arguments.includes('--check')
+        const missing = ocrFixture === 'missing' && !installed
+        let output = checking
+          ? `uvPath=${missing ? '' : 'C:/Users/Example/.local/bin/uv.exe'}\nuvVersion=${missing ? '' : 'uv 0.9.3'}\nuvSource=${missing ? '' : installed ? 'plugin' : 'user'}\nready=${installed}\n`
+          : 'Synthetic OCR installation log\n'
+        return { stdout: { readString: async () => { const value = output; output = null; return value } }, wait: async () => {
+          if (!checking) { await new Promise(resolve => setTimeout(resolve, 1500)); installed = ocrFixture !== 'failure' }
+          return { exitCode: !checking && ocrFixture === 'failure' ? 1 : 0 }
+        } }
+      },
+    } }) }
+  }
   window.fetch = async (input, options = {}) => {
+    if (ocrFixture && String(input).startsWith('chrome://jadense-in-zotero/content/ocr/')) return new Response('Synthetic bundled OCR resource')
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href)
     if (url.origin !== location.origin) throw new Error("浏览器验收 fixture 禁止外网请求")
     if (url.pathname === "/api/chat") {

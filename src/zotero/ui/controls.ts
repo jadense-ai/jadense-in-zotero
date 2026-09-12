@@ -52,7 +52,7 @@ const actionPaths = {
   stop: 'M6 6h12v12H6z', pause: 'M8 5v14M16 5v14', play: 'm8 5 11 7-11 7z',
   read: 'M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15', locate: 'M12 3v4m0 10v4M3 12h4m10 0h4M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1', type: 'M4 5h16M12 5v15M8 20h8', more: 'M4 12h2m5 0h2m5 0h2',
-  search: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 6 6', import: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
+  search: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 6 6', import: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5', edit: 'm4 16-1 5 5-1L20 8l-4-4L4 16m9-9 4 4', delete: 'M5 7h14m-9 4v6m4-6v6M9 7V4h6v3m-9 0 1 13h10l1-13',
   verify: 'm4 12 5 5L20 6', skip: 'm5 5 9 7-9 7zM19 5v14',
 } as const
 export function actionIcon(button: HTMLButtonElement, icon: keyof typeof actionPaths, label = button.textContent || '') {

@@ -1,4 +1,9 @@
 @import url("translation-interface.css");
+/* 原生偏好复用同一 OCR 内容，沿用本 pane 的按钮与主题变量。 */
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings .jdx-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-path { color: var(--jdx-pref-muted); font-size: 12px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings [data-tone="error"] { color: var(--jdx-pref-error); }
 /* 仅插件 vbox 覆盖主题；Zotero 设置窗口外框继续使用宿主主题。 */
 #jadense-in-zotero-preferences-pane {
   --jdx-pref-line: #d9e2dd;

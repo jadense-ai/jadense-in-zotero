@@ -78,10 +78,10 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   library.setOptions(libraryOptions, String(libraries.find(item => item.libraryID === source.libraryID)?.libraryID ?? libraries[0]?.libraryID ?? ""))
   const collections = () => collection.setOptions([{ value: "", label: uiText("不指定分类", "No collection") }, ...(native.Collections?.getByLibrary?.(Number(library.getValue()), true) || []).map(item => ({ value: String(item.id), label: item.name }))], "")
   library.onChange(collections); collections()
-  let task: DocumentTask | undefined, preparation: ReferencePreparation | undefined, entries: ReferenceEntry[] = [], importing = false, disposed = false, generation = 0
+  let task: DocumentTask | undefined, preparation: ReferencePreparation | undefined, entries: ReferenceEntry[] = [], importing = false, mutating = false, disposed = false, generation = 0
   let extracting: AbortController | undefined
   const selected = new Set<string>()
-  type Row = { root: HTMLElement; raw: HTMLElement; metadata: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; publication?: HTMLButtonElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; entry: ReferenceEntry }
+  type Row = { root: HTMLElement; raw: HTMLElement; metadata: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; publication?: HTMLButtonElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; edit?: HTMLButtonElement; remove?: HTMLButtonElement; entry: ReferenceEntry }
   const rows = new Map<string, Row>()
   const operate = (callback: (id: string) => void) => { if (task && !importing) { feedback.textContent = ""; callback(task.id) } }
   const extract = action(doc, uiText("提取参考文献", "Extract references"), () => {
@@ -119,10 +119,37 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     try { await navigateDocument(host as unknown as DocumentHost, task.source, { pageIndex: entry.lines[0].pageIndex, rects: entry.lines[0].rects }) }
     catch (error) { feedback.textContent = errorText(error); feedback.dataset.kind = "error" }
   }
+  const editReference = async (view: Row) => {
+    if (!task || task.status === "running" || importing || mutating || jobs.referencePhase(task.id)) return
+    const value = doc.defaultView?.prompt(uiText("编辑参考文献内容", "Edit reference content"), view.entry.raw)
+    if (value === null || value === undefined || value === view.entry.raw) return
+    if (!value.trim()) { feedback.textContent = uiText("参考文献内容不能为空。", "Reference content cannot be empty."); feedback.dataset.kind = "error"; return }
+    const taskID = task.id; mutating = true; feedback.textContent = uiText("正在保存参考文献…", "Saving reference…"); feedback.dataset.kind = "neutral"; render()
+    try {
+      const saved = await jobs.updateReference(taskID, view.entry.id, value)
+      if (!saved) { feedback.textContent = uiText("参考文献保存失败。", "Could not save the reference."); feedback.dataset.kind = "error"; return }
+      selected.delete(view.entry.id); feedback.textContent = uiText("参考文献已更新，请重新核验。", "Reference updated. Verify it again."); feedback.dataset.kind = "success"
+      await refresh()
+    } catch (error) { feedback.textContent = errorText(error); feedback.dataset.kind = "error" }
+    finally { mutating = false; if (!disposed) render() }
+  }
+  const deleteReference = async (view: Row) => {
+    if (!task || task.status === "running" || importing || mutating || jobs.referencePhase(task.id)) return
+    if (!doc.defaultView?.confirm(uiText("删除这条参考文献记录？只会删除解析结果，不会删除 Zotero 条目或 PDF。", "Delete this reference record? Only the analysis result will be removed; the Zotero item and PDF will stay."))) return
+    const taskID = task.id, referenceID = view.entry.id, restoreFocus = doc.activeElement === view.remove; mutating = true; feedback.textContent = uiText("正在删除参考文献…", "Deleting reference…"); feedback.dataset.kind = "neutral"; render()
+    try {
+      const deleted = await jobs.deleteReference(taskID, referenceID)
+      if (!deleted) { feedback.textContent = uiText("参考文献删除失败。", "Could not delete the reference."); feedback.dataset.kind = "error"; return }
+      selected.delete(referenceID); feedback.textContent = uiText("参考文献已删除。", "Reference deleted."); feedback.dataset.kind = "success"
+      await refresh()
+      if (restoreFocus && !disposed) [...rows.values()].find(row => !row.root.hidden)?.edit?.focus()
+    } catch (error) { feedback.textContent = errorText(error); feedback.dataset.kind = "error" }
+    finally { mutating = false; if (!disposed) render() }
+  }
   function render() {
     if (disposed) return
     const phase = task ? jobs.referencePhase(task.id) : undefined, running = task?.status === "running", preparing = Boolean(preparation?.running || extracting)
-    const busy = importing || phase === "importing"
+    const busy = importing || mutating || phase === "importing"
     const blocksImport = running && phase !== "identifying"
     const label = phase === "stopping" ? uiText("正在停止…", "Stopping…") : phase === "queued" ? uiText("等待处理", "Queued") : phase === "identifying" ? uiText("识别待定片段", "Identifying fragments") : phase === "verifying" ? uiText("正在核验", "Verifying") : phase === "importing" ? uiText("正在导入", "Importing")
       : task?.status === "paused" ? uiText("已暂停", "Paused") : task?.status === "error" ? uiText("核验失败", "Verification failed") : task ? uiText("提取完成", "Extraction finished") : ""
@@ -157,14 +184,18 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
         const metadata = element(doc, "p", "jdx-reference-raw")
         const state = badge(doc, ""), reason = element(doc, "span", "jdx-reference-reason"), controls = element(doc, "div", "jdx-reference-actions")
         meta.append(state, reason); body.append(raw, metadata, meta, controls); container.append(number, body); container.dataset.referenceId = entry.id
-        row = { root: container, raw, metadata, state, reason, number, controls, entry }; rows.set(entry.id, row)
+        const view = { root: container, raw, metadata, state, reason, number, controls, entry } as Row
+        const edit = action(doc, uiText("编辑参考文献", "Edit reference"), () => { void editReference(view) })
+        const remove = action(doc, uiText("删除参考文献", "Delete reference"), () => { void deleteReference(view) })
+        actionIcon(edit, "edit"); actionIcon(remove, "delete")
+        controls.append(edit, remove); view.edit = edit; view.remove = remove; row = view; rows.set(entry.id, row)
       }
       row.entry = entry; row.root.hidden = !visibleIDs.has(entry.id); row.root.dataset.verification = entry.verification
       if (row.raw.textContent !== entry.raw) row.raw.textContent = entry.raw
       row.metadata.textContent = entry.verified ? [entry.verified.title, entry.verified.authors.join("; "), entry.verified.year, entry.verified.publicationTitle, entry.verified.doi].filter(Boolean).join(" · ") : ""
       row.metadata.hidden = !entry.verified
       row.number.textContent = entry.label || String(entry.order + 1); row.state.textContent = entryState(entry); row.state.dataset.state = entry.verification === "verified" ? "success" : "neutral"
-      row.reason.textContent = [entry.uncertain ? uiText("识别待定，原文保留", "Uncertain extraction; original retained") : "", entry.reason].filter(Boolean).join(" · ")
+      row.reason.textContent = [entry.edited ? uiText("已手动编辑，请重新核验", "Manually edited; verify again") : "", entry.uncertain ? uiText("识别待定，原文保留", "Uncertain extraction; original retained") : "", entry.reason].filter(Boolean).join(" · ")
       if (!row.checkbox) {
         const view = row, checkbox = element(doc, "input"); checkbox.type = "checkbox"
         checkbox.setAttribute("aria-label", uiText(`选择引用 ${entry.label || entry.order + 1}`, `Select reference ${entry.label || entry.order + 1}`))
@@ -190,6 +221,8 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
         actionIcon(row.save!, entry.importUncertain ? "search" : "import")
         row.save!.disabled = busy || blocksImport || Boolean(entry.imported) || entry.verification !== "verified"
       }
+      row.edit!.disabled = busy || preparing || running || Boolean(phase)
+      row.remove!.disabled = busy || preparing || running || Boolean(phase)
     }
     // 只插入新增/位置变化的节点；普通核验进度不移动已有节点、选择或焦点。
     let cursor = list.firstElementChild
@@ -206,11 +239,11 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   }
   all.addEventListener("change", () => { for (const entry of filterReferences(entries, search.value, filter.getValue()).filter(canImportReference)) { if (all.checked) selected.add(entry.id); else selected.delete(entry.id) } render() })
   search.addEventListener("input", render); filter.onChange(render)
-  head.append(title, count); tools.append(extract, pause, resume, verify, identify, skip)
+  head.append(title, count, tools); tools.append(extract, pause, resume, verify, identify, skip)
   const searchBar = element(doc, "div", "jdx-reference-search"); searchBar.append(search, filters)
   const destination = element(doc, "div", "jdx-reference-destination"); destination.append(libraryRoot, collectionRoot)
   importBar.append(allLabel, destination, importButton)
-  root.append(head, tools, status, searchBar, feedback, list, empty, importBar)
+  root.append(head, status, searchBar, feedback, list, empty, importBar)
   const stop = jobs.subscribe(() => { void refresh() }); render()
   return {
     update(value?: DocumentTask, preparing?: ReferencePreparation) { const changed = value?.id !== task?.id; task = value; preparation = preparing; if (changed) { selected.clear(); entries = [] } void refresh() },

@@ -4,7 +4,7 @@ import { ByokChatClient as DirectByokChatClient, ByokResponseError } from '@/cha
 import { recordStarInvitationUse } from './star-invitation'
 import { TemporaryChatClient } from "@/chat/temporary-chat"
 import { ReliableTemporaryChatClient } from "@/chat/reliable-temporary-chat"
-import { extractReferences } from "@/chat/reference-list"
+import { extractReferences, parseReferenceFields, stripReferenceLabel } from "@/chat/reference-list"
 import { applyReferenceBatch, referenceBatches, referencePrompt } from "@/chat/reference-batches"
 import { JadenseApiError } from '@/jadense/api'
 import { requestHash } from '@/chat/temporary-request-store'
@@ -539,6 +539,26 @@ export class DocumentJobs {
     task.storageWarning = !(await this.store.saveReferences(task.id, entries)) || task.storageWarning
     if (entries.some(entry => !checked.has(entry))) await verify()
     task.status = task.total > 0 && !task.warnings.length ? "complete" : "partial"
+  }
+  async updateReference(id: string, referenceID: string, raw: string) {
+    const task = this.tasks.get(id)
+    if (!task || task.kind !== "references" || this.controllers.has(id) || this.referencePhases.has(id)) return false
+    const value = stripReferenceLabel(raw)
+    if (!value) return false
+    const entries = await this.store.references(id), entry = entries.find(row => row.id === referenceID)
+    if (!entry) return false
+    entry.raw = value; entry.fields = parseReferenceFields(value); entry.edited = true
+    entry.uncertain = !entry.fields.title || !entry.fields.authors.length || !entry.fields.year; entry.verification = "unverified"
+    delete entry.reason; delete entry.verified; delete entry.imported; delete entry.importUncertain
+    const saved = await this.store.saveReferences(id, entries); task.storageWarning ||= !saved; await this.save(task); return saved
+  }
+  async deleteReference(id: string, referenceID: string) {
+    const task = this.tasks.get(id)
+    if (!task || task.kind !== "references" || this.controllers.has(id) || this.referencePhases.has(id)) return false
+    const entries = await this.store.references(id), next = entries.filter(row => row.id !== referenceID)
+    if (next.length === entries.length) return false
+    task.total = next.length; task.completed = Math.min(task.completed, task.total); if (!next.length) task.status = "partial"
+    const saved = await this.store.saveReferences(id, next); task.storageWarning ||= !saved; await this.save(task); return saved
   }
   async import(id: string, selected: string[], libraryID: number, collectionID?: number) {
     // 已核验项可立即进入导入流程；取消可选 AI，再沿用串行写入保护。

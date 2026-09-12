@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it, vi } from "vitest"
 
-import { accountErrorMessage, accountRefreshIsDisabled, activeAiState, appendReaderFigureToCurrentChatSession, buildFigureInterpretationRequest, buildJadenseChatModelSelectOptions, buildJadensePointsView, buildManagerState, canAccountRefreshRestoreConnection, classifyJadenseAccountError, createReaderChatSession, createReaderFigureChatSession, friendlyChatError, jadenseAppUrl, jadenseChatModelSelectionIssue, MANAGER_BOOT_MESSAGE, MANAGER_OPERATION_PREF_KEYS, observeManagerOperationPreferences, openPaperAnalysisHistoryRecord, openTranslationHistoryRecord, pointsRefreshErrorMessage, readChatPanelCollapsed, readSidebarCollapsed, readThemeDark, renderManagerConnectionStatus, runJadenseAccountRequest, waitForSourceRead, zoteroDraggedItemIDs } from "./manager-page"
+import { accountErrorMessage, accountRefreshIsDisabled, activeAiState, appendReaderFigureToCurrentChatSession, buildFigureInterpretationRequest, buildJadenseChatModelSelectOptions, buildJadensePointsView, buildManagerState, canAccountRefreshRestoreConnection, classifyJadenseAccountError, createReaderChatSession, createReaderFigureChatSession, friendlyChatError, isChatSessionActive, jadenseAppUrl, jadenseChatModelSelectionIssue, MANAGER_BOOT_MESSAGE, MANAGER_OPERATION_PREF_KEYS, observeManagerOperationPreferences, openPaperAnalysisHistoryRecord, openTranslationHistoryRecord, pointsRefreshErrorMessage, readChatPanelCollapsed, readSidebarCollapsed, readThemeDark, renderManagerConnectionStatus, runJadenseAccountRequest, waitForSourceRead, zoteroDraggedItemIDs } from "./manager-page"
 import { addLocalChatSources, appendLocalChatMessage, createLocalChatSession, readLocalChatState } from "@/chat/local-chat-store"
 import type { PaperAnalysisRecord } from "@/chat/paper-analysis-history"
 import { normalizeChatSources } from "@/chat/research-context"
@@ -48,6 +48,19 @@ describe("built-in getting started guide", () => {
     tabs[0]!.listeners.keydown!({ key: "Tab", preventDefault })
     expect(preventDefault).not.toHaveBeenCalled()
     expectSelected(0)
+  })
+})
+
+describe("manager chat session navigation", () => {
+  it("keeps hidden manager pages above later detail layout rules in the cascade", () => {
+    const css = readFileSync(new URL("../../content/manager.css", import.meta.url), "utf8")
+    expect(css).toMatch(/\.jdx-manager-section\[hidden\]\s*\{[^}]*display:\s*none\s*!important/)
+  })
+
+  it("does not mark a conversation active while another manager section is visible", () => {
+    expect(isChatSessionActive(true, "chat-1", "chat-1")).toBe(true)
+    expect(isChatSessionActive(false, "chat-1", "chat-1")).toBe(false)
+    expect(isChatSessionActive(false, "chat-2", "chat-1")).toBe(false)
   })
 })
 
@@ -705,20 +718,22 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain("对话记录仅保存在本机")
   })
 
-  it("provides accessible history/config tabs and compact states for independent paper analysis", () => {
+  it("shows analysis history directly without configuration tabs", () => {
     const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
     const css = readFileSync(new URL("../../content/manager.css", import.meta.url), "utf8")
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
     const analysis = xhtml.match(/<section id="jadense-manager-section-analysis"[\s\S]*?<section id="jadense-manager-section-migrate"/)?.[0] ?? ""
 
-    expect(analysis).toContain('role="tablist"')
-    expect(analysis).toContain('id="jadense-analysis-tab-history"')
-    expect(analysis).toContain('id="jadense-analysis-tab-config"')
-    expect(analysis).toContain('aria-selected="true"')
+    expect(analysis).not.toContain('role="tablist"')
+    expect(analysis).not.toContain('id="jadense-analysis-tabs"')
+    expect(analysis).toContain('<h2 data-ui-en="Analysis history">解析历史</h2>')
+    expect(xhtml).toContain('<span class="jdx-manager-nav-label" data-ui-en="Analysis history">解析历史</span>')
+    expect(analysis).not.toContain('id="jadense-analysis-tab-history"')
+    expect(analysis).not.toContain('id="jadense-analysis-tab-config"')
     expect(analysis).toContain('role="status"')
     expect(analysis).toContain('id="jadense-analysis-stop"')
-    expect(analysis).toContain('id="jadense-analysis-model-select"')
-    expect(analysis).toContain('id="jadense-analysis-open-settings"')
+    expect(analysis).not.toContain('id="jadense-analysis-model-select"')
+    expect(analysis).not.toContain('id="jadense-analysis-open-settings"')
     expect(manager).toContain('["ArrowLeft", "ArrowRight", "Home", "End"]')
     expect(manager).toMatch(/elements\.analysisStop\.addEventListener\("click"[\s\S]*?readerActionQueue\.length = 0[\s\S]*?activeChatAbort\?\.abort\(\)/)
     expect(css).toContain(".jdx-tabs")
@@ -856,11 +871,11 @@ describe("manager page state", () => {
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(1)
     expect(xhtml).not.toContain('data-settings-section="jadense"')
     expect(xhtml).toContain('data-settings-section="byok"')
-    for (const name of ["general", "features", "shortcuts", "connection", "ai"]) {
+    for (const name of ["general", "features", "ocr", "shortcuts", "connection", "ai"]) {
       expect(xhtml).toContain(`id="jadense-settings-tab-${name}"`)
       expect(xhtml).toContain(`id="jadense-settings-panel-${name}"`)
     }
-    const settingsTabOrder = ["general", "features", "shortcuts", "connection", "ai"].map((name) => xhtml.indexOf(`id="jadense-settings-tab-${name}"`))
+    const settingsTabOrder = ["general", "features", "ocr", "shortcuts", "connection", "ai"].map((name) => xhtml.indexOf(`id="jadense-settings-tab-${name}"`))
     expect(settingsTabOrder).toEqual([...settingsTabOrder].sort((a, b) => a - b))
     expect(xhtml).toContain('>连接攻玉</button>')
     expect(xhtml).toContain('role="tablist" aria-label="设置分区"')

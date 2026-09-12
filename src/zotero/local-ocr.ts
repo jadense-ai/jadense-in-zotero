@@ -15,31 +15,67 @@ const platform = () => globalThis as unknown as Platform
 const windows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platform ?? globalThis.navigator?.platform ?? '').toLowerCase().startsWith('win')
 const network = (host: ZoteroLike) => { const win = host.getMainWindow?.(); return win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis) }
 
-/** 无 shell 拼接，所有路径作为独立参数；仅复制随 XPI 发布的固定文件。 */
+/** 设置与首次全文任务共用固定安装资源。 */
+async function prepareOCR(host: ZoteroLike) {
+  const { IOUtils: io, PathUtils: paths } = platform()
+  const root = paths.join(paths.profileDir, 'jadense-ocr', 'v1')
+  await io.makeDirectory(root, { ignoreExisting: true })
+  for (const name of ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh']) {
+    const response = await network(host)(resource + name)
+    if (!response.ok) throw new Error(`OCR resource unavailable: ${name}`)
+    const text = await response.text()
+    // Windows PowerShell 5.1 无 BOM 时按系统代码页读取，中文注释可能吞掉下一行。
+    await io.writeUTF8(paths.join(root, name), name === 'install.ps1' ? '\uFEFF' + text.replace(/^\uFEFF/u, '') : text)
+  }
+  return root
+}
+
+/** 参数单独传递，用户目录不会成为 shell 代码；检查模式不下载依赖。 */
+async function runInstaller(host: ZoteroLike, root: string, checkOnly = false) {
+  const { PathUtils: paths, ChromeUtils } = platform()
+  const { Subprocess } = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
+  const environment = Subprocess.getEnvironment()
+  const systemRoot = environment.SystemRoot ?? environment.SYSTEMROOT ?? 'C:\\Windows'
+  return Subprocess.call({
+    command: windows(host) ? paths.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : '/bin/sh',
+    arguments: windows(host)
+      ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, 'install.ps1'), '-RuntimeDirectory', root, ...(checkOnly ? ['-CheckOnly'] : [])]
+      : [paths.join(root, 'install.sh'), root, ...(checkOnly ? ['--check'] : [])], stderr: 'stdout',
+  })
+}
+
+export type OCREnvironment = { uvPath: string; uvVersion: string; uvSource: string; ready: boolean; logPath: string }
+
+/** 仅返回 OCR 相关环境状态，不读取其他 Python 项目。 */
+export async function checkLocalOCR(host: ZoteroLike): Promise<OCREnvironment> {
+  const active = (host as SharedHost).__jadenseOCRInstall
+  if (active) await active.catch(() => {})
+  const root = await prepareOCR(host)
+  const process = await runInstaller(host, root, true)
+  let output = '', chunk: string | null
+  while ((chunk = await process.stdout.readString())) output += chunk
+  if ((await process.wait()).exitCode !== 0) throw new Error(uiText('OCR 环境检查失败。', 'OCR environment check failed.') + '\n' + output.slice(-2000))
+  const fields = Object.fromEntries(output.split(/\r?\n/u).filter(line => line.includes('=')).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+  return { uvPath: fields.uvPath ?? '', uvVersion: fields.uvVersion ?? '', uvSource: fields.uvSource ?? '', ready: fields.ready === 'true', logPath: platform().PathUtils.join(root, 'install.log') }
+}
+
+/** 失败不留 ready 标记，下次仍可重试；手动配置与全文任务共享并发安装。 */
 export async function installLocalOCR(host: ZoteroLike, progress: (text: string) => void = () => {}) {
   const shared = host as SharedHost
   if (shared.__jadenseOCRInstall) return shared.__jadenseOCRInstall
   shared.__jadenseOCRInstall = (async () => {
-    const { IOUtils: io, PathUtils: paths, ChromeUtils } = platform()
-    const root = paths.join(paths.profileDir, 'jadense-ocr', 'v1')
-    await io.makeDirectory(root, { ignoreExisting: true })
-    for (const name of ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh']) {
-      const response = await network(host)(resource + name)
-      if (!response.ok) throw new Error(`OCR resource unavailable: ${name}`)
-      await io.writeUTF8(paths.join(root, name), await response.text())
-    }
+    const { IOUtils: io, PathUtils: paths } = platform()
+    const root = await prepareOCR(host)
     const python = paths.join(root, '.venv', windows(host) ? 'Scripts' : 'bin', windows(host) ? 'python.exe' : 'python')
     if (!await io.exists(python) || !await io.exists(paths.join(root, 'ready-2.126.0-3.9.2'))) {
-      const { Subprocess } = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
-      const environment = Subprocess.getEnvironment()
-      const systemRoot = environment.SystemRoot ?? environment.SYSTEMROOT ?? 'C:\\Windows'
-      const command = windows(host) ? paths.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : '/bin/sh'
-      const process = await Subprocess.call({ command,
-        arguments: windows(host) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, 'install.ps1'), '-RuntimeDirectory', root] : [paths.join(root, 'install.sh'), root], stderr: 'stdout' })
+      const process = await runInstaller(host, root)
       progress(uiText('正在安装本机 OCR，首次安装需要下载 Python 和模型依赖…', 'Installing local OCR; the first installation downloads Python and model dependencies…'))
       let log = '', chunk: string | null
-      while ((chunk = await process.stdout.readString())) { log = (log + chunk).slice(-2000) }
-      if ((await process.wait()).exitCode !== 0) throw new Error(uiText('OCR 安装失败。请重试，或按插件 README 的本机 OCR 手动安装步骤操作。', 'OCR installation failed. Retry or follow the local OCR manual installation in the plugin README.') + '\n' + log)
+      while ((chunk = await process.stdout.readString())) { log += chunk }
+      const exitCode = (await process.wait()).exitCode
+      const logPath = paths.join(root, 'install.log')
+      try { await io.writeUTF8(logPath, log) } catch { /* 可选诊断日志不能阻止安装成功或掩盖原始错误。 */ }
+      if (exitCode !== 0) throw new Error(uiText('OCR 安装失败。请在设置 → OCR配置中重试。安装日志：', 'OCR installation failed. Retry in Settings → OCR configuration. Installation log: ') + logPath + '\n' + log.slice(-2000))
       await io.writeUTF8(paths.join(root, 'ready-2.126.0-3.9.2'), 'ready')
     }
     return root

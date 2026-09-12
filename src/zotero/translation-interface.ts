@@ -3,7 +3,6 @@ import type { TranslationService } from '@/chat/machine-translation'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { createJdxSelect } from './custom-select'
-import { startLocalOCR } from './local-ocr'
 import { TRANSLATION_CAPACITY_PREF } from './translation-chunks'
 
 export const TRANSLATION_INTERFACE_PREF = 'extensions.jadenseInZotero.translationInterface'
@@ -56,12 +55,6 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
   const service = makeField(uiText('翻译服务', 'Translation service'), 'service')
   service.help.textContent = uiText('原文将直接发送至所选翻译服务，无需攻玉令牌或 API Key；可用性受网络与服务限流影响。', 'Source text is sent directly to the selected service. No Jadense token or API key is required; availability depends on network access and service rate limits.')
   const status = element('p'); status.setAttribute('role', 'status'); container.append(status)
-  const ocr = element('button'); ocr.type = 'button'; ocr.textContent = uiText('安装并启动本机 OCR', 'Install and start local OCR')
-  ocr.addEventListener('click', () => {
-    ocr.disabled = true
-    status.textContent = uiText('正在准备本机 OCR…', 'Preparing local OCR…')
-    void startLocalOCR(host, text => { status.textContent = text }).then(() => { status.textContent = uiText('本机 OCR 已就绪，模型将在首次识别时加载。', 'Local OCR is ready. Models load on first recognition.') }).catch(error => { status.textContent = String(error) }).finally(() => { ocr.disabled = false })
-  })
   const capacity = element('details'), capacityTitle = element('summary')
   capacityTitle.textContent = uiText('全文翻译容量（缺少模型元数据时使用）', 'Full translation capacity (when model metadata is unavailable)'); capacity.append(capacityTitle)
   const capacityInputs: HTMLInputElement[] = []
@@ -71,7 +64,7 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
     label.textContent = title; label.append(input); capacity.append(label); capacityInputs.push(input)
     input.addEventListener('change', () => { const values = Object.fromEntries(capacityInputs.map(field => [field.dataset.capacity, Number(field.value)])); try { host.Prefs?.set?.(TRANSLATION_CAPACITY_PREF, JSON.stringify(values), true) } catch { status.textContent = uiText('容量设置保存失败', 'Could not save capacity') } })
   }
-  container.append(ocr, capacity)
+  container.append(capacity)
   modelRow.before(container)
   const sync = () => {
     const value = readTranslationInterface(host)

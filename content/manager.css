@@ -271,7 +271,8 @@ textarea {
 }
 
 .jdx-manager-section[hidden] {
-  display: none;
+  /* 页面切换优先于后加载的详情 flex 布局，保留详情状态也不能让隐藏页占位。 */
+  display: none !important;
 }
 
 .jdx-manager-section-header {
@@ -1393,7 +1394,6 @@ textarea {
 .jdx-analysis-summary { padding: 10px; border-radius: 6px; background: var(--jdx-sidebar); overflow-wrap: anywhere; line-height: 1.7; }
 .jdx-analysis-summary > :first-child { margin-top: 0; }
 .jdx-analysis-summary > :last-child { margin-bottom: 0; }
-.jdx-analysis-config-card { max-width: 620px; }
 
 @media (max-width: 820px) {
   .jdx-analysis-record > header { align-items: flex-start; flex-direction: column; gap: 3px; }

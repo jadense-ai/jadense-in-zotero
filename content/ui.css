@@ -219,6 +219,7 @@
 .jdx-document-results{position:relative;display:flex;flex-direction:column;min-height:0;height:100%}
 .jdx-literature-workspace [hidden],.jdx-document-results [hidden]{display:none!important}
 .jdx-literature-workspace button,.jdx-document-results button,.jdx-literature-workspace input{appearance:none;font:inherit}
+.jdx-literature-workspace .jdx-reference-import input[type=checkbox],.jdx-document-results .jdx-reference-import input[type=checkbox],.jdx-literature-workspace .jdx-reference-actions input[type=checkbox],.jdx-document-results .jdx-reference-actions input[type=checkbox]{appearance:auto;display:inline-block}
 .jdx-result-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px 0;min-width:0}
 .jdx-result-tools>div{min-width:0;max-width:100%}
 .jdx-document-results>.jdx-result-tools{flex:none;padding:8px 12px;background:transparent}
@@ -253,17 +254,22 @@
 .jdx-literature-types{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.jdx-literature-types .jdx-badge{border:0;background:var(--jdx-subtle);color:var(--jdx-muted);padding:3px 7px;font-size:11px;border-radius:4px}
 .jdx-literature-types .jdx-badge[data-state=running]{color:var(--jdx-green-deep);background:var(--jdx-active-bg)}
 .jdx-literature-workspace .jdx-analysis-date{align-self:center;white-space:nowrap;font-size:11px}
+.jdx-literature-detail{display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden}
+.jdx-analysis-section[data-detail=true]{display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden}
+.jdx-analysis-section[data-detail=true]>.jdx-analysis-panel{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden}
+.jdx-analysis-section[data-detail=true] .jdx-analysis-history.jdx-literature-workspace{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden}
 .jdx-literature-detail>.jdx-result-tools{padding-top:0}.jdx-literature-attachment{flex:1 1 200px;max-width:420px!important;margin-inline-start:auto}
 .jdx-literature-hero{padding:16px 0 24px}.jdx-literature-heading{margin:0 0 10px;font-size:22px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
-.jdx-literature-detail>.jdx-tabs{overflow-x:auto;flex-wrap:nowrap;padding:0;gap:2px}.jdx-literature-detail>.jdx-tabs button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:13px}
-.jdx-literature-panel{min-height:320px;height:calc(100vh - 310px)}.jdx-literature-panel[aria-labelledby=jdx-literature-tab-history]{height:auto;padding:8px 0}
+.jdx-literature-detail>.jdx-tabs{flex:0 0 auto;min-height:38px;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;padding:0;gap:2px}.jdx-literature-detail>.jdx-tabs button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:13px}
+.jdx-literature-panels{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden}
+.jdx-literature-panel{flex:1 1 auto;min-height:0;height:auto;overflow:auto}.jdx-literature-panel[aria-labelledby=jdx-literature-tab-history]{padding:8px 0}
 .jdx-literature-event{padding:18px 12px;border-bottom:1px solid var(--jdx-line)}.jdx-literature-event:hover{background:var(--jdx-surface-sunken)}
 .jdx-literature-event-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}.jdx-literature-event-title{padding:0;min-height:26px;font-weight:600!important;color:var(--jdx-text)}.jdx-literature-event time{margin-inline-start:auto;color:var(--jdx-muted);font-size:11px}
 .jdx-literature-event-preview{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--jdx-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.jdx-literature-event-preview:empty{display:none}
 .jdx-document-results .jdx-analysis-detail{padding:0}.jdx-document-results .jdx-detail-tabs{position:static;display:flex;overflow-x:auto}.jdx-document-results .jdx-detail-tabs button{flex:0 0 auto;min-width:max-content;padding:8px 10px}
-.jdx-document-results .jdx-detail-panel{min-width:0}.jdx-document-results .jdx-analysis-summary,.jdx-document-results .jdx-analysis-notes-text{height:auto;overflow:visible}.jdx-document-results .jdx-analysis-detail .jdx-reading-body{padding:16px 0}.jdx-document-results .jdx-note-entry{padding:12px 0;border-bottom:1px solid var(--jdx-line)}
+.jdx-document-results .jdx-detail-panel{min-width:0}.jdx-document-results .jdx-analysis-summary,.jdx-document-results .jdx-analysis-notes-text{height:auto;overflow:visible}.jdx-document-results .jdx-analysis-detail .jdx-reading-body{padding:16px 0;user-select:text}.jdx-document-results .jdx-note-entry{padding:12px 0;border-bottom:1px solid var(--jdx-line)}
 .jdx-reader-workspace .jdx-result-content{padding:20px 16px}.jdx-reader-workspace .jdx-result-content.jdx-translation-reader{padding:0}
-@media(max-width:800px){.jdx-literature-heading{font-size:19px}.jdx-literature-workspace .jdx-analysis-record{grid-template-columns:minmax(0,1fr);gap:8px;padding-inline:4px}.jdx-literature-event{padding-inline:4px}.jdx-literature-panel{height:calc(100vh - 340px)}}
+@media(max-width:800px){.jdx-literature-heading{font-size:19px}.jdx-literature-workspace .jdx-analysis-record{grid-template-columns:minmax(0,1fr);gap:8px;padding-inline:4px}.jdx-literature-event{padding-inline:4px}}
 /* 任务状态不依赖系统 progress/提示框；文案与状态色共同表达，不覆盖正文。 */
 .jdx-reading-progress>span{display:block;height:100%;background:var(--jdx-green,#16cf8c);transition:width .2s ease}
 .jdx-reading-progress[data-state=error]>span{background:var(--jdx-red,#b42318)}
@@ -302,8 +308,14 @@
 .jdx-translation-capsule>.jdx-result-language{flex:0 1 136px;min-width:84px;order:0}
 .jdx-translation-capsule .jdx-select-trigger{height:34px;min-height:34px;border:0;border-radius:999px 0 0 999px;background:transparent;padding-inline:12px}
 .jdx-translation-capsule>.jdx-button-primary{flex:none;border:0;border-inline-start:1px solid var(--jdx-line);border-radius:0 999px 999px 0;min-height:34px;padding-inline:14px;white-space:nowrap}
-.jdx-reading-toolbar:has(>.jdx-icon-action){justify-content:flex-start}
-
 /* 工具从左侧连续排列；选择器与翻译组合放在动作之后。 */
 .jdx-document-results .jdx-reading-modes{margin-inline-end:0}
 .jdx-literature-attachment{order:1}
+
+/* OCR 配置沿用设置页控件，长路径与安装错误在面板内换行。 */
+.jdx-ocr-settings{min-width:0}
+.jdx-ocr-settings h3{margin:0 0 12px;font-size:15px}
+.jdx-ocr-settings p{line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.jdx-ocr-settings .jdx-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.jdx-ocr-path{color:var(--jdx-muted);font-size:12px}
+.jdx-ocr-settings [data-tone="error"]{color:var(--jdx-red,var(--jdx-pref-error,#b42318))}

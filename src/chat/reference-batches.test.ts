@@ -13,6 +13,9 @@ describe('reference batches', () => {
     expect(referenceBatches([source], budget).batches).toHaveLength(1)
     expect(referenceBatches([source], budget - 1).oversized).toEqual(['one'])
   })
+  it('does not let AI overwrite a manually edited reference', () => {
+    expect(referenceBatches([{ ...entry('edited'), edited: true }], 4000).batches).toHaveLength(0)
+  })
   it('accepts a supported field and contains missing, conflicting and invented responses', () => {
     const a = entry('a'), b = entry('b'), c = entry('c')
     const result = applyReferenceBatch([a, b, c], { extra: true, items: [

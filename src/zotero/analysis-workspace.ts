@@ -6,7 +6,6 @@ import { analysisPapers, paperKey, type AnalysisPaper } from "./analysis-workspa
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
 import { mountReferenceDetails, type ReferencePreparation } from "./reference-workspace"
-import { copyTextToClipboard } from "./connection-display"
 import type { ZoteroLike } from "./runtime"
 import { getUiLocale, uiText } from "./ui-preferences"
 import { actionIcon, action, badge, bindTabs, element, notice } from "./ui/controls"
@@ -96,14 +95,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     const panels = tabNames.map(name => { const panel = element(doc, "section", "jdx-detail-panel"); panel.id = `${prefix}-${name}`; panel.setAttribute("role", "tabpanel"); panel.setAttribute("aria-labelledby", `${prefix}-tab-${name}`); return panel })
     const tabs = tabNames.map((name, i) => { const button = action(doc, labels[name], () => {}); button.id = `${prefix}-tab-${name}`; button.setAttribute("role", "tab"); button.setAttribute("aria-controls", panels[i].id); tablist.append(button); return button })
     const summary = element(doc, "div", "jdx-markdown jdx-analysis-summary jdx-reading-body"), notes = element(doc, "div", "jdx-analysis-notes-text jdx-reading-body")
-    const copy = (kind: "summary" | "notes") => action(doc, kind === "summary" ? uiText("复制总结", "Copy summary") : uiText("复制笔记", "Copy notes"), () => {
-      const record = papers.get(key)?.record
-      const text = kind === "summary" ? record?.summary : record?.notes
-      if (!text) return
-      const content = [paper.source.title, warning.textContent, text].filter(Boolean).join("\n\n")
-      void copyTextToClipboard(host, content).then(ok => { feedback.textContent = ok ? uiText("已复制", "Copied") : uiText("复制失败，请选择正文复制。", "Copy failed. Select the text to copy it."); feedback.dataset.kind = ok ? "success" : "error" }).catch(() => { feedback.textContent = uiText("复制失败，请选择正文复制。", "Copy failed. Select the text to copy it.") })
-    })
-    for (const [i, kind] of (["summary", "notes"] as const).entries()) { const toolbar = element(doc, "div", "jdx-reading-toolbar"); toolbar.append(actionIcon(copy(kind), "copy")); panels[i].append(toolbar, i === 0 ? summary : notes) }
+    panels[0].append(summary); panels[1].append(notes)
     container.append(nav, hero, run, warning, feedback, tablist, ...panels)
     if (options.embedded) { nav.hidden = true; hero.hidden = true }
     if (options.hideTabs) { tablist.hidden = true; panels.forEach(panel => { panel.removeAttribute("role"); panel.removeAttribute("aria-labelledby") }) }
@@ -122,15 +114,13 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.status.textContent = run?.message || ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
     detail.stop.hidden = !(run?.busy || run?.references?.running || paper.references?.status === "running")
     detail.status.parentElement!.hidden = !detail.status.textContent && detail.stop.hidden
-    detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请复制笔记。", "The latest result is not fully saved. Copy the notes before closing.") : "", ...(record?.warnings || [])].filter(Boolean).join("\n")
+    detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...(record?.warnings || [])].filter(Boolean).join("\n")
     detail.warning.dataset.kind = record && options.unsaved(record.id) ? "error" : "neutral"
     const signature = JSON.stringify(record || null)
     if (signature !== detail.signature) {
       detail.signature = signature
       updateChatMarkdown(detail.summary, record?.summary || uiText("尚无解析总结。请在 PDF 阅读器中点击「解析」。", "No analysis summary yet. Click Analyze in the PDF reader."))
       renderNotes(detail.notes, record)
-      detail.panels[0].querySelector("button")!.disabled = !record?.summary
-      detail.panels[1].querySelector("button")!.disabled = !record?.notes
     }
     const reference = options.referenceTaskID ? jobs.get(options.referenceTaskID) : paper.references
     detail.reference.update(reference && paperKey(reference.source) === paperKey(paper.source) ? reference : paper.references, run?.references)
