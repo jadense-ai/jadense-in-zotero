@@ -3,6 +3,7 @@ export async function verifyAnalysisDetails({ manager, Zotero, task, jobs, asser
   const doc = manager.document, detail = doc.querySelector('.jdx-analysis-detail:not([hidden])')
   const section = detail.closest('.jdx-analysis-section'), tabs = [...detail.querySelectorAll('[role="tab"]')]
   const references = detail.querySelector('.jdx-reference-details'), search = references.querySelector('input[type="search"]')
+  const referenceHeading = references.querySelector('.jdx-reference-heading'), referenceTools = references.querySelector('.jdx-reference-tools')
   const originalRow = references.querySelector('.jdx-reference-row'), checkbox = originalRow.querySelector('input')
   const tasksBefore = jobs.list('references').length
   const historyKey = 'extensions.jadenseInZotero.paperAnalysisHistory', savedHistory = JSON.parse(Zotero.Prefs.get(historyKey))
@@ -12,6 +13,8 @@ export async function verifyAnalysisDetails({ manager, Zotero, task, jobs, asser
   assert(tabs.length === 3 && !doc.getElementById('jadense-analysis-tab-references'), 'Detail tab hierarchy is wrong')
   assert(detail.querySelector('.jdx-analysis-summary strong'), 'Summary lost safe Markdown formatting')
   assert(detail.querySelector('.jdx-note-entry blockquote') && !detail.querySelector('.jdx-note-entry button'), 'Notes lost structure or gained page navigation')
+  assert(!detail.querySelector('.jdx-reading-toolbar'), 'Analysis detail still exposes a bulk-copy toolbar')
+  assert(referenceHeading && referenceTools && referenceHeading.contains(referenceTools), 'Reference controls are still rendered as a standalone row')
   checkbox.click(); search.value = 'Smith'; search.dispatchEvent(new manager.Event('input', { bubbles: true }))
   search.focus()
   jobs.emit()

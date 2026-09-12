@@ -1,3 +1,4 @@
+import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
 import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtime"
 import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
@@ -97,7 +98,6 @@ import { mountLiteratureWorkspace } from "./literature-workspace"
 import { analysisPapers, paperKey } from "./analysis-workspace-model"
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
-import { bindTabs } from "./ui/controls"
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import { localizeManagerStaticContent } from "./manager-localization"
 import { wireManagerHelp } from "./manager-help"
@@ -164,6 +164,8 @@ type ManagerElements = {
   uploadSection: HTMLElement
   guideSection: HTMLElement
   settingsSection: HTMLElement
+  settingsTabOcr: HTMLButtonElement
+  settingsPanelOcr: HTMLElement
   settingsTabGeneral: HTMLButtonElement
   settingsPanelGeneral: HTMLElement
   displayLanguage: JdxSelect
@@ -214,18 +216,10 @@ type ManagerElements = {
   connectionTabSync: HTMLButtonElement
   connectionPanelAccount: HTMLElement
   connectionPanelSync: HTMLElement
-  analysisTabs: HTMLElement
-  analysisTabHistory: HTMLButtonElement
-  analysisTabConfig: HTMLButtonElement
-  analysisHistoryPanel: HTMLElement
-  analysisConfigPanel: HTMLElement
   analysisStatus: HTMLElement
   analysisStop: HTMLButtonElement
   analysisHistory: HTMLElement
   analysisHistoryRefresh: HTMLButtonElement
-  analysisModelSelect: JdxSelect
-  analysisModelStatus: HTMLElement
-  analysisOpenSettings: HTMLButtonElement
   tokenDisplay: HTMLElement
   tokenMask: HTMLElement
   tokenCopy: HTMLButtonElement
@@ -308,6 +302,8 @@ const IDS = {
   uploadSection: "jadense-manager-section-migrate",
   guideSection: "jadense-manager-section-guide",
   settingsSection: "jadense-manager-section-settings",
+  settingsTabOcr: "jadense-settings-tab-ocr",
+  settingsPanelOcr: "jadense-settings-panel-ocr",
   settingsTabGeneral: "jadense-settings-tab-general",
   settingsPanelGeneral: "jadense-settings-panel-general",
   displayLanguage: "jadense-display-language",
@@ -357,18 +353,10 @@ const IDS = {
   connectionTabSync: "jadense-connection-tab-sync",
   connectionPanelAccount: "jadense-connection-panel-account",
   connectionPanelSync: "jadense-connection-panel-sync",
-  analysisTabs: "jadense-analysis-tabs",
-  analysisTabHistory: "jadense-analysis-tab-history",
-  analysisTabConfig: "jadense-analysis-tab-config",
-  analysisHistoryPanel: "jadense-analysis-panel-history",
-  analysisConfigPanel: "jadense-analysis-panel-config",
   analysisStatus: "jadense-analysis-status",
   analysisStop: "jadense-analysis-stop",
   analysisHistory: "jadense-analysis-history",
   analysisHistoryRefresh: "jadense-analysis-history-refresh",
-  analysisModelSelect: "jadense-analysis-model-select",
-  analysisModelStatus: "jadense-analysis-model-status",
-  analysisOpenSettings: "jadense-analysis-open-settings",
   tokenDisplay: "jadense-manager-token-display",
   tokenMask: "jadense-manager-token-mask",
   tokenCopy: "jadense-manager-token-copy",
@@ -602,6 +590,8 @@ function readElements(): ManagerElements {
     uploadSection: element(IDS.uploadSection),
     guideSection: element(IDS.guideSection),
     settingsSection: element(IDS.settingsSection),
+    settingsTabOcr: element(IDS.settingsTabOcr),
+    settingsPanelOcr: element(IDS.settingsPanelOcr),
     settingsTabGeneral: element(IDS.settingsTabGeneral),
     settingsPanelGeneral: element(IDS.settingsPanelGeneral),
     displayLanguage: createJdxSelect(element(IDS.displayLanguage), { ariaLabel: uiText("显示语言", "Display language") }),
@@ -664,24 +654,10 @@ function readElements(): ManagerElements {
     connectionTabSync: element(IDS.connectionTabSync),
     connectionPanelAccount: element(IDS.connectionPanelAccount),
     connectionPanelSync: element(IDS.connectionPanelSync),
-    analysisTabs: element(IDS.analysisTabs),
-    analysisTabHistory: element(IDS.analysisTabHistory),
-    analysisTabConfig: element(IDS.analysisTabConfig),
-    analysisHistoryPanel: element(IDS.analysisHistoryPanel),
-    analysisConfigPanel: element(IDS.analysisConfigPanel),
     analysisStatus: element(IDS.analysisStatus),
     analysisStop: element(IDS.analysisStop),
     analysisHistory: element(IDS.analysisHistory),
     analysisHistoryRefresh: element(IDS.analysisHistoryRefresh),
-    analysisModelSelect: createJdxSelect(element(IDS.analysisModelSelect), {
-      showSelectedIcon: true,
-      popupWidth: 304,
-      compact: true,
-      searchPlaceholder: uiText("搜索路由、模型或能力", "Search routes, models, or capabilities"),
-      ariaLabel: uiText("当前解析模型", "Current analysis model"),
-    }),
-    analysisModelStatus: element(IDS.analysisModelStatus),
-    analysisOpenSettings: element(IDS.analysisOpenSettings),
     tokenDisplay: element(IDS.tokenDisplay),
     tokenMask: element(IDS.tokenMask),
     tokenCopy: element<HTMLButtonElement>(IDS.tokenCopy),
@@ -979,6 +955,11 @@ export function activeChatFeature(zotero: ZoteroLike): "chat" | "figure" {
     ? "figure" : "chat"
 }
 
+/** 只有 Chat section 可见时，会话列表才展示当前会话的 active 状态。 */
+export function isChatSessionActive(chatSectionVisible: boolean, sessionID: string, selectedSessionID: string | null) {
+  return chatSectionVisible && sessionID === selectedSessionID
+}
+
 export function activeAiState(zotero: ZoteroLike, invalidToken = invalidConnectionToken) {
   return featureModelState(zotero, activeChatFeature(zotero), invalidToken)
 }
@@ -1045,9 +1026,12 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   elements.uploadSection.hidden = !isUpload
   elements.guideSection.hidden = section !== "guide"
   elements.settingsSection.hidden = !isSettings
+  if (!isChat) {
+    elements.sessionList.querySelectorAll<HTMLElement>('[data-active="true"]').forEach(node => { node.dataset.active = "false" })
+    elements.sessionList.querySelectorAll<HTMLElement>('[aria-current="true"]').forEach(node => node.removeAttribute("aria-current"))
+  }
 }
 
-type AnalysisTab = "history" | "config"
 
 /** 内置指南只切换本页章节；无需账号、网络或 Zotero API，离开页面时保留当前章节。 */
 export function wireGuideNavigation(section: HTMLElement) {
@@ -1075,18 +1059,6 @@ export function wireGuideNavigation(section: HTMLElement) {
   select(0)
 }
 
-function setAnalysisTab(elements: ManagerElements, tab: AnalysisTab, focus = false) {
-  if (tab === "config") analysisWorkspace?.back()
-  for (const name of ["history", "config"] as const) {
-    const button = document.getElementById(`jadense-analysis-tab-${name}`)
-    const panel = document.getElementById(`jadense-analysis-panel-${name}`)
-    if (!button || !panel) continue
-    button.setAttribute("aria-selected", String(tab === name)); button.tabIndex = tab === name ? 0 : -1
-    panel.hidden = tab !== name
-    if (focus && tab === name) button.focus()
-  }
-
-}
 
 const CONNECTION_TABS = ["account", "sync"] as const
 type ConnectionTab = (typeof CONNECTION_TABS)[number]
@@ -1125,13 +1097,13 @@ function wireConnectionTabs(elements: ManagerElements, zotero: ZoteroLike | null
   })
 }
 
-type SettingsTab = "general" | "features" | "shortcuts" | "connection" | "byok"
-const SETTINGS_TABS: SettingsTab[] = ["general", "features", "shortcuts", "connection", "byok"]
+type SettingsTab = "ocr" | "general" | "features" | "shortcuts" | "connection" | "byok"
+const SETTINGS_TABS: SettingsTab[] = ["general", "features", "ocr", "shortcuts", "connection", "byok"]
 
 /** 设置页 tab 与 AI 通道独立；录制结果只在用户保存后用于已有阅读器。 */
 function wireSettingsTabs(elements: ManagerElements, zotero: ZoteroLike | null, initialTab: SettingsTab = "general") {
-  const tabs = [elements.settingsTabGeneral, elements.settingsTabFeatures, elements.settingsTabShortcuts, elements.settingsTabConnection, elements.settingsTabAi]
-  const panels = [elements.settingsPanelGeneral, elements.settingsPanelFeatures, elements.settingsPanelShortcuts, elements.settingsPanelConnection, elements.settingsPanelAi]
+  const tabs = [elements.settingsTabGeneral, elements.settingsTabFeatures, elements.settingsTabOcr, elements.settingsTabShortcuts, elements.settingsTabConnection, elements.settingsTabAi]
+  const panels = [elements.settingsPanelGeneral, elements.settingsPanelFeatures, elements.settingsPanelOcr, elements.settingsPanelShortcuts, elements.settingsPanelConnection, elements.settingsPanelAi]
   const setTab = (index: number, focus = false) => {
     tabs.forEach((tab, i) => {
       tab.setAttribute("aria-selected", String(i === index))
@@ -1412,7 +1384,6 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
     renderFeatureModelSelect(elements.featureModelSelects[feature], zotero, feature)
     elements.featureModelSelects[feature].setDisabled(chatBusy || (autoFollow && feature !== "chat"))
   }
-  renderPaperAnalysisModel(elements, zotero)
   setStatus(elements.featureModelStatus, chatModelCatalogStatus === "loading"
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
@@ -1456,16 +1427,6 @@ function renderByokConfig(elements: ManagerElements, zotero: ZoteroLike) {
   updateByokEndpoint(elements)
 }
 
-function renderPaperAnalysisModel(elements: ManagerElements, zotero: ZoteroLike) {
-  const issue = renderFeatureModelSelect(elements.analysisModelSelect, zotero, "analysis")
-  elements.analysisModelSelect.setDisabled(chatBusy || readAutoFollowChatModel(zotero))
-  const state = paperAnalysisModelState(zotero, invalidConnectionToken)
-  setStatus(
-    elements.analysisModelStatus,
-    issue || uiText(`${state.label}已就绪。`, `${state.label} is ready.`),
-    issue ? "error" : "success",
-  )
-}
 
 function byokProviderDraft(elements: ManagerElements, zotero: ZoteroLike): ByokProvider {
   const settings = readByokSettings(zotero)
@@ -1550,7 +1511,6 @@ function refreshManagerState(elements: ManagerElements, zotero: ZoteroLike) {
   const selectedFolderId = state.defaultFolderId || cached?.defaultFolderId || ""
   renderFolderOptions(elements.folderSelect, cachedFolders, selectedFolderId)
   renderJadenseChatModel(elements, zotero)
-  renderPaperAnalysisModel(elements, zotero)
   updateComposerState(elements, zotero)
 }
 
@@ -1648,6 +1608,7 @@ function renderChat(elements: ManagerElements, zotero: ZoteroLike) {
     if (sessionID && !sessionIDs.has(sessionID)) sessionImageDrafts.delete(sessionID)
   }
   const selectedSessionID = currentChatSessionID(zotero)
+  const chatSectionVisible = !elements.chatSection.hidden
   const activeSession = state.sessions.find((session) => session.id === selectedSessionID) ?? null
   // 标题按 Unicode 字符截断；完整名称保留在 tooltip 和无障碍名称中。
   const title = activeSession?.title || uiText("新对话", "New conversation")
@@ -1671,8 +1632,9 @@ function renderChat(elements: ManagerElements, zotero: ZoteroLike) {
     const button = create("button", "jdx-chat-session-button") as HTMLButtonElement
     button.type = "button"
     button.dataset.sessionId = session.id
-    button.dataset.active = String(session.id === selectedSessionID)
-    if (session.id === selectedSessionID) button.setAttribute("aria-current", "true")
+    const isActive = isChatSessionActive(chatSectionVisible, session.id, selectedSessionID)
+    button.dataset.active = String(isActive)
+    if (isActive) button.setAttribute("aria-current", "true")
     const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     for (const [name, value] of Object.entries({ viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) icon.setAttribute(name, value)
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
@@ -1692,7 +1654,7 @@ function renderChat(elements: ManagerElements, zotero: ZoteroLike) {
     })
     const row = create("div", "jdx-chat-session-row")
     row.setAttribute("role", "listitem")
-    row.dataset.active = button.dataset.active
+    row.dataset.active = String(isActive)
     const menu = create("details", "jdx-session-menu") as HTMLDetailsElement
     const toggle = create("summary")
     toggle.textContent = "⋯"
@@ -1814,7 +1776,6 @@ function setChatBusy(elements: ManagerElements, zotero: ZoteroLike, busy: boolea
   elements.chatStop.hidden = !busy || !activeChatAbort || activeOperation === "analysis"
   elements.detailsStop.hidden = elements.chatStop.hidden
   elements.analysisStop.hidden = !busy || !activeChatAbort || activeOperation !== "analysis"
-  elements.analysisModelSelect.setDisabled(busy || readAutoFollowChatModel(zotero))
   elements.attachItems.disabled = busy
   elements.attachFiles.disabled = busy
   elements.sessionList.querySelectorAll<HTMLButtonElement>("button").forEach((button) => { button.disabled = busy })
@@ -2051,7 +2012,6 @@ async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, op
 async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemID: number) {
   if (chatBusy || window.closed) return
   setActiveSection(elements, "analysis")
-  setAnalysisTab(elements, "history")
   const operation = new AbortController()
   activeChatAbort = operation; activeOperation = "analysis"; preparingAnalysisItemID = itemID
   setChatBusy(elements, zotero, true)
@@ -2122,7 +2082,7 @@ async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemI
     if (session) { session.view.busy = false; analysisWorkspace?.setRun(session.view) }
     if (activeChatAbort === operation) { activeChatAbort = null; activeOperation = null }
     preparingAnalysisItemID = undefined
-    setChatBusy(elements, zotero, false); renderPaperAnalysisModel(elements, zotero)
+    setChatBusy(elements, zotero, false)
     void drainReaderActions(elements, zotero)
   }
 }
@@ -2235,7 +2195,6 @@ async function drainReaderActions(elements: ManagerElements, zotero: ZoteroLike)
       }
       if (action.kind === "analyze") {
         setActiveSection(elements, "analysis")
-        setAnalysisTab(elements, "history")
         await analyzePaper(elements, zotero, action.itemID)
         continue
       }
@@ -2736,7 +2695,6 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.navAnalysis.addEventListener("click", () => {
     renderPaperAnalysisHistory(elements, zotero)
-    renderPaperAnalysisModel(elements, zotero)
     setActiveSection(elements, "analysis")
   })
   elements.navUpload.addEventListener("click", () => {
@@ -2746,7 +2704,6 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.navSettings.addEventListener("click", () => setActiveSection(elements, "settings"))
   elements.translationHistoryRefresh.addEventListener("click", () => renderTranslationHistory(elements, zotero))
   elements.analysisHistoryRefresh.addEventListener("click", () => renderPaperAnalysisHistory(elements, zotero))
-  bindTabs([elements.analysisTabHistory, elements.analysisTabConfig], index => setAnalysisTab(elements, index ? "config" : "history"))
   const selectFeatureModel = (feature: AiFeature, value: string) => {
     if (chatBusy) return
     try {
@@ -2759,7 +2716,6 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     }
   }
   for (const feature of AI_FEATURES) elements.featureModelSelects[feature].onChange(value => selectFeatureModel(feature, value))
-  elements.analysisModelSelect.onChange(value => selectFeatureModel("analysis", value))
   elements.autoFollowChatModel.addEventListener("change", () => {
     saveAutoFollowChatModel(zotero, elements.autoFollowChatModel.checked)
     renderJadenseChatModel(elements, zotero)
@@ -2767,10 +2723,6 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     setStatus(elements.featureModelStatus, elements.autoFollowChatModel.checked
       ? uiText("已开启自动跟随当前对话模型。", "Automatic Chat model following is enabled.")
       : uiText("已关闭自动跟随，可逐项配置功能模型。", "Automatic following is disabled; feature models can be configured independently."), "success")
-  })
-  elements.analysisOpenSettings.addEventListener("click", () => {
-    elements.settingsTabAi.click()
-    setActiveSection(elements, "settings")
   })
   elements.analysisStop.addEventListener("click", () => {
     stopPaperAnalysis(zotero)
@@ -3049,7 +3001,6 @@ function disableForMissingZotero(elements: ManagerElements) {
     elements.chatStop,
     elements.analysisStop,
     elements.analysisHistoryRefresh,
-    elements.analysisOpenSettings,
     elements.attachItems,
     elements.attachFiles,
     elements.previewCollection,
@@ -3072,11 +3023,9 @@ function disableForMissingZotero(elements: ManagerElements) {
   ]) button.disabled = true
   elements.chatModelSelect.setDisabled(true)
   for (const select of Object.values(elements.featureModelSelects)) select.setDisabled(true)
-  elements.analysisModelSelect.setDisabled(true)
   elements.chatInput.disabled = true
   setStatus(elements.chatStatus, uiText("当前窗口无法访问 Zotero 运行时。", "This window cannot access the Zotero runtime."), "error")
   setStatus(elements.analysisStatus, uiText("当前窗口无法访问 Zotero 运行时。", "This window cannot access the Zotero runtime."), "error")
-  setStatus(elements.analysisModelStatus, uiText("请从 Zotero 的工具菜单重新打开 Jadense。", "Reopen Jadense from Zotero's Tools menu."), "error")
   setStatus(elements.uploadStatus, uiText("请从 Zotero 的工具菜单重新打开 Jadense。", "Reopen Jadense from Zotero's Tools menu."), "error")
   setStatus(elements.settingsStatus, uiText("请从 Zotero 的工具菜单重新打开 Jadense。", "Reopen Jadense from Zotero's Tools menu."), "error")
   setStatus(elements.accountProfileStatus, uiText("请从 Zotero 的工具菜单重新打开 Jadense。", "Reopen Jadense from Zotero's Tools menu."), "error")
@@ -3150,7 +3099,6 @@ export function initJadenseManagerPage() {
   if (dock) mountChatComposer(dock)
   const elements = readElements()
   const section = initialSection()
-  setAnalysisTab(elements, "history")
   setConnectionTab(elements, "account")
   setActiveSection(elements, section)
   wireGuideNavigation(elements.guideSection)
@@ -3193,6 +3141,8 @@ export function initJadenseManagerPage() {
   window.addEventListener('unload', stopRecovery, { once: true })
   const stopReferenceAI = wireReferenceAISetting(zotero, document.getElementById("jadense-settings-panel-features"))
   window.addEventListener('unload', stopReferenceAI, { once: true })
+  const stopOCR = wireOCRSettings(zotero, elements.settingsPanelOcr.querySelector<HTMLElement>('[data-ocr-settings]'))
+  window.addEventListener("unload", stopOCR, { once: true })
   const stopTranslationInterface = wireTranslationInterface(zotero, document.getElementById("jadense-settings-panel-features"))
   window.addEventListener('unload', stopTranslationInterface, { once: true })
   const stopReadingPreferences = wireReadingPreferences(zotero, document.getElementById("jadense-settings-panel-general")!)
@@ -3245,20 +3195,20 @@ export function initJadenseManagerPage() {
         if (preparingAnalysisItemID === action.itemID || session?.view.busy || session?.view.references?.running
           || (session?.view.referenceTaskID && documentJobs(zotero).get(session.view.referenceTaskID)?.status === "running")
           || readerActionQueue.some(queued => queued.kind === "analyze" && queued.itemID === action.itemID)) {
-          setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+          setActiveSection(elements, "analysis")
           if (session) analysisWorkspace?.open(session.view.source)
           return false
         }
       }
       if (action.kind === "references") {
-        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+        setActiveSection(elements, "analysis")
         void collectSourceForItem(zotero, action.itemID, { includeText: false }).then(source => {
           if (source?.kind === "file") analysisWorkspace?.open({ ...source, title: source.parentItem?.title || source.title, authors: [] }, "references")
         }).catch(() => setStatus(elements.analysisStatus, uiText("原 PDF 不可用", "Original PDF unavailable"), "error"))
         return false
       }
       if (action.kind === "fullTranslate") {
-        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+        setActiveSection(elements, "analysis")
         renderPaperAnalysisHistory(elements, zotero)
         void documentJobs(zotero).ready.then(async () => {
           const task = action.taskID ? documentJobs(zotero).get(action.taskID) : undefined
@@ -3281,7 +3231,6 @@ export function initJadenseManagerPage() {
     }
     setActiveSection(elements, context.section)
     if (context.section === "settings-connection") elements.settingsTabConnection.click()
-    if (context.section === "analysis" && actions.some((action) => action.kind === "analyze")) setAnalysisTab(elements, "history")
     if (context.section === "migrate") void refreshJadenseAccount(elements, zotero)
     void drainReaderActions(elements, zotero)
   }

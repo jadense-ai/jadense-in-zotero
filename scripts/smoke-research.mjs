@@ -923,7 +923,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       pressKey(manager, "Escape", {}, element("help-menu"))
       assert(element("help-menu").hidden && doc.activeElement === element("help-toggle"), "Help Escape/focus failed")
       element("help-about").click()
-      await waitFor(() => element("help-version").textContent.includes("0.4.4"), "runtime installed version")
+      await waitFor(() => element("help-version").textContent.includes("0.4.5"), "runtime installed version")
       assert(element("help-dialog").open, "About is not modal")
       element("help-dialog").close()
       await Zotero.Promise.delay(50)
@@ -935,7 +935,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         if (String(url).includes("api.github.com/repos/jadense-ai/jadense-in-zotero/releases/latest")) {
           updateRequests++
           if (mode === "failure") return { ok: false, status: 429 }
-          const tag = mode === "latest" ? "v0.4.4" : mode === "ahead" ? "v0.4.2" : "v0.4.10"
+          const tag = mode === "latest" ? "v0.4.5" : mode === "ahead" ? "v0.4.2" : "v0.4.10"
           return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, future: true }) }
         }
         return fetchBefore.call(manager, url, options)
@@ -1696,7 +1696,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await Zotero.Reader.open(attachment.id)
     toolbarButton("analyze").click()
     await waitFor(() => !manager.document.getElementById("jadense-manager-section-analysis").hidden
-      && manager.document.getElementById("jadense-analysis-tab-history").getAttribute("aria-selected") === "true", "independent analysis history page")
+      && !manager.document.getElementById("jadense-analysis-panel-history").hidden, "independent analysis history page")
     await screenshot("manager-analysis-in-progress", manager)
     toolbarButton("analyze").click()
     await waitFor(() => analysisState().records?.length === 2 && managerIdle()
@@ -1747,15 +1747,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     assert(manager.document.activeElement.id.endsWith("-tab-references"), "Detail tabs lost keyboard navigation")
     manager.document.querySelector('.jdx-literature-detail > .jdx-result-tools button').click()
     report.checks.push("analysis-multiline-code-block", "analysis-detail-native-reader", "analysis-three-result-tabs", "analysis-duplicate-start-focus-only")
-    const historyTab = manager.document.getElementById("jadense-analysis-tab-history")
-    const configTab = manager.document.getElementById("jadense-analysis-tab-config")
-    historyTab.focus()
-    historyTab.dispatchEvent(new manager.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "ArrowRight", bubbles: true }, manager)))
-    assert(configTab.getAttribute("aria-selected") === "true" && manager.document.activeElement === configTab
-      && !manager.document.getElementById("jadense-analysis-panel-config").hidden, "Analysis tabs do not support keyboard navigation")
-    configTab.dispatchEvent(new manager.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Home", bubbles: true }, manager)))
-    assert(historyTab.getAttribute("aria-selected") === "true" && manager.document.activeElement === historyTab, "Analysis Home key did not return to history")
-    report.checks.push("analysis-independent-from-chat", "analysis-history-readable-backup", "analysis-notes-detail", "analysis-tabs-keyboard")
+    assert(!manager.document.getElementById("jadense-analysis-tabs") && !manager.document.getElementById("jadense-analysis-panel-config"), "History still has configuration tabs")
+    report.checks.push("analysis-independent-from-chat", "analysis-history-readable-backup", "analysis-notes-detail", "analysis-history-without-tabs")
     const annotationKeys = annotations.map((annotation) => annotation.key).sort()
     await stage("repeat-analysis")
     toolbarButton("analyze").click()
@@ -2153,24 +2146,26 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       await waitFor(() => manager.document.querySelectorAll("#jadense-analysis-history .jdx-analysis-record").length === rowsBeforeClear,
         "restored analysis history after empty-state visual")
     }
-    manager.document.getElementById("jadense-analysis-tab-config").click()
-    await waitFor(() => manager.document.getElementById("jadense-analysis-model-status").dataset.kind === "error", "stale analysis model error")
-    assert(manager.document.getElementById("jadense-analysis-model-status").textContent.includes("已删除或配置不完整"), "Stale analysis model did not fail closed")
+    manager.document.getElementById("jadense-manager-nav-settings").click()
+    manager.document.getElementById("jadense-settings-tab-features").click()
+    await waitFor(() => manager.document.getElementById("jadense-feature-analysis-model-status").dataset.kind === "error", "stale analysis model error")
+    assert(manager.document.getElementById("jadense-feature-analysis-model-status").textContent.includes("已删除或配置不完整"), "Stale analysis model did not fail closed")
     await screenshot("manager-analysis-config-error", manager)
     toolbarButton("analyze").click()
     await waitFor(() => manager.document.getElementById("jadense-analysis-status").dataset.kind === "error", "stale BYOK analysis rejection")
     assert(analysisState().records.length === historyBeforeByokAnalysis && JSON.stringify(localState()) === chatBeforeByokAnalysis,
       "Stale BYOK analysis wrote history or Chat")
 
-    manager.document.getElementById("jadense-analysis-tab-config").click()
-    const analysisModelSelect = manager.document.getElementById("jadense-analysis-model-select")
+    manager.document.getElementById("jadense-manager-nav-settings").click()
+    manager.document.getElementById("jadense-settings-tab-features").click()
+    const analysisModelSelect = manager.document.getElementById("jadense-feature-analysis-model")
     analysisModelSelect.querySelector(".jdx-select-trigger").click()
     const analysisModelOption = Array.from(analysisModelSelect.querySelectorAll('[role="option"]'))
       .find((option) => option.textContent.includes("Synthetic Model") && option.textContent.includes("Synthetic Provider"))
     assert(analysisModelOption, "Analysis configuration does not list the saved Provider / model")
     analysisModelOption.click()
     await waitFor(() => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.paperAnalysisModel")).modelId === selectedAnalysisModel.id
-      && manager.document.getElementById("jadense-analysis-model-status").dataset.kind === "success", "independent analysis model selection")
+      && manager.document.getElementById("jadense-feature-analysis-model-status").dataset.kind === "idle", "independent analysis model selection")
     assert(Zotero.Prefs.get("extensions.jadenseInZotero.aiRoute") === globalRouteBeforeAnalysis
       && Zotero.Prefs.get("extensions.jadenseInZotero.byokConfig") === globalByokBeforeAnalysis,
     "Independent analysis model selection changed Chat route or active BYOK settings")
@@ -2178,7 +2173,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     themeToggle.click()
     await screenshot("manager-analysis-config-dark", manager)
     themeToggle.click()
-    manager.document.getElementById("jadense-analysis-tab-history").click()
+    manager.document.getElementById("jadense-manager-nav-analysis").click()
     await screenshot("manager-analysis-history-light", manager)
     themeToggle.click()
     await screenshot("manager-analysis-history-dark", manager)
@@ -2186,11 +2181,12 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     manager.resizeTo(760 + settingsChromeWidth, 620 + settingsChromeHeight)
     await waitFor(() => manager.innerWidth === 760 && manager.innerHeight === 620, "compact analysis viewport")
     await screenshot("manager-analysis-history-compact", manager)
-    manager.document.getElementById("jadense-analysis-tab-config").click()
+    manager.document.getElementById("jadense-manager-nav-settings").click()
+    manager.document.getElementById("jadense-settings-tab-features").click()
     await screenshot("manager-analysis-config-compact", manager)
     manager.resizeTo(1360 + settingsChromeWidth, 860 + settingsChromeHeight)
     await waitFor(() => manager.innerWidth === 1360 && manager.innerHeight === 860, "restored analysis viewport")
-    manager.document.getElementById("jadense-analysis-tab-history").click()
+    manager.document.getElementById("jadense-manager-nav-analysis").click()
     toolbarButton("analyze").click()
     await waitFor(() => analysisState().records?.length === historyBeforeByokAnalysis + 1 && managerIdle(), "selected BYOK analysis completion")
     assert(JSON.stringify(localState()) === chatBeforeByokAnalysis
