@@ -5,7 +5,7 @@ import type { ZoteroLike } from "./runtime"
 import type { JdxSelectOption } from "./custom-select"
 import { getUiLocale, uiText } from "./ui-preferences"
 
-import modelLogos from "../../../../webapp/public/model-logos/catalog.json"
+import modelLogos from "../../model-logos/catalog.json"
 
 /** 根据实际模型 ID 匹配共享品牌素材；未知品牌保留现有后备图标。 */
 function modelLogo(modelID: string) {

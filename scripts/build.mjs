@@ -32,11 +32,10 @@ for (const directory of ["content", "locale", "_locales", "icons"]) {
   await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true })
 }
 
-// 直接复用 Webapp 品牌素材，发行包不依赖远程网站。
-const webPublic = path.resolve(projectRoot, "../../webapp/public")
-const logos = JSON.parse(await readFile(path.join(webPublic, "model-logos/catalog.json"), "utf8"))
+// 使用插件仓库内的品牌素材，开源仓库可独立安装依赖并构建发行包。
+const logos = JSON.parse(await readFile(path.join(projectRoot, "model-logos/catalog.json"), "utf8"))
 await mkdir(path.join(buildDir, "content/model-logos"), { recursive: true })
-for (const logo of logos) await cp(path.join(webPublic, logo.src), path.join(buildDir, "content/model-logos", path.basename(logo.src)))
+for (const logo of logos) await cp(path.join(projectRoot, logo.src), path.join(buildDir, "content/model-logos", path.basename(logo.src)))
 
 // Bundle 不保留零散许可证注释；完整原文随每份 XPI 分发。
 for (const fileName of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {

@@ -1,0 +1,89 @@
+[
+  {
+    "aliases": [
+      "deepseek"
+    ],
+    "src": "/model-logos/deepseek.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "claude"
+    ],
+    "src": "/model-logos/claude.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "gemini"
+    ],
+    "src": "/model-logos/gemini.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "gpt",
+      "chatgpt",
+      "openai",
+      "o1",
+      "o3",
+      "o4"
+    ],
+    "src": "/model-logos/gpt.svg",
+    "mode": "themed"
+  },
+  {
+    "aliases": [
+      "qwen",
+      "qwq"
+    ],
+    "src": "/model-logos/qwen.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "kimi",
+      "moonshot"
+    ],
+    "src": "/model-logos/kimi.svg",
+    "mode": "themed"
+  },
+  {
+    "aliases": [
+      "glm",
+      "chatglm"
+    ],
+    "src": "/model-logos/glm.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "minimax"
+    ],
+    "src": "/model-logos/minimax.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "doubao"
+    ],
+    "src": "/model-logos/doubao.svg",
+    "mode": "shared"
+  },
+  {
+    "aliases": [
+      "stepfun",
+      "step"
+    ],
+    "src": "/model-logos/stepfun.svg",
+    "mode": "themed"
+  },
+  {
+    "aliases": [
+      "mimo",
+      "xiaomi"
+    ],
+    "src": "/model-logos/xiaomimimo.svg",
+    "mode": "themed"
+  }
+]
