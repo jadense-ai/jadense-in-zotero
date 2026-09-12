@@ -2033,7 +2033,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await waitFor(() => preferencesWindow.document.getElementById("jadense-in-zotero-byok-save"), "native BYOK Preferences controls")
     const preferenceSections = Array.from(preferencesWindow.document.querySelectorAll("[data-settings-section]"))
     await waitFor(() => preferencesWindow.getComputedStyle(preferenceSections[0]).display === "grid", "native Preferences stylesheet")
-    assert(preferenceSections.length === 4
+    assert(preferenceSections.length === 5
       && preferenceSections[1].getBoundingClientRect().top > preferenceSections[0].getBoundingClientRect().bottom,
     "Native Preferences lost feature, connection, or BYOK sections")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-byok-endpoint").textContent.endsWith("/chat/completions"),
