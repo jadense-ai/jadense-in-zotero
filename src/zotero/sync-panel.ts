@@ -99,9 +99,10 @@ export function buildSyncPanelState(zotero: ZoteroLike): SyncPanelState {
   }
 }
 
-function create(doc: Document, tagName: keyof HTMLElementTagNameMap, className?: string) {
+function create(doc: Document, tagName: keyof HTMLElementTagNameMap, className?: string, textContent?: string) {
   const node = doc.createElement(tagName)
   if (className) node.className = className
+  if (textContent !== undefined) node.textContent = textContent
   return node
 }
 
@@ -149,44 +150,72 @@ function appendButton(input: {
 
 const PANEL_STYLES = `
   .jdx-sync-panel {
-    --jdx-text: #17211b;
+    --jdx-sidebar: #f7f8f5;
+    --jdx-text: #111510;
     --jdx-muted: #53625a;
     --jdx-line: #d9e2dd;
     --jdx-line-strong: #b9c7c0;
     --jdx-surface: #ffffff;
     --jdx-subtle: #f1f4ef;
-    --jdx-green-deep: #0f7c56;
-    --jdx-green-deep-hover: #0b6848;
-    --jdx-green-text: #ffffff;
+    --jdx-press-bg: #e6ece8;
+    --jdx-green: #16cf8c;
+    --jdx-green-hover: #22d997;
+    --jdx-active-bg: #d4fae8;
+    --jdx-active-text: #07351f;
     --jdx-error-text: #b42318;
     --jdx-error-bg: #fef3f2;
     --jdx-success-text: #117a52;
     --jdx-success-bg: #ecfdf3;
-    display: grid;
-    gap: 10px;
+    color-scheme: light;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    overflow: hidden;
     color: var(--jdx-text);
-    background: var(--jdx-subtle);
+    background: var(--jdx-sidebar);
     font: calc(12px * var(--jdx-font-scale,1))/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   .jdx-sync-panel[data-theme="dark"] {
+    color-scheme: dark;
+    --jdx-sidebar: #1a201c;
     --jdx-text: #e4eae6;
     --jdx-muted: #9aa8a1;
     --jdx-line: #303a34;
     --jdx-line-strong: #42504a;
-    --jdx-surface: #202723;
-    --jdx-subtle: #1b211e;
-    --jdx-green-deep: #2f9d71;
-    --jdx-green-deep-hover: #3bb184;
-    --jdx-green-text: #eef7f2;
+    --jdx-surface: #27312a;
+    --jdx-subtle: #232b26;
+    --jdx-press-bg: #2b342f;
+    --jdx-green: #16cf8c;
+    --jdx-green-hover: #4fe3ab;
+    --jdx-active-bg: #0f2e21;
+    --jdx-active-text: #8ff0c8;
     --jdx-error-text: #f5a097;
     --jdx-error-bg: #3a2320;
     --jdx-success-text: #7fe0b2;
     --jdx-success-bg: #14291f;
   }
+  .jdx-sync-content {
+    display: grid;
+    flex: 1 1 auto;
+    align-content: start;
+    gap: 12px;
+    min-height: 0;
+    overflow: auto;
+    padding: 12px;
+  }
+  .jdx-sync-intro {
+    display: grid;
+    gap: 3px;
+  }
+  .jdx-sync-intro strong {
+    font-size: calc(14px * var(--jdx-font-scale,1));
+    line-height: 1.35;
+  }
   .jdx-sync-hint {
     margin: 0;
     color: var(--jdx-muted);
     font-size: calc(11.5px * var(--jdx-font-scale,1));
+    line-height: 1.6;
   }
   .jdx-sync-card {
     display: grid;
@@ -196,10 +225,30 @@ const PANEL_STYLES = `
     padding: 10px 12px;
     background: var(--jdx-surface);
   }
+  .jdx-sync-card-heading,
+  .jdx-sync-actions-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 2px;
+    color: var(--jdx-muted);
+    font-size: calc(10.5px * var(--jdx-font-scale,1));
+    font-weight: 650;
+    letter-spacing: .02em;
+  }
+  .jdx-sync-card-heading::before,
+  .jdx-sync-actions-heading::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--jdx-green);
+  }
   .jdx-sync-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
     font-weight: 600;
     color: var(--jdx-text);
   }
@@ -211,19 +260,41 @@ const PANEL_STYLES = `
     background: #b7c4bd;
   }
   .jdx-sync-pill[data-connected="true"]::before {
-    background: #16cf8c;
+    background: var(--jdx-green);
   }
   .jdx-sync-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    min-width: 0;
+    border-top: 1px solid var(--jdx-line);
+    padding-top: 6px;
     color: var(--jdx-muted);
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .jdx-sync-line::before {
+    content: "";
+    flex: 0 0 4px;
+    width: 4px;
+    height: 4px;
+    margin-top: 7px;
+    border-radius: 50%;
+    background: var(--jdx-line-strong);
   }
   .jdx-sync-actions {
     display: grid;
     gap: 8px;
   }
+  .jdx-sync-actions-heading { margin: 0 0 1px; }
   .jdx-sync-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
     min-height: 32px;
     border: 1px solid var(--jdx-line);
     border-radius: 6px;
@@ -232,23 +303,24 @@ const PANEL_STYLES = `
     background: var(--jdx-surface);
     font: inherit;
     font-weight: 600;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
-    transition: background 0.12s ease, border-color 0.12s ease;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
   }
   .jdx-sync-button:hover:not(:disabled) {
     border-color: var(--jdx-line-strong);
-    background: var(--jdx-subtle);
+    background: var(--jdx-press-bg);
   }
   .jdx-sync-button-primary {
-    border-color: var(--jdx-green-deep);
-    background: var(--jdx-green-deep);
-    color: var(--jdx-green-text);
+    border-color: var(--jdx-green);
+    background: var(--jdx-green);
+    color: #07351f;
   }
   .jdx-sync-button-primary:hover:not(:disabled) {
-    border-color: var(--jdx-green-deep-hover);
-    background: var(--jdx-green-deep-hover);
+    border-color: var(--jdx-green-hover);
+    background: var(--jdx-green-hover);
   }
+  .jdx-sync-button:active:not(:disabled) { transform: translateY(1px); }
   .jdx-sync-button:disabled {
     cursor: default;
     opacity: 0.55;
@@ -261,6 +333,11 @@ const PANEL_STYLES = `
     color: var(--jdx-muted);
     white-space: pre-wrap;
     line-height: 1.5;
+  }
+  .jdx-sync-status:focus-visible,
+  .jdx-sync-button:focus-visible {
+    outline: 2px solid var(--jdx-green);
+    outline-offset: 2px;
   }
   .jdx-sync-status:empty {
     display: none;
@@ -292,14 +369,19 @@ export function renderSyncPanel(input: {
   const style = create(doc, "style")
   style.textContent = PANEL_STYLES
 
+  const content = create(doc, "div", "jdx-sync-content")
+  const intro = create(doc, "section", "jdx-sync-intro")
+  const introTitle = create(doc, "strong", "", uiText("在 Zotero 中继续研究", "Continue your research in Zotero"))
   const hint = create(doc, "p", "jdx-sync-hint")
   hint.textContent = state.hintLabel
+  intro.append(introTitle, hint)
 
-  const card = create(doc, "div", "jdx-sync-card")
+  const card = create(doc, "section", "jdx-sync-card")
+  const cardHeading = create(doc, "h2", "jdx-sync-card-heading", uiText("当前状态", "Current status"))
   const pill = create(doc, "span", "jdx-sync-pill")
   pill.dataset.connected = String(state.connected)
   pill.textContent = state.connectionLabel
-  card.append(pill)
+  card.append(cardHeading, pill)
   for (const label of [state.folderLabel, ...state.selectionLabels]) {
     const line = create(doc, "div", "jdx-sync-line")
     line.textContent = label
@@ -307,6 +389,8 @@ export function renderSyncPanel(input: {
     card.append(line)
   }
 
+  const actionSection = create(doc, "section", "jdx-sync-action-section")
+  const actionsHeading = create(doc, "h2", "jdx-sync-actions-heading", uiText("快捷操作", "Quick actions"))
   const actions = create(doc, "div", "jdx-sync-actions")
   const commandStatus = create(doc, "div", "jdx-sync-status")
   commandStatus.setAttribute("role", "status")
@@ -343,7 +427,9 @@ export function renderSyncPanel(input: {
         pushSelectedCollectionToJadense(zotero, { includePdf: readCollectionUploadIncludePdfDefault(zotero) }))
     },
   })
-  root.append(style, hint, card, actions, commandStatus)
+  actionSection.append(actionsHeading, actions)
+  content.append(intro, card, actionSection, commandStatus)
+  root.append(style, content)
   body.append(root)
   const stopObservingTheme = observeTheme(zotero, root)
   const stopTheme = () => {

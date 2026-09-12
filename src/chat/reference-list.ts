@@ -19,10 +19,14 @@ export function normalizeDoi(value: string) {
   return doi
 }
 
-/** 断行只在 DOI token 内连接；保留原始 raw，归一化文本不能替代来源。 */
+/** 去掉 PDF 版式换行；原始行和坐标仍由 ReferenceEntry.lines 保留，用于定位与证据追溯。 */
+export function normalizeReferenceText(value: string) {
+  return value.normalize("NFKC").replace(/\u00ad\s*\n\s*/gu, "").replace(/([\p{Ll}])[-‐]\s*\n\s*(?=[\p{Ll}])/gu, "$1")
+    .replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").trim()
+}
+
 export function parseReferenceFields(raw: string): ReferenceMetadata {
-  const joined = raw.normalize("NFKC").replace(/\u00ad\s*\n\s*/gu, "").replace(/([\p{Ll}])-\s*\n\s*(?=[\p{Ll}])/gu, "$1")
-    .replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").replace(numbered, "").trim()
+  const joined = normalizeReferenceText(raw).replace(numbered, "")
   const doi = joined.match(/\b10\.\d{4,9}\/[^\s<>"]+/iu)?.[0]
   const yearMatch = joined.match(/\b((?:18|19|20)\d{2})[a-z]?\b/u)
   const year = yearMatch?.[1] ?? ""
@@ -51,7 +55,7 @@ export function parseReferenceFields(raw: string): ReferenceMetadata {
 }
 
 function entry(lines: PdfLine[], order: number, knownBoundary: boolean): ReferenceEntry {
-  const raw = lines.map(line => line.text).join("\n")
+  const raw = normalizeReferenceText(lines.map(line => line.text).join("\n"))
   const match = raw.match(numbered)
   const fields = parseReferenceFields(raw)
   return { id: `ref-${lines[0].id}`, order, ...(match ? { label: match[1] || match[2] } : {}), raw, lines, fields,
@@ -118,8 +122,8 @@ export function applyReferenceSuggestion(original: ReferenceEntry, value: unknow
     const start = row.startLine, end = row.endLine
     if (start !== offset || !Number.isInteger(end) || Number(end) < offset || Number(end) >= original.lines.length) return [original]
     const next = entry(original.lines.slice(offset, Number(end) + 1), original.order + result.length, true)
-    const rawNormalized = next.raw.normalize("NFKC").replace(/\s+/gu, " ").toLowerCase()
-    const supported = (v: unknown) => typeof v === "string" && rawNormalized.includes(v.normalize("NFKC").replace(/\s+/gu, " ").toLowerCase()) ? v : ""
+    const rawNormalized = normalizeReferenceText(next.raw).toLowerCase()
+    const supported = (v: unknown) => typeof v === "string" && rawNormalized.includes(normalizeReferenceText(v).toLowerCase()) ? v : ""
     next.fields.title ||= supported(row.title)
     next.fields.year ||= supported(row.year)
     if (!next.fields.authors.length && Array.isArray(row.authors)) next.fields.authors = row.authors.map(supported).filter(Boolean)

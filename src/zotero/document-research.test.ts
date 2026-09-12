@@ -86,7 +86,9 @@ describe("complete PDF and reference evidence", () => {
     expect(refs).toHaveLength(5)
     expect(refs.map(row => row.fields.title)).toEqual(['Reliable scientific evidence', '深度学习的证据组合', 'Reliable scientific evidence', 'Reliable scientific evidence', 'Reliable scientific evidence'])
     expect(refs[1].fields.authors).toEqual(['张三', '李四'])
-    expect(refs[0].raw).toContain('\n'); expect(refs[3].raw).toContain('scien-\ntific')
+    expect(refs[0].raw).toBe('[1] J. Smith et al., “Reliable scientific evidence,” Research Journal, 2020.')
+    expect(refs[3].raw).toBe('[4] Smith, J. (2020). Reliable scientific evidence. Research Journal.')
+    expect(refs[0].lines).toHaveLength(2); expect(refs[3].lines).toHaveLength(2)
   })
   it("does not split numbered citations on author-year continuation lines", () => {
     const refs = extractReferences(document([['References', '[1] First author,', 'Smith, J. (2020). Reliable scientific evidence.', '[2] Next author,', 'Jones, K. (2021). Another study.']]))
