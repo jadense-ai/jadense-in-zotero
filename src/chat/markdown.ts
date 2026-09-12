@@ -95,7 +95,7 @@ markdown.block.ruler.before("fence", "math_block", (state, startLine, endLine, s
 markdown.renderer.rules.math_inline = (tokens, index) => mathHtml(tokens[index].content, false)
 markdown.renderer.rules.math_block = (tokens, index) => `${mathHtml(tokens[index].content, true)}\n`
 const validateLink = markdown.validateLink.bind(markdown)
-markdown.validateLink = (url) => /^(https?:\/\/|mailto:)/i.test(url) && validateLink(url)
+markdown.validateLink = (url) => /^jdx-asset:image-\d+$/u.test(url) || /^(https?:\/\/|mailto:)/i.test(url) && validateLink(url)
 
 markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
   tokens[index].attrSet("target", "_blank")
@@ -105,10 +105,16 @@ markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => 
 }
 
 // 自动加载模型提供的图片会泄露阅读行为；保留可显式打开的图片说明和地址。
-markdown.renderer.rules.image = (tokens, index) => {
+markdown.renderer.rules.image = (tokens, index, _options, env) => {
   const token = tokens[index]
   const label = markdown.utils.escapeHtml(`图片：${token.content || "查看图片"}`)
   const url = String(token.attrGet("src") ?? "")
+  const assets = env?.documentAssets as Record<string, unknown> | undefined
+  const asset = /^jdx-asset:image-\d+$/u.test(url) ? assets?.[url] : undefined
+  if (typeof asset === 'string' && /^data:image\/png;base64,[a-z\d+/]+=*$/iu.test(asset)) {
+    return `<img src="${asset}" alt="${markdown.utils.escapeHtml(token.content)}" style="max-width:100%;height:auto" />`
+  }
+  if (url.startsWith('jdx-asset:')) return `<span>${label} (unavailable)</span>`
   const insideLink = tokens.slice(0, index).reduce((depth, item) =>
     depth + (item.type === "link_open" ? 1 : item.type === "link_close" ? -1 : 0), 0) > 0
   if (insideLink || !markdown.validateLink(url)) return label
@@ -116,9 +122,9 @@ markdown.renderer.rules.image = (tokens, index) => {
 }
 
 /** 格式异常只降级这一段展示，不改变消息原文、存储或对话执行结果。 */
-export function renderChatMarkdown(text: string): string {
+export function renderChatMarkdown(text: string, documentAssets?: Record<string, string>): string {
   try {
-    return markdown.render(text)
+    return markdown.render(text, { documentAssets })
   } catch {
     const escaped = markdown.utils.escapeHtml(text).replace(/\r?\n/g, "<br />")
     return `<p>${escaped}</p>`
@@ -149,10 +155,10 @@ function syncMarkdownChildren(target: Node, source: Node) {
 }
 
 /** 使用惰性 HTML 模板承接已禁用 HTML/危险资源的解析结果，兼容 Manager 的 XHTML 文档。 */
-export function updateChatMarkdown(target: HTMLElement, text: string) {
+export function updateChatMarkdown(target: HTMLElement, text: string, documentAssets?: Record<string, string>) {
   const template = target.ownerDocument.createElement("template")
   try {
-    template.innerHTML = renderChatMarkdown(text)
+    template.innerHTML = renderChatMarkdown(text, documentAssets)
   } catch {
     // XHTML 中不可解析的控制字符只影响格式；仍保留这条消息，不中断对话。
     const paragraph = target.ownerDocument.createElement("p")

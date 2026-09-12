@@ -70,7 +70,7 @@ export async function consumeTemporaryChatStream(
   requireComplete = false,
 ) {
   if (!response.ok) {
-    throw await readJadenseApiError(response, uiText("攻玉对话请求失败", "The Jadense chat request failed"))
+    throw await readJadenseApiError(response, uiText("攻玉对话请求失败", "The Jadense chat request failed"), true)
   }
   if (!response.body) throw new Error(uiText("攻玉对话响应缺少数据流。", "The Jadense chat response has no stream."))
 

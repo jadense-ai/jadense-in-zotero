@@ -2,7 +2,7 @@
   "name": "jadense-in-zotero",
   "version": "0.4.4",
   "private": true,
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@10.19.0",
   "engines": {
     "node": "24.x"

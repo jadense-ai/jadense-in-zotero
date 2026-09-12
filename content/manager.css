@@ -1497,3 +1497,5 @@ textarea {
 
 .jdx-titlebar .jdx-manager-sidebar-toggle { padding: 4px; color: var(--jdx-muted); }
 .jdx-titlebar #jadense-home { padding: 3px; }
+/* 翻译历史入口已并入文献解析；保留旧 DOM ID 供兼容路由使用。 */
+#jadense-manager-nav-translations { display: none !important; }

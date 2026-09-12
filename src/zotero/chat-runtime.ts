@@ -11,6 +11,7 @@ import { featureModelState, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF
 import { collectSourceForItem } from './research-context'
 import { readConnection, type ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
+import { recordStarInvitationUse } from './star-invitation'
 
 export type PreparedChat = {
   requestText: string
@@ -170,6 +171,7 @@ export class ChatRuntime {
       if (attachment && !image) this.status += uiText(' 历史图片不可用，本次仅发送文字。', ' Previous image unavailable; only text was sent.')
       if (stored && !stored.saved) this.status += uiText(' 图片未能保存到本机。', ' The image could not be saved locally.')
       this.statusKind = result?.kind ?? 'success'
+      if (finalText.trim() && this.statusKind === 'success' && !signal.aborted) recordStarInvitationUse(this.host)
     } catch (error) {
       this.status = signal.aborted ? uiText('已停止生成。', 'Generation stopped.') : friendlyChatError(error)
       this.statusKind = signal.aborted ? 'idle' : 'error'

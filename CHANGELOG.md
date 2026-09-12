@@ -1,9 +1,13 @@
 # 更新说明 / Changelog
 
 
-## 0.4.4 — 2026-09-12
+## 0.4.4 — 2026-09-13
 
 ### 简体中文
+
+- 新增按文献与附件组织的成果工作区，统一浏览原文、译文、选中翻译和解析历史。
+- 新增 Bing/Google 传统翻译和本机 OCR；全文翻译先识别完整 PDF，公式保留本机原图。首次安装需下载环境与模型。
+- 新增快速开始、图文指南与 FAQ。0.4.4 起采用非商业许可，历史 MIT 授权和第三方许可继续保留。
 
 - 优化工作台顶部导航与聊天模型选择，让对话、翻译历史、文献解析和连接设置之间的切换更清晰；可继续跟随攻玉账号默认模型，也可为当前对话明确选择模型。
 - 提升全文翻译在跨章节、长段落和不同上下文容量下的稳定性：只在请求内部拆分超长内容，阅读与定位仍对应完整原文段落，已有译文可继续恢复。
@@ -13,13 +17,17 @@
 
 ### English
 
+- Group original text, translations and analysis history by paper and attachment.
+- Add Bing/Google translation and local OCR before full translation; formulas remain local images. First setup downloads the runtime and models.
+- Add onboarding, illustrated guides and FAQ. Version 0.4.4 adopts the non-commercial license; prior MIT grants and third-party licenses remain intact.
+
 - Clarify the workbench navigation and chat model selection, making it easier to move between Chat, translation history, literature analysis, and connection settings. Chat can still follow the Jadense account default or use an explicit model for the current conversation.
 - Improve full-translation stability across sections, long paragraphs, and different context capacities: oversized content is split only inside requests, while reading and source navigation continue to correspond to complete original paragraphs and completed translations remain recoverable.
 - Refine responsive layouts, notices, and the getting-started guide across the reader workspace and Manager while preserving full selection-toolbar labels and host-width containment.
 
 Install over GitHub 0.4.3 to retain settings and history. Disable legacy .com builds first. Jadense AI requires the temporary-execution V1 server protocol; older servers show an upgrade message. This client release does not establish production server readiness. BYOK remains independent. Website automatic updates are unchanged.
 
-Validation and final package checksum: [v0.4.4 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4).
+最终验收与制品校验 / Validation and checksums: [v0.4.4 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4).
 
 
 ## 0.4.3 — 2026-09-11

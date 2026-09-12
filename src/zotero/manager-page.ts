@@ -3,6 +3,7 @@ import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtim
 import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
 import { wireTemporaryRecovery } from './temporary-recovery-panel'
 import { wireReferenceAISetting } from './reference-ai-settings'
+import { wireTranslationInterface } from './translation-interface'
 /**
  * Jadense Zotero 主工作台页面。
  * 上游由 bootstrap 打开独立 chrome 窗口，下游连接本地对话存储、Zotero 选择与攻玉扩展 API。
@@ -28,7 +29,7 @@ import {
 } from "@/chat/byok-chat"
 import { renderMessage, followMessageUpdate, nearLatest, updateLatestButton } from "./chat-message-ui"
 import { appendPaperAnalysisRecord, readPaperAnalysisHistory, type PaperAnalysisRecord, type PaperAnalysisSource } from "@/chat/paper-analysis-history"
-import { type TranslationRecord } from "@/chat/translation-history"
+import { readTranslationHistory, type TranslationRecord } from "@/chat/translation-history"
 import { createQuoteSource, groupChatSources, type ChatSource } from "@/chat/research-context"
 
 import {
@@ -90,8 +91,9 @@ import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-an
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
-import { renderDocumentHistory } from "./document-ui"
-import { mountAnalysisWorkspace, type AnalysisRunView } from "./analysis-workspace"
+import {} from "./document-ui"
+import { type AnalysisRunView } from "./analysis-workspace"
+import { mountLiteratureWorkspace } from "./literature-workspace"
 import { analysisPapers, paperKey } from "./analysis-workspace-model"
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
@@ -100,6 +102,7 @@ import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, 
 import { localizeManagerStaticContent } from "./manager-localization"
 import { wireManagerHelp } from "./manager-help"
 import { wireManagerQuickStart } from "./manager-quick-start"
+import { wireStarInvitation } from "./star-invitation"
 import { wireManagerTitlebar } from "./manager-titlebar"
 
 export type ManagerPageState = {
@@ -454,7 +457,7 @@ let figureChatContexts = new Map<string, FigureChatContext>()
 
 // 历史存储不可用时保留本窗口最近结果，刷新列表也不丢失复制入口。
 const unsavedPaperAnalyses = new Map<string, PaperAnalysisRecord>()
-let analysisWorkspace: ReturnType<typeof mountAnalysisWorkspace> | undefined
+let analysisWorkspace: ReturnType<typeof mountLiteratureWorkspace> | undefined
 let preparingAnalysisItemID: number | undefined
 const analysisSessions = new Map<number, { controller: AbortController; recordID: string; view: AnalysisRunView }>()
 export const MANAGER_OPERATION_PREF_KEYS = [
@@ -915,11 +918,7 @@ export async function openPaperAnalysisHistoryRecord(zotero: ZoteroLike, record:
 }
 
 function renderTranslationHistory(elements: ManagerElements, zotero: ZoteroLike) {
-  renderDocumentHistory(elements.translationHistory, zotero, async record => {
-    const opened = await openTranslationHistoryRecord(zotero, record)
-    setStatus(elements.translationHistoryStatus, opened ? uiText("已打开原文", "Original opened") : uiText("原附件不可用", "Original unavailable"), opened ? "success" : "error")
-    return opened
-  })
+  renderPaperAnalysisHistory(elements, zotero)
 }
 
 /** 保持保存/临时结果的同 ID 覆盖语义，组件只获得用于阅读的投影。 */
@@ -952,7 +951,7 @@ function stopPaperAnalysis(zotero: ZoteroLike, source?: PaperAnalysisSource) {
 }
 
 function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLike) {
-  analysisWorkspace ??= mountAnalysisWorkspace(elements.analysisHistory, zotero, {
+  analysisWorkspace ??= mountLiteratureWorkspace(elements.analysisHistory, zotero, {
     records: () => paperAnalysisRecords(zotero),
     unsaved: id => unsavedPaperAnalyses.has(id),
     openSource: source => openPaperAnalysisHistoryRecord(zotero, { id: "", createdAt: "", source, summary: "" }),
@@ -1021,8 +1020,10 @@ export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConn
 }
 
 function setActiveSection(elements: ManagerElements, section: ManagerSection) {
+  if (section === "translations") section = "analysis"
+  elements.navTranslations.hidden = true
   const isChat = section === "chat"
-  const isTranslations = section === "translations"
+  const isTranslations = false
   const isAnalysis = section === "analysis"
   const isUpload = section === "migrate"
   const isSettings = section === "settings" || section === "settings-connection"
@@ -1416,7 +1417,7 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
     : !readConnection(zotero).token ? uiText("连接攻玉后可加载内置模型；BYOK 模型可独立使用。", "Connect Jadense to load built-in models. BYOK models work independently.")
-      : autoFollow ? uiText("其他功能自动跟随对话模型；AI 对话模型仍可调整。关闭上方开关后可逐项配置其他功能。", "Other features follow the Chat model; the Chat model remains editable. Turn off the switch above to configure other features independently.")
+      : autoFollow ? uiText("其他 AI 功能自动跟随对话模型；关闭上方开关后可逐项配置。翻译接口独立使用。", "Other AI features follow the Chat model. Turn off the switch above to configure them separately. Translation services are independent.")
       : uiText("选择后自动保存，各功能可独立配置。", "Choices save automatically and features can be configured independently."))
 }
 
@@ -3158,6 +3159,7 @@ export function initJadenseManagerPage() {
   syncChatDockOffset(elements.chatDock)
   wireConnectionTabs(elements, zotero)
   wireSettingsTabs(elements, zotero, section === "settings-connection" ? "connection" : "general")
+  wireStarInvitation(document, zotero)
   wireManagerQuickStart(document, zotero, () => {
     elements.navSettings.click()
     elements.settingsTabFeatures.click()
@@ -3191,6 +3193,8 @@ export function initJadenseManagerPage() {
   window.addEventListener('unload', stopRecovery, { once: true })
   const stopReferenceAI = wireReferenceAISetting(zotero, document.getElementById("jadense-settings-panel-features"))
   window.addEventListener('unload', stopReferenceAI, { once: true })
+  const stopTranslationInterface = wireTranslationInterface(zotero, document.getElementById("jadense-settings-panel-features"))
+  window.addEventListener('unload', stopTranslationInterface, { once: true })
   const stopReadingPreferences = wireReadingPreferences(zotero, document.getElementById("jadense-settings-panel-general")!)
   window.addEventListener("unload", stopReadingPreferences, { once: true })
   const stopObservingAppearance = wireManagerAppearance(elements, zotero, document.documentElement)
@@ -3254,8 +3258,17 @@ export function initJadenseManagerPage() {
         return false
       }
       if (action.kind === "fullTranslate") {
-        setActiveSection(elements, "translations")
-        renderDocumentHistory(elements.translationHistory, zotero, record => openTranslationHistoryRecord(zotero, record), action.taskID)
+        setActiveSection(elements, "analysis"); setAnalysisTab(elements, "history")
+        renderPaperAnalysisHistory(elements, zotero)
+        void documentJobs(zotero).ready.then(async () => {
+          const task = action.taskID ? documentJobs(zotero).get(action.taskID) : undefined
+          const selection = zotero.Prefs && action.taskID ? readTranslationHistory(zotero.Prefs).records.find(record => record.id === action.taskID) : undefined
+          const analysis = action.taskID ? paperAnalysisRecords(zotero).find(record => record.id === action.taskID) : undefined
+          const saved = task?.source || analysis?.source || selection?.source
+          if (saved) { analysisWorkspace?.open({ ...saved, libraryID: saved.libraryID ?? -1, itemKey: saved.itemKey ?? '', title: saved.title || 'PDF', authors: [] }, action.resultMode || 'translation', action.taskID); return }
+          const current = await collectSourceForItem(zotero, action.itemID, { includeText: false })
+          if (current?.kind === 'file') analysisWorkspace?.open({ ...current, authors: [] }, action.resultMode || 'translation', action.taskID)
+        }).catch(error => setStatus(elements.analysisStatus, String(error), 'error'))
         return false
       }
       return true

@@ -29,7 +29,8 @@ await mkdir(buildDir, { recursive: true })
 await mkdir(releasePaths.versionDir, { recursive: true })
 
 for (const directory of ["content", "locale", "_locales", "icons"]) {
-  await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true })
+  await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true,
+    filter: source => !source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh'].includes(path.basename(source)) })
 }
 
 // 使用插件仓库内的品牌素材，开源仓库可独立安装依赖并构建发行包。

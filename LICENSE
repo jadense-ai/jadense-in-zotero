@@ -1,21 +1,52 @@
-MIT License
+Jadense Non-Commercial License 1.0
+Jadense 非商业使用许可证 1.0
 
 Copyright (c) 2026 Jadense contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Scope and permission
+Subject to these terms, you may use, copy, study, modify and redistribute this
+Software and accompanying documentation free of charge, solely for personal,
+non-commercial use, learning and non-commercial research. Redistribution must
+be free of charge, retain copyright and license notices, identify modifications,
+and preserve these non-commercial conditions for recipients of covered material.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. Commercial use is prohibited without separate written authorization
+Commercial use includes selling or licensing the Software for a fee; charging
+for its installation, deployment, hosting or access; incorporating it in a paid
+product or service; and using it for a commercial organization's business
+operations or revenue-generating services, including internal use. An activity
+is not non-commercial merely because the Software itself is provided for free.
+Voluntary donations to the original project do not purchase a license, API
+credits, a subscription, or a right to commercial use. Contact the maintainers
+through https://github.com/jadense-ai/jadense-in-zotero for authorization inquiries.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. Existing rights and third-party components
+These terms apply to material distributed under this license only to the extent
+the relevant copyright holder has authority to grant it. They do not revoke,
+restrict or replace rights already granted under MIT or another license for
+previously released material, or relicense third-party contributions without
+permission. Existing MIT-covered material remains available under its original
+terms; see THIRD_PARTY_NOTICES.md for the preserved notice. Third-party components
+retain their own licenses. No rights in the Jadense server, private application,
+trademarks or official service identity are granted by this license.
+
+4. Disclaimer
+The Software is provided as available, with no warranty of fitness, accuracy,
+availability or non-infringement. To the extent permitted by applicable law,
+the authors and copyright holders accept no liability for losses or claims
+arising from using or distributing it. Rights that cannot legally be excluded
+are unaffected.
+
+5. Termination
+Permissions granted by this license terminate if you breach its conditions.
+Termination does not affect rights independently granted by other licenses.
+
+中文条款摘要（如有歧义，以以上英文条款为准）
+允许个人非商业自用、学习、非商业研究，以及保留声明和相同非商业条件的免费修改与分发。
+禁止商业使用，包括转售、收费代安装/部署/托管、付费产品集成及商业组织的业务使用；
+商业用途必须另行取得权利人书面授权。自愿赞助不购买商业许可、订阅或 API 额度。
+本许可不追溯撤销历史 MIT 授权，不改变第三方组件许可，不涵盖私有服务端或商标权。
+软件按现状提供，在法律允许范围内不作担保；违反本许可将终止本许可授予的权利。
+
+This is a source-available, non-commercial license, not an OSI-approved
+open-source license. / 本项目源码公开，但本许可证不属于 OSI 开源许可证。

@@ -7,7 +7,7 @@ import { navigateDocument, type DocumentHost, type DocumentIdentity } from "./pd
 import type { ReferenceHost } from "./reference-verification"
 import type { ZoteroLike } from "./runtime"
 import { uiText } from "./ui-preferences"
-import { element, action, notice, badge } from "./ui/controls"
+import { actionIcon, element, action, notice, badge } from "./ui/controls"
 import { createJdxSelect } from "./ui/select"
 
 export type ReferencePreparation = { running: boolean; message?: string; error?: string }
@@ -136,6 +136,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     identify.hidden = !referenceAIEnabled(host) || !task || running || !entries.some(entry => entry.uncertain); identify.disabled = busy
     if (task?.referenceAI?.pausedReason) status.textContent += ` · ${task.referenceAI.pausedReason}`
     skip.hidden = phase !== "identifying"; skip.disabled = busy
+    actionIcon(extract, task ? "refresh" : "extract"); actionIcon(pause, "pause"); actionIcon(resume, "play"); actionIcon(identify, "search"); actionIcon(skip, "skip"); actionIcon(verify, "verify")
     library.setDisabled(busy || !libraryOptions.length); collection.setDisabled(busy || !libraryOptions.length)
     const visible = filterReferences(entries, search.value, filter.getValue())
     const visibleIDs = new Set(visible.map(entry => entry.id)), importable = visible.filter(canImportReference)
@@ -146,6 +147,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     all.checked = importable.length > 0 && importable.every(entry => selected.has(entry.id)); all.indeterminate = !all.checked && importable.some(entry => selected.has(entry.id)); all.disabled = !importable.length || busy || blocksImport
     importButton.disabled = !selected.size || !library.getValue() || busy || blocksImport
     importButton.textContent = busy ? uiText("正在导入…", "Importing…") : selected.size ? uiText(`导入 ${selected.size} 条`, `Import ${selected.size}`) : uiText("导入 Zotero", "Import to Zotero")
+    actionIcon(importButton, "import")
     importBar.hidden = !entries.length
     for (const entry of entries) {
       let row = rows.get(entry.id)
@@ -176,6 +178,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
           try { (host as ZoteroLike & { launchURL?(url: string): void }).launchURL?.(referenceSearchURL(view.entry)) } catch (error) { feedback.textContent = errorText(error) }
         })
         const save = action(doc, uiText("导入", "Import"), () => { void importSelected([view.entry.id]) })
+        actionIcon(locate, "locate"); actionIcon(search, "search"); actionIcon(publication, "open")
         view.controls.append(checkbox, locate, search, publication, save); view.checkbox = checkbox; view.save = save; view.publication = publication
       }
       if (row.checkbox) {
@@ -184,6 +187,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
         row.checkbox.checked = selected.has(entry.id); row.checkbox.disabled = busy || blocksImport || !canImportReference(entry)
         // 未确认写入仅允许显式核对文库；执行层先查 DOI，找不到时仍禁止再次写入。
         row.save!.textContent = entry.importUncertain ? uiText("核对文库", "Check library") : uiText("导入", "Import")
+        actionIcon(row.save!, entry.importUncertain ? "search" : "import")
         row.save!.disabled = busy || blocksImport || Boolean(entry.imported) || entry.verification !== "verified"
       }
     }

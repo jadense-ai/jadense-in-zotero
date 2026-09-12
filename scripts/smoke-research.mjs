@@ -1,4 +1,7 @@
+import { verifyLiteratureWorkspace } from './smoke-literature-workspace.mjs'
 import { verifyReaderChat } from "./smoke-reader-chat.mjs"
+import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
+import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -6,7 +9,7 @@ import { verifyReaderChat } from "./smoke-reader-chat.mjs"
 /* global Zotero, Services, Components, ChromeUtils, IOUtils, PathUtils */
 import { spawn } from "node:child_process"
 import { createServer } from "node:http"
-import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -431,6 +434,13 @@ async function startStub() {
           output = analysis.output
           requests.push({ kind: "analysis-jadense", temporary: true, passages: analysis.input.passages.length, pages: [...new Set(analysis.input.passages.map((passage) => passage.pageIndex))] })
           await delay(600)
+        } else if (prompt.includes('<passage>')) {
+          requests.push({ kind: 'ocr-translation' })
+          response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+          response.write(`data: ${JSON.stringify({ type: 'text-delta', delta: '## OCR_STREAM\n\n首片流式译文。\n\n' })}\n\n`)
+          await delay(1800)
+          response.end(`data: ${JSON.stringify({ type: 'text-delta', delta: '全文已完成。' + (prompt.split('<passage>')[1]?.match(/⟦F\d+⟧|!\[[^\]\n]*\]\(jdx-asset:image-\d+\)/gu) ?? []).join(' ') })}\n\ndata: {"type":"finish"}\n\n`)
+          return
         } else if (prompt.startsWith("Translate every supplied passage") || prompt.startsWith("Translate the supplied continuous article passage")) {
           const passages = JSON.parse(prompt.split("\n").at(-1))
           const semanticTranslations = {
@@ -572,6 +582,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await stage("waiting-for-library")
     await Zotero.Libraries.get(Zotero.Libraries.userLibraryID).waitForDataLoad("item")
     Zotero.Prefs.set("extensions.jadenseInZotero.baseUrl", config.origin)
+    // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
+    Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
     if (config.resumeOnly) {
       const jobs = Zotero.__jadenseDocumentJobs; await jobs.ready
@@ -867,6 +879,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         main.resizeTo(...previousSize)
         await Zotero.Promise.delay(200)
       }
+    }
+    if (config.machineOnly) {
+      await stage('machine-translation')
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'machine Manager')
+      await verifyMachineTranslation({ Zotero, reader, manager, waitFor, assert, screenshot, report, findWindowContaining, live: config.machineLive })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (!config.documentsOnly) {
     const toolbarButton = (kind) => readerDoc.querySelector(`[data-jadense-reader-tools="renderToolbar"] [data-jadense-action="${kind}"], [data-jadense-action-menu] [data-jadense-action="${kind}"]`)
@@ -1720,13 +1739,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const analysisTitle = manager.document.querySelector("#jadense-analysis-history .jdx-analysis-title")
     assert(analysisTitle?.localName === "button" && analysisTitle.type === "button", "History title lacks keyboard button semantics")
     analysisTitle.click()
-    const notesTab = manager.document.querySelector('.jdx-analysis-detail:not([hidden]) [role="tab"][id$="-tab-notes"]')
+    const notesTab = manager.document.getElementById('jdx-literature-tab-notes')
     notesTab.click()
-    const analysisNotes = manager.document.querySelector('.jdx-analysis-detail:not([hidden]) .jdx-analysis-notes-text')
+    const analysisNotes = await waitFor(() => manager.document.querySelector('.jdx-literature-panel:not([hidden]) .jdx-analysis-notes-text'), 'paper notes result')
     assert(!analysisNotes.parentElement.hidden && analysisNotes.textContent.includes("Controlled improvement."), "Analysis notes detail lost its readable backup")
     notesTab.dispatchEvent(new manager.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "ArrowRight", bubbles: true }, manager)))
     assert(manager.document.activeElement.id.endsWith("-tab-references"), "Detail tabs lost keyboard navigation")
-    detail.querySelector('.jdx-detail-navigation button').click()
+    manager.document.querySelector('.jdx-literature-detail > .jdx-result-tools button').click()
     report.checks.push("analysis-multiline-code-block", "analysis-detail-native-reader", "analysis-three-result-tabs", "analysis-duplicate-start-focus-only")
     const historyTab = manager.document.getElementById("jadense-analysis-tab-history")
     const configTab = manager.document.getElementById("jadense-analysis-tab-config")
@@ -1848,26 +1867,25 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       }
       if (manager.document.documentElement.dataset.theme !== previousTheme) manager.document.getElementById("jadense-manager-theme-toggle").click()
     }
-    manager.document.getElementById("jadense-manager-nav-translations").click()
-    await waitFor(() => manager.document.getElementById("jadense-translation-history")?.textContent.includes(config.translationMarker), "Manager translation history page")
+    manager.document.getElementById("jadense-manager-nav-analysis").click()
+    const paperTitle = await waitFor(() => [...manager.document.querySelectorAll('.jdx-analysis-title')].find(button => button.textContent.includes(firstAnalysisRecord.source.title)), 'paper history title')
+    paperTitle.click()
+    manager.document.getElementById('jdx-literature-tab-selection').click()
+    const selectionEntry = await waitFor(() => manager.document.querySelector('.jdx-literature-panel:not([hidden]) .jdx-selection-result'), 'selection result in paper workspace')
+    selectionEntry.querySelector('.jdx-selection-toggle').click()
     const translationRecord = translationState().records[0]
     assert(translationRecord.source.itemID === attachment.id && translationRecord.source.libraryID === attachment.libraryID
       && translationRecord.source.itemKey === attachment.key && translationRecord.source.pageIndex === 0,
-    "Translation history did not retain the exact attachment identity and page")
-    assert(manager.document.querySelector("#jadense-translation-history .jdx-markdown h2")
-      && manager.document.querySelector("#jadense-translation-history .jdx-markdown ul")
-      && manager.document.querySelector("#jadense-translation-history .jdx-markdown strong")
-      && manager.document.querySelector("#jadense-translation-history .jdx-markdown math annotation")?.textContent === "\\epsilon = 0.2",
-    "Translation history did not render Markdown while preserving formula notation")
-    const translationTitle = manager.document.querySelector("#jadense-translation-history .jdx-translation-title")
-    if (translationTitle?.closest("details")) translationTitle.closest("details").open = true
-    assert(translationTitle?.localName === "button" && translationTitle.type === "button" && translationTitle.getAttribute("aria-label")?.includes("Zotero 阅读器"),
-      "Translation history title is not an accessible native button")
+      'Translation history lost exact attachment and page')
+    assert(selectionEntry.querySelector('.jdx-markdown h2') && selectionEntry.querySelector('.jdx-markdown ul')
+      && selectionEntry.querySelector('.jdx-markdown strong') && selectionEntry.querySelector('.jdx-markdown math annotation')?.textContent === "\\epsilon = 0.2",
+      'Selection history lost Markdown or formula notation')
+    const translationTitle = selectionEntry.querySelector('.jdx-selection-content button')
+    assert(translationTitle?.localName === 'button' && translationTitle.type === 'button', 'Source navigation is not a button')
     await reader.navigate({ pageIndex: JSON.parse(second.annotationPosition).pageIndex })
-    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, "second PDF page before translation navigation")
+    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 2, 'second PDF page before translation navigation')
     translationTitle.click()
-    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 1
-      && manager.document.getElementById("jadense-translation-history-status").dataset.kind === "success", "translation title exact-page Reader navigation")
+    await waitFor(() => view._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 1, 'selection history exact-page Reader navigation')
     await screenshot("manager-translation-history", manager)
     const restoredPickerButton = await waitFor(() => manager.document.querySelector(`[data-session-id="${pickerSessionId}"]`), "resource conversation after returning to Chat")
     restoredPickerButton.click()
@@ -2570,6 +2588,14 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     Zotero.Prefs.set("extensions.jadenseInZotero.translationModel", JSON.stringify({ route: "jadense", selection: { kind: "model", modelId: "synthetic-platform-model" } }))
     const jobs = Zotero.__jadenseDocumentJobs
     assert(jobs, "Plugin lifecycle did not own the document jobs")
+    if (config.literatureOnly) {
+      await verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.ocrOnly) {
+      await verifyOCRTranslation({ Zotero, reader, jobs, assert, waitFor, screenshot, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.translationPapers) {
       await verifyTranslationPapers({ Zotero, jobs, directory: config.translationPapers, report, assert })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
@@ -2762,6 +2788,9 @@ async function writeCompanion(extensionsDir, config) {
   zip.file("bootstrap.js", [
     `const SMOKE_CONFIG = ${JSON.stringify(config)};`,
     verifyReaderChat.toString(),
+    verifyMachineTranslation.toString(),
+    verifyOCRTranslation.toString(),
+    verifyLiteratureWorkspace.toString(),
     verifyAnalysisDetails.toString(),
     verifyTranslationSidebar.toString(),
     verifyTranslationPapers.toString(),
@@ -2835,6 +2864,13 @@ async function main() {
   try {
     await mkdir(extensionsDir, { recursive: true })
     await mkdir(dataDir, { recursive: true })
+    const ocrRuntime = argValue(argv, '--ocr-runtime')
+    if (ocrRuntime) {
+      // 仅复用用户显式指定的测试环境，不能把此快速复测记为首次安装验收。
+      const runtime = await realpath(ocrRuntime)
+      await mkdir(path.join(profileDir, 'jadense-ocr'), { recursive: true })
+      await symlink(runtime, path.join(profileDir, 'jadense-ocr', 'v1'), process.platform === 'win32' ? 'junction' : 'dir')
+    }
     await writeFile(pdfPath, createResearchFixturePdf())
     await writeFile(referencePdfPath, createResearchFixturePdf(true))
     await writeFile(translationPdfPath, createResearchFixturePdf(false, true))
@@ -2855,7 +2891,8 @@ async function main() {
         user: createMarkdownFixture("user", stub.origin),
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
-      chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
+      literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [

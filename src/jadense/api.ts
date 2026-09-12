@@ -75,13 +75,15 @@ export class JadenseApiError extends Error {
   readonly status: number
   readonly code: string | null
   readonly body: string
+  readonly retryAfter: string | null
 
-  constructor(input: { status: number; code?: string | null; body: string; message: string }) {
+  constructor(input: { status: number; code?: string | null; body: string; message: string; retryAfter?: string | null }) {
     super(input.message)
     this.name = "JadenseApiError"
     this.status = input.status
     this.code = input.code ?? null
     this.body = input.body
+    this.retryAfter = input.retryAfter ?? null
   }
 }
 
@@ -218,8 +220,9 @@ export function parseJadenseChatModelCatalog(value: unknown): JadenseChatModelCa
   }
 }
 
-export async function readJadenseApiError(response: Response, fallback = uiText("攻玉请求失败", "The Jadense request failed")) {
-  const body = await response.text().catch(() => "")
+export async function readJadenseApiError(response: Response, fallback = uiText("攻玉请求失败", "The Jadense request failed"), showPlainText = false) {
+  let readFailed = false
+  const body = await response.text().catch(() => { readFailed = true; return "" })
   let code: string | null = null
   let message: string | null = null
   try {
@@ -227,10 +230,28 @@ export async function readJadenseApiError(response: Response, fallback = uiText(
     code = nonEmptyText(parsed.code)
     message = nonEmptyText(parsed.error) ?? nonEmptyText(parsed.message)
   } catch {
-    // 非 JSON 响应仍保留原始文本，避免隐藏网关或代理返回的可诊断信息。
+    // 简短纯文本业务拒绝需要可见；HTML 代理页及长正文只保留在错误对象中。
+    const plain = body.trim()
+    if (showPlainText && plain && plain.length <= 300 && !/[<>]/u.test(plain)) message = `${fallback}（${response.status}）：${plain}`
+  }
+  if (showPlainText && !message) {
+    const reason = readFailed
+      ? uiText('响应正文读取失败，无法取得服务端错误详情。', 'The response body could not be read; server error details are unavailable.')
+      : !body.trim()
+        ? uiText('响应正文为空，服务端未提供错误详情。', 'The response body is empty; the server provided no error details.')
+        : /<\s*(?:!doctype|html|head|body)\b/iu.test(body)
+          ? uiText('服务器返回了 HTML 错误页，未提供可显示的业务错误详情。', 'The server returned an HTML error page without displayable application error details.')
+          : uiText('响应中没有可显示的错误详情。', 'The response contains no displayable error details.')
+    message = `${fallback}（${response.status}）：${reason}`
+  }
+  if (showPlainText) {
+    // 只展示有限字符的关联 ID，不读取认证头、Cookie 或请求正文。
+    const requestID = response.headers?.get?.('x-request-id')
+    if (requestID && /^[a-z\d_.:-]{1,128}$/iu.test(requestID)) message += uiText(` 请求 ID：${requestID}`, ` Request ID: ${requestID}`)
   }
   return new JadenseApiError({
     status: response.status,
+    retryAfter: response.headers?.get?.('Retry-After') ?? null,
     code,
     body,
     message: message ?? `${fallback}（${response.status}）`,

@@ -1,3 +1,4 @@
+import { readLiteratureIdentity, type LiteratureIdentity } from "@/zotero/document-identity"
 import { uiText } from "@/zotero/ui-preferences"
 /**
  * Zotero profile 中独立的文献解析历史。
@@ -12,6 +13,7 @@ export type PaperAnalysisHistoryPreferenceStore = {
 }
 
 export type PaperAnalysisSource = {
+  literature?: LiteratureIdentity
   itemID: number
   libraryID: number
   itemKey: string
@@ -102,6 +104,7 @@ function normalizeRecord(value: unknown): PaperAnalysisRecord | null {
     id,
     createdAt,
     source: {
+      ...(readLiteratureIdentity(source?.literature) ? { literature: readLiteratureIdentity(source?.literature) } : {}),
       itemID,
       libraryID,
       itemKey,

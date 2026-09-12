@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { JadenseApiClient, JadenseApiError, jadenseModelSubscriptionErrorMessage, parseJadenseChatModelCatalog } from "./api"
+import { JadenseApiClient, JadenseApiError, jadenseModelSubscriptionErrorMessage, parseJadenseChatModelCatalog, readJadenseApiError } from "./api"
 
 describe("JadenseApiClient", () => {
+  it('distinguishes an empty HTTP rejection from a failed response-body read', async () => {
+    const empty = await readJadenseApiError(new Response(null, { status: 400, headers: { 'x-request-id': 'test-request-400' } }), undefined, true)
+    expect(empty.message).toContain('400'); expect(empty.message).toContain('响应正文为空')
+    expect(empty.message).toContain('test-request-400')
+    const broken = new Response(null, { status: 400 })
+    vi.spyOn(broken, 'text').mockRejectedValue(new Error('stream failed'))
+    const failed = await readJadenseApiError(broken, undefined, true)
+    expect(failed.message).toContain('响应正文读取失败'); expect(failed.message).not.toContain('响应正文为空')
+    const normal = await readJadenseApiError(new Response(null, { status: 400 }))
+    expect(normal.message).toBe('攻玉请求失败（400）')
+  })
+  it.each(['<html>proxy</html>', 'x'.repeat(500), '{"detail":"unrecognized shape"}'])('explains an unreadable error response instead of falling back to a bare status: %s', async body => {
+    const error = await readJadenseApiError(new Response(body, { status: 400 }), undefined, true)
+    expect(error.message).toContain('400'); expect(error.message).not.toBe('攻玉请求失败（400）')
+    expect(error.message).not.toContain('<html>')
+  })
+  it('shows a short plain-text rejection without displaying an HTML proxy page', async () => {
+    const error = await readJadenseApiError(new Response('Invalid body', { status: 400 }), undefined, true)
+    expect(error.message).toContain('Invalid body'); expect(error.message).toContain('400')
+    const html = await readJadenseApiError(new Response('<html>proxy</html>', { status: 400 }), undefined, true)
+    expect(html.message).not.toContain('<html>')
+  })
   it("preserves optional subscription requirements without inferring locks or rejecting future fields", () => {
     const catalog = parseJadenseChatModelCatalog({ options: [
       { kind: "model", modelId: "paid", displayName: "Paid", minimumPlanCode: " go ", locked: true, lockReason: "需要 GO", future: true },

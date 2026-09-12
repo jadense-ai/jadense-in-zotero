@@ -1,4 +1,5 @@
 import { wireReferenceAISetting } from './reference-ai-settings'
+import { wireTranslationInterface } from './translation-interface'
 /** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import {
@@ -583,6 +584,7 @@ export function initJadensePreferencesPage() {
   const themeOptions = [{ value: "system", label: strings.followZotero }, { value: "light", label: strings.lightTheme }, { value: "dark", label: strings.darkTheme }]
   const generalStatus = element("jadense-in-zotero-general-status")
   const stopReferenceAI = wireReferenceAISetting(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
+  const stopTranslationInterface = wireTranslationInterface(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
   const stopReading = wireReadingPreferences(Zotero, root.querySelector<HTMLElement>('[data-settings-section="general"]')!)
   const stopTheme = observeTheme(Zotero, root, () => theme.setOptions(themeOptions, readTheme(Zotero)))
   // Zotero 卸载 pane 时也会移除根节点，不让跨窗口主题 observer 引用旧 UI。
@@ -590,7 +592,8 @@ export function initJadensePreferencesPage() {
   const cleanup = () => {
     stopTheme()
     stopReading()
-    stopReferenceAI()
+      stopReferenceAI()
+      stopTranslationInterface()
     stopLanguage()
     removalObserver?.disconnect()
     root.ownerDocument.defaultView?.removeEventListener("unload", cleanup)

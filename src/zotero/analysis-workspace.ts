@@ -9,7 +9,7 @@ import { mountReferenceDetails, type ReferencePreparation } from "./reference-wo
 import { copyTextToClipboard } from "./connection-display"
 import type { ZoteroLike } from "./runtime"
 import { getUiLocale, uiText } from "./ui-preferences"
-import { action, badge, bindTabs, element, notice } from "./ui/controls"
+import { actionIcon, action, badge, bindTabs, element, notice } from "./ui/controls"
 
 export type AnalysisDetailTab = "summary" | "notes" | "references"
 export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; error?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
@@ -22,14 +22,20 @@ function noteLabel(text: string) {
   return uiText(text, count ? `Source passages and notes (${count[1]})` : labels[text] || text)
 }
 
+let workspaceSequence = 0
+
 export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, options: {
+  embedded?: boolean
+  hideTabs?: boolean
+  referenceTaskID?: string
   records(): PaperAnalysisRecord[]
   unsaved(id: string): boolean
   openSource(source: PaperAnalysisSource): Promise<boolean>
   stop(source: PaperAnalysisSource): void
   onReferenceTask(source: PaperAnalysisSource, task: DocumentTask): void
 }) {
-  const doc = root.ownerDocument, jobs = documentJobs(host), section = root.closest<HTMLElement>(".jdx-analysis-section")!
+  const workspaceID = ++workspaceSequence
+  const doc = root.ownerDocument, jobs = documentJobs(host), section = options.embedded ? root : root.closest<HTMLElement>(".jdx-analysis-section") || root
   const list = element(doc, "div", "jdx-analysis-list"), empty = element(doc, "div", "jdx-result-empty")
   empty.append(element(doc, "span", "jdx-empty-mark", "≡"), element(doc, "h3", "", uiText("从一篇文献开始", "Start with a paper")), element(doc, "p", "", uiText("在 PDF 阅读器中点击「解析」，总结、笔记与参考文献会汇集在这里。", "Click Analyze in the PDF reader to collect the summary, notes and references here.")))
   root.replaceChildren(list, empty)
@@ -75,7 +81,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     }
   }
   function createDetail(paper: AnalysisPaper): Detail {
-    const key = paper.key, prefix = `jdx-analysis-detail-${++detailSequence}`
+    const key = paper.key, prefix = `jdx-analysis-detail-${workspaceID}-${++detailSequence}`
     const container = element(doc, "article", "jdx-analysis-detail"), nav = element(doc, "div", "jdx-detail-navigation")
     const feedback = notice(doc), backButton = action(doc, uiText("← 解析历史", "← Analysis history"), back)
     nav.append(backButton, action(doc, uiText("打开原文 ↗", "Open PDF ↗"), () => { void openSource(papers.get(key)!.source, feedback) }))
@@ -83,6 +89,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     const title = element(doc, "h2"), meta = element(doc, "p", "jdx-detail-metadata"), date = element(doc, "p", "jdx-detail-date")
     hero.append(eyebrow, title, meta, date)
     const run = element(doc, "div", "jdx-detail-run"), status = notice(doc), stop = action(doc, uiText("停止本次解析", "Stop analysis"), () => { reference.pause(); options.stop(papers.get(key)!.source) })
+    actionIcon(backButton, "back"); actionIcon(nav.lastElementChild as HTMLButtonElement, "open"); actionIcon(stop, "stop")
     run.append(status, stop)
     const warning = notice(doc), tablist = element(doc, "div", "jdx-tabs jdx-detail-tabs")
     tablist.setAttribute("role", "tablist"); tablist.setAttribute("aria-label", uiText("解析结果", "Analysis results"))
@@ -96,8 +103,10 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
       const content = [paper.source.title, warning.textContent, text].filter(Boolean).join("\n\n")
       void copyTextToClipboard(host, content).then(ok => { feedback.textContent = ok ? uiText("已复制", "Copied") : uiText("复制失败，请选择正文复制。", "Copy failed. Select the text to copy it."); feedback.dataset.kind = ok ? "success" : "error" }).catch(() => { feedback.textContent = uiText("复制失败，请选择正文复制。", "Copy failed. Select the text to copy it.") })
     })
-    for (const [i, kind] of (["summary", "notes"] as const).entries()) { const toolbar = element(doc, "div", "jdx-reading-toolbar"); toolbar.append(element(doc, "span", "", labels[kind]), copy(kind)); panels[i].append(toolbar, i === 0 ? summary : notes) }
+    for (const [i, kind] of (["summary", "notes"] as const).entries()) { const toolbar = element(doc, "div", "jdx-reading-toolbar"); toolbar.append(actionIcon(copy(kind), "copy")); panels[i].append(toolbar, i === 0 ? summary : notes) }
     container.append(nav, hero, run, warning, feedback, tablist, ...panels)
+    if (options.embedded) { nav.hidden = true; hero.hidden = true }
+    if (options.hideTabs) { tablist.hidden = true; panels.forEach(panel => { panel.removeAttribute("role"); panel.removeAttribute("aria-labelledby") }) }
     const reference = mountReferenceDetails(panels[2], host, paper.source, task => { options.onReferenceTask(paper.source, task); refresh() })
     const detail: Detail = { root: container, title, meta, date, warning, status, stop, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
     const cleanup = bindTabs(tabs, i => selectTab(detail, tabNames[i]))
@@ -110,7 +119,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.title.textContent = paper.source.title; detail.meta.textContent = [metadataText(paper.source), paper.source.doi ? `DOI ${paper.source.doi}` : ""].filter(Boolean).join(" · ")
     detail.meta.hidden = !detail.meta.textContent
     detail.date.textContent = [record ? uiText(`解析于 ${timeText(record.createdAt)}`, `Analyzed ${timeText(record.createdAt)}`) : uiText("尚未生成解析总结", "No analysis summary yet"), uiText("本地保存", "Stored locally")].join(" · ")
-    detail.status.textContent = run?.message || ""; detail.status.dataset.kind = run?.error ? "error" : "neutral"
+    detail.status.textContent = run?.message || ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
     detail.stop.hidden = !(run?.busy || run?.references?.running || paper.references?.status === "running")
     detail.status.parentElement!.hidden = !detail.status.textContent && detail.stop.hidden
     detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请复制笔记。", "The latest result is not fully saved. Copy the notes before closing.") : "", ...(record?.warnings || [])].filter(Boolean).join("\n")
@@ -123,7 +132,8 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
       detail.panels[0].querySelector("button")!.disabled = !record?.summary
       detail.panels[1].querySelector("button")!.disabled = !record?.notes
     }
-    detail.reference.update(paper.references, run?.references)
+    const reference = options.referenceTaskID ? jobs.get(options.referenceTaskID) : paper.references
+    detail.reference.update(reference && paperKey(reference.source) === paperKey(paper.source) ? reference : paper.references, run?.references)
   }
   function refresh() {
     if (disposed) return
@@ -173,7 +183,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     const detail = details.get(key) || createDetail(paper)
     updateDetail(paper, detail); detail.root.hidden = false
     selectTab(detail, tab || detail.active, false)
-    detail.tabs[tabNames.indexOf(detail.active)].focus({ preventScroll: true })
+    if (!options.hideTabs) detail.tabs[tabNames.indexOf(detail.active)].focus({ preventScroll: true })
   }
   const stop = jobs.subscribe(refresh)
   void jobs.ready.then(refresh)

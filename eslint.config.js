@@ -6,7 +6,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["build/**", "node_modules/**", "release/**"],
+    ignores: ["build/**", "node_modules/**", "release/**", "content/ocr/.venv/**", "content/ocr/.cache/**"],
   },
   {
     files: ["**/*.ts"],

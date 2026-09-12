@@ -3,10 +3,10 @@ import { uiText } from "./ui-preferences"
 
 export type PdfRect = [number, number, number, number]
 export type PdfLine = { id: string; text: string; pageIndex: number; pageLabel: string; rects: PdfRect[]; paragraphEnd?: boolean; fontSize?: number }
-export type PdfParagraph = PdfLine & { lineIDs: string[]; heading?: boolean; locations?: Array<{ pageIndex: number; pageLabel: string; rects: PdfRect[] }> }
-export type DocumentIdentity = { itemID: number; libraryID: number; itemKey: string; title: string; modificationTime?: number }
+export type PdfParagraph = PdfLine & { lineIDs: string[]; heading?: boolean; formulas?: Record<string, string>; sourceRange?: { start: number; end: number }; locations?: Array<{ pageIndex: number; pageLabel: string; rects: PdfRect[] }> }
+export type DocumentIdentity = { itemID: number; libraryID: number; itemKey: string; title: string; modificationTime?: number; literature?: import('./document-identity').LiteratureIdentity }
 export type DocumentPage = { pageIndex: number; pageLabel: string; paragraphs: PdfParagraph[]; lines: PdfLine[]; warning?: string; layoutWarning?: string; viewBox?: number[]; excludedLines?: PdfLine[]; continuationFrom?: number[] }
-export type PdfTextDocument = { source: DocumentIdentity; pages: DocumentPage[] }
+export type PdfTextDocument = { source: DocumentIdentity; pages: DocumentPage[]; ocrVersion?: number }
 type Char = { c: string; rect?: number[]; inlineRect?: number[]; fontSize?: number; ignorable?: boolean; spaceAfter?: boolean; lineBreakAfter?: boolean; paragraphBreakAfter?: boolean }
 type Item = { id: number; libraryID: number; key: string; deleted?: boolean; parentItem?: Item; getField?(key: string): unknown; isPDFAttachment?(): boolean; attachmentModificationTime?: number | Promise<number | null> }
 type View = { initializedPromise?: Promise<unknown>; _ensureBasicPageData?(page: number): Promise<void>; _pdfPages?: Record<number, { chars: Char[]; viewBox?: number[] }>; _iframeWindow?: { PDFViewerApplication?: { pdfDocument?: { numPages: number; getPageLabels?(): Promise<string[] | null> } } } }

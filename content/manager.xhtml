@@ -47,7 +47,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.7h10a1.3 1.3 0 0 1 1.3 1.3v6a1.3 1.3 0 0 1-1.3 1.3H8.2l-3.4 2.5v-2.5H3a1.3 1.3 0 0 1-1.3-1.3v-6A1.3 1.3 0 0 1 3 2.7z"/></svg>
             <span class="jdx-manager-nav-label" data-ui-en="New conversation">新对话</span>
           </button>
-          <button id="jadense-manager-nav-translations" type="button" role="tab" aria-controls="jadense-manager-section-translations" aria-label="翻译历史" data-ui-en-aria-label="Translation history" title="翻译历史" data-ui-en-title="Translation history">
+          <button id="jadense-manager-nav-translations" hidden="hidden" type="button" role="tab" aria-controls="jadense-manager-section-translations" aria-label="翻译历史" data-ui-en-aria-label="Translation history" title="翻译历史" data-ui-en-title="Translation history">
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h7M5.5 1.8V3M3.2 3c0 3 2.7 5.2 5.3 5.8M8.2 3c0 2.8-2.4 5.1-5.2 6M9.5 13.5l2.2-5.8 2.3 5.8M10.3 11.5h2.9"/></svg>
             <span class="jdx-manager-nav-label" data-ui-en="Translation history">翻译历史</span>
           </button>
@@ -248,13 +248,13 @@
                 <h4 data-ui-en="Full-PDF translation">全文翻译</h4>
                 <p class="jdx-guide-note" data-ui-en="Full translation is not recommended for most reading. It processes many pages and sends much more text to the model, which can waste tokens on passages you do not need. Start with Literature analysis or selected-text translation when you only want to understand the main points.">不建议把全文翻译作为常规阅读方式：它会处理很多页面，把大量文字交给模型，可能在不需要翻译的内容上浪费 token。想先了解重点时，建议先用「文献解析」或「选中翻译」。</p>
                 <ol>
-                  <li data-ui-en="Click Full translation in the PDF reader. Read the reminder, and click Continue translation only when you still need the whole document.">点击 PDF 阅读器中的「全文翻译」。先阅读提示，确认确实需要处理整篇文献后，再点击「仍要翻译」。</li>
-                  <li data-ui-en="The task translates readable pages according to the paper's language settings. Blank, scanned, or unreadable pages are marked instead of being silently treated as translated.">任务会按照文章的语言设置处理可读取的页面。空白页、扫描页或无法读取的页面会被标记，不会被默认为已经翻译。</li>
+                  <li data-ui-en="Open the reader sidebar and switch to Full Markdown. Click Extract source to prepare the read-only document and its images.">打开 PDF 阅读器侧栏，切换到「全文 Markdown」，点击「提取原文」，生成可阅读的正文和图片。</li>
+                  <li data-ui-en="After extraction, read the source and choose a target language. Click Translate full text to translate this saved Markdown version.">提取完成后先阅读原文并选择目标语言；手动点击「翻译全文」，翻译当前保存的 Markdown 版本。</li>
                   <li data-ui-en="Pause or continue from the translation window or its details. Completed pages are kept, so you can continue later. After restarting Zotero, resume the task manually.">可以在翻译浮窗或详情中暂停、继续。已经完成的页面会保留，之后可以接着做；重启 Zotero 后需要手动点击继续。</li>
                 </ol>
                 <p data-ui-en="You can drag or resize the translation window, minimize it, or hide it while the task continues. Use Locate original beside a passage to return to its PDF page.">翻译进行时，可以拖动或调整浮窗大小，也可以最小化或隐藏浮窗；隐藏后任务仍会继续。点击段落旁的「定位原文」可以回到 PDF 对应页面。</p>
                 <h4 data-ui-en="Review translation history">回看翻译历史</h4>
-                <p data-ui-en="Translation history keeps selected passages and full-PDF tasks separately. Expand a selected-text record to read and copy the source and translation; open a full-PDF record for page-by-page results, copying, resuming, retranslating, or deleting. These records are stored locally and are separate from AI Chat.">「翻译历史」会分别保存选中翻译和全文翻译。展开选文记录可以查看、复制原文和译文；打开全文记录可以按页查看、复制、续译、重新翻译或删除。翻译记录保存在本机，与 AI 对话分开。</p>
+                <p data-ui-en="Literature analysis groups source extraction, full translations, selected-text translations and analysis results by paper. Select an attachment in the details, or use History to revisit a result version. Everything is stored locally, separately from Chat.">「文献解析」以文献汇总原文提取、全文翻译、选中翻译和解析成果。进入详情选择附件，通过「历史」回看各次结果。记录保存在本机，与 AI 对话分开。</p>
                 <p data-ui-en="Settings → General lets you change the plugin font size, translation window style, and background transparency. Settings → Feature settings lets you choose the model used by translation.">「设置 → 常规」可以调整插件字号、翻译浮窗样式和背景透明度；「设置 → 功能配置」可以选择翻译功能使用的模型。</p>
                 <h4 data-ui-en="Reading tips">使用建议</h4>
                 <ul>
@@ -310,7 +310,7 @@
           <header class="jdx-manager-section-header">
             <div>
               <h2 data-ui-en="Literature analysis">文献解析</h2>
-              <p data-ui-en="Analyze the current reader&#x27;s paper independently. Summaries are stored only on this computer, separately from conversations.">独立解析当前阅读器中的文献；解析总结只保存在这台电脑上，不会写入对话记录。</p>
+              <p data-ui-en="Read extracted Markdown, translations and analysis together by paper. Results are stored on this computer.">按文献查看原文、翻译与解析成果；记录保存在这台电脑上。</p>
             </div>
           </header>
           <div id="jadense-analysis-tabs" class="jdx-tabs" role="tablist" aria-label="文献解析页面" data-ui-en-aria-label="Literature analysis pages">
@@ -474,13 +474,13 @@
             </div>
           </section>
           <section id="jadense-settings-panel-features" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
-            <p class="jdx-manager-settings-note" data-ui-en="Other features follow the current Chat model by default. The Chat model remains editable; turn this off to configure other features separately. First connect your account in Connect Jadense, or add a provider and model in BYOK.">其他功能默认自动跟随当前对话模型；AI 对话模型始终可调整，关闭后可分别配置其他功能。请先在「连接攻玉」连接账号，或在「BYOK」添加提供商与模型。</p>
+            <p class="jdx-manager-settings-note" data-ui-en="Other AI features follow the current Chat model by default. Configure AI through Connect Jadense or BYOK. Translation services can be selected independently without an AI model.">其他 AI 功能默认自动跟随当前对话模型。可在「连接攻玉」或「BYOK」配置 AI；翻译接口可独立选择，无需 AI 模型。</p>
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p data-ui-en="Everyday questions and paper discussions. Shared with the model selector in the Chat input.">日常问答与文献对话；与对话输入栏的模型选择保持一致。</p></div>
               <div><div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label"></div><p id="jadense-feature-chat-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
             <div class="jdx-feature-model-row jdx-feature-model-follow-row">
-              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, other features use the current Chat model. Turn it off to configure them separately.">开启后，其他功能使用当前对话模型；关闭后可分别配置其他功能模型。</p></div>
+              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, other AI features use the current Chat model. Turn it off to configure them separately. Translation services are independent.">开启后，其他 AI 功能使用当前对话模型；关闭后可分别配置。翻译接口不受此开关影响。</p></div>
               <label class="jdx-manager-checkbox"><input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" /><span data-ui-en="Enabled">启用</span></label>
             </div>
             <div class="jdx-feature-model-row">

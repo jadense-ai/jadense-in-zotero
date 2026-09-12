@@ -12,3 +12,6 @@ reports/
 profile/
 profiles/
 .DS_Store
+content/ocr/.venv/
+content/ocr/__pycache__/
+content/ocr/.cache/

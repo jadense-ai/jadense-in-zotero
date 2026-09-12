@@ -1,4 +1,14 @@
-# Jadense in Zotero
+<p align="center">
+  <a href="https://jadense.cn/"><img src="content/icons/logo-padded.png" width="128" height="128" alt="Jadense Logo"></a>
+</p>
+<h1 align="center">Jadense in Zotero</h1>
+<p align="center">Jadense · AI reading assistant for Zotero</p>
+<p align="center">
+  <a href="https://www.zotero.org/download/"><img src="https://img.shields.io/badge/Zotero-8%20%7C%209%20%7C%2010-bb2222" alt="Zotero 8 / 9 / 10"></a>
+  <a href="https://github.com/jadense-ai/jadense-in-zotero/releases/latest"><img src="https://img.shields.io/github/v/release/jadense-ai/jadense-in-zotero" alt="GitHub release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Non--Commercial-16a36a" alt="Non-commercial license"></a>
+  <a href="docs/usage-guide.md"><img src="https://img.shields.io/badge/BYOK-supported-16a36a" alt="BYOK supported"></a>
+</p>
 
 [简体中文](README.md) · **English**
 
@@ -6,13 +16,115 @@
 
 Paper Q&A · Source-linked annotations · Text translation · Figure interpretation
 
-Jadense in Zotero is an open-source AI reading assistant from [Jadense (攻玉学术)](https://jadense.cn/). Ask questions about the paper you are reading, keep analysis notes alongside the original passages, and follow up on difficult paragraphs or figures—all within Zotero.
+Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻玉学术)](https://jadense.cn/). Ask questions about the paper you are reading, keep analysis notes alongside the original passages, and follow up on difficult paragraphs or figures—all within Zotero.
 
-**MIT-licensed client · Bring your own API key (BYOK) · Jadense account optional**
+**Free for personal non-commercial use · Commercial use prohibited · Bring your own API key (BYOK) · Jadense account optional**
 
 **[Download the plugin](https://github.com/jadense-ai/jadense-in-zotero/releases/latest)** · [Quick start](#quick-start) · [Explore Jadense](#continue-research)
 
-The client is open source. Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
+The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
+
+<!-- release-summary:start -->
+> **[v0.4.4](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4)**: A unified literature workspace, Bing/Google translation, local OCR, and clearer navigation and onboarding. [Full release notes](CHANGELOG.md)
+<!-- release-summary:end -->
+
+
+## Contents
+
+- [How to use this plugin](#quick-start)
+  - [1. Install and open the workbench](#install)
+  - [2. Choose an AI connection](#ai-connection)
+    - [2.1 Bring your own key](#use-byok)
+    - [2.2 Connect Jadense](#connect-jadense)
+  - [3. Your first reading session](#first-reading)
+  - [4. Language and theme](#display-language-and-theme)
+- [Reading features](#read-and-analyze-papers)
+- [Zotero introduction (中文)](docs/zotero-guide.md) · [Illustrated guide (中文)](docs/usage-guide.md)
+- [FAQ](#faq) · [Upgrade](#upgrade) · [Changelog](CHANGELOG.md)
+- [Continue your research](#continue-research)
+  - [Meet Jadense](#jadense-introduction) · [Bring papers into a project](#research-project)
+- [Support us](#support) · [WeChat / Alipay support page](support/README.md)
+- [Contribute and share feedback](#contribute-and-share-feedback) · [Release workflow (中文)](CONTRIBUTING.md#发布正式版本)
+- [License](#license)
+
+<a id="quick-start"></a>
+
+## How to use this plugin
+
+**Install → configure one AI connection → select a model → open a PDF.** Chat and selection translation do not require Python. Full translation installs local OCR automatically; the first setup downloads dependencies and models and needs several GB of disk space. See [OCR setup and troubleshooting (Chinese)](docs/local-ocr.md). BYOK requires access to your configured model API.
+
+The [illustrated guide (Chinese)](docs/usage-guide.md) walks through provider, model, token and reader settings.
+
+The workbench supports both English and Simplified Chinese. The steps below also include Chinese labels for reference; choose your display language in **Settings → General (设置 → 常规)**.
+
+<a id="install"></a>
+
+### 1. Install and open the workbench
+
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). This release is **0.4.4**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
+3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
+
+Both options use the same installation package and support paper Q&A, translation, analysis, and figure interpretation. Image support depends on the selected model.
+
+| Connection | A good fit if you… | What you need |
+| --- | --- | --- |
+| Bring your own key (BYOK) | Already use a model service and want to choose your provider and models | The provider's API key, base URL, and model ID; no Jadense account required |
+| Connect Jadense | Want to use your Jadense account's model services and bring papers into further research | A Jadense account and plugin token |
+
+Jadense AI requests require the temporary-execution V1 server protocol; older servers show an upgrade message. Recover result retrieves existing pending results, and opening history never resends a request automatically. BYOK works independently and does not automatically retry uncertain third-party requests. Batched reference AI is off by default and can be enabled in feature settings.
+
+<a id="ai-connection"></a>
+
+### 2. Choose an AI connection
+
+<a id="use-byok"></a>
+
+#### 2.1 Bring your own key (BYOK)
+
+1. Open the workbench's gear menu, **Settings → BYOK (设置 → BYOK)**. Add a provider, choose the OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages protocol, and enter your base URL and API key.
+2. Add a model, enter its model ID, and set its output limit as required by the provider. You can use the connection test to check the configuration.
+3. In **Settings → Feature settings (设置 → 功能配置)**, select your BYOK model for AI chat. **Automatically follow the current Chat model** is enabled by default, so other features use that model. Turn it off to choose independent translation, analysis and figure models.
+
+![BYOK provider settings: protocol, API base URL and key](docs/images/guide-byok-provider.png)
+
+Chinese UI shown from the current build's browser preview with fictional configuration. Replace the example URL and key; do not copy them. [Add a model and select feature models (中文)](docs/usage-guide.md#byok-model).
+
+The plugin sends BYOK model requests directly to your configured provider. **Literature analysis → Analysis settings (文献解析 → 解析配置)** edits the same analysis model setting as Feature settings. Changing or deleting a model does not automatically redirect failed requests to another provider.
+
+<a id="connect-jadense"></a>
+
+#### 2.2 Connect Jadense
+
+1. In [Jadense](https://jadense.cn/), create a token under **Settings → Integrations → Connect Jadense in Zotero (设置 → 集成 → 连接 Jadense in Zotero)**.
+2. In the plugin, open **Settings → Connect Jadense (设置 → 连接攻玉)**, paste the plugin token, and save.
+3. In **Settings → Feature settings (设置 → 功能配置)**, choose models available to your account. **Jadense → Your account (攻玉学术 → 用户信息)** contains **Your Jadense (你的攻玉)**, with your account, subscription, available points and their source, check-in rewards, and streak.
+
+The top of **Your account** provides links to the Jadense homepage, check-in page, and subscription usage, even before you connect an account. Complete check-in on the website, then refresh **Your Jadense** to view the updated status. Account and points information load separately, so one failed refresh does not hide the other.
+
+<a id="first-reading"></a>
+
+### 3. Your first reading session
+
+Open a PDF with selectable text, select a paragraph you find difficult, and use the translation shortcut. Then click **Ask (提问)** in the PDF toolbar and enter:
+
+> Explain this paper's central research question, and point out the methods and experimental results I should examine most closely.
+
+When you are ready for a closer read, click **Analyze (解析)** to view the summary, notes, and annotations. For more instructions, open **Getting started (上手指南)** in the workbench.
+
+For full translation, analysis, reference import and figures, follow the [step-by-step reading guide (Chinese)](docs/usage-guide.md#reading).
+
+<a id="display-language-and-theme"></a>
+
+### 4. Display language and theme
+
+Open **Settings → General (设置 → 常规)** to choose your display language and theme. The native Zotero plugin settings share the same preferences.
+
+- **Display language**: follow Zotero, Simplified Chinese, or English; the default follows Zotero. Chinese Zotero locales use Simplified Chinese, and other locales use English. Restart Zotero after saving; reopening the workbench alone does not switch languages. This does not change translation direction, AI output requirements, papers, or existing history.
+- **Theme**: follow Zotero, light, or dark; the default follows Zotero and updates open plugin interfaces immediately. Existing light/dark choices are preserved. The sidebar button also saves your theme choice, while drafts and active generation continue.
+- **Font size and translation panels**: choose a 12–24px plugin font, a standard or frosted-glass panel, and background transparency. Drag the selection-translation panel by its title or resize its edges and corners; the bottom-left Appearance menu offers the same style controls. Full translation uses an opaque, resizable sidebar with independent text settings. Transparency affects only the selection panel background. Frosted glass requires host graphics support and falls back to a standard background when unavailable.
+
+The workbench, reader tools, guide, native settings, menus, and notices support both languages. Zotero continues to control window frames, system title bars, and PDF page appearance.
 
 ## Read and analyze papers
 
@@ -30,7 +142,7 @@ Select text and click **AI translation (智能翻译)** in the selection popup, 
 
 ### Translate a whole PDF and check the original passages
 
-Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Full translation uses the model selected for real-time translation. It requires extractable PDF text and does not provide OCR or replace the original page layout.
+Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Choose AI or Bing/Google in Settings → Feature settings → Translation. Full translation first uses local OCR, including scanned pages, then sends recognized text to the selected translation service. It does not export a bilingual PDF with the original layout.
 
 ### Follow the evidence through references
 
@@ -44,70 +156,28 @@ Click an automatically detected image, or press `Ctrl+Alt+S` (`⌘+Alt+S` on mac
 
 Figure interpretation requires a model that accepts images. Automatic detection requires a compatible PDF reader in Zotero 10.0.1 or later. When an image is not detected, you can select a region manually in a PDF reader that supports native cropping. Both capture and translation shortcuts can be customized in Settings.
 
-<a id="quick-start"></a>
-
-## Quick start
-
-The workbench supports both English and Simplified Chinese. The steps below also include Chinese labels for reference; choose your display language in **Settings → General (设置 → 常规)**.
-
-### Install
-
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The current version is **0.4.4**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
-2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
-3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
-
-Both options use the same installation package and support paper Q&A, translation, analysis, and figure interpretation. Image support depends on the selected model.
-
-| Connection | A good fit if you… | What you need |
-| --- | --- | --- |
-| Bring your own key (BYOK) | Already use a model service and want to choose your provider and models | The provider's API key, base URL, and model ID; no Jadense account required |
-| Connect Jadense | Want to use your Jadense account's model services and bring papers into further research | A Jadense account and plugin token |
-
-Jadense AI requests require the temporary-execution V1 server protocol; older servers show an upgrade message. Recover result retrieves existing pending results, and opening history never resends a request automatically. BYOK works independently and does not automatically retry uncertain third-party requests. Batched reference AI is off by default and can be enabled in feature settings.
-
-### Display language and theme
-
-Open **Settings → General (设置 → 常规)** to choose your display language and theme. The native Zotero plugin settings share the same preferences.
-
-- **Display language**: follow Zotero, Simplified Chinese, or English; the default follows Zotero. Chinese Zotero locales use Simplified Chinese, and other locales use English. Restart Zotero after saving; reopening the workbench alone does not switch languages. This does not change translation direction, AI output requirements, papers, or existing history.
-- **Theme**: follow Zotero, light, or dark; the default follows Zotero and updates open plugin interfaces immediately. Existing light/dark choices are preserved. The sidebar button also saves your theme choice, while drafts and active generation continue.
-- **Font size and translation panels**: choose a 12–24px plugin font, a standard or frosted-glass panel, and background transparency. Drag the selection-translation panel by its title or resize its edges and corners; the bottom-left Appearance menu offers the same style controls. Full translation uses an opaque, resizable sidebar with independent text settings. Transparency affects only the selection panel background. Frosted glass requires host graphics support and falls back to a standard background when unavailable.
-
-The workbench, reader tools, guide, native settings, menus, and notices support both languages. Zotero continues to control window frames, system title bars, and PDF page appearance.
-
-### Use BYOK
-
-1. Open the workbench's gear menu, **Settings → BYOK (设置 → BYOK)**. Add a provider, choose the OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages protocol, and enter your base URL and API key.
-2. Add a model, enter its model ID, and set its output limit as required by the provider. You can use the connection test to check the configuration.
-3. In **Settings → Feature settings (设置 → 功能配置)**, select that BYOK model for each feature you want to use. **AI chat, real-time translation, literature analysis, and figure interpretation each save their own model selection.** Select BYOK explicitly when first setting it up.
-
-The plugin sends BYOK model requests directly to your configured provider. **Literature analysis → Analysis settings (文献解析 → 解析配置)** edits the same analysis model setting as Feature settings. Changing or deleting a model does not automatically redirect failed requests to another provider.
-
-### Connect Jadense
-
-1. In [Jadense](https://jadense.cn/), create a token under **Settings → Integrations → Connect Jadense in Zotero (设置 → 集成 → 连接 Jadense in Zotero)**.
-2. In the plugin, open **Connect Jadense → Connection (连接攻玉 → 连接配置)**, paste the plugin token, and save.
-3. In **Settings → Feature settings (设置 → 功能配置)**, choose models available to your account. **Connect Jadense → Your account (连接攻玉 → 用户信息)** contains **Your Jadense (你的攻玉)**, with your account, subscription, available points and their source, check-in rewards, and streak.
-
-The top of **Your account** provides links to the Jadense homepage, check-in page, and subscription usage, even before you connect an account. Complete check-in on the website, then refresh **Your Jadense** to view the updated status. Account and points information load separately, so one failed refresh does not hide the other.
-
-### Try it with one passage
-
-Open a PDF with selectable text, select a paragraph you find difficult, and use the translation shortcut. Then click **Ask (提问)** in the PDF toolbar and enter:
-
-> Explain this paper's central research question, and point out the methods and experimental results I should examine most closely.
-
-When you are ready for a closer read, click **Analyze (解析)** to view the summary, notes, and annotations. For more instructions, open **Getting started (上手指南)** in the workbench.
-
 <a id="continue-research"></a>
 
 ## From reading papers to pursuing a research question
+
+<a id="jadense-introduction"></a>
+
+### Meet Jadense
+
+[![Jadense homepage in dark theme](docs/images/jadense-home-dark.png)](https://jadense.cn/)
+
+The public Jadense homepage, captured in dark theme. Click the image to visit the website.
+
 
 After a few papers, your question may shift from “What does this paper say?” to “How do these methods differ, and what evidence is still missing for my project?”
 
 **Jadense (攻玉学术)** supports that next step: organize relevant papers in a research project and keep working on the same question. Use what you have read to compare methods, organize evidence, and plan what to investigate next.
 
-1. Select the relevant papers in Zotero and open **Connect Jadense → Literature sync (连接攻玉 → 文献同步)** in the plugin.
+<a id="research-project"></a>
+
+### Bring papers into a research project
+
+1. Select the relevant papers in Zotero and open **Jadense → Literature sync (攻玉学术 → 文献同步)** in the plugin.
 2. Choose a Jadense favorites folder, decide whether to include PDFs, and upload the selected papers.
 3. On the Jadense website, open or create a project, click **Add context (添加上下文)**, select these papers from your personal favorites, and start a conversation in the project.
 
@@ -121,9 +191,11 @@ Uploading is a **one-way operation from Zotero to Jadense**. You choose whether 
 
 ## FAQ
 
+For endpoint configuration, authentication errors, model selection, scanned PDFs and sponsorship, see the [full FAQ (Chinese)](docs/faq.md).
+
 ### Do I need an account? Is it free?
 
-BYOK does not require a Jadense account. The plugin client is MIT-licensed. Third-party model usage is charged by the corresponding provider; Jadense services follow your account permissions, subscription, and points rules.
+BYOK does not require a Jadense account. The client is free to download and use for personal non-commercial purposes, learning and research; donations are optional. Commercial use requires separate written permission. Third-party model usage is charged by the corresponding provider; Jadense services follow your account permissions, subscription, and points rules.
 
 Restricted Jadense models show **Upgrade required (需升级)** and the required subscription tier. Choose an available model or upgrade your subscription; adding points does not unlock a restricted model. If an older plugin token lacks points permissions, the account card will prompt you to update it. Other functions already authorized by that token remain available.
 
@@ -146,7 +218,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.4 was tested on **Windows 11 / Zotero 10.0.2**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4) for the full validation record and scope.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.\***. Guide screenshots use the local 0.4.4 build on **Windows 11 / Zotero 10.0.2**, with synthetic data and mocked services. This screenshot run timed out at the wide-reader viewport check and is not a full smoke-test pass. Other platforms, Zotero 8/9 and real paid providers were not tested during this documentation update. Published validation is recorded in the [v0.4.4 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4).
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 
@@ -154,11 +226,22 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-To upgrade from GitHub 0.4.0, 0.4.1, 0.4.2, or 0.4.3, install 0.4.4 from the XPI file. Both use the same `.cn` plugin ID, preserving existing settings and local history.
+Install 0.4.4 over GitHub 0.4.0–0.4.3. The same `.cn` plugin ID preserves settings and local history. Existing translations are not regenerated automatically.
 
-If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install 0.4.4 from the XPI file**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
+If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install the latest published XPI**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 
 The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved explicit models, routes, and BYOK selections are preserved. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-042-en) for version differences.
+
+<a id="support"></a>
+
+## How to support us
+
+Star the project, share it, report issues or contribute. Optional donations help maintain the plugin and documentation.
+
+- Leave your preferred **nickname and message**, with explicit permission to publish them in a future supporter list. Otherwise, we keep your contribution anonymous.
+- ☕ [Wechat / Alipay — support this project](support/README.md)
+
+The link opens a separate project support page with payment codes and supporter-list information. Donations do not buy subscriptions, API credits or commercial permission.
 
 ## Contribute and share feedback
 
@@ -174,4 +257,6 @@ The [contribution guide (Chinese)](CONTRIBUTING.md) covers upstream synchronizat
 
 ## License
 
-The plugin code is licensed under [MIT](LICENSE). Bundled dependencies are covered in the [third-party notices](THIRD_PARTY_NOTICES.md). The open-source scope includes the Zotero client and related resources published in this repository. It does not include the Jadense main application or server, or grant the right to impersonate an official service or misuse its trademarks.
+The current project uses the [Jadense Non-Commercial License 1.0](LICENSE). Personal non-commercial use, learning, research and free redistribution under its terms are allowed. Commercial use requires separate written authorization; donations do not grant it.
+
+This is source-available software, not OSI open source: the [Open Source Definition](https://opensource.org/osd) does not allow restrictions on commercial use. The new license does not revoke rights in previously MIT-licensed material or change third-party licenses. Preserved notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); historical release notes remain historical. The private Jadense application, server and trademarks are not licensed here.

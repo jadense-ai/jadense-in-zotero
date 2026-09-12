@@ -1,0 +1,17 @@
+/* 两处翻译配置共用布局与悬浮说明，颜色取各宿主的插件主题。 */
+.jdx-translation-interface { padding-block: 10px; min-width: 0; }
+.jdx-translation-interface-row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(220px, 40%); align-items: center; gap: 20px; padding-block: 6px; }
+.jdx-feature-model-row[data-translation-ai-row][hidden] { display: none; }
+.jdx-translation-interface-row[hidden] { display: none; }
+.jdx-translation-interface-row > span { position: relative; }
+.jdx-translation-interface p:empty { display: none; }
+.jdx-translation-tip { margin-inline-start: 6px; border: 0; padding: 2px 4px; background: transparent; color: inherit; font: inherit; cursor: help; }
+.jdx-translation-tip:focus-visible { outline: 2px solid #16cf8c; outline-offset: 2px; border-radius: 3px; }
+.jdx-translation-tooltip { display: none; position: absolute; z-index: 1000; inset-inline-start: 0; top: 100%; width: max-content; max-width: min(280px, 65vw); padding: 9px 12px; border: 1px solid var(--jdx-line-strong, var(--jdx-pref-line)); border-radius: 6px; background: var(--jdx-surface, var(--jdx-pref-surface)); color: var(--jdx-text, var(--jdx-pref-text)); font-size: 12px; font-weight: 400; line-height: 1.6; box-shadow: 0 3px 12px #0002; }
+.jdx-translation-interface-row > span:hover .jdx-translation-tooltip,
+.jdx-translation-interface-row > span:focus-within .jdx-translation-tooltip { display: block; }
+.jdx-translation-interface-row > span[data-tip-dismissed] .jdx-translation-tooltip { display: none; }
+@media (max-width: 500px) { .jdx-translation-interface-row { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+.jdx-translation-interface details label{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-block:8px}
+.jdx-translation-interface input[type=number]{width:110px;max-width:100%;color:inherit;background:transparent;border:1px solid var(--jdx-line-strong,#8885);border-radius:4px;padding:4px}
+.jdx-translation-interface summary{cursor:pointer;overflow-wrap:anywhere}
