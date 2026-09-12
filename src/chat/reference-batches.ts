@@ -9,7 +9,7 @@ export function referenceBatches(entries: ReferenceEntry[], budget: number) {
   const batches: ReferenceEntry[][] = [], oversized: string[] = []
   let batch: ReferenceEntry[] = []
   for (const entry of entries) {
-    if (!entry.uncertain || entry.verification === 'verified' || entry.imported || entry.importUncertain) continue
+    if (!entry.uncertain || entry.edited || entry.verification === 'verified' || entry.imported || entry.importUncertain) continue
     if (referenceTokens(referencePrompt([entry])) > budget) { oversized.push(entry.id); continue }
     if (batch.length && (batch.length >= 16 || referenceTokens(referencePrompt([...batch, entry])) > budget)) { batches.push(batch); batch = [] }
     batch.push(entry)

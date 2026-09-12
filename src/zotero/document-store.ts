@@ -1,5 +1,5 @@
 /** profile 专用任务目录：摘要与逐页正文分开，原子替换；失败时会话缓存保留可读成果。 */
-import type { ReferenceEntry } from "@/chat/reference-list"
+import { stripReferenceLabel, type ReferenceEntry } from "@/chat/reference-list"
 import { normalizeTranslationLanguages, type TranslationLanguages } from "@/chat/translation-languages"
 import type { DocumentIdentity, DocumentPage } from "./pdf-document"
 import type { TranslationReadingIndex, TranslationReadingPosition } from "./translation-reading"
@@ -94,7 +94,7 @@ export class DocumentStore {
     const value = await this.read<TranslationReadingPosition>(id, "reading-position.json")
     return value && typeof value.blockID === "string" && Number.isFinite(value.offset) ? value : null
   }
-  async references(id: string) { const value = await this.read<ReferenceEntry[]>(id, "references.json"); return Array.isArray(value) ? value.filter(row => row && typeof row.raw === "string" && Array.isArray(row.lines) && row.fields) : [] }
+  async references(id: string) { const value = await this.read<ReferenceEntry[]>(id, "references.json"); return Array.isArray(value) ? value.filter(row => row && typeof row.raw === "string" && Array.isArray(row.lines) && row.fields).map(row => ({ ...row, raw: stripReferenceLabel(row.raw) })) : [] }
   saveReferences(id: string, entries: ReferenceEntry[]) { return this.write(id, "references.json", entries) }
   async list(): Promise<DocumentTask[]> {
     const ids = new Set([...this.cache.keys()].map(key => key.split("/")[0]))

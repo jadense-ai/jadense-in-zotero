@@ -86,8 +86,9 @@ describe("complete PDF and reference evidence", () => {
     expect(refs).toHaveLength(5)
     expect(refs.map(row => row.fields.title)).toEqual(['Reliable scientific evidence', '深度学习的证据组合', 'Reliable scientific evidence', 'Reliable scientific evidence', 'Reliable scientific evidence'])
     expect(refs[1].fields.authors).toEqual(['张三', '李四'])
-    expect(refs[0].raw).toBe('[1] J. Smith et al., “Reliable scientific evidence,” Research Journal, 2020.')
-    expect(refs[3].raw).toBe('[4] Smith, J. (2020). Reliable scientific evidence. Research Journal.')
+    expect(refs.map(row => row.label)).toEqual(['1', '2', '3', '4', '5'])
+    expect(refs[0].raw).toBe('J. Smith et al., “Reliable scientific evidence,” Research Journal, 2020.')
+    expect(refs[3].raw).toBe('Smith, J. (2020). Reliable scientific evidence. Research Journal.')
     expect(refs[0].lines).toHaveLength(2); expect(refs[3].lines).toHaveLength(2)
   })
   it("does not split numbered citations on author-year continuation lines", () => {
@@ -436,8 +437,26 @@ describe("document jobs, durability and appearance", () => {
     const task = await jobs.start("references", 11); await jobs.idle()
     const refs = await store.references(task.id)
     expect(fetchImpl.mock.calls.every(call => String(call[0]).startsWith("https://api.crossref.org/works"))).toBe(true)
-    expect(refs).toHaveLength(1); expect(refs[0].raw).toBe(citation); expect(refs[0].verification).toBe("unverified")
+    expect(refs).toHaveLength(1); expect(refs[0].raw).toBe(citation.replace("[1] ", "")); expect(refs[0].verification).toBe("unverified")
     jobs.dispose()
+  })
+  it("normalizes legacy stored reference labels without changing source lines", async () => {
+    const { store } = memoryStore(), entry = extractReferences(document())[0]
+    entry.raw = citation
+    await store.saveReferences("00000000-0000-4000-8000-000000000001", [entry])
+    const loaded = await store.references("00000000-0000-4000-8000-000000000001")
+    expect(loaded[0].raw).toBe(citation.replace("[1] ", "")); expect(loaded[0].lines).toEqual(entry.lines)
+  })
+  it("edits and deletes one reference without changing its source locator", async () => {
+    const fixture = host([["References", citation, "[2] Jones, K. (2021). Another study. Journal."]]), fetchImpl = vi.fn(), { store } = memoryStore()
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, store), task = await jobs.start("references", 11); await jobs.idle()
+    const before = await store.references(task.id), sourceLines = before[0].lines, secondID = before[1].id
+    expect(await jobs.updateReference(task.id, before[0].id, "Edited, J. (2024). Edited scientific evidence. Journal.")).toBe(true)
+    const edited = (await store.references(task.id))[0]
+    expect(edited).toMatchObject({ raw: "Edited, J. (2024). Edited scientific evidence. Journal.", verification: "unverified", edited: true })
+    expect(edited.fields).toMatchObject({ title: "Edited scientific evidence", year: "2024" }); expect(edited.lines).toEqual(sourceLines)
+    expect(await jobs.deleteReference(task.id, secondID)).toBe(true)
+    expect(await store.references(task.id)).toHaveLength(1); expect(task.total).toBe(1); jobs.dispose()
   })
   it("preserves unknown fields but ignores conflicting IDs and never loses split source characters", () => {
     const source = "Hello 世界. ".repeat(150)
@@ -473,7 +492,7 @@ describe("document jobs, durability and appearance", () => {
     const fetchImpl = vi.fn(async (_url: unknown, options: RequestInit) => { jobs.skipReferenceAI(jobs.list("references")[0].id); if (options.signal?.aborted) throw new DOMException("cancelled", "AbortError"); return response({}) })
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl as never, memory.store)
     const task = await jobs.start("references", 11); await jobs.idle(); await jobs.idle()
-    expect(task.completed).toBe(2); expect((await memory.store.references(task.id)).map(row => row.raw)).toEqual([citation, "[2] Uncertain source"])
+    expect(task.completed).toBe(2); expect((await memory.store.references(task.id)).map(row => row.raw)).toEqual([citation.replace("[1] ", ""), "Uncertain source"])
     const aiCalls = fetchImpl.mock.calls.filter(call => !String(call[0]).startsWith("https://api.crossref.org/works"))
     expect(aiCalls).toHaveLength(1); jobs.dispose()
   })

@@ -4,7 +4,7 @@ import type { PdfLine, PdfTextDocument } from "@/zotero/pdf-document"
 export type ReferenceMetadata = { title: string; authors: string[]; year: string; doi?: string; url?: string; publicationTitle?: string; itemType?: string }
 export type ReferenceEntry = {
   id: string; order: number; label?: string; raw: string; lines: PdfLine[]; fields: ReferenceMetadata
-  uncertain: boolean; verification: "pending" | "unverified" | "verified"; reason?: string; verified?: ReferenceMetadata
+  uncertain: boolean; edited?: boolean; verification: "pending" | "unverified" | "verified"; reason?: string; verified?: ReferenceMetadata
   imported?: { libraryID: number; itemKey: string; itemID: number }; importUncertain?: boolean
 }
 
@@ -24,6 +24,7 @@ export function normalizeReferenceText(value: string) {
   return value.normalize("NFKC").replace(/\u00ad\s*\n\s*/gu, "").replace(/([\p{Ll}])[-‐]\s*\n\s*(?=[\p{Ll}])/gu, "$1")
     .replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").trim()
 }
+export function stripReferenceLabel(value: string) { return normalizeReferenceText(value).replace(numbered, "").trim() }
 
 export function parseReferenceFields(raw: string): ReferenceMetadata {
   const joined = normalizeReferenceText(raw).replace(numbered, "")
@@ -55,8 +56,9 @@ export function parseReferenceFields(raw: string): ReferenceMetadata {
 }
 
 function entry(lines: PdfLine[], order: number, knownBoundary: boolean): ReferenceEntry {
-  const raw = normalizeReferenceText(lines.map(line => line.text).join("\n"))
-  const match = raw.match(numbered)
+  const source = normalizeReferenceText(lines.map(line => line.text).join("\n"))
+  const match = source.match(numbered)
+  const raw = stripReferenceLabel(source)
   const fields = parseReferenceFields(raw)
   return { id: `ref-${lines[0].id}`, order, ...(match ? { label: match[1] || match[2] } : {}), raw, lines, fields,
     uncertain: !knownBoundary || !fields.title || !fields.authors.length || !fields.year, verification: "pending" }

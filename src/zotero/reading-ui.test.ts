@@ -32,4 +32,14 @@ describe("reading UI controls", () => {
     expect(view).toContain("head.append(title, count, tools)")
     expect(view).not.toContain("root.append(head, tools,")
   })
+
+  it("exposes persisted reference edit and delete controls", () => {
+    const view = read("./reference-workspace.ts")
+
+    expect(view).toContain("编辑参考文献")
+    expect(view).toContain("删除参考文献")
+    expect(view).toContain("prompt(uiText(\"编辑参考文献内容\"")
+    expect(view).toContain("jobs.updateReference")
+    expect(view).toContain("jobs.deleteReference")
+  })
 })
