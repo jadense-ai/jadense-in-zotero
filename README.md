@@ -14,23 +14,46 @@
 
 **在 Zotero 中读懂论文，把阅读所得变成下一步研究的起点。**
 
-文献问答 · 原文批注 · 选文与全文翻译 · 图表解读 · 参考文献核验
+[论文问答](docs/usage-guide.md#paper-chat) · [原文批注](docs/usage-guide.md#paper-analysis) · [选文翻译](docs/usage-guide.md#selection-translation) · [全文翻译与本机 OCR](docs/usage-guide.md#full-translation) · [图表解读](docs/usage-guide.md#figures) · [参考文献核验与导入](docs/usage-guide.md#references)
 
 Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的源码公开 AI 阅读助手。围绕正在读的论文提问，把解析重点留在原文旁，遇到难懂的段落或图表时继续追问，让阅读、理解与核对在 Zotero 中连起来。
 
 **非商业自用免费 · 禁止商用 · 支持自带 API Key（BYOK）· 攻玉账号可选**
 
-**[下载插件](https://github.com/jadense-ai/jadense-in-zotero/releases/latest)** · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
+**[下载插件](https://github.com/jadense-ai/jadense-in-zotero/releases/latest)** · [先看依赖与安装方式](#requirements) · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
 
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 <!-- release-summary:start -->
-> **[v0.4.4](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4)**：统一文献原文与解析成果，新增 Bing/Google 翻译与本机 OCR，完善导航和上手引导。[完整更新说明](CHANGELOG.md)
+> **[v0.4.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5)**：同步最新插件代码，继续提供文献工作区、本机 OCR、翻译、解析和阅读辅助。[Release 详情与制品](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5) · [历史更新说明](CHANGELOG.md)
 <!-- release-summary:end -->
+
+<a id="requirements"></a>
+
+## 先看：依赖、安装方式与功能入口
+
+### 插件依赖
+
+- **宿主程序**：需要 [Zotero 桌面版 8.0–10.0.*](https://www.zotero.org/download/)。自动识别 PDF 图片需要 Zotero 10.0.1 及以上版本的兼容 PDF 阅读器。
+- **AI 接入**：要使用 AI 功能，需要配置一种 AI 服务。可以使用 [BYOK 自带 API Key](docs/usage-guide.md#byok-provider)（Provider 的 API Key、Base URL 和模型 ID，不需要攻玉账号），也可以[连接攻玉学术](docs/usage-guide.md#connect)（攻玉账号和插件令牌）。模型调用费用按所选服务商或攻玉账号规则计算。
+- **本机 OCR**：问答、选文翻译等功能不需要 Python；[全文翻译和全文 Markdown 提取](docs/local-ocr.md)需要在本机安装 OCR 运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
+- **插件之外的文献工具**：Zotero Connector 不是本插件的依赖；它只负责从浏览器收集文献，是否安装不影响本插件在 Zotero 中阅读本地文献和 PDF。
+
+### 当前可用的安装方式
+
+| 安装方式 | 操作 | 说明 |
+| --- | --- | --- |
+| [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.5.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5)，同时提供元数据和 SHA-256 校验和 |
+| Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.5/jadense-in-zotero-v0.4.5.xpi` | 适合开发和审计；不需要私有主应用、数据库或 `.env` |
+
+以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
 
 ## 目录
 
+- [先看：依赖、安装方式与功能入口](#requirements)
 - [如何使用本插件](#quick-start)
   - [1. 安装与打开工作台](#安装)
   - [2. 选择 AI 接入方式](#ai-connection)
@@ -63,7 +86,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 1. 安装与打开工作台
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，本次版本为 **0.4.4**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，本次版本为 **0.4.5**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -143,29 +166,29 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ## 阅读与解析
 
-### 先把一篇论文的重点留在原文旁
+### [先把一篇论文的重点留在原文旁](docs/usage-guide.md#paper-analysis)
 
 在 PDF 工具条点击「解析」，查看论文总结与详细笔记，并通过 Zotero 原生批注回到对应段落核对。生成的批注可编辑、筛选和随 PDF 导出，不覆盖你的人工批注；未能定位到原文的内容仍可在解析笔记中查看。
 
-### 带着问题读，而不只是得到一段总结
+### [带着问题读，而不只是得到一段总结](docs/usage-guide.md#paper-chat)
 
 点击「提问」，围绕当前论文开始对话；也可以关联 Zotero 文献、PDF 或选文，询问「作者为什么选择这种方法？」「这一结论依赖哪些条件？」。对话历史保存在本机，方便接着问、回头看。
 
-### 遇到难懂的段落，就地翻译
+### [遇到难懂的段落，就地翻译](docs/usage-guide.md#selection-translation)
 
 选中文本后点击选区弹出栏的「智能翻译」，或按 `Ctrl+Alt+T`（macOS：`⌘+Alt+T`），在阅读器浮窗中查看译文。支持 32 种语言选项，可临时调整当前选文的翻译方向；已有文章语言偏好继续生效。顶部工具条的「全文翻译」处理整篇 PDF，选文翻译使用选区入口或快捷键。
 
-### 翻译整篇 PDF，随时回到原文核对
+### [翻译整篇 PDF，随时回到原文核对](docs/usage-guide.md#full-translation)
 
 在阅读操作中选择「全文翻译」，按段查看译文并定位原文。全文译文在阅读器侧栏连续展示，支持目录、独立字号/行距和阅读位置恢复；阅读模式专注浏览，定位模式可点击段落核对原文。隐藏侧栏后任务继续；中断或重启后可从翻译历史手动继续，保留已经完成的部分。在「设置 → 功能配置 → 翻译」选择 AI 或 Bing/Google。全文翻译先通过本机 OCR 识别完整 PDF，再发送正文；支持扫描件，不导出原版式双语 PDF。
 
-### 从参考文献继续追踪证据
+### [从参考文献继续追踪证据](docs/usage-guide.md#references)
 
 「解析」同时提取当前 PDF 的参考文献，在「文献解析 → 论文详情 → 参考文献」核对来源、验证 DOI，再选择已验证条目导入 Zotero。原始顺序、编号与重复项保留，无法确认的内容继续展示；导入按同库 DOI 去重，仅保存元数据与链接，不自动下载 PDF。
 
 阅读器空间不足时，提问、解析、引用和全文翻译收在「•••」阅读操作菜单内；点击 Jadense 图标直接打开工作台。
 
-### 看图表时，把论文背景一起带入问题
+### [看图表时，把论文背景一起带入问题](docs/usage-guide.md#figures)
 
 点击自动识别的图片，或按 `Ctrl+Alt+S`（macOS：`⌘+Alt+S`）框选 PDF 区域，选择开启新对话或追加到当前对话。新对话会关联当前文献及可提取的 PDF 正文，便于追问「图中的比较支持了什么结论？」。也可在对话中上传、粘贴或拖入 PNG/JPEG 图片；图片随对话保存在本机，重开后可继续查看和追问。
 
@@ -230,7 +253,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 支持哪些版本？有哪些阅读限制？
 
-Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windows 11 / Zotero 10.0.2** 与 0.4.4 本地构建，数据和服务均为模拟；本次截图冒烟在宽屏阅读器检查处超时，不代表全量验收通过。macOS、Linux、Zotero 8/9 和真实付费 Provider 未在本次文档工作中实测。正式版的完整验证范围见 [v0.4.4 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4)。
+Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windows 11 / Zotero 10.0.2** 与 0.4.4 本地构建，数据和服务均为模拟；本次截图冒烟在宽屏阅读器检查处超时，不代表全量验收通过。macOS、Linux、Zotero 8/9 和真实付费 Provider 未在本次文档工作中实测。当前公开版本见 [v0.4.5 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5)；截图与原生验收记录仍以各版本发布说明为准。
 
 全文翻译先在本机 OCR，扫描 PDF 也可识别；识别后的正文会发送至你选择的翻译服务。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
 
@@ -238,7 +261,7 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windo
 
 ### 从旧版怎样升级？
 
-从 GitHub 0.4.0–0.4.3 可直接安装 0.4.4；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
+从 GitHub 0.4.0–0.4.4 可直接安装 0.4.5；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 
