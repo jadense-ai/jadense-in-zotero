@@ -129,6 +129,7 @@ export type ZoteroReaderHost = UiPreferenceHost & {
 type ReaderToolbarAction = {
   kind: "attach" | "quote" | "translate" | "analyze" | "fullTranslate" | "references"
   taskID?: string
+  resultMode?: import('./document-results').DocumentResultMode | import('./analysis-workspace').AnalysisDetailTab
   itemID: number
   text?: string
   pageIndex?: number

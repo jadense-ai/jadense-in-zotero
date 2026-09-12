@@ -7,7 +7,7 @@ import type { ZoteroLike } from "./runtime"
 import { observeTheme, uiText } from "./ui-preferences"
 import { READER_UI_THEME_CSS } from "./reader-ui-theme"
 import { copyTextToClipboard } from "./connection-display"
-import { element, action } from "./ui/controls"
+import { actionIcon, element, action } from "./ui/controls"
 import type { TranslationReadingPosition, TranslationReadingRow } from "./translation-reading"
 
 const FONT = "extensions.jadenseInZotero.translationReadingFontSize"
@@ -87,25 +87,33 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   modes.setAttribute("role", "group"); modes.setAttribute("aria-label", uiText("阅读模式", "Reading mode"))
   const body = element(doc, "div", "jdx-reading-body"), footer = element(doc, "footer", "jdx-reading-footer")
   body.tabIndex = 0; body.setAttribute("role", "document")
+  const toast = element(doc, "div", "jdx-notice jdx-result-toast"); toast.setAttribute("role", "status")
+  let toastTimer: ReturnType<typeof setTimeout> | undefined, previousStatus: string | undefined
+  const feedback = (message: string) => { clearTimeout(toastTimer); toast.textContent = message; toastTimer = setTimeout(() => { toast.textContent = "" }, 3500) }
   const state = element(doc, "span", "jdx-reading-state"); state.setAttribute("role", "status")
   const locations = element(doc, "div", "jdx-reading-location"); locations.hidden = true; locations.setAttribute("aria-label", uiText("当前段落原文位置", "Source locations for this paragraph"))
   const locationSelect = createJdxSelect(locations, { compact: true, portal: true, ariaLabel: uiText("原文位置", "Source location"), popupWidth: 180 })
-  const progress = element(doc, "progress", "jdx-reading-progress"); progress.setAttribute("aria-label", uiText("翻译进度", "Translation progress"))
+  const progress = element(doc, "div", "jdx-reading-progress"); progress.setAttribute("aria-label", uiText("翻译进度", "Translation progress"))
+  progress.setAttribute('role', 'progressbar'); progress.setAttribute('aria-valuemin', '0'); progress.setAttribute('aria-valuemax', '100')
+  const progressFill = element(doc, 'span'); progress.append(progressFill)
   let disposed = false, fetching = false, dirty = false, initialized = false, locating = false, activeID = "", lastNotice = ""
   let rows: TranslationReadingRow[] = [], saved: TranslationReadingPosition | null = null
+  let documentAssets: Record<string, string> | undefined
   let saveTimer: number | undefined
   const blocks = new Map<string, { node: HTMLElement; gap: HTMLElement; text?: string }>()
-  const menus: HTMLDetailsElement[] = []
-  const closeMenus = () => { for (const menu of menus) menu.open = false }
+  const menus: Array<{ trigger: HTMLButtonElement; content: HTMLElement }> = []
+  const closeMenus = () => { for (const menu of menus) { menu.content.hidden = true; menu.trigger.setAttribute('aria-expanded', 'false') } }
   const menu = (label: string, accessible = label) => {
-    const details = element(doc, "details", "jdx-reading-popover"), summary = element(doc, "summary", "", label)
-    summary.setAttribute("aria-label", accessible); summary.title = accessible
-    const content = element(doc, "div", "jdx-reading-menu")
-    details.append(summary, content); menus.push(details)
-    details.addEventListener("toggle", () => { if (details.open) for (const other of menus) if (other !== details) other.open = false })
+    const details = element(doc, 'div', 'jdx-reading-popover'), content = element(doc, 'div', 'jdx-reading-menu')
+    content.hidden = true; content.id = `jdx-reading-menu-${Math.random().toString(36).slice(2)}`; content.setAttribute('role', 'group'); content.setAttribute('aria-label', accessible)
+    const trigger = action(doc, label, () => { const open = content.hidden; closeMenus(); content.hidden = !open; trigger.setAttribute('aria-expanded', String(open)) })
+    actionIcon(trigger, label === "Aa" ? "type" : label === "⋯" ? "more" : "list", accessible)
+    trigger.setAttribute('aria-label', accessible); trigger.title = accessible; trigger.setAttribute('aria-expanded', 'false'); trigger.setAttribute('aria-controls', content.id)
+    details.append(trigger, content); menus.push({ trigger, content })
     return { details, content }
   }
   const setMode = (value: boolean) => {
+    value = value && jobs.get(taskID)?.status !== 'running'
     locating = value; root.dataset.mode = value ? "locate" : "read"
     read.setAttribute("aria-pressed", String(!value)); locate.setAttribute("aria-pressed", String(value))
     for (const [id, view] of blocks) view.node.tabIndex = value && id === (activeID || rows.find(row => row.text)?.block.id) ? 0 : -1
@@ -113,6 +121,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   }
   const read = action(doc, uiText("阅读", "Read"), () => setMode(false))
   const locate = action(doc, uiText("定位", "Locate"), () => setMode(true))
+  actionIcon(read, "read"); actionIcon(locate, "locate")
   read.dataset.readingMode = "read"; locate.dataset.readingMode = "locate"; modes.append(read, locate)
   const outline = menu(uiText("目录", "Contents")); outline.details.hidden = true
   const appearance = menu("Aa", uiText("正文排版", "Typography")), more = menu("⋯", uiText("更多", "More"))
@@ -145,33 +154,34 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   })
   const observers: unknown[] = []
   for (const key of [FONT, LINE]) try { const id = host.Prefs?.registerObserver?.(key, applyAppearance, true); if (id !== undefined) observers.push(id) } catch { /* 当前窗口仍可调整。 */ }
-  const notice = (message: string, error = false) => { lastNotice = message; state.textContent = message; state.title = message; state.dataset.error = String(error) }
+  const notice = (message: string, error = false) => { if (!error) { feedback(message); return }; lastNotice = message; state.textContent = message; state.title = message; state.dataset.error = String(error) }
   const restart = action(doc, uiText("重新翻译", "Translate again"), () => {
     closeMenus(); const task = jobs.get(taskID); if (!task) return
     restart.disabled = true
-    void jobs.start("translation", task.source.itemID, true).then(next => options.onReplace?.(next.id)).catch(error => notice(String(error), true)).finally(() => { restart.disabled = false })
+    void jobs.start("translation", task.source.itemID, true, { extractionID: task.extractionID }).then(next => options.onReplace?.(next.id)).catch(error => notice(String(error), true)).finally(() => { restart.disabled = false })
   })
-  more.content.append(action(doc, uiText("复制全文", "Copy all"), () => {
+  const copyAll = action(doc, uiText("复制全文", "Copy all"), () => {
     closeMenus(); void jobs.copy(taskID).then(async text => { if (!await copyTextToClipboard(host, text)) throw new Error(uiText("复制失败", "Copy failed")); notice(uiText("已复制", "Copied")) }).catch(error => notice(String(error), true))
-  }))
+  })
+  more.content.append(copyAll)
   if (options.onHistory) more.content.append(action(doc, uiText("翻译历史", "Translation history"), () => { closeMenus(); options.onHistory?.() }))
   more.content.append(restart)
   const diagnostics = element(doc, "p"); diagnostics.style.whiteSpace = "pre-wrap"; more.content.append(diagnostics)
   const pause = action(doc, uiText("暂停", "Pause"), () => { lastNotice = ""; if (jobs.get(taskID)?.status === "running") jobs.pause(taskID); else jobs.resume(taskID) })
   pause.dataset.translationPause = ""; footer.append(state, locations, pause)
-  toolbar.append(modes, outline.details, appearance.details, more.details, progress); root.append(toolbar, body, footer)
+  toolbar.append(modes, outline.details, appearance.details, more.details, progress); root.append(toolbar, body, footer, toast)
   const jump = async (id: string, locationIndex = 0) => {
     const row = rows.find(row => row.block.id === id), task = jobs.get(taskID)
-    if (!row?.paragraph || !task) return
+    if (!row?.paragraph || !task || task.status === 'running' || row.draft) return
     const sourceLocations = row.paragraph.locations?.length ? row.paragraph.locations : [row.paragraph]
     activeID = id
-    const range = sourceLocations.length > 1 ? `${sourceLocations[0].pageLabel}–${sourceLocations.at(-1)!.pageLabel}` : ""
+    const range = sourceLocations.length > 1 ? `${sourceLocations[0].pageIndex + 1}–${sourceLocations.at(-1)!.pageIndex + 1}` : ""
     const locationOptions = sourceLocations.map((source, index) => {
-      const label = index === 0 && range ? uiText(`原文 p.${range} · 起点`, `Source pp.${range} · start`) : uiText(`原文 p.${source.pageLabel}`, `Source p.${source.pageLabel}`)
+      const label = index === 0 && range ? uiText(`第 ${range} / ${task.totalPages} 页 · 起点`, `Pages ${range} / ${task.totalPages} · start`) : uiText(`第 ${source.pageIndex + 1} / ${task.totalPages} 页`, `Page ${source.pageIndex + 1} / ${task.totalPages}`)
       return { value: String(index), label }
     })
     locationSelect.setOptions(locationOptions, String(locationIndex)); locations.hidden = false
-    locations.title = sourceLocations.map(location => location.pageLabel).join("–")
+    locations.title = sourceLocations.map(location => location.pageIndex + 1).join("–")
     for (const [key, view] of blocks) { view.node.dataset.active = String(key === id); view.node.tabIndex = key === id ? 0 : -1 }
     try { await navigateDocument(host as unknown as DocumentHost, task.source, sourceLocations[locationIndex] ?? sourceLocations[0], options.readerDocument) } catch (error) { notice(String(error), true) }
   }
@@ -202,7 +212,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   })
   const onKey = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return
-    if (menus.some(menu => menu.open)) { closeMenus(); event.stopPropagation() }
+    if (menus.some(menu => !menu.content.hidden)) { const menu = menus.find(menu => !menu.content.hidden); closeMenus(); menu?.trigger.focus(); event.stopPropagation() }
     else if (locating) { setMode(false); read.focus(); event.stopPropagation() }
   }
   root.addEventListener("keydown", onKey)
@@ -219,12 +229,14 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
     try {
       do {
         dirty = false; const task = jobs.get(taskID); if (!task) return
-        const next = await jobs.reading(taskID); if (disposed) return
+        const next = await jobs.reading(taskID)
+        documentAssets ??= task.extractionID ? await jobs.store.assets(task.extractionID) : {}
+        const assets = documentAssets; if (disposed) return
         const anchor = initialized ? capture() : await jobs.store.readingPosition(taskID)
         if (disposed) return
         // 宿主已呈现题名；版权声明可能排在题名前，只略过原文完全匹配的题名块，结果仍保留。
         rows = next.filter(row => row.paragraph?.text.replace(/\s+/gu, " ").trim().toLowerCase() !== task.source.title.replace(/\s+/gu, " ").trim().toLowerCase())
-        const headings: string[] = []; let gap = false
+        const headings = new Map<string, HTMLElement>(); let gap = false
         for (const row of rows) {
           let view = blocks.get(row.block.id)
           if (!view) {
@@ -233,28 +245,58 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
             view = { node, gap: missing }; blocks.set(row.block.id, view)
           }
           view.node.hidden = !row.text
-          view.gap.hidden = Boolean(row.text) || gap
+          view.gap.hidden = row.draft ? false : Boolean(row.text) || gap
+          if (row.draft) view.gap.textContent = uiText('未完成译文草稿', 'Incomplete translation draft')
           if (!row.text && !gap) view.gap.textContent = row.missing ? uiText("此处文字未能可靠提取，请在 PDF 中核对。", "Text could not be reliably extracted here. Check the PDF.")
             : task.status === "running" ? uiText("正在翻译后续内容…", "Translating the next passage…") : uiText("此处译文尚未完成。继续翻译后会在原位补齐。", "Translation is incomplete here. Resume to fill this passage.")
           gap = !row.text
           if (row.text && view.text !== row.text) {
-            updateChatMarkdown(view.node, row.paragraph?.heading && !/^#/u.test(row.text) ? `## ${row.text}` : row.text); view.text = row.text
+            const visibleText = row.draft ? row.text.replace(/⟦F\d*$/u, '') : row.text
+            updateChatMarkdown(view.node, row.paragraph?.heading && !/^#/u.test(visibleText) ? `## ${visibleText}` : visibleText, assets); view.text = row.text
+            // 仅替换存储在本机来源中的公式；模型不能指定 URL 或注入 HTML。
+            const formulas = row.paragraph?.formulas ?? {}
+            const walker = doc.createTreeWalker(view.node, 4), textNodes: Text[] = []
+            while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+            for (const node of textNodes) {
+              const parts = node.data.split(/(⟦F\d+⟧)/u)
+              if (parts.length < 2) continue
+              const fragment = doc.createDocumentFragment()
+              for (const part of parts) {
+                const source = formulas[part]
+                if (source && /^data:image\/png;base64,[a-z\d+/]+=*$/iu.test(source)) {
+                  const image = element(doc, 'img'); image.src = source; image.alt = uiText('原文公式', 'Source formula'); image.style.maxWidth = '100%'; image.style.verticalAlign = 'middle'; fragment.append(image)
+                } else fragment.append(doc.createTextNode(part))
+              }
+              node.replaceWith(fragment)
+            }
           }
-          if (row.text && row.paragraph?.heading) headings.push(row.block.id)
+          view.node.dataset.draft = String(Boolean(row.draft))
+          view.node.setAttribute('aria-label', row.draft ? uiText('未完成译文草稿', 'Incomplete translation draft') : uiText('译文', 'Translation'))
+          if (row.text) for (const [index, heading] of Array.from(view.node.querySelectorAll<HTMLElement>('h1,h2,h3')).entries()) headings.set(`${row.block.id}-heading-${index}`, heading)
         }
-        if (outline.content.dataset.headings !== headings.join("|")) {
-          outline.content.replaceChildren(...headings.map(id => action(doc, blocks.get(id)!.node.textContent || "", () => { closeMenus(); blocks.get(id)?.node.scrollIntoView({ block: "start" }) })))
-          outline.content.dataset.headings = headings.join("|"); outline.details.hidden = !headings.length
+        const headingSignature = [...headings].map(([id, node]) => `${id}:${node.textContent}`).join('|')
+        if (outline.content.dataset.headings !== headingSignature) {
+          outline.content.replaceChildren(...[...headings].map(([, node]) => action(doc, node.textContent || '', () => { closeMenus(); node.scrollIntoView({ block: 'start' }) })))
+          outline.content.dataset.headings = headingSignature; outline.details.hidden = !headings.size
         }
         const percent = task.total ? Math.floor(task.completed / task.total * 100) : 0
-        const status = { running: uiText(`已翻译 ${percent}%`, `${percent}% translated`), paused: uiText(`已暂停 · ${percent}%`, `Paused · ${percent}%`), complete: uiText("翻译完成", "Translation complete"), partial: uiText(`部分完成 · ${percent}%`, `Partial · ${percent}%`), error: uiText(`翻译中断 · ${percent}%`, `Interrupted · ${percent}%`) }[task.status]
+        const status = { running: uiText(`已翻译 ${percent}%`, `${percent}% translated`), paused: uiText(`已暂停 · ${percent}%`, `Paused · ${percent}%`), complete: "", partial: uiText(`部分完成 · ${percent}%`, `Partial · ${percent}%`), error: uiText(`翻译中断 · ${percent}%`, `Interrupted · ${percent}%`) }[task.status]
+        if (previousStatus && previousStatus !== "complete" && task.status === "complete") feedback(uiText("翻译完成", "Translation complete"))
+        previousStatus = task.status
         const layoutWarnings = [...new Set(rows.map(row => row.page?.layoutWarning).filter(Boolean))]
-        state.textContent = task.storageWarning ? uiText("译文未完整保存，请及时复制", "Not fully saved; copy your translation") : task.error || lastNotice || status + (layoutWarnings.length ? uiText(" · 需核对版式", " · check source layout") : "")
+        state.textContent = task.storageWarning ? uiText("译文未完整保存，请及时复制", "Not fully saved; copy your translation") : task.error || lastNotice || (task.status === 'running' ? jobs.translationPhase(taskID) : '') || status + (layoutWarnings.length ? uiText(" · 需核对版式", " · check source layout") : "")
         state.title = state.textContent; state.dataset.error = String(Boolean(task.error || task.storageWarning))
+        if (task.storageWarning && copyAll.parentElement !== footer) footer.append(copyAll)
+        else if (!task.storageWarning && copyAll.parentElement !== more.content) more.content.prepend(copyAll)
         diagnostics.textContent = [task.error, ...task.warnings, ...layoutWarnings].filter(Boolean).join("\n"); diagnostics.hidden = !diagnostics.textContent
-        progress.max = Math.max(1, task.total); progress.value = task.completed; progress.hidden = task.status !== "running"
+        progressFill.style.width = `${percent}%`; progress.setAttribute('aria-valuenow', String(percent)); progress.setAttribute('aria-valuetext', `${task.completed} / ${task.total}`); progress.hidden = task.status === 'complete'
+        progress.dataset.state = task.status; footer.dataset.state = task.error || task.storageWarning ? 'error' : task.status
         pause.hidden = task.status === "complete" || task.status === "partial" && task.completed === task.total; pause.textContent = task.status === "running" ? uiText("暂停", "Pause") : uiText("继续", "Continue")
+        actionIcon(pause, task.status === "running" ? "pause" : "play")
         restart.disabled = task.status === "running"
+        locate.disabled = task.status === 'running'
+        locate.title = task.status === 'running' ? uiText('生成期间暂不支持定位', 'Location is unavailable while generating') : uiText('定位', 'Locate')
+        if ((task.extractionVersion ?? 0) < 5) pause.hidden = true
         setMode(locating); restore(anchor); saved = capture(); initialized = true
       } while (dirty && !disposed)
     } catch (error) { if (!disposed) notice(String(error), true) } finally { fetching = false }
@@ -264,7 +306,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   return () => {
     locationSelect.destroy(); fontSelect.destroy(); lineSelect.destroy()
     if (disposed) return
-    disposed = true; stop()
+    disposed = true; clearTimeout(toastTimer); stop()
     try { savePosition() } catch { /* 窗口已销毁时保留最后一次正常滚动锚点。 */ }
     for (const id of observers) host.Prefs?.unregisterObserver?.(id)
     stopTheme(); resize?.disconnect()

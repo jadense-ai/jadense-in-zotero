@@ -6,10 +6,13 @@ import type { TranslationReadingIndex, TranslationReadingPosition } from "./tran
 
 export type DocumentTask = {
   referenceAI?: { unavailable?: boolean; pausedReason?: string; batches: Array<{ id: string; requestId: string; previousRequestId?: string; entryIds: string[]; prompt: string; model: string; status: 'pending' | 'complete' | 'failed' }> }
-  version: 1; id: string; kind: "translation" | "references"; source: DocumentIdentity; createdAt: string
+  version: 1; id: string; kind: "translation" | "references" | "extraction"; source: DocumentIdentity; createdAt: string
   status: "running" | "paused" | "complete" | "partial" | "error"; totalPages: number; completed: number; total: number
   languages?: TranslationLanguages; models: string[]; warnings: string[]; storageWarning?: boolean; error?: string; extractionVersion?: number
+  chunkVersion?: number
+  extractionID?: string
 }
+export type ExtractedDocument = { version: 1; markdown: string; pages: DocumentPage[]; assets: string[] }
 export type TranslationPage = DocumentPage & { translations: Record<string, string>; pieces: Array<{ id: string; paragraphID: string; text: string }> }
 export type TaskIO = {
   makeDirectory(path: string, options: { ignoreExisting: boolean }): Promise<unknown>
@@ -62,6 +65,24 @@ export class DocumentStore {
       && value.translations && typeof value.translations === "object" ? value : null
   }
   savePage(id: string, page: TranslationPage) { return this.write(id, `page-${page.pageIndex}.json`, page) }
+  saveExtraction(id: string, value: ExtractedDocument) { return this.write(id, 'extraction.json', value) }
+  async extraction(id: string) {
+    const value = await this.read<ExtractedDocument>(id, 'extraction.json')
+    return value?.version === 1 && typeof value.markdown === 'string' && Array.isArray(value.pages) && Array.isArray(value.assets) ? value : null
+  }
+  saveAsset(id: string, asset: string, data: string) {
+    if (!/^image-\d+$/u.test(asset)) return Promise.resolve(false)
+    return this.write(id, `${asset}.json`, data)
+  }
+  async assets(id: string): Promise<Record<string, string>> {
+    const value = await this.extraction(id), result: Record<string, string> = {}
+    for (const asset of value?.assets ?? []) {
+      if (!/^image-\d+$/u.test(asset)) continue
+      const data = await this.read<string>(id, `${asset}.json`)
+      if (typeof data === 'string' && /^data:image\/png;base64,[a-z\d+/]+=*$/iu.test(data)) result[`jdx-asset:${asset}`] = data
+    }
+    return result
+  }
   saveReadingIndex(id: string, index: TranslationReadingIndex) { return this.write(id, "reading.json", index) }
   async readingIndex(id: string): Promise<TranslationReadingIndex | null> {
     const value = await this.read<TranslationReadingIndex>(id, "reading.json")
@@ -81,7 +102,7 @@ export class DocumentStore {
     const result: DocumentTask[] = []
     for (const id of ids) {
       const task = await this.read<DocumentTask>(id, "task.json")
-      if (task && task.id === id && (task.kind === "translation" || task.kind === "references") && task.source
+      if (task && task.id === id && (task.kind === "translation" || task.kind === "references" || task.kind === "extraction") && task.source
         && Number.isSafeInteger(task.source.itemID) && Number.isSafeInteger(task.source.libraryID) && typeof task.source.itemKey === "string"
         && Number.isSafeInteger(task.totalPages) && task.totalPages >= 0 && Array.isArray(task.models) && Array.isArray(task.warnings)) {
         // 摘要的可选展示字段逐项降级；一条损坏清单不能令整个历史排序或初始化失败。
@@ -107,7 +128,7 @@ export class DocumentStore {
       try { paths = await this.io.getChildren(this.path(id)) } catch { /* 未落盘记录没有目录。 */ }
         for (const path of paths.sort((a, b) => Number(this.paths!.filename(a) === "task.json") - Number(this.paths!.filename(b) === "task.json"))) {
           const name = this.paths.filename(path)
-          if (/^(task|references|reading|reading-position|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
+          if (/^(task|references|reading|reading-position|extraction|image-\d+|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
         }
     }
     for (const key of this.cache.keys()) if (key.startsWith(`${id}/`)) this.cache.delete(key)

@@ -386,6 +386,7 @@ async function serveChat(request, response) {
 
 const assets = new Map([
   ["/ui.css", ["ui.css", "text/css; charset=utf-8"]],
+  ["/translation-interface.css", ["translation-interface.css", "text/css; charset=utf-8"]],
   ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],
   ["/manager.js", ["manager.js", "text/javascript; charset=utf-8"]],
   ["/manager.css", ["manager.css", "text/css; charset=utf-8"]],

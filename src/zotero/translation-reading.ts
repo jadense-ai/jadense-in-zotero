@@ -7,7 +7,7 @@ export type TranslationReadingBlock = {
 }
 export type TranslationReadingIndex = { version: 1; blocks: TranslationReadingBlock[] }
 export type TranslationReadingRow = {
-  block: TranslationReadingBlock; paragraph?: PdfParagraph; page?: TranslationPage; text?: string; missing?: boolean
+  block: TranslationReadingBlock; paragraph?: PdfParagraph; page?: TranslationPage; text?: string; missing?: boolean; draft?: boolean
 }
 export type TranslationReadingPosition = { blockID: string; offset: number }
 

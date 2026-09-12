@@ -2,6 +2,12 @@
 
 本仓库可以独立开发和构建，无需私有主应用、数据库、账号令牌或 `.env`。GitHub PR 与 Release 按本文执行；官网发布和自动更新不属于此流程。
 
+## 许可与贡献
+
+当前项目采用 [Jadense 非商业使用许可证 1.0](LICENSE)，允许非商业自用与符合许可的修改、分发；商业使用需另行书面授权。提交贡献前请确认你有权提供相关内容，并在 PR 中明确同意新增贡献按本项目当前许可分发；保留引入内容的原始许可，不将第三方代码直接改标为本项目许可。历史 MIT 授权不追溯撤销。
+
+README 与 docs 用户指南由本仓库独立维护；LICENSE、package.json 与 THIRD_PARTY_NOTICES.md 和上游保持一致。发布新许可前需核对新增贡献的授权。README 的微信/支付宝入口统一链接到 `support/README.md`，由独立赞助页展示维护者提供的收款码。更新收款码时只裁剪外框与外围文字，保留码内图案，不重绘二维码；发布前检查链接、平台与收款人对应关系。
+
 ## 开发与本机验证
 
 使用 `.node-version` 中的 Node 版本和 `packageManager` 中的 pnpm 版本：
@@ -80,7 +86,7 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 - `0.5.0` 及后续次版本：计划中的功能里程碑，或涉及安装、数据、配置迁移的明显变化；发布说明列出兼容性影响和迁移要求。
 - 每个已发布版本保持不可变。修改安装包必须使用新版本号，不同 XPI 字节不得重复使用已公开版本号。
 
-1. 创建发布 PR，集中修改 `package.json` 版本和相关版本说明。依赖发生变化时更新锁文件；清楚列出新增、修复、兼容范围及升级注意事项。
+1. 创建发布 PR，集中修改 `package.json` 版本和相关版本说明。依赖发生变化时更新锁文件；清楚列出新增、修复、兼容范围及升级注意事项。完成下方「README 与指南发布清单」，不能只更新 CHANGELOG 或 Release 草稿。
 2. 正常合并发布 PR，并确认 `main` CI 成功。维护者在最新 `main` 的预定提交创建并推送标签；以下 `0.4.1` 仅为示例，必须替换为发布 PR 中的实际版本：
 
    ```powershell
@@ -115,6 +121,42 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 创建草稿及公开 Release 都不会执行官网发布或修改自动更新配置。
 
 ## Release 说明文案
+
+### README 与指南发布清单
+
+每次正式版本发布，由发布 PR 的维护者逐项核对，中英文在同一个 PR 中更新：
+
+- [ ] `README.md` 和 `README.en.md` 的 `release-summary:start` / `release-summary:end` 区块改为本次版本，保持在目录之前。每种语言只写一至两句话，列出本次最核心的 2–4 项变化，不堆积提交记录；完整细节放入 CHANGELOG。
+- [ ] 摘要版本、Release 链接、安装说明、升级说明和 `package.json` 一致。未正式公开的版本标明「待发布 / Pending release」，不将草稿称为正式版；公开前移除待发布标记并核对最终链接。README 仅保留当前摘要，历史摘要留在 CHANGELOG。
+- [ ] 更新双语 CHANGELOG，区分新增、优化和修复，不把已有功能重复标为新增。许可变更必须标明实际生效的新版本，不能把本地变更追溯写成已发布安装包的许可。
+- [ ] 用户可见入口或操作改变时，同步「如何使用本插件」和 `docs/usage-guide.md`；问题边界改变时同步 FAQ。标题调整后检查目录与已有兼容锚点，尤其保留 `quick-start`、`upgrade` 和 `continue-research`。
+- [ ] 更新受影响的操作截图，并检查实际图片中文字、路径、语言和主题。使用隔离 profile、合成论文和虚构凭据，不复制真实用户资料；截图注明插件版本与原生/浏览器预览来源。未改变的界面可复用已核对截图，不必每版全部重拍。
+- [ ] 预览两种语言 README：Logo、徽章、版本摘要、目录、图片均正常显示；相对链接与锚点可达。Manifest 的兼容声明与实测范围分别陈述。
+- [ ] 在发布 PR 中填写本清单结果与尚未验证的范围，按原有测试和制品验收流程完成发布。
+
+摘要示例（版本和内容必须替换为本次真实变化）：
+
+```markdown
+<!-- release-summary:start -->
+> **[vX.Y.Z](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/vX.Y.Z)**：改善全文翻译的阅读与定位，优化模型配置和新用户引导。[完整更新说明](CHANGELOG.md)
+<!-- release-summary:end -->
+```
+
+#### 重拍指南图片
+
+先构建当前候选版本，再使用现有隔离截图工具：
+
+```powershell
+pnpm run build
+pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --screenshots --keep-temp
+pnpm run preview:research
+```
+
+将 Zotero 路径替换为本机路径。原生脚本会输出临时截图目录；浏览器预览只提供当前构建的真实 Manager 与模拟宿主。用浏览器截图工具操作配置表单即可，不向示例 Provider 发送请求。挑选必要图片保存到 `docs/images/guide-*.png`，不要复制 profile、日志、测试报告或整批临时文件。截图的生成不代表整套冒烟通过；存在超时或失败时分别记录，不将部分截图视为全量验收。
+
+当前操作图来自 0.4.4 构建：BYOK 提供商/模型、连接令牌与解析历史为浏览器预览，功能配置、选文工具条/翻译和手动框选为 Windows / Zotero 10.0.2 原生隔离截图。图中凭据与论文均为虚构，模型结果为模拟结果。
+
+### 用户版 Release 正文
 
 Release 面向插件用户，重点介绍功能和更新价值。以本次版本相对上一正式版的实际变化为准，不把已有功能重新包装成新增。
 

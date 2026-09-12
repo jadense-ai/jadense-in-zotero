@@ -2,6 +2,31 @@
 import type { PaperAnalysisRecord, PaperAnalysisSource } from "@/chat/paper-analysis-history"
 import type { DocumentIdentity } from "./pdf-document"
 import type { DocumentTask } from "./document-store"
+import type { TranslationRecord } from '@/chat/translation-history'
+import { literatureIdentity } from './document-identity'
+import type { ZoteroLike } from './runtime'
+
+export type LiteratureResult = { id: string; date: string; mode: 'source' | 'translation' | 'selection' | 'analysis'; source: PaperAnalysisSource; task?: DocumentTask; analysis?: PaperAnalysisRecord; selection?: TranslationRecord }
+export type LiteraturePaper = { key: string; title: string; source: PaperAnalysisSource; date: string; results: LiteratureResult[]; attachments: PaperAnalysisSource[] }
+
+/** 各成果只投影索引，不复制正文；可信父条目聚合，缺身份旧记录独立保留。 */
+export function literaturePapers(host: ZoteroLike, analyses: PaperAnalysisRecord[], tasks: DocumentTask[], selections: TranslationRecord[]): LiteraturePaper[] {
+  const entries: LiteratureResult[] = [
+    ...analyses.map(record => ({ id: record.id, date: record.createdAt, mode: 'analysis' as const, source: record.source, analysis: record })),
+    ...tasks.map(task => ({ id: task.id, date: task.createdAt, mode: task.kind === 'extraction' ? 'source' as const : task.kind === 'translation' ? 'translation' as const : 'analysis' as const, source: { ...task.source, authors: [] }, task })),
+    ...selections.map(record => ({ id: record.id, date: record.createdAt, mode: 'selection' as const, source: { ...record.source, libraryID: record.source.libraryID ?? -1, itemKey: record.source.itemKey ?? '', title: record.source.title || 'PDF', authors: [] }, selection: record })),
+  ]
+  const papers = new Map<string, LiteraturePaper>()
+  for (const entry of entries.sort((a, b) => b.date.localeCompare(a.date))) {
+    const owner = literatureIdentity(host, entry.source)
+    const key = owner ? `literature:${paperKey(owner)}` : entry.source.itemKey ? `attachment:${paperKey(entry.source)}` : `legacy:${entry.mode}:${entry.id}`
+    let paper = papers.get(key)
+    if (!paper) { paper = { key, title: owner?.title || entry.source.title, source: entry.source, date: entry.date, results: [], attachments: [] }; papers.set(key, paper) }
+    paper.results.push(entry)
+    if (!paper.attachments.some(source => paperKey(source) === paperKey(entry.source))) paper.attachments.push(entry.source)
+  }
+  return [...papers.values()]
+}
 
 export type AnalysisPaper = { key: string; source: PaperAnalysisSource; record?: PaperAnalysisRecord; references?: DocumentTask; date: string }
 export function paperKey(source: Pick<DocumentIdentity, "itemID" | "libraryID" | "itemKey">) {

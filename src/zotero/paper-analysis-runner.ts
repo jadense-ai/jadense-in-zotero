@@ -1,3 +1,4 @@
+import { literatureIdentity } from "./document-identity"
 import { uiText } from "@/zotero/ui-preferences"
 /**
  * 独立文献解析任务协调器。
@@ -165,6 +166,7 @@ export async function runIndependentPaperAnalysis(input: {
     ...(input.referenceTaskID ? { referenceTaskID: input.referenceTaskID } : {}),
     createdAt: input.createdAt ?? new Date().toISOString(),
     source: {
+      literature: literatureIdentity(input.zotero, snapshot),
       itemID: snapshot.itemID,
       libraryID: snapshot.libraryID,
       itemKey: snapshot.itemKey,

@@ -1,3 +1,4 @@
+import { literatureIdentity } from "./document-identity"
 /**
  * 阅读器选文翻译运行时。
  * 上游接收本地选区，下游按独立翻译模型生成译文并写入独立翻译历史。
@@ -18,6 +19,9 @@ import { readConnection, type ZoteroLike } from "./runtime"
 import { readArticleTranslationLanguages } from "./translation-settings"
 import type { ReaderAction } from "./reader-tools"
 import { uiText } from "./ui-preferences"
+import { recordStarInvitationUse } from "./star-invitation"
+import { readTranslationInterface } from './translation-interface'
+import { translateMachineText } from '@/chat/machine-translation'
 
 function createId(prefix: string) {
   const random = globalThis.crypto?.randomUUID?.()
@@ -56,9 +60,9 @@ export async function translateReaderSelection(input: {
   ).catch(() => null)
   const title = source?.parentItem?.title ?? source?.title
   const citation = source?.citation
-  const model = featureModelState(input.zotero, "translation")
-  if (!model.ready) throw new Error(model.issue)
-  const connection = readConnection(input.zotero)
+  const config = readTranslationInterface(input.zotero)
+  const model = config.kind === 'ai' ? featureModelState(input.zotero, 'translation') : null
+  if (model && !model.ready) throw new Error(model.issue)
   if (!source || source.kind !== "file" || source.itemID !== input.action.itemID) {
     throw new Error(uiText("无法确认当前 PDF 附件身份；本次翻译未发送，也不会写入历史。", "The current PDF attachment could not be verified. No translation request was sent and no history was saved."))
   }
@@ -67,40 +71,46 @@ export async function translateReaderSelection(input: {
     await readArticleTranslationLanguages(input.zotero, input.action.itemID),
   )
 
-  const client = model.route === "byok"
-    ? new ByokChatClient({ config: model.config!, fetchImpl: input.fetchImpl })
-    : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: input.fetchImpl })
   const id = createId("translation")
   let translatedText = ""
   try {
-    translatedText = await client.send({
-      clientFeature: "translation",
-      clientRequestId: createId("request"),
-      conversationId: id,
-      taskId: id,
-      operationId: id,
-      messages: [{
-        id: createId("user"),
-        role: "user",
-        text: buildTranslationPrompt({
-          text: selectedText,
-          title,
-          citation,
-          pageLabel: input.action.pageLabel,
-          ...languages,
-        }),
-      }],
-      onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(accumulatedText),
-    })
+    if (!model) {
+      translatedText = await translateMachineText({ host: input.zotero, service: config.service, text: selectedText, ...languages, fetchImpl: input.fetchImpl, onText: input.onTextDelta })
+    } else {
+      const connection = readConnection(input.zotero)
+      const client = model.route === "byok"
+        ? new ByokChatClient({ config: model.config!, fetchImpl: input.fetchImpl })
+        : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: input.fetchImpl })
+      translatedText = await client.send({
+        clientFeature: "translation",
+        clientRequestId: createId("request"),
+        conversationId: id,
+        taskId: id,
+        operationId: id,
+        messages: [{
+          id: createId("user"),
+          role: "user",
+          text: buildTranslationPrompt({
+            text: selectedText,
+            title,
+            citation,
+            pageLabel: input.action.pageLabel,
+            ...languages,
+          }),
+        }],
+        onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(accumulatedText),
+      })
+    }
   } catch (error) {
     throw new Error(friendlyTranslationError(error))
   }
   if (!translatedText.trim()) throw new Error(uiText("AI 没有返回可显示的译文。", "The AI did not return a translation."))
 
-  return appendTranslationRecord(translationPreferences(input.zotero), {
+  const record = appendTranslationRecord(translationPreferences(input.zotero), {
     id,
     createdAt: new Date().toISOString(),
     source: {
+      literature: literatureIdentity(input.zotero, source),
       text: selectedText,
       itemID: input.action.itemID,
       libraryID: source.libraryID,
@@ -116,4 +126,6 @@ export async function translateReaderSelection(input: {
       targetLanguage: translationLanguageLabel(languages.targetLanguage),
     },
   })
+  recordStarInvitationUse(input.zotero)
+  return record
 }

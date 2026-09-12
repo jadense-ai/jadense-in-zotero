@@ -303,7 +303,7 @@ describe("reader document conversation lifecycle", () => {
 
   it("routes only new figure conversations through automatic literature and PDF association", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const drain = manager.match(/async function drainReaderActions[\s\S]*?\n}\n\nfunction syncFolderSelection/)?.[0] ?? ""
+    const drain = manager.match(/async function drainReaderActions[\s\S]*?\n}\s*\nfunction syncFolderSelection/)?.[0] ?? ""
     expect(drain).toContain('action.conversationTarget === "current"')
     expect(drain).toContain('collectChatSources(zotero, { mode: "files", itemIDs: [action.itemID] })')
     expect(drain).toContain("appendReaderFigureToCurrentChatSession")
@@ -363,7 +363,7 @@ describe("reader document conversation lifecycle", () => {
   it("routes Reader analysis to the independent workbench without calling the Chat-session helper", () => {
     const bootstrap = readFileSync(new URL("../bootstrap.ts", import.meta.url), "utf8")
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const analyze = manager.match(/async function analyzePaper[\s\S]*?\n}\n\nfunction compactFigureText/)?.[0] ?? ""
+    const analyze = manager.match(/async function analyzePaper[\s\S]*?\n}\s*\nfunction compactFigureText/)?.[0] ?? ""
     expect(bootstrap).toContain('openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)')
     expect(analyze).toContain("runIndependentPaperAnalysis")
     expect(analyze).not.toContain("createLocalChatSession")
@@ -751,19 +751,19 @@ describe("manager page state", () => {
 
   it("renders translation titles as native accessible buttons backed by local Reader navigation", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const renderer = manager.match(/function renderTranslationHistory[\s\S]*?\n}\n\nfunction renderPaperAnalysisHistory/)?.[0] ?? ""
+    const renderer = manager.match(/function renderTranslationHistory[\s\S]*?\n}/)?.[0] ?? ""
     const ui = readFileSync(new URL("./document-ui.ts", import.meta.url), "utf8")
-    expect(renderer).toContain("renderDocumentHistory")
+    expect(renderer).toContain("renderPaperAnalysisHistory")
     expect(ui).toContain('sourceTitle.className = "jdx-translation-title"')
     expect(ui).toContain('sourceTitle.setAttribute("aria-label"')
-    expect(renderer).toContain("openTranslationHistoryRecord")
-    expect(renderer).toContain("translationHistoryStatus")
+    expect(manager).toContain("openTranslationHistoryRecord")
+    expect(manager).toContain("elements.navTranslations.hidden = true")
   })
 
   it("routes analysis titles into the dedicated workspace and keeps exact PDF navigation separate", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
-    const renderer = manager.match(/function renderPaperAnalysisHistory[\s\S]*?\n}\n\n\/\*\* 有图片上下文/)?.[0] ?? ""
-    expect(renderer).toContain("mountAnalysisWorkspace")
+    const renderer = manager.match(/function renderPaperAnalysisHistory[\s\S]*?\n}\s*\n\/\*\* 有图片上下文/)?.[0] ?? ""
+    expect(renderer).toContain("mountLiteratureWorkspace")
     expect(renderer).toContain("openPaperAnalysisHistoryRecord")
     const view = readFileSync(new URL("./analysis-workspace.ts", import.meta.url), "utf8")
     expect(view).toContain('() => open(paper.source)')

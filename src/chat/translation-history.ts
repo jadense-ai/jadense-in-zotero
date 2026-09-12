@@ -1,3 +1,4 @@
+import { readLiteratureIdentity, type LiteratureIdentity } from "@/zotero/document-identity"
 /**
  * Zotero profile 本地翻译档案。
  * 上游接收阅读器选文与 AI 译文，下游仅写独立首选项，不混入本地对话历史。
@@ -11,6 +12,7 @@ export type TranslationPreferenceStore = {
 }
 
 export type TranslationSource = {
+  literature?: LiteratureIdentity
   text: string
   itemID: number
   libraryID?: number
@@ -91,6 +93,7 @@ function normalizeRecord(value: unknown): TranslationRecord | null {
     id,
     createdAt,
     source: {
+      ...(readLiteratureIdentity(source?.literature) ? { literature: readLiteratureIdentity(source?.literature) } : {}),
       text: sourceText,
       itemID,
       ...(libraryID !== undefined && itemKey ? { libraryID, itemKey } : {}),

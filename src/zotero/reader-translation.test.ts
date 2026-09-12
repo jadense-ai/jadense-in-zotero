@@ -8,6 +8,7 @@ import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, saveAiRoute, saveByokConfig, saveFeatu
 import { translateReaderSelection } from "./reader-translation"
 import { ARTICLE_TRANSLATION_LANGUAGES_PREF_PREFIX, readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
 import type { ZoteroLike } from "./runtime"
+import { saveTranslationInterface, readTranslationInterface, TRANSLATION_INTERFACE_PREF } from './translation-interface'
 
 function zoteroWithPreferences(values: Map<string, unknown>, items?: ZoteroLike["Items"]): ZoteroLike {
   if (!values.has(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY)) values.set(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, false)
@@ -38,6 +39,24 @@ function readerSourceItems(): NonNullable<ZoteroLike["Items"]> {
 }
 
 describe("reader translation runtime", () => {
+  it('uses traditional translation without AI configuration and saves the usual history', async () => {
+    const values = new Map<string, unknown>(), zotero = zoteroWithPreferences(values, readerSourceItems())
+    saveTranslationInterface(zotero, { kind: 'machine', service: 'google' })
+    const fetchImpl = vi.fn(async () => new Response('<div class="result-container">普通译文</div>'))
+    const record = await translateReaderSelection({ zotero, fetchImpl, action: { kind: 'translate', itemID: 17, text: 'Source sentence.' } })
+    expect(record.result.text).toBe('普通译文')
+    expect(readTranslationHistory(zotero.Prefs!).records).toHaveLength(1)
+    expect(fetchImpl).toHaveBeenCalledOnce()
+  })
+
+  it('defaults legacy configuration to AI and accepts additive translation settings', () => {
+    const values = new Map<string, unknown>(), zotero = zoteroWithPreferences(values)
+    expect(readTranslationInterface(zotero)).toEqual({ kind: 'ai', service: 'bing' })
+    values.set(TRANSLATION_INTERFACE_PREF, JSON.stringify({ kind: 'machine', service: 'google', future: true }))
+    expect(readTranslationInterface(zotero)).toEqual({ kind: 'machine', service: 'google' })
+    values.set(TRANSLATION_INTERFACE_PREF, '{broken')
+    expect(readTranslationInterface(zotero)).toEqual({ kind: 'ai', service: 'bing' })
+  })
   it("uses the UI language for local validation without sending a translation request", async () => {
     initializeUiLocale({ locale: "en-US" })
     const fetchImpl = vi.fn()

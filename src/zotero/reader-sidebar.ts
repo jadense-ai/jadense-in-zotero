@@ -1,12 +1,14 @@
-import { renderDocumentHistory } from "./document-ui"
-import { collectSourceForItem, openChatSource } from "./research-context"
+import type { AnalysisDetailTab } from "./analysis-workspace"
+import { mountDocumentResults, resultLabels, type DocumentResultMode } from "./document-results"
+import { openManagerWindow } from "./manager-window"
+import { collectSourceForItem } from "./research-context"
 import { mountReaderChat } from "./reader-chat"
 import { createJdxSelect } from "./ui/select"
 import { messageAction } from "./chat-message-ui"
 /** Reader 工作区承载：首选现有原生 Jadense 区域；无原生侧栏的窗口使用同一内容的停靠壳。 */
 import { documentJobs } from "./document-jobs"
-import { mountTranslationReader, installTranslationReadingStyles } from "./translation-reader"
-import { element, action } from "./ui/controls"
+import { installTranslationReadingStyles } from "./translation-reader"
+import { element } from "./ui/controls"
 import { observeTheme, uiText } from "./ui-preferences"
 import type { ZoteroLike } from "./runtime"
 import { isLiveDocumentReader } from "./pdf-document"
@@ -14,6 +16,7 @@ import { isLiveDocumentReader } from "./pdf-document"
 const PANE = "jadense-in-zotero-sync-panel"
 const WIDTH = "extensions.jadenseInZotero.readerSidebarWidth"
 export type ReaderSidebarSource = { itemID: number; tabID?: string; _iframe?: HTMLElement; _iframeWindow?: Window; _window?: Window }
+type ResultPage = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab
 type Reader = ReaderSidebarSource
 type Details = HTMLElement & { tabID?: string; pinnedPane?: string; scrollToPane?(id: string, behavior: string): Promise<unknown>; render?(): Promise<unknown> }
 type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean): Promise<void>; remove(): void }
@@ -83,105 +86,69 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   const left = element(doc, 'div', 'jdx-reader-header-left'), center = element(doc, 'div', 'jdx-reader-header-center'), right = element(doc, 'div', 'jdx-reader-header-right')
   const pageHost = element(doc, 'div'); left.append(pageHost)
   const pageSelect = createJdxSelect(pageHost, { compact: true, portal: true, popupWidth: 180, ariaLabel: uiText('切换功能', 'Switch page'), iconPath: 'M4 6h16M4 12h16M4 18h16' })
-  pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, { value: 'translation', label: uiText('全文翻译', 'Full translation') }, { value: 'selection-history', label: uiText('选中翻译历史', 'Selection translation history') }], 'chat')
-  const sessionHost = element(doc, 'div'), translationTitle = element(doc, 'strong', '', uiText('全文翻译', 'Full translation')); center.append(sessionHost, translationTitle)
-  const newChat = messageAction(doc, uiText('新建对话', 'New conversation'), 'M12 5v14M5 12h14')
-  newChat.classList.add('jdx-button')
+  const { source, translation, selection } = resultLabels()
+  const labels = { source, translation, selection, summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References') }
+  pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))], 'chat')
+  const sessionHost = element(doc, 'div'), heading = element(doc, 'strong'); center.append(sessionHost, heading)
+  const newChat = messageAction(doc, uiText('新建对话', 'New conversation'), 'M12 5v14M5 12h14'); newChat.classList.add('jdx-button')
   right.append(newChat); header.append(left, center, right)
   const pages = element(doc, 'section', 'jdx-reader-workspace-pages'), chat = element(doc, 'section', 'jdx-reader-workspace-content')
-  const content = element(doc, 'section', 'jdx-reader-workspace-content'); pages.append(chat, content); root.append(header, pages)
+  pages.append(chat); root.append(header, pages)
   const chatView = mountReaderChat(chat, sessionHost, host, itemID)
-  const selectionHistory = element(doc, 'section', 'jdx-reader-workspace-content jdx-reader-selection-history')
-  const historyTitle = element(doc, 'strong', '', uiText('选中翻译历史', 'Selection translation history'))
-  pages.append(selectionHistory); center.append(historyTitle)
-  let stopHistory = () => {}, historyRemoved = false, historyLoading = false
-  const refreshHistory = async () => {
-    if (historyLoading || historyRemoved) return
-    historyLoading = true
-    if (!selectionHistory.childNodes.length) selectionHistory.textContent = uiText('正在读取翻译历史…', 'Loading translation history…')
+  const views = new Map<ResultPage, { root: HTMLElement; view: ReturnType<typeof mountDocumentResults> }>()
+  let page = 'chat', removed = false, sequence = 0
+  const setPage = async (next: string, recordID?: string) => {
+    page = next; const generation = ++sequence
+    root.dataset.page = next; pageSelect.setValue(next); pageSelect.close(); chatView.closeMenus()
+    chat.hidden = next !== 'chat'; sessionHost.hidden = chat.hidden; newChat.hidden = chat.hidden; heading.hidden = !chat.hidden
+    for (const [mode, view] of views) view.root.hidden = mode !== next
+    if (next === 'chat') { chatView.refresh(); return }
+    const resultPage = next as ResultPage
+    const analysisTab = resultPage === 'summary' || resultPage === 'notes' || resultPage === 'references' ? resultPage : undefined
+    const mode: DocumentResultMode = analysisTab ? 'analysis' : resultPage as DocumentResultMode
+    heading.textContent = labels[resultPage]
+    let existing = views.get(resultPage)
+    if (recordID && existing) { existing.view.remove(); existing.root.remove(); views.delete(resultPage); existing = undefined }
+    if (existing) { void existing.view.refresh(); return }
     try {
-      const source = await collectSourceForItem(host, itemID, { includeText: false })
-      if (historyRemoved) return
-      if (!source || source.kind !== 'file') throw new Error(uiText('当前 PDF 不可用', 'Current PDF unavailable'))
-      stopHistory = renderDocumentHistory(selectionHistory, host, record => openChatSource(host, {
-        ...source, pageIndex: record.source.pageIndex, pageLabel: record.source.pageLabel,
-      }), undefined, source)
-    } catch (error) { if (!historyRemoved) selectionHistory.textContent = String(error) }
-    finally { historyLoading = false }
-  }
-  const refreshButton = messageAction(doc, uiText('刷新翻译历史', 'Refresh translation history'), 'M20 7v5h-5M4 17v-5h5M6 8a7 7 0 0 1 12-2l2 2M4 16l2 2a7 7 0 0 0 12-2')
-  refreshButton.classList.add('jdx-button'); right.append(refreshButton)
-  refreshButton.onclick = () => { void refreshHistory() }
-  const openHistoryLink = (event: MouseEvent) => {
-    const link = (event.target as Element).closest('a')
-    if (!link) return
-    event.preventDefault()
-    const url = link.getAttribute('href') || ''
-    if (/^https?:\/\//iu.test(url)) (host as ZoteroLike & { launchURL?(url: string): void }).launchURL?.(url)
-  }
-  selectionHistory.addEventListener('click', openHistoryLink)
-  selectionHistory.addEventListener('auxclick', openHistoryLink)
-  let page = 'chat'
-  const setPage = (next: string) => {
-    page = next; root.dataset.page = next; pageSelect.setValue(next); pageSelect.close(); chatView.closeMenus()
-    chat.hidden = next !== 'chat'; sessionHost.hidden = chat.hidden; newChat.hidden = chat.hidden
-    content.hidden = next !== 'translation'; translationTitle.hidden = content.hidden
-    selectionHistory.hidden = next !== 'selection-history'; historyTitle.hidden = selectionHistory.hidden; refreshButton.hidden = selectionHistory.hidden
-    if (!selectionHistory.hidden) void refreshHistory()
-    if (next === 'chat') chatView.refresh()
+      await jobs.ready
+      const current = await collectSourceForItem(host, itemID, { includeText: false }).catch(() => undefined)
+      if (removed || generation !== sequence) return
+      const saved = jobs.list().find(task => task.source.itemID === itemID)?.source
+      const source = current?.kind === 'file' ? { ...current, title: current.parentItem?.title || current.title, authors: [] } : saved ? { ...saved, authors: [] } : undefined
+      if (!source) { heading.textContent = uiText('当前 PDF 不可用', 'Current PDF unavailable'); return }
+      const panel = element(doc, 'section', 'jdx-reader-workspace-content'); pages.append(panel)
+      const view = mountDocumentResults(panel, host, source, mode, { recordID, readerDocument: options.readerDocument, analysisTab, hideAnalysisTabs: true,
+        onTranslate: id => { void setPage('translation', id) },
+        onWorkbench: (resultMode, taskID) => {
+          openManagerWindow({ zotero: host, win: host.getMainWindow?.() as Parameters<typeof openManagerWindow>[0]['win'],
+            context: { pluginID: 'jadense-in-zotero@jadense.cn', rootURI: '' }, section: 'analysis', action: { kind: 'fullTranslate', itemID, taskID, resultMode: analysisTab || resultMode } })
+        },
+      })
+      views.set(resultPage, { root: panel, view })
+    } catch (error) { if (!removed && generation === sequence) heading.textContent = String(error) }
   }
   newChat.onclick = () => { void chatView.newSession() }
-  pageSelect.onChange(setPage); setPage(page)
-  let taskID = "", stopContent = () => {}, removed = false, busy = false, history = options.history
-  const mount = (id: string) => {
-    if (id === taskID) return
-    taskID = id; stopContent(); content.replaceChildren()
-    stopContent = mountTranslationReader(content, host, id, { onReplace: mount, onHistory: () => history?.(), readerDocument: options.readerDocument })
-    root.dataset.translationTask = id
-  }
-  const restore = async () => {
-    await jobs.ready; if (removed || taskID || busy) return
-    const existing = jobs.list("translation").find(task => task.source.itemID === itemID)
-    if (existing) mount(existing.id)
-  }
-  const start = async () => {
-    if (busy || taskID || removed) return
-    busy = true; startButton.disabled = true; message.textContent = uiText("正在读取文献…", "Reading the paper…")
-    try { const task = await jobs.start("translation", itemID); if (!removed) mount(task.id) }
-    catch (error) { if (!removed) message.textContent = String(error) }
-    finally { busy = false; startButton.disabled = false }
-  }
-  const empty = element(doc, "div", "jdx-reader-workspace-empty")
-  const heading = element(doc, "h2", "", uiText("全文翻译前，先考虑精读", "Consider focused reading first"))
-  const advice = element(doc, "p", "", uiText("全文翻译不是推荐做法。建议先使用「解析文献」，再精读关键点、翻译重点句，会更加经济。", "Full translation is not recommended. Analyze the paper first, then read the key points closely and translate important sentences to reduce cost."))
-  const message = element(doc, "p", "jdx-reader-translation-status")
-  message.setAttribute("role", "status")
-  const startButton = action(doc, uiText("仍要翻译", "Translate anyway"), () => { void start() })
-  const confirmation = element(doc, "div", "jdx-reader-translation-confirmation")
-  confirmation.append(heading, advice, startButton, message)
-  empty.append(confirmation); content.append(empty)
-  const stopActivity = jobs.subscribe(() => { if (busy && !taskID) message.textContent = jobs.activity || uiText("正在准备翻译…", "Preparing translation…") })
+  pageSelect.onChange(next => { void setPage(next) }); void setPage(page)
   const value: Surface = {
     itemID, doc, root,
-    async show(shouldStart = false, onHistory, newConversation) {
-      if (onHistory) history = onHistory
+    async show(shouldStart = false, _onHistory, newConversation) {
       await options.activate()
-      if (newConversation) { setPage('chat'); await chatView.newSession(); return }
-      if (shouldStart) setPage('translation')
-      // 打开侧栏仅恢复已有译文；新任务必须由「仍要翻译」明确触发。
-      await restore()
+      if (newConversation) { await setPage('chat'); await chatView.newSession(); return }
+      if (shouldStart) await setPage('translation')
+      else if (page !== 'chat') await setPage(page)
     },
     remove() {
       if (removed) return
-      removed = true; historyRemoved = true
-      for (const cleanup of [stopContent, stopHistory, stopTheme, stopActivity, () => pageSelect.destroy(), () => chatView.remove(), options.cleanup, () => root.remove()]) {
-        try { cleanup() } catch { /* 已关闭窗口的失效 Xray 不妨碍其他视图清理。 */ }
+      removed = true; sequence++
+      for (const cleanup of [() => { for (const view of views.values()) view.view.remove() }, stopTheme, () => pageSelect.destroy(), () => chatView.remove(), options.cleanup, () => root.remove()]) {
+        try { cleanup() } catch { /* 单个失效窗口不影响其他界面清理。 */ }
       }
       surfaces.get(host)?.delete(value)
     },
   }
   const registry = surfaces.get(host) ?? new Set<Surface>(); registry.add(value); surfaces.set(host, registry)
-  void restore(); return value
+  return value
 }
 
 /** 原生注册区域保留宿主按钮及调整宽度；固定只作用于当前 Reader 的 item-details。 */

@@ -1,3 +1,4 @@
+@import url("translation-interface.css");
 /* Manager 共享基础控件；具体业务布局不进入本文件。 */
 /* 自研下拉组件：不透明白底弹出层，绕开 Zotero 原生 menupopup 的透明渲染。 */
 .jdx-select {
@@ -213,3 +214,96 @@
 .jdx-select-compact .jdx-select-option[aria-selected="true"] .jdx-select-option-status { color: var(--jdx-green-deep); }
 .jdx-select-compact .jdx-select-option[aria-disabled="true"] .jdx-select-option-status { color: var(--jdx-muted); }
 .jdx-select-compact .jdx-select-option-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* 文献成果：Manager 与 Reader 共用自制控件，颜色继承插件主题。 */
+.jdx-literature-workspace,.jdx-document-results{min-width:0;color:var(--jdx-text);font:inherit}
+.jdx-document-results{position:relative;display:flex;flex-direction:column;min-height:0;height:100%}
+.jdx-literature-workspace [hidden],.jdx-document-results [hidden]{display:none!important}
+.jdx-literature-workspace button,.jdx-document-results button,.jdx-literature-workspace input{appearance:none;font:inherit}
+.jdx-result-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px 0;min-width:0}
+.jdx-result-tools>div{min-width:0;max-width:100%}
+.jdx-document-results>.jdx-result-tools{flex:none;padding:8px 12px;background:transparent}
+.jdx-result-version{flex:0 1 200px;order:1}.jdx-result-language{flex:0 1 140px;order:1}
+.jdx-result-tools>.jdx-button-primary{order:2;margin-inline-start:auto}.jdx-result-workbench{margin-inline-start:0}
+.jdx-result-tools .jdx-select-trigger{min-height:32px}
+.jdx-document-results>.jdx-notice:empty{display:none}
+.jdx-document-results>.jdx-notice:not(:empty){flex:none;margin:0;padding:9px 16px;font-size:12px;line-height:1.6;background:var(--jdx-subtle);overflow-wrap:anywhere;border:0;border-inline-start:2px solid var(--jdx-line-strong)}
+.jdx-document-results>.jdx-notice[data-kind=error]{color:var(--jdx-red);border-inline-start-color:var(--jdx-red)}
+.jdx-document-results>.jdx-notice[data-kind=running]{color:var(--jdx-green-deep);border-inline-start-color:var(--jdx-green)}
+.jdx-document-results>.jdx-notice[data-kind=complete]{border-inline-start-color:var(--jdx-green)}
+.jdx-result-content{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;padding:12px;background:var(--jdx-background);overflow-wrap:anywhere}
+.jdx-result-content.jdx-translation-reader{padding:0}.jdx-document-results .jdx-reading-block{max-width:72ch;font-size:14px;line-height:1.85}
+.jdx-document-results img{max-width:100%;height:auto;border-radius:4px}.jdx-document-results table{display:block;overflow-x:auto}
+.jdx-result-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:220px;max-width:40ch;margin:auto;padding:32px 16px;text-align:center;color:var(--jdx-muted);line-height:1.8}
+.jdx-result-empty::before{content:'';width:26px;height:32px;border:1.5px solid var(--jdx-line-strong);border-radius:4px;background:linear-gradient(var(--jdx-line),var(--jdx-line)) 6px 10px/13px 1px no-repeat,linear-gradient(var(--jdx-line),var(--jdx-line)) 6px 17px/10px 1px no-repeat;margin-bottom:6px}
+.jdx-result-empty h3{margin:0;font-size:15px;font-weight:600;color:var(--jdx-text)}.jdx-result-empty p{margin:0;font-size:13px}
+.jdx-selection-result{border-bottom:1px solid var(--jdx-line)}
+.jdx-selection-toggle{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:100%;padding:16px 28px 16px 8px;text-align:start;color:var(--jdx-text);border-radius:6px}
+.jdx-selection-toggle::after{content:'';position:absolute;inset-inline-end:10px;top:22px;width:6px;height:6px;border-inline-end:1.5px solid var(--jdx-muted);border-bottom:1.5px solid var(--jdx-muted);transform:rotate(-45deg)}
+.jdx-selection-toggle[aria-expanded=true]::after{transform:rotate(45deg)}.jdx-selection-toggle time{color:var(--jdx-muted);font-size:11px}
+.jdx-selection-preview{line-height:1.65;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.jdx-selection-content{padding:0 8px 18px;font-size:14px;line-height:1.8}.jdx-selection-content h4{margin:18px 0 8px;font-size:11px;font-weight:600;color:var(--jdx-muted)}.jdx-selection-content>.jdx-button{margin-top:12px}
+.jdx-literature-workspace{width:100%;margin:0}.jdx-literature-search{position:relative;width:100%;max-width:420px}
+.jdx-literature-search::before{content:'';position:absolute;top:11px;left:12px;width:10px;height:10px;border:1.5px solid var(--jdx-muted);border-radius:50%;pointer-events:none}
+.jdx-literature-search::after{content:'';position:absolute;top:22px;left:23px;width:5px;height:1.5px;background:var(--jdx-muted);transform:rotate(45deg);pointer-events:none}
+.jdx-literature-search .jdx-search{box-sizing:border-box;width:100%;height:36px;padding:7px 12px 7px 34px;border:1px solid var(--jdx-line);border-radius:6px;color:var(--jdx-text);background:var(--jdx-surface)}
+.jdx-literature-search .jdx-search::placeholder{color:var(--jdx-muted)}
+.jdx-literature-workspace .jdx-analysis-record{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 20px;padding:20px 12px}
+.jdx-literature-workspace .jdx-analysis-title{grid-column:1/-1;justify-content:flex-start;padding:0;color:var(--jdx-text);text-align:start;font-size:16px;line-height:1.6;font-weight:600;border:0;border-radius:4px;background:transparent}
+.jdx-literature-meta{margin:0;color:var(--jdx-muted);font-size:12px;line-height:1.65;overflow-wrap:anywhere}.jdx-literature-meta:empty{display:none}.jdx-analysis-record>.jdx-literature-meta{grid-column:1/-1}
+.jdx-literature-types{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.jdx-literature-types .jdx-badge{border:0;background:var(--jdx-subtle);color:var(--jdx-muted);padding:3px 7px;font-size:11px;border-radius:4px}
+.jdx-literature-types .jdx-badge[data-state=running]{color:var(--jdx-green-deep);background:var(--jdx-active-bg)}
+.jdx-literature-workspace .jdx-analysis-date{align-self:center;white-space:nowrap;font-size:11px}
+.jdx-literature-detail>.jdx-result-tools{padding-top:0}.jdx-literature-attachment{flex:1 1 200px;max-width:420px!important;margin-inline-start:auto}
+.jdx-literature-hero{padding:16px 0 24px}.jdx-literature-heading{margin:0 0 10px;font-size:22px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+.jdx-literature-detail>.jdx-tabs{overflow-x:auto;flex-wrap:nowrap;padding:0;gap:2px}.jdx-literature-detail>.jdx-tabs button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:13px}
+.jdx-literature-panel{min-height:320px;height:calc(100vh - 310px)}.jdx-literature-panel[aria-labelledby=jdx-literature-tab-history]{height:auto;padding:8px 0}
+.jdx-literature-event{padding:18px 12px;border-bottom:1px solid var(--jdx-line)}.jdx-literature-event:hover{background:var(--jdx-surface-sunken)}
+.jdx-literature-event-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}.jdx-literature-event-title{padding:0;min-height:26px;font-weight:600!important;color:var(--jdx-text)}.jdx-literature-event time{margin-inline-start:auto;color:var(--jdx-muted);font-size:11px}
+.jdx-literature-event-preview{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--jdx-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.jdx-literature-event-preview:empty{display:none}
+.jdx-document-results .jdx-analysis-detail{padding:0}.jdx-document-results .jdx-detail-tabs{position:static;display:flex;overflow-x:auto}.jdx-document-results .jdx-detail-tabs button{flex:0 0 auto;min-width:max-content;padding:8px 10px}
+.jdx-document-results .jdx-detail-panel{min-width:0}.jdx-document-results .jdx-analysis-summary,.jdx-document-results .jdx-analysis-notes-text{height:auto;overflow:visible}.jdx-document-results .jdx-analysis-detail .jdx-reading-body{padding:16px 0}.jdx-document-results .jdx-note-entry{padding:12px 0;border-bottom:1px solid var(--jdx-line)}
+.jdx-reader-workspace .jdx-result-content{padding:20px 16px}.jdx-reader-workspace .jdx-result-content.jdx-translation-reader{padding:0}
+@media(max-width:800px){.jdx-literature-heading{font-size:19px}.jdx-literature-workspace .jdx-analysis-record{grid-template-columns:minmax(0,1fr);gap:8px;padding-inline:4px}.jdx-literature-event{padding-inline:4px}.jdx-literature-panel{height:calc(100vh - 340px)}}
+/* 任务状态不依赖系统 progress/提示框；文案与状态色共同表达，不覆盖正文。 */
+.jdx-reading-progress>span{display:block;height:100%;background:var(--jdx-green,#16cf8c);transition:width .2s ease}
+.jdx-reading-progress[data-state=error]>span{background:var(--jdx-red,#b42318)}
+.jdx-document-results .jdx-reading-footer{align-items:flex-start;gap:8px;padding:10px 14px;background:var(--jdx-subtle);border-top:1px solid var(--jdx-line)}
+.jdx-document-results .jdx-reading-state{white-space:normal;overflow-wrap:anywhere;line-height:1.6;text-overflow:clip;max-height:7em;overflow:auto}
+.jdx-document-results .jdx-reading-footer[data-state=running]{border-inline-start:2px solid var(--jdx-green)}
+.jdx-document-results .jdx-reading-footer[data-state=error]{border-inline-start:2px solid var(--jdx-red)}
+.jdx-document-results .jdx-reading-footer[data-state=error] .jdx-reading-state{color:var(--jdx-red)}
+.jdx-document-results .jdx-detail-run{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--jdx-subtle);border-radius:6px}
+.jdx-document-results .jdx-detail-run .jdx-notice{flex:1;min-width:0;margin:0;border:0;background:transparent;overflow-wrap:anywhere}
+.jdx-document-results .jdx-notice[data-kind=running]{color:var(--jdx-green-deep)}
+.jdx-document-results .jdx-notice[data-kind=error]{color:var(--jdx-red)}
+@media(prefers-reduced-motion:reduce){.jdx-reading-progress>span{transition:none}}
+
+.jdx-literature-workspace .jdx-badge[data-state=complete]::before{background:var(--jdx-green)}
+.jdx-literature-workspace .jdx-badge[data-state=error]{color:var(--jdx-red)}
+.jdx-literature-workspace .jdx-badge[data-state=error]::before{background:var(--jdx-red)}
+
+/* 窄窗口直接换行，避免宿主窗口缩放后当前页签被横向裁切。 */
+@media(max-width:800px){.jdx-literature-detail>.jdx-tabs{flex-wrap:wrap;overflow:visible;gap:4px}.jdx-literature-detail>.jdx-tabs button{padding:8px 10px}}
+
+/* 文献详情占满宿主 panel；仅内容保留紧凑内边距，反馈不占阅读行。 */
+.jdx-manager-section.jdx-analysis-section[data-detail=true]{padding:12px}
+.jdx-literature-detail .jdx-analysis-detail,.jdx-literature-detail .jdx-reading-body,.jdx-literature-detail .jdx-reading-block{max-width:none;margin-inline:0}
+.jdx-document-results>.jdx-result-toast:not(:empty),.jdx-translation-reader>.jdx-result-toast:not(:empty){position:absolute;z-index:10;inset-inline-end:12px;bottom:12px;max-width:calc(100% - 48px);border:1px solid var(--jdx-line);border-radius:6px;background:var(--jdx-surface);box-shadow:0 4px 16px rgb(0 0 0 / .1);pointer-events:none}
+
+.jdx-translation-reader{position:relative}
+.jdx-translation-reader>.jdx-result-toast:empty{display:none}
+.jdx-translation-reader>.jdx-result-toast:not(:empty){padding:9px 16px;font-size:12px}
+.jdx-reading-footer:has(>.jdx-reading-state:empty):not(:has(>button:not([hidden]),>.jdx-reading-location:not([hidden]))){display:none}
+
+/* 图标操作保留原生 title 提示及 aria-label；胶囊作为不可拆分的语言与翻译操作。 */
+.jdx-button.jdx-icon-action{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 32px;width:32px;min-width:32px;height:32px;min-height:32px;padding:0!important;font-size:0!important;gap:0}
+.jdx-icon-action::before{content:'';display:block;width:18px;height:18px;background:currentColor;mask:var(--jdx-action-icon) center/contain no-repeat}
+.jdx-result-tools>.jdx-translation-capsule{order:2;display:flex;flex:0 1 auto;align-items:stretch;margin-inline-start:auto;border:1px solid var(--jdx-line);border-radius:999px;max-width:100%;overflow:hidden}
+.jdx-translation-capsule>.jdx-result-language{flex:0 1 136px;min-width:84px;order:0}
+.jdx-translation-capsule .jdx-select-trigger{height:34px;min-height:34px;border:0;border-radius:999px 0 0 999px;background:transparent;padding-inline:12px}
+.jdx-translation-capsule>.jdx-button-primary{flex:none;border:0;border-inline-start:1px solid var(--jdx-line);border-radius:0 999px 999px 0;min-height:34px;padding-inline:14px;white-space:nowrap}
+.jdx-reading-toolbar:has(>.jdx-icon-action){justify-content:flex-start}
+
+/* 工具从左侧连续排列；选择器与翻译组合放在动作之后。 */
+.jdx-document-results .jdx-reading-modes{margin-inline-end:0}
+.jdx-literature-attachment{order:1}

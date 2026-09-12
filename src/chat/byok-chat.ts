@@ -10,7 +10,7 @@ export type ByokProtocol = "openai-chat-completions" | "anthropic-messages" | "o
 
 /** 保留可信 HTTP 状态供调度区分明确拒绝与结果不确定；正文仍使用原脱敏逻辑。 */
 export class ByokResponseError extends Error {
-  constructor(readonly status: number, message: string) { super(message) }
+  constructor(readonly status: number, message: string, readonly retryAfter: string | null = null) { super(message) }
 }
 
 export type ByokConfig = {
@@ -126,7 +126,7 @@ async function responseError(response: Response, apiKey: string) {
   } catch {
     // 不显示未知原始响应，避免 Provider 回显凭据或私有请求内容。
   }
-  return new ByokResponseError(response.status, redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`)).message)
+  return new ByokResponseError(response.status, redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`)).message, response.headers.get('Retry-After'))
 }
 
 export async function consumeByokStream(

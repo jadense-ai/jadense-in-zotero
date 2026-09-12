@@ -1,0 +1,5 @@
+[project]
+name = "jadense-zotero-ocr"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["docling[rapidocr]==2.126.0", "rapidocr==3.9.2"]

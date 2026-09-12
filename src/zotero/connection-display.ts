@@ -169,7 +169,7 @@ const ZH_STRINGS: PreferencesStrings = {
 
   featureConfigTitle: "功能配置",
   autoFollowChatModelLabel: "自动跟随当前对话模型",
-  autoFollowChatModelNote: "开启后，其他功能使用当前对话模型；AI 对话模型仍可调整。关闭后可分别配置其他功能模型。",
+  autoFollowChatModelNote: "开启后，其他 AI 功能使用当前对话模型；关闭后可分别配置。翻译接口不受此开关影响。",
   autoFollowChatModelEnabled: "已开启自动跟随当前对话模型。",
   autoFollowChatModelDisabled: "已关闭自动跟随，可逐项配置功能模型。",
   featureChatLabel: "AI 对话",
@@ -179,7 +179,7 @@ const ZH_STRINGS: PreferencesStrings = {
   featureModelSearch: "搜索模型或提供商",
   featureModelConnect: "连接攻玉后可加载内置模型；BYOK 模型可独立使用。",
   featureModelLoading: "正在加载攻玉模型；BYOK 模型仍可选择。",
-  featureModelReady: "其他功能默认跟随对话模型；AI 对话模型仍可调整。关闭自动跟随后可逐项配置其他功能。",
+  featureModelReady: "其他 AI 功能默认跟随对话模型；关闭自动跟随后可逐项配置。翻译接口独立使用。",
   featureModelUnavailable: "攻玉模型目录暂不可用；可继续使用当前选择或 BYOK 模型。",
   featureModelSaved: "模型选择已保存。",
 
@@ -287,7 +287,7 @@ const EN_STRINGS: PreferencesStrings = {
 
   featureConfigTitle: "Feature settings",
   autoFollowChatModelLabel: "Automatically follow the current Chat model",
-  autoFollowChatModelNote: "When enabled, other features use the current Chat model; the Chat model remains editable. Turn it off to configure other features independently.",
+  autoFollowChatModelNote: "When enabled, other AI features use the current Chat model. Turn it off to configure them separately. Translation services are independent.",
   autoFollowChatModelEnabled: "Automatic Chat model following is enabled.",
   autoFollowChatModelDisabled: "Automatic following is disabled; feature models can be configured independently.",
   featureChatLabel: "AI Chat",
@@ -297,7 +297,7 @@ const EN_STRINGS: PreferencesStrings = {
   featureModelSearch: "Search models or providers",
   featureModelConnect: "Connect Jadense to load built-in models. BYOK works independently.",
   featureModelLoading: "Loading Jadense models. BYOK models remain selectable.",
-  featureModelReady: "Other features follow the Chat model by default; the Chat model remains editable. Turn that off to configure other features independently.",
+  featureModelReady: "Other AI features follow the Chat model by default. Turn that off to configure them separately. Translation services are independent.",
   featureModelUnavailable: "The Jadense catalog is unavailable. Your saved selection and BYOK remain usable.",
   featureModelSaved: "Model selection saved.",
 
