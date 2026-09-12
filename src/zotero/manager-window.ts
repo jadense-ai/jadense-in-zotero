@@ -3,7 +3,7 @@ import type { ZoteroLike } from "./runtime"
 import { chromeContentUrl } from "./chrome-registration"
 import type { ReaderAction } from "./reader-tools"
 
-export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings"
+export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings" | "settings-connection"
 
 export const JADENSE_MANAGER_WINDOW_NAME = "jadense-in-zotero-manager"
 export const JADENSE_MANAGER_RESOURCE = "manager.xhtml"
@@ -95,7 +95,7 @@ export function openManagerWindow(input: {
   const width = Math.min(1360, win.screen?.availWidth > 0 ? Math.max(1, Math.floor(win.screen.availWidth - chromeWidth)) : 1360)
   const height = Math.min(860, win.screen?.availHeight > 0 ? Math.max(1, Math.floor(win.screen.availHeight - chromeHeight)) : 860)
   const size = `width=${width},height=${height}`
-  // openDialog 默认隐藏最小化/最大化按钮；普通 chrome 窗口使用系统原生标题栏控件。
+  // 保留普通 chrome 窗口能力；已验收的 Windows 宿主由 Manager 设置 customtitlebar，其他组合保持系统标题栏。
   const features = `chrome,dialog=no,titlebar,toolbar,centerscreen,resizable,${size}`
 
   const remember = (opened: unknown) => {

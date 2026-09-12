@@ -1,0 +1,134 @@
+/* Reader 壳继承自制工作台控件和共享 Chat 样式；不更改宿主 chrome。 */
+.jdx-reader-workspace .jdx-reader-workspace-empty {
+  height:100%; overflow:auto; align-items:center; text-align:center;
+}
+/* 自动外边距在空间充足时双轴居中，矮窗口中保留顶部可滚动内容。 */
+.jdx-reader-translation-confirmation { width:100%; max-width:340px; margin:auto; flex:none; }
+.jdx-reader-translation-confirmation h2 { margin:0 0 12px; font-size:16px; line-height:1.5; font-weight:600; }
+.jdx-reader-translation-confirmation button { margin-top:20px; min-height:36px; }
+.jdx-reader-translation-confirmation button:hover { background:var(--jdx-press-bg); }
+.jdx-reader-translation-confirmation button:disabled { opacity:.6; cursor:wait; }
+.jdx-reader-translation-confirmation .jdx-reader-translation-status:not(:empty) { margin-top:12px; overflow-wrap:anywhere; }
+.jdx-reader-workspace {
+  color-scheme: light;
+  --jdx-background: #ffffff;
+  --jdx-sidebar: #f7f8f5;
+  --jdx-text: #111510;
+  --jdx-muted: #53625a;
+  --jdx-subtle: #f1f4ef;
+  --jdx-line: #d9e2dd;
+  --jdx-line-strong: #b9c7c0;
+  --jdx-green: #16cf8c;
+  --jdx-green-deep: #0f7c56;
+  --jdx-red: #b42318;
+  --jdx-blue: #2f66c5;
+  --jdx-surface: #ffffff;
+  --jdx-surface-sunken: #fbfcfb;
+  --jdx-active-bg: #d4fae8;
+  --jdx-active-text: #07351f;
+  --jdx-press-bg: #e6ece8;
+  --jdx-hover-line: #96aaa0;
+  --jdx-placeholder: #9aa8a1;
+  --jdx-popup-shadow: 0 6px 18px rgb(17 21 16 / 0.12), 0 1px 4px rgb(17 21 16 / 0.08);
+}
+
+/* 深色主题:由 manager-page.ts 按 Zotero 首选项写入 data-theme,保持绿灰镀铬的设计方向。 */
+.jdx-reader-workspace[data-theme="dark"] {
+  color-scheme: dark;
+  --jdx-background: #202723;
+  --jdx-sidebar: #1a201c;
+  --jdx-text: #e4eae6;
+  --jdx-muted: #9aa8a1;
+  --jdx-subtle: #232b26;
+  --jdx-line: #303a34;
+  --jdx-line-strong: #42504a;
+  --jdx-green-deep: #4fe3ab;
+  --jdx-red: #f5a097;
+  --jdx-surface: #27312a;
+  --jdx-surface-sunken: #232b26;
+  --jdx-active-bg: #0f2e21;
+  --jdx-active-text: #8ff0c8;
+  --jdx-press-bg: #2b342f;
+  --jdx-hover-line: #55645d;
+  --jdx-placeholder: #66766d;
+  --jdx-popup-shadow: 0 6px 18px rgb(0 0 0 / 0.5), 0 1px 4px rgb(0 0 0 / 0.4);
+}
+
+
+.jdx-reader-workspace { font:calc(13px * var(--jdx-font-scale,1))/1.45 system-ui,sans-serif; background:var(--jdx-sidebar); color:var(--jdx-text); max-width:100%; min-height:0; }
+.jdx-reader-workspace * { box-sizing:border-box; }
+.jdx-reader-workspace [hidden] { display:none!important; }
+.jdx-reader-workspace :is(button,input,textarea) { font:inherit; }
+.jdx-reader-workspace :focus-visible { outline:2px solid var(--jdx-green); outline-offset:-2px; }
+.jdx-reader-workspace .jdx-reader-workspace-header { display:grid; grid-template-columns:32px minmax(0,1fr) 32px; gap:4px; min-height:40px; height:40px; padding:4px 8px; }
+.jdx-reader-header-left,.jdx-reader-header-right { display:flex; align-items:center; min-width:0; }
+.jdx-reader-header-right { justify-content:flex-end; }
+.jdx-reader-header-center { min-width:0; text-align:center; }
+.jdx-reader-header-center .jdx-select-trigger { justify-content:center; border:0; background:transparent; }
+.jdx-reader-header-center .jdx-select-value { flex:0 1 auto; }
+.jdx-reader-workspace-header .jdx-button,.jdx-select-icon-only { width:28px; min-width:28px; flex:none; }
+.jdx-reader-workspace-header .jdx-button { padding:4px; }
+.jdx-reader-workspace-header svg { width:18px; height:18px; flex:none; }
+.jdx-select-icon-only .jdx-select-trigger { padding:4px; justify-content:center; border:0; background:transparent; }
+.jdx-select-portal { position:static; width:0; height:0; }
+.jdx-select-portal .jdx-select-popup { z-index:10000; box-sizing:border-box; }
+.jdx-reader-workspace-pages { display:flex; flex:1; min-height:0; min-width:0; overflow:hidden; }
+.jdx-reader-workspace-content { width:100%; min-width:0; min-height:0; }
+.jdx-reader-chat { display:flex; flex-direction:column; position:relative; overflow:hidden; background:var(--jdx-background); }
+.jdx-reader-chat .jdx-chat-message-list { flex:1; min-height:0; min-width:0; padding:12px 12px calc(var(--jdx-chat-dock-height, 150px) + 12px); overflow:auto; }
+.jdx-reader-chat .jdx-chat-dock { width:100%; min-width:0; gap:0; padding:0 8px 8px; background:transparent; max-height:65%; overflow:auto; }
+.jdx-reader-chat .jdx-chat-composer { width:100%; min-width:0; }
+/* 宿主原生 textarea 规则带 ID / !important；输入表面完整归插件主题所有。 */
+.jdx-reader-workspace .jdx-chat-composer textarea {
+  appearance:none !important;
+  box-sizing:border-box !important;
+  width:100%; min-width:0; min-height:48px; max-height:160px;
+  margin:0 !important; padding:10px 12px !important;
+  border:0 !important; border-radius:0 !important;
+  outline:none !important; box-shadow:none !important;
+  background:transparent !important; color:var(--jdx-text) !important;
+  -webkit-text-fill-color:var(--jdx-text);
+  font:inherit; line-height:1.6; caret-color:var(--jdx-text);
+  overflow:auto; resize:none;
+}
+.jdx-reader-workspace .jdx-chat-composer textarea::placeholder { color:var(--jdx-muted) !important; -webkit-text-fill-color:var(--jdx-muted); opacity:1; }
+.jdx-reader-chat .jdx-chat-compose-field:focus-within { border-color:var(--jdx-green); outline:none; }
+.jdx-reader-chat .jdx-chat-composer-footer { gap:4px; }
+.jdx-reader-chat .jdx-chat-composer-meta { min-width:0; gap:4px; }
+.jdx-reader-chat .jdx-chat-model-select { min-width:0; flex:1; max-width:100%; }
+.jdx-reader-chat .jdx-chat-model-select .jdx-select-trigger { min-width:0; }
+.jdx-reader-chat .jdx-chat-message { max-width:100%; min-width:0; }
+.jdx-reader-chat :is(pre,table,.katex-display) { max-width:100%; overflow:auto; }
+.jdx-reader-chat :is(.jdx-chat-message-body,p,a) { overflow-wrap:anywhere; min-width:0; }
+.jdx-reader-chat .jdx-chat-latest { left:50%; right:auto; bottom:calc(var(--jdx-chat-dock-height, 150px) + 8px); min-height:26px; margin:0; padding:3px 10px; transform:translateX(-50%); white-space:nowrap; box-shadow:none; }
+.jdx-chat-association { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:inherit; padding:0; font:inherit; }
+.jdx-reader-chat .jdx-manager-inline-status:is([data-state="error"],[data-kind="error"]) { color:var(--jdx-red); }
+.jdx-reader-chat [id$="-chat-compose-hint"] { font-size:10px; line-height:14px; }
+.jdx-reader-chat .jdx-chat-image-preview { min-width:0; }
+.jdx-reader-chat .jdx-chat-image-preview span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.jdx-reader-chat .jdx-chat-empty { padding:16px 4px; }
+.jdx-reader-workspace-empty { overflow:auto; }
+.jdx-reader-chat .jdx-manager-primary { background:var(--jdx-green); color:#07351f; border:0; }
+.jdx-reader-chat button:disabled { opacity:.5; cursor:default; }
+
+/* 以面板实际宽度收缩，不使用整个 Zotero 窗口宽度判断紧凑模式。 */
+.jdx-reader-chat { container-type:inline-size; container-name:reader-chat; }
+@container reader-chat (max-width:380px) {
+  .jdx-reader-chat .jdx-chat-model-select { flex:0 0 32px; width:32px; max-width:32px; }
+  .jdx-reader-chat .jdx-chat-model-select .jdx-select-trigger { width:32px; min-width:32px; padding:0; justify-content:center; gap:0; }
+  .jdx-reader-chat .jdx-chat-model-select :is(.jdx-select-value,.jdx-select-chevron) { display:none; }
+}
+
+/* 选文历史复用工作台条目；侧栏固定单列，不依赖宿主窗口断点。 */
+.jdx-reader-workspace .jdx-reader-selection-history { overflow:auto; padding:8px; background:var(--jdx-reader-background); }
+.jdx-reader-selection-history .jdx-history-toolbar { gap:8px; }
+.jdx-reader-selection-history .jdx-history-toolbar label:first-child { flex:1 1 100%; min-width:0; }
+.jdx-reader-selection-history .jdx-history-toolbar :is(input,select,button) { min-height:30px; }
+.jdx-reader-selection-history .jdx-history-columns { grid-template-columns:minmax(0,1fr); gap:12px; margin-bottom:12px; }
+.jdx-reader-selection-history .jdx-history-body { padding:12px; }
+.jdx-document.jdx-reader-selection-history .jdx-history-summary { grid-template-columns:minmax(0,1fr) auto; padding:10px; gap:4px 8px; }
+.jdx-reader-selection-history .jdx-history-summary>span { display:none; }
+.jdx-reader-selection-history .jdx-history-summary>:is(strong,small,.jdx-history-preview) { grid-column:1; }
+.jdx-reader-selection-history .jdx-history-summary::after { grid-column:2; }
+.jdx-reader-selection-history :is(pre,table,.katex-display) { max-width:100%; overflow:auto; }
+.jdx-reader-selection-history .jdx-history-empty { padding:24px 8px; }

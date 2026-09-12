@@ -19,16 +19,17 @@ import {
   ByokChatClient,
   BYOK_TEST_MAX_OUTPUT_TOKENS,
   byokEndpoint,
-  defaultByokBaseUrl,
   type ByokConfig,
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import {
   AI_FEATURES,
+  effectiveFeatureModelSelection,
+  readAutoFollowChatModel,
   featureModelSelectionKey,
   featureModelSelectionFromKey,
-  readFeatureModelSelection,
   saveFeatureModelSelection,
+  saveAutoFollowChatModel,
   type AiFeature,
   clearByokConfig,
   deleteByokModel,
@@ -56,6 +57,7 @@ import {
 declare const Zotero: ZoteroLike
 
 const IDS = {
+  autoFollowChatModel: "jadense-in-zotero-auto-follow-chat-model",
   connectionStatus: "jadense-in-zotero-connection-status",
   connectionStatusText: "jadense-in-zotero-connection-status-text",
   connectionUpdated: "jadense-in-zotero-connection-updated",
@@ -84,6 +86,8 @@ const IDS = {
   byokEndpoint: "jadense-in-zotero-byok-endpoint",
   byokKeyMask: "jadense-in-zotero-byok-key-mask",
   byokKeyInput: "jadense-in-zotero-byok-key-input",
+  byokKeyToggle: "jadense-in-zotero-byok-key-toggle",
+  byokModelEditor: "jadense-in-zotero-byok-model-editor",
   byokModelSelect: "jadense-in-zotero-byok-model-select",
   byokModelName: "jadense-in-zotero-byok-model-name",
   byokModel: "jadense-in-zotero-byok-model",
@@ -101,6 +105,7 @@ type ConnectionState = "unconfigured" | "checking" | "connected" | "failed"
 
 type PreferenceElements = {
   featureModels: Record<AiFeature, JdxSelect>
+  autoFollowChatModel: HTMLInputElement
   featureModelStatus: HTMLElement
   connectionStatus: HTMLElement
   connectionStatusText: HTMLElement
@@ -120,7 +125,7 @@ type PreferenceElements = {
   disconnect: HTMLButtonElement
   status: HTMLElement
   helpSteps: HTMLElement
-  byokProviderSelect: JdxSelect
+  byokProviderSelect: HTMLElement
   byokProviderName: HTMLInputElement
   byokProviderNew: HTMLButtonElement
   byokProviderDelete: HTMLButtonElement
@@ -130,7 +135,9 @@ type PreferenceElements = {
   byokEndpoint: HTMLElement
   byokKeyMask: HTMLElement
   byokKeyInput: HTMLInputElement
-  byokModelSelect: JdxSelect
+  byokKeyToggle: HTMLButtonElement
+  byokModelEditor: HTMLElement
+  byokModelSelect: HTMLElement
   byokModelName: HTMLInputElement
   byokModel: HTMLInputElement
   byokContextWindow: HTMLInputElement
@@ -153,7 +160,14 @@ function readElements(): PreferenceElements {
   const strings = selectPreferencesStrings(getUiLocale())
   const labels = { chat: strings.featureChatLabel, translation: strings.featureTranslationLabel, analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
-    featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), { searchPlaceholder: strings.featureModelSearch, ariaLabel: labels[feature] })])) as Record<AiFeature, JdxSelect>,
+    featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), {
+      showSelectedIcon: true,
+      popupWidth: 304,
+      compact: true,
+      searchPlaceholder: strings.featureModelSearch,
+      ariaLabel: labels[feature],
+    })])) as Record<AiFeature, JdxSelect>,
+    autoFollowChatModel: element<HTMLInputElement>(IDS.autoFollowChatModel),
     featureModelStatus: element("jadense-in-zotero-feature-model-status"),
     connectionStatus: element(IDS.connectionStatus),
     connectionStatusText: element(IDS.connectionStatusText),
@@ -173,7 +187,7 @@ function readElements(): PreferenceElements {
     disconnect: element<HTMLButtonElement>(IDS.disconnect),
     status: element(IDS.status),
     helpSteps: element(IDS.helpSteps),
-    byokProviderSelect: createJdxSelect(element(IDS.byokProviderSelect)),
+    byokProviderSelect: element(IDS.byokProviderSelect),
     byokProviderName: element<HTMLInputElement>(IDS.byokProviderName),
     byokProviderNew: element<HTMLButtonElement>(IDS.byokProviderNew),
     byokProviderDelete: element<HTMLButtonElement>(IDS.byokProviderDelete),
@@ -183,7 +197,9 @@ function readElements(): PreferenceElements {
     byokEndpoint: element(IDS.byokEndpoint),
     byokKeyMask: element(IDS.byokKeyMask),
     byokKeyInput: element<HTMLInputElement>(IDS.byokKeyInput),
-    byokModelSelect: createJdxSelect(element(IDS.byokModelSelect)),
+    byokKeyToggle: element<HTMLButtonElement>(IDS.byokKeyToggle),
+    byokModelEditor: element(IDS.byokModelEditor),
+    byokModelSelect: element(IDS.byokModelSelect),
     byokModelName: element<HTMLInputElement>(IDS.byokModelName),
     byokModel: element<HTMLInputElement>(IDS.byokModel),
     byokContextWindow: element<HTMLInputElement>(IDS.byokContextWindow),
@@ -325,7 +341,7 @@ async function refreshFolders(elements: PreferenceElements, strings: Preferences
 }
 
 const BYOK_PROTOCOL_OPTIONS: Array<{ value: ByokProtocol; label: string }> = [
-  { value: "openai-chat-completions", label: "OpenAI Chat Completions" },
+  { value: "openai-chat-completions", label: "OpenAI Chat Completion" },
   { value: "anthropic-messages", label: "Anthropic Messages" },
   { value: "openai-responses", label: "OpenAI Responses" },
 ]
@@ -338,16 +354,91 @@ function currentByokProtocol(elements: PreferenceElements): ByokProtocol {
 }
 
 function updateByokEndpoint(elements: PreferenceElements) {
-  elements.byokEndpoint.textContent = byokEndpoint(currentByokProtocol(elements), elements.byokBaseUrl.value)
+  const baseUrl = elements.byokBaseUrl.value.trim()
+  elements.byokEndpoint.textContent = baseUrl
+    ? byokEndpoint(currentByokProtocol(elements), baseUrl)
+    : uiText("填写基础地址后显示请求地址", "Enter a base URL to preview the request URL")
+}
+
+function createHtmlElement<T extends HTMLElement>(tagName: string) {
+  return document.createElementNS("http://www.w3.org/1999/xhtml", tagName) as T
+}
+
+function renderByokProviderList(target: HTMLElement, providers: ByokProvider[], activeProviderId: string) {
+  target.replaceChildren(...providers.map((provider) => {
+    const button = createHtmlElement<HTMLButtonElement>("button")
+    button.type = "button"
+    button.role = "option"
+    button.dataset.providerId = provider.id
+    button.setAttribute("aria-selected", String(provider.id === activeProviderId))
+    const name = createHtmlElement("strong")
+    name.textContent = provider.name
+    const meta = createHtmlElement("small")
+    meta.textContent = provider.protocol
+    button.append(name, meta)
+    return button
+  }))
+}
+
+function renderByokModelList(target: HTMLElement, models: ByokModel[], activeModelId: string, strings: PreferencesStrings) {
+  target.replaceChildren(...models.map((model) => {
+    const button = createHtmlElement<HTMLButtonElement>("button")
+    button.type = "button"
+    button.role = "option"
+    button.dataset.modelId = model.id
+    button.setAttribute("aria-selected", String(model.id === activeModelId))
+    const name = createHtmlElement("strong")
+    name.textContent = model.name
+    const meta = createHtmlElement("small")
+    meta.textContent = model.model || strings.byokModelEmpty
+    button.append(name, meta)
+    return button
+  }))
+}
+
+type ByokModelEditorMode = { kind: "new" } | { kind: "edit"; modelId: string }
+
+function readByokModelEditorMode(editor: HTMLElement): ByokModelEditorMode | null {
+  if (editor.dataset.mode === "new") return { kind: "new" }
+  if (editor.dataset.mode === "edit" && editor.dataset.modelId) return { kind: "edit", modelId: editor.dataset.modelId }
+  return null
+}
+
+function setByokModelEditorMode(editor: HTMLElement, mode: ByokModelEditorMode | null) {
+  if (!mode) {
+    delete editor.dataset.mode
+    delete editor.dataset.modelId
+    return
+  }
+  editor.dataset.mode = mode.kind
+  if (mode.kind === "edit") editor.dataset.modelId = mode.modelId
+  else delete editor.dataset.modelId
+}
+
+function placeByokModelEditor(elements: PreferenceElements, mode: ByokModelEditorMode | null) {
+  const editor = elements.byokModelEditor
+  const list = elements.byokModelSelect
+  const panel = list.parentElement
+  if (!panel) return
+  editor.hidden = !mode
+  panel.insertBefore(editor, list)
+  if (mode?.kind !== "edit") return
+  const selected = Array.from(list.querySelectorAll<HTMLButtonElement>("button[data-model-id]")).find(button => button.dataset.modelId === mode.modelId)
+  if (!selected) return
+  selected.hidden = true
+  list.insertBefore(editor, selected)
 }
 
 let featureModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
 let featureCatalogGeneration = 0
 
 function renderFeatureModels(elements: PreferenceElements) {
+  const autoFollow = readAutoFollowChatModel(Zotero)
+  elements.autoFollowChatModel.checked = autoFollow
   for (const feature of AI_FEATURES) {
-    const selection = readFeatureModelSelection(Zotero, feature)
+    const selection = effectiveFeatureModelSelection(Zotero, feature)
     elements.featureModels[feature].setOptions(buildFeatureModelSelectOptions(Zotero, featureModelCatalog, selection, !getUiLocale()?.toLowerCase().startsWith("zh")), featureModelSelectionKey(selection))
+    elements.featureModels[feature].setDisabled(autoFollow && feature !== "chat")
   }
 }
 
@@ -385,26 +476,36 @@ function renderByokConfig(elements: PreferenceElements, strings: PreferencesStri
   const settings = readByokSettings(Zotero)
   const provider = settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
   const models = settings.models.filter((model) => model.providerId === provider.id)
-  const model = models.find((item) => item.id === settings.activeModelId)
-  elements.byokProviderSelect.setOptions(settings.providers.map((item) => ({ value: item.id, label: item.name })), provider.id)
+  let mode = readByokModelEditorMode(elements.byokModelEditor)
+  const editModelId = mode && mode.kind === "edit" ? mode.modelId : ""
+  const model = editModelId ? models.find((item) => item.id === editModelId) : undefined
+  if (mode?.kind === "edit" && !model) {
+    setByokModelEditorMode(elements.byokModelEditor, null)
+    mode = null
+  }
+  renderByokProviderList(elements.byokProviderSelect, settings.providers, provider.id)
   elements.byokProviderName.value = provider.name
   elements.byokProtocol.setOptions(BYOK_PROTOCOL_OPTIONS, provider.protocol)
   elements.byokBaseUrl.value = provider.baseUrl
-  elements.byokKeyInput.value = ""
+  elements.byokKeyInput.value = provider.apiKey
+  elements.byokKeyInput.type = "password"
   elements.byokKeyInput.placeholder = strings.byokKeyPlaceholder
+  elements.byokKeyToggle.setAttribute("aria-pressed", "false")
+  elements.byokKeyToggle.setAttribute("aria-label", strings.byokShowKey)
+  elements.byokKeyToggle.title = strings.byokShowKey
   elements.byokKeyMask.textContent = provider.apiKey ? maskToken(provider.apiKey) : strings.tokenNotConfigured
   elements.byokKeyMask.dataset.empty = String(!provider.apiKey)
-  elements.byokModelSelect.setOptions([
-    { value: "", label: models.length ? strings.byokModelSelectPlaceholder : strings.byokModelEmpty },
-    ...models.map((item) => ({ value: item.id, label: item.name })),
-  ], model?.id ?? "")
-  elements.byokModelName.value = model?.name ?? ""
-  elements.byokModel.value = model?.model ?? ""
+  renderByokModelList(elements.byokModelSelect, models, editModelId || settings.activeModelId, strings)
+  elements.byokModelName.value = mode?.kind === "edit" ? model?.name ?? "" : ""
+  elements.byokModel.value = mode?.kind === "edit" ? model?.model ?? "" : ""
   elements.byokModel.placeholder = strings.byokModelPlaceholder
-  elements.byokContextWindow.value = model?.contextWindow ? String(model.contextWindow) : ""
-  elements.byokMaxOutputTokens.value = String(model?.maxOutputTokens ?? 96_000)
+  elements.byokContextWindow.value = mode?.kind === "edit" && model?.contextWindow ? String(model.contextWindow) : ""
+  elements.byokMaxOutputTokens.value = String(mode?.kind === "edit" ? model?.maxOutputTokens ?? 96_000 : 96_000)
+  elements.byokModelEditor.setAttribute("aria-label", mode?.kind === "new" ? uiText("添加模型", "Add model") : strings.byokModelEditorTitle)
+  placeByokModelEditor(elements, mode)
   elements.byokModelDelete.disabled = !model
-  elements.byokTest.disabled = !model
+  elements.byokTest.disabled = !mode
+  elements.byokSave.disabled = !mode
   updateByokEndpoint(elements)
 }
 
@@ -420,9 +521,9 @@ function byokProviderDraft(elements: PreferenceElements): ByokProvider {
   }
 }
 
-function byokModelDraft(elements: PreferenceElements): ByokModel {
+function byokModelDraft(elements: PreferenceElements, modelId = ""): ByokModel {
   const settings = readByokSettings(Zotero)
-  const stored = settings.models.find((model) => model.id === settings.activeModelId)
+  const stored = settings.models.find((model) => model.id === modelId)
   const contextWindow = Number(elements.byokContextWindow.value)
   const maxOutputTokens = Number(elements.byokMaxOutputTokens.value)
   return {
@@ -516,6 +617,7 @@ export function initJadensePreferencesPage() {
   void refreshFeatureModelCatalog(elements)
   renderByokConfig(elements, strings)
   elements.includePdf.checked = readCollectionUploadIncludePdfDefault(Zotero)
+  elements.autoFollowChatModel.checked = readAutoFollowChatModel(Zotero)
 
   // 缓存先行:命中时立即渲染列表与状态,再后台刷新;未命中且已配置令牌时进入验证态。
   const connection = readConnection(Zotero)
@@ -595,41 +697,52 @@ export function initJadensePreferencesPage() {
       setStatus(elements.featureModelStatus, error instanceof Error ? error.message : strings.unexpectedError, "error")
     }
   })
-  let previousByokProtocol = currentByokProtocol(elements)
-  elements.byokProviderSelect.onChange((providerId) => {
-    selectByokProvider(Zotero, providerId)
-    renderByokConfig(elements, strings)
-    previousByokProtocol = currentByokProtocol(elements)
-  })
-  elements.byokModelSelect.onChange((modelId) => {
-    if (!modelId) return
-    selectByokModel(Zotero, modelId)
-    renderByokConfig(elements, strings)
+  elements.autoFollowChatModel.addEventListener("change", () => {
+    saveAutoFollowChatModel(Zotero, elements.autoFollowChatModel.checked)
+    renderFeatureModels(elements)
+    setStatus(elements.featureModelStatus, elements.autoFollowChatModel.checked
+      ? strings.autoFollowChatModelEnabled
+      : strings.autoFollowChatModelDisabled, "success")
   })
   elements.byokProtocol.onChange((value) => {
     if (!BYOK_PROTOCOL_OPTIONS.some((option) => option.value === value)) return
-    const next = value as ByokProtocol
-    const currentUrl = elements.byokBaseUrl.value.trim().replace(/\/+$/g, "")
-    if (!currentUrl || currentUrl === defaultByokBaseUrl(previousByokProtocol)) {
-      elements.byokBaseUrl.value = defaultByokBaseUrl(next)
-    }
-    previousByokProtocol = next
     updateByokEndpoint(elements)
   })
   elements.byokBaseUrl.addEventListener("input", () => updateByokEndpoint(elements))
+  elements.byokKeyToggle.addEventListener("click", () => {
+    const revealed = elements.byokKeyInput.type === "text"
+    elements.byokKeyInput.type = revealed ? "password" : "text"
+    elements.byokKeyToggle.setAttribute("aria-pressed", String(!revealed))
+    elements.byokKeyToggle.setAttribute("aria-label", revealed ? strings.byokShowKey : strings.byokHideKey)
+    elements.byokKeyToggle.title = revealed ? strings.byokShowKey : strings.byokHideKey
+  })
+  elements.byokProviderSelect.addEventListener("click", (event) => {
+    const target = (event.target as Element).closest<HTMLButtonElement>("[data-provider-id]")
+    if (!target) return
+    setByokModelEditorMode(elements.byokModelEditor, null)
+    selectByokProvider(Zotero, target.dataset.providerId ?? "")
+    renderByokConfig(elements, strings)
+  })
+  elements.byokModelSelect.addEventListener("click", (event) => {
+    const target = (event.target as Element).closest<HTMLButtonElement>("button[data-model-id]")
+    if (!target) return
+    setByokModelEditorMode(elements.byokModelEditor, { kind: "edit", modelId: target.dataset.modelId ?? "" })
+    selectByokModel(Zotero, target.dataset.modelId ?? "")
+    renderByokConfig(elements, strings)
+  })
   elements.byokProviderNew.addEventListener("click", () => {
+    setByokModelEditorMode(elements.byokModelEditor, null)
     saveByokProvider(Zotero, {
       id: createByokId("byok-provider"), name: strings.byokNewProviderName,
-      protocol: "openai-chat-completions", baseUrl: defaultByokBaseUrl("openai-chat-completions"), apiKey: "",
+      protocol: "openai-chat-completions", baseUrl: "", apiKey: "",
     })
     renderByokConfig(elements, strings)
-    previousByokProtocol = currentByokProtocol(elements)
     setStatus(elements.byokStatus, strings.byokProviderAdded, "success")
   })
   elements.byokProviderDelete.addEventListener("click", () => {
+    setByokModelEditorMode(elements.byokModelEditor, null)
     deleteByokProvider(Zotero, readByokSettings(Zotero).activeProviderId)
     renderByokConfig(elements, strings)
-    previousByokProtocol = currentByokProtocol(elements)
     setStatus(elements.byokStatus, strings.byokProviderDeleted, "success")
   })
   elements.byokProviderSave.addEventListener("click", () => {
@@ -642,24 +755,25 @@ export function initJadensePreferencesPage() {
     }
   })
   elements.byokModelNew.addEventListener("click", () => {
-    const settings = readByokSettings(Zotero)
-    saveByokModel(Zotero, {
-      id: createByokId("byok-model"), providerId: settings.activeProviderId,
-      name: strings.byokNewModelName, model: "", maxOutputTokens: 96_000,
-    })
+    setByokModelEditorMode(elements.byokModelEditor, { kind: "new" })
     renderByokConfig(elements, strings)
+    elements.byokModelName.focus()
     setStatus(elements.byokStatus, strings.byokModelAdded, "success")
   })
   elements.byokModelDelete.addEventListener("click", () => {
     const modelId = readByokSettings(Zotero).activeModelId
     if (!modelId) return
+    setByokModelEditorMode(elements.byokModelEditor, null)
     deleteByokModel(Zotero, modelId)
     renderByokConfig(elements, strings)
     setStatus(elements.byokStatus, strings.byokModelDeleted, "success")
   })
   elements.byokSave.addEventListener("click", () => {
     try {
-      saveByokModel(Zotero, byokModelDraft(elements))
+      const mode = readByokModelEditorMode(elements.byokModelEditor)
+      if (!mode) return
+      saveByokModel(Zotero, byokModelDraft(elements, mode.kind === "edit" ? mode.modelId : ""))
+      setByokModelEditorMode(elements.byokModelEditor, null)
       renderByokConfig(elements, strings)
       setStatus(elements.byokStatus, strings.byokModelSaved, "success")
     } catch (error) {
@@ -668,6 +782,7 @@ export function initJadensePreferencesPage() {
   })
   elements.byokTest.addEventListener("click", () => void testByokDraft(elements, strings))
   elements.byokClear.addEventListener("click", () => {
+    setByokModelEditorMode(elements.byokModelEditor, null)
     clearByokConfig(Zotero)
     renderByokConfig(elements, strings)
     setStatus(elements.byokStatus, strings.byokCleared, "success")

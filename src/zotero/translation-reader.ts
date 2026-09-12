@@ -1,3 +1,4 @@
+import { createJdxSelect } from "./ui/select"
 /** 连续译文阅读器：Reader 原生侧栏、停靠栏和 Manager 历史共用；不拥有模型请求生命周期。 */
 import { updateChatMarkdown } from "@/chat/markdown"
 import { documentJobs } from "./document-jobs"
@@ -12,7 +13,7 @@ import type { TranslationReadingPosition, TranslationReadingRow } from "./transl
 const FONT = "extensions.jadenseInZotero.translationReadingFontSize"
 const LINE = "extensions.jadenseInZotero.translationReadingLineHeight"
 const CSS = `${READER_UI_THEME_CSS}
-.jdx-translation-reader{display:flex;flex-direction:column;position:relative;min-width:0;min-height:0;height:100%;overflow:hidden;background:var(--jdx-reader-background);color:var(--jdx-reader-text);font:13px/1.4 system-ui,sans-serif;container-type:inline-size;box-sizing:border-box}
+.jdx-translation-reader{--jdx-text:var(--jdx-reader-text);--jdx-muted:var(--jdx-reader-muted);--jdx-surface:var(--jdx-reader-background);--jdx-line-strong:var(--jdx-reader-line);--jdx-press-bg:var(--jdx-reader-hover);--jdx-green-deep:#0f7c56;--jdx-active-bg:var(--jdx-reader-hover);--jdx-popup-shadow:0 6px 18px #0002;display:flex;flex-direction:column;position:relative;min-width:0;min-height:0;height:100%;overflow:hidden;background:var(--jdx-reader-background);color:var(--jdx-reader-text);font:13px/1.4 system-ui,sans-serif;container-type:inline-size;box-sizing:border-box}
 .jdx-translation-reader *{box-sizing:border-box}
 .jdx-translation-reader [hidden]{display:none!important}
 .jdx-translation-reader button,.jdx-translation-reader select{font:inherit;color:inherit;max-width:100%;border:1px solid transparent;border-radius:5px;background:transparent;min-height:28px;padding:4px 7px;cursor:pointer}
@@ -75,6 +76,10 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
 } = {}) {
   const doc = root.ownerDocument, win = doc.defaultView, jobs = documentJobs(host)
   installTranslationReadingStyles(doc)
+  if (!doc.getElementById('jdx-translation-controls-css')) {
+    const link = element(doc, 'link'); link.id = 'jdx-translation-controls-css'; link.rel = 'stylesheet'; link.href = 'chrome://jadense-in-zotero/content/ui.css'
+    ;(doc.head || doc.documentElement).append(link)
+  }
   root.classList.add("jdx-translation-reader"); root.setAttribute("data-jadense-reader-theme", ""); root.dataset.mode = "read"
   root.setAttribute("aria-label", uiText("全文译文", "Full translation")); root.replaceChildren()
   const stopTheme = observeTheme(host, root)
@@ -83,7 +88,8 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const body = element(doc, "div", "jdx-reading-body"), footer = element(doc, "footer", "jdx-reading-footer")
   body.tabIndex = 0; body.setAttribute("role", "document")
   const state = element(doc, "span", "jdx-reading-state"); state.setAttribute("role", "status")
-  const locations = element(doc, "select", "jdx-reading-location"); locations.hidden = true; locations.setAttribute("aria-label", uiText("当前段落原文位置", "Source locations for this paragraph"))
+  const locations = element(doc, "div", "jdx-reading-location"); locations.hidden = true; locations.setAttribute("aria-label", uiText("当前段落原文位置", "Source locations for this paragraph"))
+  const locationSelect = createJdxSelect(locations, { compact: true, portal: true, ariaLabel: uiText("原文位置", "Source location"), popupWidth: 180 })
   const progress = element(doc, "progress", "jdx-reading-progress"); progress.setAttribute("aria-label", uiText("翻译进度", "Translation progress"))
   let disposed = false, fetching = false, dirty = false, initialized = false, locating = false, activeID = "", lastNotice = ""
   let rows: TranslationReadingRow[] = [], saved: TranslationReadingPosition | null = null
@@ -110,9 +116,11 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   read.dataset.readingMode = "read"; locate.dataset.readingMode = "locate"; modes.append(read, locate)
   const outline = menu(uiText("目录", "Contents")); outline.details.hidden = true
   const appearance = menu("Aa", uiText("正文排版", "Typography")), more = menu("⋯", uiText("更多", "More"))
-  const font = element(doc, "select"), line = element(doc, "select")
-  for (let value = 12; value <= 24; value++) { const option = element(doc, "option", "", `${value}px`); option.value = String(value); font.append(option) }
-  for (const value of [1.4, 1.6, 1.8, 2, 2.2]) { const option = element(doc, "option", "", String(value)); line.append(option) }
+  const font = element(doc, 'div'), line = element(doc, 'div')
+  const fontSelect = createJdxSelect(font, { compact: true, portal: true, ariaLabel: uiText('字号', 'Font size'), popupWidth: 100 })
+  const lineSelect = createJdxSelect(line, { compact: true, portal: true, ariaLabel: uiText('行距', 'Line height'), popupWidth: 100 })
+  fontSelect.setOptions(Array.from({ length: 13 }, (_, index) => ({ value: String(index + 12), label: `${index + 12}px` })), '14')
+  lineSelect.setOptions([1.4, 1.6, 1.8, 2, 2.2].map(value => ({ value: String(value), label: String(value) })), '1.8')
   const fontLabel = element(doc, "label", "", uiText("字号", "Font size")), lineLabel = element(doc, "label", "", uiText("行距", "Line height"))
   fontLabel.append(font); lineLabel.append(line); appearance.content.append(fontLabel, lineLabel)
   const capture = (): TranslationReadingPosition | null => {
@@ -129,11 +137,11 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const applyAppearance = () => {
     const anchor = capture(), value = translationReadingAppearance(host)
     root.style.setProperty("--jdx-reading-font", `${value.fontSize}px`); root.style.setProperty("--jdx-reading-line", String(value.lineHeight))
-    font.value = String(value.fontSize); line.value = String(value.lineHeight); restore(anchor)
+    fontSelect.setValue(String(value.fontSize)); lineSelect.setValue(String(value.lineHeight)); restore(anchor)
   }
-  for (const [select, key] of [[font, FONT], [line, LINE]] as const) select.addEventListener("change", () => {
-    try { host.Prefs?.set?.(key, select.value, true) } catch { /* 展示偏好保存失败不阻断阅读。 */ }
-    const anchor = capture(); root.style.setProperty(key === FONT ? "--jdx-reading-font" : "--jdx-reading-line", key === FONT ? `${select.value}px` : select.value); restore(anchor)
+  for (const [select, key] of [[fontSelect, FONT], [lineSelect, LINE]] as const) select.onChange(value => {
+    try { host.Prefs?.set?.(key, value, true) } catch { /* 展示偏好保存失败不阻断阅读。 */ }
+    const anchor = capture(); root.style.setProperty(key === FONT ? "--jdx-reading-font" : "--jdx-reading-line", key === FONT ? `${value}px` : value); restore(anchor)
   })
   const observers: unknown[] = []
   for (const key of [FONT, LINE]) try { const id = host.Prefs?.registerObserver?.(key, applyAppearance, true); if (id !== undefined) observers.push(id) } catch { /* 当前窗口仍可调整。 */ }
@@ -156,18 +164,18 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
     const row = rows.find(row => row.block.id === id), task = jobs.get(taskID)
     if (!row?.paragraph || !task) return
     const sourceLocations = row.paragraph.locations?.length ? row.paragraph.locations : [row.paragraph]
-    activeID = id; locations.replaceChildren()
+    activeID = id
     const range = sourceLocations.length > 1 ? `${sourceLocations[0].pageLabel}–${sourceLocations.at(-1)!.pageLabel}` : ""
-    sourceLocations.forEach((source, index) => {
+    const locationOptions = sourceLocations.map((source, index) => {
       const label = index === 0 && range ? uiText(`原文 p.${range} · 起点`, `Source pp.${range} · start`) : uiText(`原文 p.${source.pageLabel}`, `Source p.${source.pageLabel}`)
-      const option = element(doc, "option", "", label); option.value = String(index); locations.append(option)
+      return { value: String(index), label }
     })
-    locations.value = String(locationIndex); locations.hidden = false
+    locationSelect.setOptions(locationOptions, String(locationIndex)); locations.hidden = false
     locations.title = sourceLocations.map(location => location.pageLabel).join("–")
     for (const [key, view] of blocks) { view.node.dataset.active = String(key === id); view.node.tabIndex = key === id ? 0 : -1 }
     try { await navigateDocument(host as unknown as DocumentHost, task.source, sourceLocations[locationIndex] ?? sourceLocations[0], options.readerDocument) } catch (error) { notice(String(error), true) }
   }
-  locations.addEventListener("change", () => { if (activeID) void jump(activeID, Number(locations.value)) })
+  locationSelect.onChange(value => { if (activeID) void jump(activeID, Number(value)) })
   let down: { x: number; y: number } | undefined
   body.addEventListener("pointerdown", event => { down = { x: event.clientX, y: event.clientY } })
   body.addEventListener("click", event => {
@@ -254,6 +262,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   setMode(false); applyAppearance()
   const stop = jobs.subscribe(() => { void update() }); void jobs.ready.then(update)
   return () => {
+    locationSelect.destroy(); fontSelect.destroy(); lineSelect.destroy()
     if (disposed) return
     disposed = true; stop()
     try { savePosition() } catch { /* 窗口已销毁时保留最后一次正常滚动锚点。 */ }

@@ -2,7 +2,8 @@
   "manifest": {
     "manifest_version": 2,
     "name": "Jadense in Zotero",
-    "description": "Local AI chat, PDF figure interpretation, structured annotations, reader translation, and Zotero-to-Jadense upload.",
+    "description": "__MSG_extensionDescription__",
+    "default_locale": "zh",
     "homepage_url": "https://jadense.cn",
     "icons": {
       "48": "content/icons/logo-padded.png"

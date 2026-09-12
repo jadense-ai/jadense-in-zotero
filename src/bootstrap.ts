@@ -1,3 +1,4 @@
+import { chatRuntime, stopChatRuntime } from "@/zotero/chat-runtime"
 /** 插件生命周期与原生入口；就绪后固定会话语言，停止时清理窗口和宿主注册。 */
 import { initializeUiLocale, uiText } from "@/zotero/ui-preferences"
 import {
@@ -249,7 +250,7 @@ function configureConnection() {
     log("Main window was unavailable for configuration.")
     return
   }
-  if (openManager("migrate")) return
+  if (openManager("settings-connection")) return
   if (openPreferencesPane(Zotero, win)) return
   alertUser(uiText("请打开 Zotero 设置并选择 Jadense in Zotero；将改用输入框完成配置。", "Open Zotero Settings and select Jadense in Zotero. A token prompt will open as a fallback."))
   runPromptConnectionFlow(win)
@@ -337,6 +338,7 @@ async function startup(data: BootstrapData = {}) {
   registerMenus()
   documentJobs(Zotero)
   try {
+    chatRuntime(Zotero)
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
         const win = mainWindow()
@@ -371,6 +373,7 @@ async function startup(data: BootstrapData = {}) {
 }
 
 function shutdown() {
+  stopChatRuntime(Zotero)
   stopDocumentJobs(Zotero)
   unregisterReaderFigureTools?.()
   unregisterReaderFigureTools = null

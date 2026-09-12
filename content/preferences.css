@@ -118,6 +118,94 @@
   gap: 8px;
 }
 
+#jadense-in-zotero-preferences-pane .jdx-pref-byok-layout {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.34fr) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar,
+#jadense-in-zotero-preferences-pane .jdx-pref-byok-editor {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar {
+  align-self: start;
+  border-right: 1px solid var(--jdx-pref-line);
+  padding-right: 12px;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar .jdx-pref-byok-panel-header {
+  align-items: center;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-icon-button {
+  min-width: 28px;
+  padding-inline: 8px;
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list,
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button,
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list button {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: var(--jdx-pref-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button:hover,
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list button:hover {
+  background: var(--jdx-pref-subtle);
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button[aria-selected="true"],
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list button[aria-selected="true"] {
+  border-color: rgb(22 207 140 / 0.4);
+  color: var(--jdx-pref-green-text);
+  background: var(--jdx-pref-active);
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button strong,
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button small,
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list button small {
+  overflow: hidden;
+  color: var(--jdx-pref-muted);
+  font-size: .88em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #jadense-in-zotero-preferences-pane .jdx-pref-inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -126,7 +214,7 @@
 
 #jadense-in-zotero-preferences-pane .jdx-pref-model-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -142,6 +230,75 @@
 #jadense-in-zotero-preferences-pane .jdx-pref-key-summary code {
   overflow-wrap: anywhere;
   color: var(--jdx-pref-text);
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  min-width: 0;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-input input {
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--jdx-pref-line);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  color: var(--jdx-pref-muted);
+  background: var(--jdx-pref-subtle);
+  cursor: pointer;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle:hover {
+  color: var(--jdx-pref-text);
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle:focus-visible {
+  outline: 2px solid var(--jdx-pref-green-text);
+  outline-offset: -2px;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-model-editor {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--jdx-pref-line-subtle);
+  padding-top: 9px;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-model-editor[hidden] { display: none; }
+
+#jadense-in-zotero-preferences-pane .jdx-pref-model-fields {
+  display: grid;
+  gap: 9px;
+  padding-top: 9px;
+}
+
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list:empty::after {
+  content: "尚未添加模型";
+  padding: 7px 8px;
+  color: var(--jdx-pref-muted);
+  font-size: .9em;
+}
+
+#jadense-in-zotero-preferences-pane[lang="en-US"] .jdx-pref-model-list:empty::after {
+  content: "No models added";
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-warning {
@@ -530,3 +687,9 @@
 .jdx-temporary-recovery button:focus-visible { outline: 2px solid #16cf8c; outline-offset: 2px; }
 .jdx-temporary-recovery textarea { box-sizing: border-box; display: block; width: 100%; min-height: 180px; margin-block: 10px; padding: 10px; border: 1px solid var(--jdx-line); background: var(--jdx-surface); color: var(--jdx-text); font: inherit; }
 .jdx-temporary-recovery textarea[hidden] { display: none; }
+
+@media (max-width: 560px) {
+  #jadense-in-zotero-preferences-pane .jdx-pref-byok-layout { grid-template-columns: minmax(0, 1fr); }
+  #jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar { border-right: 0; border-bottom: 1px solid var(--jdx-pref-line); padding: 0 0 10px; }
+  #jadense-in-zotero-preferences-pane .jdx-pref-provider-list { max-height: 150px; }
+}

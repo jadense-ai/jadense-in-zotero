@@ -13,6 +13,11 @@ export type JdxSelectOption = {
   group?: string
   meta?: string
   disabled?: boolean
+  /** 本地静态图标路径，仅用于紧凑展示，不加载外部资源。 */
+  iconPath?: string
+  /** 随插件打包的品牌 Logo。 */
+  iconSrc?: string
+  iconThemed?: boolean
 }
 
 export type JdxSelectChangeListener = (value: string) => void
@@ -28,6 +33,7 @@ export type JdxSelect = {
   /** 仅在用户主动选择且值发生变化时触发，对齐原生 select 的 change。 */
   onChange(listener: JdxSelectChangeListener): void
   close(): void
+  destroy(): void
 }
 
 type JdxSelectMoveKey = "ArrowDown" | "ArrowUp" | "Home" | "End"
@@ -66,12 +72,45 @@ export function shouldOpenUp(spaceBelow: number, spaceAbove: number) {
 }
 
 /** 弹出层最大高度：默认 240px，受可用空间约束，保留最小可视高度。 */
-export function resolvePopupMaxHeight(availableSpace: number) {
-  return Math.max(POPUP_MIN_HEIGHT, Math.min(POPUP_MAX_HEIGHT, Math.floor(availableSpace)))
+export function resolvePopupMaxHeight(availableSpace: number, maximum = POPUP_MAX_HEIGHT) {
+  return Math.max(POPUP_MIN_HEIGHT, Math.min(maximum, Math.floor(availableSpace)))
 }
 
 function htmlElement<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K): HTMLElementTagNameMap[K] {
   return doc.createElementNS("http://www.w3.org/1999/xhtml", tag) as HTMLElementTagNameMap[K]
+}
+
+/** 紧凑列表使用统一线性图标，静态路径来自调用方，兼容 XHTML / XUL 文档。 */
+function createOptionIcon(doc: Document, pathData: string) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg")
+  svg.setAttribute("class", "jdx-select-option-icon")
+  svg.setAttribute("viewBox", "0 0 24 24")
+  svg.setAttribute("aria-hidden", "true")
+  svg.setAttribute("fill", "none")
+  svg.setAttribute("stroke", "currentColor")
+  svg.setAttribute("stroke-width", "1.7")
+  svg.setAttribute("stroke-linecap", "round")
+  svg.setAttribute("stroke-linejoin", "round")
+  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path")
+  path.setAttribute("d", pathData)
+  svg.append(path)
+  return svg
+}
+
+function createLogo(doc: Document, src: string, themed = false) {
+  if (themed) {
+    const mask = htmlElement(doc, "span")
+    mask.className = "jdx-select-option-icon"
+    mask.style.cssText = `background:currentColor;mask:url("${src}") center/contain no-repeat;display:inline-block;width:18px;height:18px`
+    mask.setAttribute("aria-hidden", "true")
+    return mask
+  }
+  const image = htmlElement(doc, "img")
+  image.className = "jdx-select-option-icon"
+  image.src = src
+  image.alt = ""
+  image.setAttribute("aria-hidden", "true")
+  return image
 }
 
 function createChevron(doc: Document) {
@@ -96,9 +135,13 @@ export function createJdxSelect(host: HTMLElement, input: {
   ariaLabel?: string
   popupWidth?: number
   searchPlaceholder?: string
+  compact?: boolean
+  iconPath?: string
+  portal?: boolean
+  showSelectedIcon?: boolean
 } = {}): JdxSelect {
   const doc = host.ownerDocument
-  const hostId = host.id || "jdx-select"
+  const hostId = host.id || `jdx-select-${Math.random().toString(36).slice(2)}`
   const state = {
     options: [] as JdxSelectOption[],
     value: "",
@@ -111,6 +154,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   let anchorTop = 0, anchorLeft = 0
 
   host.classList.add("jdx-select")
+  if (input.compact) host.classList.add("jdx-select-compact")
   host.dataset.open = "false"
 
   const trigger = htmlElement(doc, "button")
@@ -122,7 +166,15 @@ export function createJdxSelect(host: HTMLElement, input: {
 
   const valueLabel = htmlElement(doc, "span")
   valueLabel.className = "jdx-select-value"
+  const selectedIcon = input.showSelectedIcon ? htmlElement(doc, "span") : null
+  if (selectedIcon) { selectedIcon.className = "jdx-select-leading-icon"; selectedIcon.setAttribute("aria-hidden", "true"); trigger.append(selectedIcon) }
   trigger.append(valueLabel, createChevron(doc))
+  if (input.iconPath) {
+    trigger.replaceChildren(createOptionIcon(doc, input.iconPath))
+    host.classList.add("jdx-select-icon-only")
+  }
+  const portal = input.portal ? htmlElement(doc, "div") : null
+  if (portal) { portal.className = `jdx-select jdx-select-portal${input.compact ? " jdx-select-compact" : ""}`; portal.dataset.open = "true" }
 
   const popup = htmlElement(doc, "div")
   popup.className = "jdx-select-popup"
@@ -151,7 +203,13 @@ export function createJdxSelect(host: HTMLElement, input: {
 
   function renderTrigger() {
     const selected = state.options.find((option) => option.value === state.value) ?? null
+    if (selectedIcon) {
+      const path = selected?.iconPath ?? "M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"
+      const key = selected?.iconSrc ?? path
+      if (selectedIcon.dataset.path !== key) { selectedIcon.replaceChildren(selected?.iconSrc ? createLogo(doc, selected.iconSrc, selected.iconThemed) : createOptionIcon(doc, path)); selectedIcon.dataset.path = key }
+    }
     valueLabel.textContent = selected?.label ?? "—"
+    trigger.title = selected?.label ?? ""
     valueLabel.dataset.placeholder = String(state.value === "")
     if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${selected?.label ?? uiText("未选择", "Not selected")}`)
     trigger.disabled = state.disabled
@@ -187,11 +245,14 @@ export function createJdxSelect(host: HTMLElement, input: {
       row.setAttribute("aria-selected", String(option.value === state.value))
       row.setAttribute("aria-disabled", String(option.disabled === true))
       row.dataset.active = String(index === state.activeIndex)
+      if (input.compact) row.title = [option.label, option.description, option.meta].filter(Boolean).join("\n")
       const main = htmlElement(doc, "span")
       main.className = "jdx-select-option-main"
       const label = htmlElement(doc, "span")
       label.className = "jdx-select-option-label"
       label.textContent = option.label
+      if (input.compact && option.iconSrc) main.append(createLogo(doc, option.iconSrc, option.iconThemed))
+      else if (input.compact && option.iconPath) main.append(createOptionIcon(doc, option.iconPath))
       main.append(label)
       if (option.meta) {
         const meta = htmlElement(doc, "span")
@@ -199,11 +260,22 @@ export function createJdxSelect(host: HTMLElement, input: {
         meta.textContent = option.meta
         main.append(meta)
       }
+      if (input.compact) {
+        const status = createOptionIcon(doc, option.disabled
+          ? "M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3"
+          : option.value === state.value ? "m5 12 4 4L19 6" : "")
+        status.classList.add("jdx-select-option-status")
+        main.append(status)
+      }
       row.append(main)
       if (option.description) {
         const description = htmlElement(doc, "span")
         description.className = "jdx-select-option-description"
         description.textContent = option.description
+        if (input.compact) {
+          description.id = `${row.id}-description`
+          row.setAttribute("aria-describedby", description.id)
+        }
         row.append(description)
       }
       row.addEventListener("mouseenter", () => setActiveIndex(index, false))
@@ -248,7 +320,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     )
     popup.style.left = `${Math.round(left)}px`
     popup.style.width = `${Math.round(width)}px`
-    popup.style.maxHeight = `${resolvePopupMaxHeight(openUp ? spaceAbove : spaceBelow)}px`
+    popup.style.maxHeight = `${resolvePopupMaxHeight(openUp ? spaceAbove : spaceBelow, input.compact ? 448 : POPUP_MAX_HEIGHT)}px`
     if (openUp) {
       popup.style.top = ""
       popup.style.bottom = `${Math.round(viewportHeight - rect.top + POPUP_TRIGGER_GAP)}px`
@@ -259,7 +331,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   }
 
   function onDocumentPointerDown(event: Event) {
-    if (!host.contains(event.target as Node)) close()
+    if (!host.contains(event.target as Node) && !popup.contains(event.target as Node)) close()
   }
 
   function onDocumentScroll(event: Event) {
@@ -272,6 +344,13 @@ export function createJdxSelect(host: HTMLElement, input: {
   function open() {
     if (state.open || state.disabled) return
     state.open = true
+    if (portal) {
+      const computed = doc.defaultView?.getComputedStyle(host)
+      for (const token of ["text", "muted", "line-strong", "surface", "green-deep", "active-bg", "active-text", "press-bg", "popup-shadow", "green"]) portal.style.setProperty(`--jdx-${token}`, computed?.getPropertyValue(`--jdx-${token}`) ?? "")
+      portal.style.font = computed?.font || "13px system-ui"
+      portal.style.color = "var(--jdx-text)"
+      portal.append(popup); (doc.body || doc.documentElement).append(portal)
+    }
     state.query = ""
     if (search) search.value = ""
     const options = filterSelectOptions(state.options, state.query)
@@ -290,6 +369,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   function close() {
     if (!state.open) return
     state.open = false
+    if (portal) { host.append(popup); portal.remove() }
     state.activeIndex = -1
     renderTrigger()
     doc.removeEventListener("pointerdown", onDocumentPointerDown, true)
@@ -340,6 +420,7 @@ export function createJdxSelect(host: HTMLElement, input: {
         break
       case "Enter":
       case " ":
+        if (event.key === " " && event.target === search) return
         // 阻止 button 默认 click，避免选中后又被触发一次开合。
         event.preventDefault()
         selectIndex(state.activeIndex, true)
@@ -370,6 +451,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   return {
     element: host,
     close,
+    destroy() { close(); listeners.clear(); trigger.remove(); popup.remove(); portal?.remove() },
     getValue: () => state.value,
     setValue(value: string) {
       if (!state.options.some((option) => option.value === value)) return

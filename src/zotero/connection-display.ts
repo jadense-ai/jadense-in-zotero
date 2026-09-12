@@ -55,6 +55,10 @@ export type PreferencesStrings = {
   preferenceSaveFailed: string
 
   featureConfigTitle: string
+  autoFollowChatModelLabel: string
+  autoFollowChatModelNote: string
+  autoFollowChatModelEnabled: string
+  autoFollowChatModelDisabled: string
   featureChatLabel: string
   featureTranslationLabel: string
   featureAnalysisLabel: string
@@ -103,6 +107,9 @@ export type PreferencesStrings = {
   byokSectionTitle: string
   byokSectionNote: string
   byokProviderTitle: string
+  byokProviderSidebarNote: string
+  byokProviderConnectionTitle: string
+  byokProviderConnectionNote: string
   byokProviderSelectLabel: string
   byokProviderNameLabel: string
   byokProviderNew: string
@@ -110,15 +117,19 @@ export type PreferencesStrings = {
   byokProviderSave: string
   byokProtocolLabel: string
   byokBaseUrlLabel: string
+  byokBaseUrlPlaceholder: string
   byokEndpointLabel: string
   byokSavedKeyLabel: string
   byokKeyLabel: string
   byokKeyPlaceholder: string
+  byokShowKey: string
+  byokHideKey: string
   byokModelCatalogTitle: string
   byokModelCatalogNote: string
   byokModelSelectLabel: string
   byokModelSelectPlaceholder: string
   byokModelEmpty: string
+  byokModelEditorTitle: string
   byokModelNameLabel: string
   byokModelLabel: string
   byokModelPlaceholder: string
@@ -157,6 +168,10 @@ const ZH_STRINGS: PreferencesStrings = {
   preferenceSaveFailed: "无法保存显示偏好，请重试。",
 
   featureConfigTitle: "功能配置",
+  autoFollowChatModelLabel: "自动跟随当前对话模型",
+  autoFollowChatModelNote: "开启后，其他功能使用当前对话模型；AI 对话模型仍可调整。关闭后可分别配置其他功能模型。",
+  autoFollowChatModelEnabled: "已开启自动跟随当前对话模型。",
+  autoFollowChatModelDisabled: "已关闭自动跟随，可逐项配置功能模型。",
   featureChatLabel: "AI 对话",
   featureTranslationLabel: "实时翻译",
   featureAnalysisLabel: "文献解析",
@@ -164,7 +179,7 @@ const ZH_STRINGS: PreferencesStrings = {
   featureModelSearch: "搜索模型或提供商",
   featureModelConnect: "连接攻玉后可加载内置模型；BYOK 模型可独立使用。",
   featureModelLoading: "正在加载攻玉模型；BYOK 模型仍可选择。",
-  featureModelReady: "选择后自动保存，各功能互不影响。",
+  featureModelReady: "其他功能默认跟随对话模型；AI 对话模型仍可调整。关闭自动跟随后可逐项配置其他功能。",
   featureModelUnavailable: "攻玉模型目录暂不可用；可继续使用当前选择或 BYOK 模型。",
   featureModelSaved: "模型选择已保存。",
 
@@ -210,24 +225,31 @@ const ZH_STRINGS: PreferencesStrings = {
   byokSectionTitle: "BYOK 配置",
   byokSectionNote: "先配置提供商，再为它维护模型目录。聊天、翻译和论文解析会从当前 Zotero 客户端直接请求提供商，不经过攻玉服务器。",
   byokProviderTitle: "提供商",
+  byokProviderSidebarNote: "切换或编辑已保存的提供商",
+  byokProviderConnectionTitle: "提供商连接",
+  byokProviderConnectionNote: "每个提供商独立保存地址和密钥",
   byokProviderSelectLabel: "当前提供商",
   byokProviderNameLabel: "显示名称",
   byokProviderNew: "新增",
   byokProviderDelete: "删除",
   byokProviderSave: "保存提供商",
   byokProtocolLabel: "协议",
-  byokBaseUrlLabel: "API 基础地址",
+  byokBaseUrlLabel: "API base url",
+  byokBaseUrlPlaceholder: "例如 https://api.example.com/v1",
   byokEndpointLabel: "请求地址",
   byokSavedKeyLabel: "已保存密钥",
-  byokKeyLabel: "API 密钥（留空保留旧密钥）",
-  byokKeyPlaceholder: "输入新密钥 以保存或测试",
-  byokModelCatalogTitle: "模型目录",
-  byokModelCatalogNote: "显示名称只用于界面；模型 ID 会原样发送给提供商。",
+  byokKeyLabel: "API key",
+  byokKeyPlaceholder: "输入或替换 API 密钥",
+  byokShowKey: "显示 API 密钥",
+  byokHideKey: "隐藏 API 密钥",
+  byokModelCatalogTitle: "当前提供商的模型目录",
+  byokModelCatalogNote: "显示名称只用于界面；模型 ID 会原样发送给当前提供商。",
   byokModelSelectLabel: "当前模型",
   byokModelSelectPlaceholder: "选择模型",
   byokModelEmpty: "尚未添加模型",
+  byokModelEditorTitle: "编辑当前模型",
   byokModelNameLabel: "显示名称",
-  byokModelLabel: "模型 ID",
+  byokModelLabel: "Model id",
   byokModelPlaceholder: "例如 mimo-v2.5",
   byokContextWindowLabel: "上下文窗口（可选）",
   byokModelNew: "添加模型",
@@ -243,7 +265,7 @@ const ZH_STRINGS: PreferencesStrings = {
   byokProviderAdded: "已添加提供商；请填写并保存连接信息。",
   byokProviderDeleted: "提供商及其模型已删除。",
   byokProviderSaved: "提供商已保存；保存操作未联网。",
-  byokModelAdded: "已添加模型；请填写模型 ID 后保存。",
+  byokModelAdded: "已打开添加模型表单；填写模型 ID 后保存。",
   byokModelDeleted: "模型已删除。",
   byokModelSaved: "模型已保存；保存操作未联网。",
   byokCleared: "BYOK 配置已清除，攻玉连接与各功能的模型选择未改变。",
@@ -264,6 +286,10 @@ const EN_STRINGS: PreferencesStrings = {
   preferenceSaveFailed: "Could not save the display preference. Please try again.",
 
   featureConfigTitle: "Feature settings",
+  autoFollowChatModelLabel: "Automatically follow the current Chat model",
+  autoFollowChatModelNote: "When enabled, other features use the current Chat model; the Chat model remains editable. Turn it off to configure other features independently.",
+  autoFollowChatModelEnabled: "Automatic Chat model following is enabled.",
+  autoFollowChatModelDisabled: "Automatic following is disabled; feature models can be configured independently.",
   featureChatLabel: "AI Chat",
   featureTranslationLabel: "Translation",
   featureAnalysisLabel: "Literature analysis",
@@ -271,7 +297,7 @@ const EN_STRINGS: PreferencesStrings = {
   featureModelSearch: "Search models or providers",
   featureModelConnect: "Connect Jadense to load built-in models. BYOK works independently.",
   featureModelLoading: "Loading Jadense models. BYOK models remain selectable.",
-  featureModelReady: "Selections save automatically and apply to each feature independently.",
+  featureModelReady: "Other features follow the Chat model by default; the Chat model remains editable. Turn that off to configure other features independently.",
   featureModelUnavailable: "The Jadense catalog is unavailable. Your saved selection and BYOK remain usable.",
   featureModelSaved: "Model selection saved.",
 
@@ -317,24 +343,31 @@ const EN_STRINGS: PreferencesStrings = {
   byokSectionTitle: "BYOK configuration",
   byokSectionNote: "Configure a provider first, then maintain its model catalog. Requests go directly from this Zotero client to the provider, without the Jadense server.",
   byokProviderTitle: "Provider",
+  byokProviderSidebarNote: "Switch or edit a saved provider",
+  byokProviderConnectionTitle: "Provider connection",
+  byokProviderConnectionNote: "Each provider keeps its own endpoint and key",
   byokProviderSelectLabel: "Current provider",
   byokProviderNameLabel: "Display name",
   byokProviderNew: "Add",
   byokProviderDelete: "Delete",
   byokProviderSave: "Save provider",
   byokProtocolLabel: "Protocol",
-  byokBaseUrlLabel: "API Base URL",
+  byokBaseUrlLabel: "API base url",
+  byokBaseUrlPlaceholder: "For example, https://api.example.com/v1",
   byokEndpointLabel: "Request endpoint",
   byokSavedKeyLabel: "Saved key",
-  byokKeyLabel: "API Key (leave blank to keep the saved key)",
-  byokKeyPlaceholder: "Enter a new key to save or test",
-  byokModelCatalogTitle: "Model catalog",
-  byokModelCatalogNote: "The display name is local. Model ID is sent to the provider unchanged.",
+  byokKeyLabel: "API key",
+  byokKeyPlaceholder: "Enter or replace the API key",
+  byokShowKey: "Show API key",
+  byokHideKey: "Hide API key",
+  byokModelCatalogTitle: "Models for this provider",
+  byokModelCatalogNote: "The display name is local. Model ID is sent to this provider unchanged.",
   byokModelSelectLabel: "Current model",
   byokModelSelectPlaceholder: "Select a model",
   byokModelEmpty: "No models added",
+  byokModelEditorTitle: "Edit selected model",
   byokModelNameLabel: "Display name",
-  byokModelLabel: "Model ID",
+  byokModelLabel: "Model id",
   byokModelPlaceholder: "For example, mimo-v2.5",
   byokContextWindowLabel: "Context window (optional)",
   byokModelNew: "Add model",
@@ -350,7 +383,7 @@ const EN_STRINGS: PreferencesStrings = {
   byokProviderAdded: "Provider added. Fill in and save its connection details.",
   byokProviderDeleted: "Provider and its models deleted.",
   byokProviderSaved: "Provider saved. No network request was made.",
-  byokModelAdded: "Model added. Enter its Model ID and save.",
+  byokModelAdded: "The add-model form is open. Enter a Model ID and save.",
   byokModelDeleted: "Model deleted.",
   byokModelSaved: "Model saved. No network request was made.",
   byokCleared: "BYOK configuration cleared. The Jadense connection and feature selections were not changed.",
@@ -374,5 +407,10 @@ export function applyStrings(root: ParentNode, strings: PreferencesStrings) {
     const key = element.dataset.i18nAriaLabel as keyof PreferencesStrings
     const value = strings[key]
     if (typeof value === "string") element.setAttribute("aria-label", value)
+  })
+  root.querySelectorAll<HTMLElement>("[data-i18n-placeholder]").forEach((element) => {
+    const key = element.dataset.i18nPlaceholder as keyof PreferencesStrings
+    const value = strings[key]
+    if (typeof value === "string") element.setAttribute("placeholder", value)
   })
 }

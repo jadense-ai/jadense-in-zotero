@@ -195,6 +195,21 @@ function installPreviewHost() {
   }
   window.Zotero = Zotero
   window.JadenseInZotero = { zotero: Zotero, section: new URLSearchParams(location.search).get("section") || "chat", pluginID: "jadense-research-preview-fixture" }
+  // 临时 AI 请求使用同一个浏览器内存文件系统，不接触真实 profile。
+  const files = new Map()
+  // 翻译历史视觉验收仅使用合成档案，可重复检查长标题、筛选和展开阅读。
+  if (new URLSearchParams(location.search).has("translation-fixture")) {
+    const titles = ["Frequency comb spectroscopy", "Massively parallel sensing of trace molecules and their isotopologues with broadband subharmonic mid-infrared frequency combs", "Adaptive real-time dual-comb spectroscopy"]
+    preferences["extensions.jadenseInZotero.translationHistory"] = JSON.stringify({ version: 1, records: titles.flatMap((title, i) => [0, 1].map(n => ({
+      id: `translation-demo-${i}-${n}`, createdAt: new Date(Date.now() - (i * 14 + n) * 86400000).toISOString(),
+      source: { itemID: 2, libraryID: 1, itemKey: pdf.key, title, citation: "Ada Example, 2026", pageIndex: n, pageLabel: String(148 + n), text: n ? "The spectral resolution allows individual absorption features to be distinguished." : "Frequency combs provide precise measurements across a broad spectral range. This is synthetic preview text." },
+      result: { sourceLanguage: "英文", targetLanguage: "简体中文", text: "频率梳能够在宽广的光谱范围内进行精密测量。\n\n这是用于界面验收的**模拟译文**。" },
+    }))) })
+    const id = "20000000-0000-4000-8000-000000000001"
+    files.set(`/fixture/jadense-document-tasks/${id}/task.json`, JSON.stringify({ version: 1, id, kind: "translation", createdAt: new Date().toISOString(), source: { itemID: 2, libraryID: 1, itemKey: pdf.key, title: titles[1] }, status: "paused", completed: 9, total: 327, totalPages: 2, languages: { sourceLanguage: "en", targetLanguage: "zh-CN" }, models: [], warnings: [] }))
+  }
+  window.PathUtils = { profileDir: "/fixture", join: (...parts) => parts.join("/"), filename: path => path.split("/").at(-1) }
+  window.IOUtils = { makeDirectory: async () => {}, readUTF8: async path => { if (!files.has(path)) throw new Error("missing fixture"); return files.get(path) }, writeUTF8: async (path, text) => { files.set(path, text) }, getChildren: async path => [...new Set([...files.keys()].filter(key => key.startsWith(path + "/")).map(key => path + "/" + key.slice(path.length + 1).split("/")[0]))], remove: async path => files.delete(path) }
   // 可复现的详情验收数据；只在显式 fixture 参数下建立浏览器内存文件系统。
   if (new URLSearchParams(location.search).has("analysis-fixture")) {
     const taskID = "10000000-0000-4000-8000-000000000001"
@@ -208,12 +223,12 @@ function installPreviewHost() {
     const references = Array.from({ length: 18 }, (_, order) => {
       const fields = { title: ["Sentence-level evidence retrieval in scientific documents", "A framework for structured literature review", "Reasoning with attributable sources"][order % 3], authors: ["Smith, J.", "Chen, L."], year: String(2020 + order % 6), doi: `10.0000/fixture.reference.${order}`, url: `https://example.org/references/${order}` }
       const verification = order % 4 === 1 ? "unverified" : "verified"
-      return { id: `ref-${order}`, order, label: String(order + 1), raw: `[${order + 1}] ${fields.authors.join("; ")} (${fields.year}). ${fields.title}. Journal of Research Methods, 12(3), 45–62. https://doi.org/${fields.doi}`, fields, verification, ...(verification === "verified" ? { verified: fields } : { reason: "未找到足够的 DOI 匹配证据" }), uncertain: false, lines: [{ pageIndex: 1, rects: [[48, 100, 500, 120]] }] }
+      if (order === 2) delete fields.doi
+      return { id: `ref-${order}`, order, label: String(order + 1), raw: `[${order + 1}] ${fields.authors.join("; ")} (${fields.year}). ${fields.title}. Journal of Research Methods, 12(3), 45–62. ${fields.doi ? `https://doi.org/${fields.doi}` : fields.url}`, fields, verification, ...(verification === "verified" ? { verified: fields } : { reason: "未找到唯一匹配文献，可按原文搜索" }), uncertain: false, lines: [{ pageIndex: 1, rects: [[48, 100, 500, 120]] }] }
     })
     const task = { version: 1, id: taskID, kind: "references", source, createdAt: "2026-09-10T06:30:00Z", status: "complete", totalPages: 2, completed: references.length, total: references.length, models: [], warnings: [] }
-    const files = new Map([[`/fixture/jadense-document-tasks/${taskID}/task.json`, JSON.stringify(task)], [`/fixture/jadense-document-tasks/${taskID}/references.json`, JSON.stringify(references)]])
-    window.PathUtils = { profileDir: "/fixture", join: (...parts) => parts.join("/"), filename: path => path.split("/").at(-1) }
-    window.IOUtils = { makeDirectory: async () => {}, readUTF8: async path => { if (!files.has(path)) throw new Error("missing fixture"); return files.get(path) }, writeUTF8: async (path, text) => { files.set(path, text) }, getChildren: async path => [...new Set([...files.keys()].filter(key => key.startsWith(path + "/")).map(key => path + "/" + key.slice(path.length + 1).split("/")[0]))], remove: async path => files.delete(path) }
+    for (const [path, text] of [[`/fixture/jadense-document-tasks/${taskID}/task.json`, JSON.stringify(task)], [`/fixture/jadense-document-tasks/${taskID}/references.json`, JSON.stringify(references)]]) files.set(path, text)
+
     Zotero.Search = class { addCondition(_field, _condition, value) { this.doi = value } async search() { return [...items.values()].filter(item => item.getField("DOI") === this.doi).map(item => item.id) } }
     Zotero.Item = class { constructor() { this.fields = {}; this.id = 600 + items.size; this.key = `IM${this.id}` } setField(key, value) { this.fields[key] = value } getField(key) { return this.fields[key] || "" } setCreators() {} setCollections() {} async saveTx() { items.set(this.id, this) } }
   }
@@ -374,6 +389,7 @@ const assets = new Map([
   ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],
   ["/manager.js", ["manager.js", "text/javascript; charset=utf-8"]],
   ["/manager.css", ["manager.css", "text/css; charset=utf-8"]],
+  ["/chat.css", ["chat.css", "text/css; charset=utf-8"]],
   ["/icons/logo-padded.png", ["icons/logo-padded.png", "image/png"]],
 ])
 const fixtureAccount = { signedToday: false, balancePoints: 36, currentStreakDays: 4, rewardPoints: 2 }
@@ -382,6 +398,8 @@ const server = http.createServer(async (request, response) => {
   response.setHeader("cache-control", "no-store")
   response.setHeader("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
   try {
+    if (pathname === "/api/chat/temporary" && request.method === "HEAD") { response.writeHead(200, { "x-jadense-temporary-protocol": "1" }); response.end(); return }
+    if (pathname === "/api/chat") response.setHeader("x-jadense-temporary-protocol", "1")
     if (pathname === "/api/chat" && request.method === "POST") { await serveChat(request, response); return }
     if (pathname === "/api/extension/chat/models" && request.method === "GET") {
       response.setHeader("content-type", "application/json; charset=utf-8")

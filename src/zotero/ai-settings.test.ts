@@ -174,12 +174,13 @@ describe("paper analysis model settings", () => {
 describe("BYOK profile settings", () => {
   it("uses the canonical initial defaults", () => {
     expect(readByokConfig(fakeZotero())).toEqual(defaultByokConfig())
+    expect(defaultByokConfig().baseUrl).toBe("")
     expect(readByokConfig(fakeZotero()).maxOutputTokens).toBe(96_000)
     expect(readByokSettings(fakeZotero())).toMatchObject({
       version: 2,
       activeProviderId: "default-provider",
       activeModelId: "",
-      providers: [{ id: "default-provider", name: "OpenAI", protocol: "openai-chat-completions" }],
+      providers: [{ id: "default-provider", name: "自定义提供商", protocol: "openai-chat-completions" }],
       models: [],
     })
   })

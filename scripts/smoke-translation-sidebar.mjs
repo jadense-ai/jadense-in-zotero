@@ -8,6 +8,10 @@ export async function verifyTranslationSidebar({ Zotero, reader, jobs, assert, w
   trigger.click()
   const root = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), 'native translation sidebar')
   assert(root.closest('item-pane-custom-section'), 'Translation did not reuse the registered native section')
+  const startButton = root.querySelector('.jdx-reader-translation-confirmation button')
+  assert(startButton, 'Full translation confirmation is missing')
+  await waitFor(() => !jobs.list('translation').some(task => task.source.itemID === reader.itemID), 'translation confirmation before dispatch')
+  startButton.click()
   const task = await waitFor(() => jobs.list('translation').find(task => task.source.itemID === reader.itemID), 'sidebar translation task')
   if (task.status === 'running') {
     const waiting = await waitFor(() => root.querySelector('.jdx-reading-gap:not([hidden])'), 'single pending passage notice')

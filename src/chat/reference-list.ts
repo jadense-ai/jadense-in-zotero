@@ -10,31 +10,42 @@ export type ReferenceEntry = {
 
 const heading = /^\s*(?:\d+[.\s]*)?(?:references|bibliography|literature cited|works cited|参考文献|參考文獻|引用文献)\s*[:：]?\s*$/iu
 const endHeading = /^(?:appendix(?:\s+[a-z\d]+)?|appendices|supplementary (?:material|information)|acknowledg(?:e)?ments|附录|附錄|致谢)\s*[:：]?$/iu
-const numbered = /^\s*(?:\[(\d{1,4})\]|(\d{1,4})[.)、])\s*/u
+const numbered = /^\s*(?:[[(](\d{1,4})[\])]|(\d{1,4})[.)、])\s*/u
 const authorYear = /^[\p{L}][\p{L}'’\- ]{1,45},?\s+(?:[A-Z][., ]+|[\p{L}]+[, &]).*?(?:\(?\b(?:19|20)\d{2}[a-z]?\)?)/u
 
 export function normalizeDoi(value: string) {
-  return value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").replace(/^doi\s*:\s*/i, "").replace(/[.,;]+$/u, "").toLowerCase()
+  let doi = value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").replace(/^doi\s*:\s*/i, "").replace(/[.,;]+$/u, "").toLowerCase()
+  while (doi.endsWith(")") && doi.split(")").length > doi.split("(").length) doi = doi.slice(0, -1)
+  return doi
 }
 
 /** 断行只在 DOI token 内连接；保留原始 raw，归一化文本不能替代来源。 */
 export function parseReferenceFields(raw: string): ReferenceMetadata {
-  const joined = raw.replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").replace(numbered, "").trim()
+  const joined = raw.normalize("NFKC").replace(/\u00ad\s*\n\s*/gu, "").replace(/([\p{Ll}])-\s*\n\s*(?=[\p{Ll}])/gu, "$1")
+    .replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").replace(numbered, "").trim()
   const doi = joined.match(/\b10\.\d{4,9}\/[^\s<>"]+/iu)?.[0]
   const yearMatch = joined.match(/\b((?:18|19|20)\d{2})[a-z]?\b/u)
   const year = yearMatch?.[1] ?? ""
   let title = "", authorText = "", publicationTitle = ""
+  const quoted = joined.match(/^(.*?)[“"](.+?)[”"]\s*[,，.]?\s*(.*)$/u)
+  const typed = joined.match(/^(.*?)\.\s*(.+?)\s*\[(?:J|M|C|D|R|EB|N|S)(?:\/\w+)?\]\s*[.,]?\s*(.*)$/iu)
   const parenthesizedYear = joined.match(/^(.*?)\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\s*[.,]?\s*(.+)$/u)
-  if (parenthesizedYear) {
+    ?? joined.match(/^(.*?)\b(?:18|19|20)\d{2}[a-z]?\.\s+(.+)$/u)
+  if (quoted || typed) {
+    const parts = (quoted || typed)!
+    authorText = parts[1]; title = parts[2]; publicationTitle = parts[3].split(/[,，.;]/u)[0]
+  } else if (parenthesizedYear) {
     authorText = parenthesizedYear[1]
     const pieces = parenthesizedYear[2].split(/\.\s+(?=[\p{Lu}\p{Lo}])/u)
     title = pieces[0]; publicationTitle = pieces[1] ?? ""
   } else {
     // 作者缩写后的句点不作为题名分界：只使用后面紧随完整单词的句点。
-    const split = joined.match(/^(.*?[\p{L}][.]?)\.\s+([\p{Lu}\p{Lo}][\p{L}\d-]{2,}.*?)\.(?:\s+|$)(.*)$/u)
+    const split = joined.match(/^(.*?\bet\s+al)\.\s+(.+?)\.(?:\s+|$)(.*)$/iu)
+      ?? joined.match(/^(.*?[\p{L}][.]?)\.\s+([\p{Lu}\p{Lo}][\p{L}\d-]{2,}.*?)\.(?:\s+|$)(.*)$/u)
     if (split) { authorText = split[1]; title = split[2]; publicationTitle = split[3].split(/[.;]/u)[0] }
   }
-  const authors = authorText.split(/\s*(?:;|\band\b|&|(?<=\.)\s*,\s*(?=[\p{L}][\p{L}'’-]+,))\s*/u).map(value => value.trim().replace(/[.,]+$/u, "")).filter(Boolean)
+  const authors = authorText.replace(/\bet\s+al\.?|等[.,，]?/giu, "").split(/\s*(?:;|、|\band\b|&|,\s*(?=[A-Z]\.\s*\p{L})|(?<=\.)\s*,\s*(?=[\p{L}][\p{L}'’-]+,)|,\s*(?=\p{L}{2,}\s+[A-Z]{1,3}\b)|,\s*(?=\p{Script=Han}))\s*/u)
+    .map(value => value.trim().replace(/^[,，\s]+|[.,，\s]+$/gu, "")).filter(Boolean)
   const url = joined.match(/https?:\/\/[^\s<>"]+/iu)?.[0]?.replace(/[.,;]+$/u, "")
   return { title: title.replace(/[.,]+$/u, "").trim(), authors, year, ...(doi ? { doi: normalizeDoi(doi) } : {}), ...(url ? { url } : {}), ...(publicationTitle ? { publicationTitle } : {}) }
 }
@@ -66,14 +77,15 @@ export function extractReferences(document: PdfTextDocument): ReferenceEntry[] {
   let group: PdfLine[] = [], boundaryKnown = false
   const flush = () => { if (group.length) result.push(entry(group, result.length, boundaryKnown)); group = [] }
   let previousNumber: number | undefined
+  const numberedList = numbered.test(lines[first]?.text || "")
   for (const line of lines.slice(first)) {
     if (endHeading.test(line.text.trim())) break
     if (heading.test(line.text) || (line.text.trim() === line.pageLabel && line.rects[0]?.[3] < 35)) continue
     const number = line.text.match(numbered)
     const n = number ? Number(number[1] || number[2]) : undefined
-    const starts = Boolean(number || authorYear.test(line.text))
+    const starts = Boolean(number || !numberedList && authorYear.test(line.text))
     // 悬挂缩进：上一段结束，下一行回到条目左缘，且有作者/年份证据。
-    const hanging = !number && group.at(-1)?.paragraphEnd && /\b(?:18|19|20)\d{2}\b/u.test(line.text)
+    const hanging = !numberedList && !number && group.at(-1)?.paragraphEnd && /\b(?:18|19|20)\d{2}\b/u.test(line.text)
       && Boolean(line.rects[0] && group[0]?.rects[0] && line.rects[0][0] <= group[0].rects[0][0] + 3)
     if ((starts || hanging) && group.length) flush()
     if (!group.length) {
@@ -88,18 +100,10 @@ export function extractReferences(document: PdfTextDocument): ReferenceEntry[] {
 }
 
 export function normalizedTitle(value: string) { return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "") }
-function surname(value: string) { return normalizedTitle(value.trim().split(/[,\s]/u)[0] || "") }
-function firstInitial(value: string) { return normalizedTitle(value.split(",").slice(1).join(",")).slice(0, 1) }
-
-/** DOI 存在不代表原始引用匹配；缺少匹配证据时保持静态未验证条目。 */
+/** DOI 或归一化标题命中即可；作者省略、年份差异均不参与准入。 */
 export function metadataMatches(fields: ReferenceMetadata, candidate: ReferenceMetadata): boolean {
-  return Boolean(fields.title && fields.year && fields.authors.length && candidate.title && candidate.authors.length
-    && normalizedTitle(fields.title) === normalizedTitle(candidate.title) && fields.year === candidate.year
-    && fields.authors.every((author, index) => {
-      const other = candidate.authors[index] || ""
-      const initial = firstInitial(author), otherInitial = firstInitial(other)
-      return surname(author) === surname(other) && (!initial || !otherInitial || initial === otherInitial)
-    }))
+  const sameDoi = Boolean(fields.doi && candidate.doi && normalizeDoi(fields.doi) === normalizeDoi(candidate.doi))
+  return Boolean(candidate.title && (sameDoi || normalizedTitle(fields.title) && normalizedTitle(fields.title) === normalizedTitle(candidate.title)))
 }
 
 /** AI 只能返回当前原文的连续行分组；覆盖不完整/重叠/越界则保留整个原条目。 */

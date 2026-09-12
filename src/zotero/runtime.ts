@@ -14,6 +14,7 @@ const PREF_DEFAULT_FOLDER_ID = "extensions.jadenseInZotero.defaultFolderId"
 const PREF_SYNC_MAPPINGS = "extensions.jadenseInZotero.syncMappings"
 const PREF_COLLECTION_UPLOAD_INCLUDE_PDF = "extensions.jadenseInZotero.collectionUploadIncludePdf"
 const PREF_FAVORITE_FOLDERS_CACHE = "extensions.jadenseInZotero.favoriteFoldersCache"
+export const AI_INITIAL_MODEL_PREF_KEY = "extensions.jadenseInZotero.aiInitialModel"
 const SYNC_MAPPING_VERSION = 2
 export const DEFAULT_BASE_URL = "https://jadense.cn"
 const ZOTERO_IMPORT_BATCH_SIZE = 100
@@ -1036,6 +1037,10 @@ export function saveConnection(zotero: ZoteroLike, input: { token: string; defau
     zotero.Prefs?.set(PREF_BASE_URL, baseUrl)
   }
   zotero.Prefs?.set(PREF_TOKEN, input.token.trim())
+  // 首次完成连接时记录配置顺序；该偏好只用于初始化功能模型，写入失败不能阻断令牌保存。
+  try {
+    if (!prefString(zotero, AI_INITIAL_MODEL_PREF_KEY)) zotero.Prefs?.set(AI_INITIAL_MODEL_PREF_KEY, JSON.stringify({ route: "jadense" }))
+  } catch { /* 功能模型仍可由用户在设置中手动选择。 */ }
   // defaultFolderId 缺省(undefined)表示不改动已有选择;显式传空(含 null)则清除。
   if (input.defaultFolderId === undefined) return
   const folderId = input.defaultFolderId?.trim() ?? ""

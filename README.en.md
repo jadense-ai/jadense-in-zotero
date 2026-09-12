@@ -52,7 +52,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### Install
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The current version is **0.4.3**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The current version is **0.4.4**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 
@@ -146,7 +146,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.3 was tested on **Windows 11 / Zotero 10.0.2**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.3) for the full validation record and scope.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.***. Release 0.4.4 was tested on **Windows 11 / Zotero 10.0.2**, using synthetic materials and mocked services. macOS, Linux, Zotero 8/9, and real paid providers were not tested in that release validation. See the [release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4) for the full validation record and scope.
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 
@@ -154,9 +154,9 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-To upgrade from GitHub 0.4.0, 0.4.1, or 0.4.2, install 0.4.3 from the XPI file. Both use the same `.cn` plugin ID, preserving existing settings and local history.
+To upgrade from GitHub 0.4.0, 0.4.1, 0.4.2, or 0.4.3, install 0.4.4 from the XPI file. Both use the same `.cn` plugin ID, preserving existing settings and local history.
 
-If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install 0.4.3 from the XPI file**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
+If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install 0.4.4 from the XPI file**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 
 The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved explicit models, routes, and BYOK selections are preserved. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-042-en) for version differences.
 

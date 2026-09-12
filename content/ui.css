@@ -198,3 +198,18 @@
 .jdx-search::placeholder { color:var(--jdx-placeholder); }
 .jdx-check { display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--jdx-muted); }
 .jdx-check input { accent-color:var(--jdx-green); width:15px; height:15px; }
+
+/* 对话模型列表对齐 webapp 的单行密度；完整说明保留在 tooltip 和辅助技术描述中。
+   仅 compact 宿主使用，资料夹和原生设置的常规下拉不受影响。 */
+.jdx-select-compact .jdx-select-popup { overflow-x: hidden; border: 0; border-radius: 16px; padding: 8px; background: var(--jdx-surface); }
+.jdx-select-compact .jdx-select-search { position: sticky; top: -8px; z-index: 1; margin: 0 0 6px; width: 100%; min-height: 36px; background: var(--jdx-surface); font-size: calc(13px * var(--jdx-font-scale,1)); }
+.jdx-select-compact .jdx-select-group { padding: 8px 8px 4px; font-size: calc(11px * var(--jdx-font-scale,1)); }
+.jdx-select-compact .jdx-select-option { min-width: 0; display: flex; align-items: center; min-height: 36px; padding: 0 8px; border-radius: 6px; font-size: calc(13px * var(--jdx-font-scale,1)); font-weight: 500; }
+.jdx-select-compact .jdx-select-option-main { width: 100%; }
+.jdx-select-compact .jdx-select-option-meta { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11px * var(--jdx-font-scale,1)); }
+.jdx-select-compact .jdx-select-option-icon { width: 18px; height: 18px; flex: 0 0 18px; color: var(--jdx-muted); }
+.jdx-select-compact .jdx-select-option-status { width: 16px; height: 16px; flex-basis: 16px; }
+.jdx-select-compact .jdx-select-option[aria-selected="true"] { color: var(--jdx-text); font-weight: 500; }
+.jdx-select-compact .jdx-select-option[aria-selected="true"] .jdx-select-option-status { color: var(--jdx-green-deep); }
+.jdx-select-compact .jdx-select-option[aria-disabled="true"] .jdx-select-option-status { color: var(--jdx-muted); }
+.jdx-select-compact .jdx-select-option-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

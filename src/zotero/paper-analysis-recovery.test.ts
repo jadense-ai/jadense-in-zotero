@@ -8,14 +8,16 @@ import { readPaperAnalysisHistory } from "@/chat/paper-analysis-history"
 import { runIndependentPaperAnalysis } from "./paper-analysis-runner"
 import type { PdfAnalysisSnapshot, SavedAnalysisAnnotations } from "./reader-tools"
 import type { ZoteroLike } from "./runtime"
+import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from "./ai-settings"
 
 /** 两条请求通道均使用测试偏好，避免读取真实 Zotero 配置或凭据。 */
 function fakeZotero(route: "jadense" | "byok"): ZoteroLike {
   const values = new Map<string, unknown>([
+    [AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, false],
     ["extensions.jadenseInZotero.token", "fixture-token"],
     ["extensions.jadenseInZotero.baseUrl", "https://jadense.test"],
     ["extensions.jadenseInZotero.paperAnalysisModel", JSON.stringify(route === "jadense"
-      ? { route }
+      ? { route, selection: { kind: "model", modelId: "fixture-model" } }
       : { route, modelId: "fixture-model" })],
     ["extensions.jadenseInZotero.byokConfig", JSON.stringify({
       version: 2,

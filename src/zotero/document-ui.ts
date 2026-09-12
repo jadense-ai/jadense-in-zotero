@@ -1,6 +1,6 @@
 /** 选文浮窗与翻译历史兼容入口：全文交给连续阅读组件，执行与存储归文档任务。 */
 import { updateChatMarkdown } from "@/chat/markdown"
-import { readTranslationHistory, type TranslationRecord } from "@/chat/translation-history"
+import { readTranslationHistory, TRANSLATION_HISTORY_PREF_KEY, type TranslationSource, type TranslationRecord } from "@/chat/translation-history"
 import { translationLanguageDisplayLabel as translationLanguageLabel } from "@/chat/translation-languages"
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
@@ -32,12 +32,31 @@ const CSS = `${READER_UI_THEME_CSS}
 .jdx-document .jdx-markdown {overflow-wrap:anywhere}
 .jdx-document pre {overflow:auto;white-space:pre}
 .jdx-document .katex-display {display:block;overflow:auto}
-.jdx-history-row {padding:12px 0;border-bottom:1px solid var(--jdx-reader-line)}
-.jdx-history-summary {display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer}
-.jdx-history-summary>strong {flex:1;min-width:10em}
-.jdx-history-summary>small {color:var(--jdx-reader-muted)}
-.jdx-history-row>summary {list-style:disclosure-closed}
-.jdx-history-row[open]>summary {list-style:disclosure-open}
+.jdx-history-toolbar {display:flex;flex-wrap:wrap;align-items:end;gap:12px;padding:4px 0 12px}
+.jdx-history-toolbar label {display:grid;gap:5px;font-size:.9em;color:var(--jdx-reader-muted)}
+.jdx-history-toolbar label:first-child {flex:1 1 260px}
+.jdx-history-toolbar input {width:100%;box-sizing:border-box;cursor:text}
+.jdx-history-toolbar :is(input,select,button) {min-height:36px}
+.jdx-history-count {color:var(--jdx-reader-muted);font-size:.9em;padding-bottom:8px}
+.jdx-history-list {display:grid;gap:8px;min-width:0}
+/* Manager 主题由窗口根节点拥有，历史区直接引用其变量，避免依赖原生偏好观察器。 */
+#jadense-translation-history {color-scheme:inherit!important;--jdx-reader-text:var(--jdx-text);--jdx-reader-muted:var(--jdx-muted);--jdx-reader-background:var(--jdx-background);--jdx-reader-surface:var(--jdx-surface);--jdx-reader-hover:var(--jdx-subtle);--jdx-reader-line:var(--jdx-line)}
+.jdx-history-row {min-width:0;border:1px solid var(--jdx-reader-line);border-radius:8px;background:var(--jdx-reader-surface);overflow:hidden}
+.jdx-document .jdx-history-summary {display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 12px;align-items:start;cursor:pointer;width:100%;box-sizing:border-box;padding:14px 16px;border:0;border-radius:0;background:transparent;text-align:left;list-style:none}
+.jdx-history-summary::-webkit-details-marker {display:none}
+.jdx-history-summary::after {content:'›';grid-column:3;grid-row:1 / 4;align-self:center;color:var(--jdx-reader-muted);font-size:20px}
+.jdx-history-row[open]>.jdx-history-summary::after {transform:rotate(90deg)}
+.jdx-history-summary:hover {background:var(--jdx-reader-hover)}
+.jdx-history-summary>span {grid-column:1;grid-row:1 / 4;font-size:11px;padding:2px 6px;border-radius:4px;background:var(--jdx-reader-hover);color:var(--jdx-reader-muted)}
+.jdx-history-summary>strong {grid-column:2;font-size:1em;font-weight:600;line-height:1.5;min-width:0}
+.jdx-history-summary>small {grid-column:2;color:var(--jdx-reader-muted);font-size:.85em}
+.jdx-history-preview {grid-column:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--jdx-reader-muted);font-size:.92em}
+.jdx-history-body {padding:16px;border-top:1px solid var(--jdx-reader-line)}
+.jdx-history-columns {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-bottom:16px}
+.jdx-history-columns h4 {margin:0 0 8px;color:var(--jdx-reader-muted);font-size:.85em;font-weight:500}
+.jdx-history-actions {display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.jdx-history-empty {padding:32px 16px;text-align:center;color:var(--jdx-reader-muted)}
+@media(max-width:820px) {.jdx-history-columns {grid-template-columns:minmax(0,1fr);gap:16px}.jdx-document .jdx-history-summary {padding:12px;gap:5px 8px}}
 .jdx-document.jdx-history-detail{display:flex;flex-direction:column;gap:8px;height:calc(100vh - var(--jdx-history-top,180px));overflow:hidden}
 .jdx-history-detail>header{display:flex;align-items:center;gap:12px;flex:none;min-width:0;font-size:13px}
 .jdx-history-detail>header h3{flex:1;min-width:0;font-size:14px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -249,7 +268,7 @@ export function makeTranslationWindowInteractive(root: HTMLElement, header: HTML
 
 function prepare(root: HTMLElement, host: ZoteroLike) {
   installDocumentStyles(root.ownerDocument); root.classList.add("jdx-document"); root.setAttribute("data-jadense-reader-theme", "")
-  const stop = observeTheme(host, root); root.ownerDocument.defaultView?.addEventListener("unload", stop, { once: true }); return stop
+  return observeTheme(host, root)
 }
 function taskStatus(task: DocumentTask) {
   const labels = { running: uiText("处理中", "Running"), paused: uiText("已暂停", "Paused"), complete: uiText("已完成", "Complete"), partial: uiText("部分完成", "Partial"), error: uiText("需要处理", "Needs attention") }
@@ -272,44 +291,83 @@ export async function showFullTranslation(host: ZoteroLike, doc: Document, itemI
     if (task) onDetails(task.id)
   }, reader)
 }
-const histories = new WeakMap<HTMLElement, { refresh(): void; open(id: string): void }>()
-export function renderDocumentHistory(root: HTMLElement, host: ZoteroLike, openSource: (record: TranslationRecord) => Promise<unknown>, taskID?: string) {
+const histories = new WeakMap<HTMLElement, { refresh(): void; open(id: string): void; remove(): void }>()
+/** 仅检索本地档案已有字段；多个关键词取交集，不读取附件或触发翻译。 */
+export function matchesTranslationHistory(entry: TranslationRecord | DocumentTask, query: string, kind: string, days: number, now = Date.now()) {
+  const selection = "result" in entry
+  if (kind !== "all" && kind !== (selection ? "selection" : "full")) return false
+  if (days && Date.parse(entry.createdAt) < now - days * 86_400_000) return false
+  const text = [entry.source.title, entry.source.itemKey, selection ? entry.source.citation : "", selection ? entry.source.text : "", selection ? entry.result.text : ""].join(" ").normalize("NFKC").toLocaleLowerCase()
+  return query.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/u).every(word => text.includes(word))
+}
+/** 当前 PDF 按附件筛选；旧档案没有稳定身份时兼容本地 itemID。 */
+export function matchesTranslationSource(source: TranslationSource, current: Pick<TranslationSource, "itemID" | "libraryID" | "itemKey">) {
+  return source.itemID === current.itemID && (source.libraryID === undefined && !source.itemKey
+    || source.libraryID === current.libraryID && source.itemKey === current.itemKey)
+}
+export function renderDocumentHistory(root: HTMLElement, host: ZoteroLike, openSource: (record: TranslationRecord) => Promise<unknown>, taskID?: string, selectionSource?: Pick<TranslationSource, "itemID" | "libraryID" | "itemKey">) {
   const existing = histories.get(root)
-  if (existing) { if (taskID) existing.open(taskID); else existing.refresh(); return }
-  prepare(root, host)
-  const doc = root.ownerDocument, jobs = documentJobs(host)
+  if (existing) { if (taskID) existing.open(taskID); else existing.refresh(); return existing.remove }
+  const stopTheme = prepare(root, host)
+  const doc = root.ownerDocument, jobs = selectionSource ? undefined : documentJobs(host)
   let selected: string | undefined, stopDetail = () => {}, savedScroll = 0
+  const toolbar = node(doc, "div", undefined, "jdx-history-toolbar")
+  const search = node(doc, "input"); search.type = "search"; search.placeholder = uiText("文献标题、引用信息、原文或译文", "Paper title, citation, source or translation")
+  const searchLabel = node(doc, "label", uiText("搜索翻译历史", "Search translations")); searchLabel.append(search)
+  const type = node(doc, "select"), period = node(doc, "select")
+  for (const [value, title] of [["all", uiText("全部类型", "All types")], ["full", uiText("全文", "Full PDF")], ["selection", uiText("选文", "Selection")]]) { const option = node(doc, "option", title); option.value = value; type.append(option) }
+  for (const [value, title] of [["0", uiText("全部时间", "All time")], ["7", uiText("最近 7 天", "Last 7 days")], ["30", uiText("最近 30 天", "Last 30 days")], ["90", uiText("最近 90 天", "Last 90 days")]]) { const option = node(doc, "option", title); option.value = value; period.append(option) }
+  const typeLabel = node(doc, "label", uiText("翻译类型", "Type")); typeLabel.append(type)
+  const periodLabel = node(doc, "label", uiText("时间范围", "Date")); periodLabel.append(period)
+  const clear = button(doc, uiText("清除筛选", "Clear filters"), () => { search.value = ""; type.value = "all"; period.value = "0"; refresh(); search.focus() })
+  typeLabel.hidden = Boolean(selectionSource)
+  toolbar.append(searchLabel, typeLabel, periodLabel, clear)
+  const count = node(doc, "div", undefined, "jdx-history-count"); count.setAttribute("role", "status")
+  const list = node(doc, "div", undefined, "jdx-history-list")
+  root.removeAttribute("aria-live")
   const refresh = () => {
     if (selected) return
     root.classList.remove("jdx-history-detail")
     const expanded = new Set(Array.from(root.querySelectorAll<HTMLDetailsElement>("details[open][data-record]")).map(row => row.dataset.record))
-    const records = host.Prefs ? readTranslationHistory(host.Prefs).records : []
-    root.replaceChildren()
-    const rows = [...records.map(record => ({ date: record.createdAt, selection: record, task: undefined })), ...jobs.list("translation").map(task => ({ date: task.createdAt, task, selection: undefined }))].sort((a, b) => b.date.localeCompare(a.date))
-    if (!rows.length) root.append(node(doc, "p", uiText("还没有翻译记录", "No translations yet")))
-    for (const row of rows) {
+    const records = (host.Prefs ? readTranslationHistory(host.Prefs).records : []).filter(record => !selectionSource || matchesTranslationSource(record.source, selectionSource))
+    if (!root.contains(toolbar)) root.replaceChildren(toolbar, count, list)
+    list.replaceChildren()
+    const rows = [...records.map(record => ({ date: record.createdAt, selection: record, task: undefined })), ...(jobs?.list("translation") ?? []).map(task => ({ date: task.createdAt, task, selection: undefined }))].sort((a, b) => b.date.localeCompare(a.date))
+    const filtered = rows.filter(row => matchesTranslationHistory((row.task || row.selection)!, search.value, type.value, Number(period.value)))
+    clear.disabled = !search.value && type.value === "all" && period.value === "0"
+    count.textContent = uiText(`${filtered.length} 条记录 · 共 ${rows.length} 条`, `${filtered.length} of ${rows.length} translations`)
+    if (!filtered.length) list.append(node(doc, "div", rows.length ? uiText("没有匹配的翻译记录，请尝试其他关键词或清除筛选。", "No matching translations. Try another keyword or clear filters.") : uiText("还没有翻译记录。在 PDF 阅读器中翻译后，可在这里回看。", "No translations yet. Translate in the PDF reader to see your history here."), "jdx-history-empty"))
+    for (const row of filtered) {
       if (row.task) {
         const task = row.task, article = node(doc, "article", undefined, "jdx-history-row")
         const openButton = button(doc, "", () => open(task.id)); openButton.className = "jdx-history-summary"
         openButton.append(node(doc, "span", uiText("全文", "Full PDF")), node(doc, "strong", task.source.title), node(doc, "small", `${task.languages ? `${translationLanguageLabel(task.languages.sourceLanguage)} → ${translationLanguageLabel(task.languages.targetLanguage)} · ` : ""}${taskStatus(task)} · ${new Date(task.createdAt).toLocaleString()}`))
-        article.append(openButton); root.append(article)
+        article.append(openButton); list.append(article)
       } else if (row.selection) {
         const record = row.selection, article = node(doc, "details", undefined, "jdx-history-row"); article.dataset.record = record.id; article.open = expanded.has(record.id)
         const summary = node(doc, "summary", undefined, "jdx-history-summary")
-        summary.append(node(doc, "span", uiText("选文", "Selection")), node(doc, "strong", record.source.title || "PDF"), node(doc, "small", `${record.result.sourceLanguage} → ${record.result.targetLanguage} · ${record.source.pageLabel || ""} · ${new Date(record.createdAt).toLocaleString()}`))
+        summary.append(node(doc, "span", uiText("选文", "Selection")), node(doc, "strong", record.source.title || "PDF"), node(doc, "small", `${record.result.sourceLanguage} → ${record.result.targetLanguage}${record.source.pageLabel ? uiText(` · 第 ${record.source.pageLabel} 页`, ` · Page ${record.source.pageLabel}`) : ""} · ${new Date(record.createdAt).toLocaleString()}`), node(doc, "div", record.source.text.replace(/\s+/gu, " ").slice(0, 180), "jdx-history-preview"))
         const original = node(doc, "p", record.source.text, "jdx-document-original"), result = node(doc, "div", undefined, "jdx-markdown")
         updateChatMarkdown(result, record.result.text)
         const state = node(doc, "p")
         const sourceTitle = button(doc, record.source.title || uiText("打开原文", "Open original"), async () => { try { const value = await openSource(record); if (value === false) state.textContent = uiText("原附件不可用", "Original attachment unavailable") } catch (error) { state.textContent = errorText(error) } })
         sourceTitle.className = "jdx-translation-title"
         sourceTitle.setAttribute("aria-label", uiText("在 Zotero 阅读器中打开原文", "Open original in Zotero Reader"))
-        article.append(summary, original, result, sourceTitle, button(doc, uiText("复制译文", "Copy translation"), async () => { try { await copy(host, record.result.text); state.textContent = uiText("已复制", "Copied") } catch (error) { state.textContent = errorText(error) } }), state)
-        root.append(article)
+        const body = node(doc, "div", undefined, "jdx-history-body"), columns = node(doc, "div", undefined, "jdx-history-columns")
+        const sourceColumn = node(doc, "section"), resultColumn = node(doc, "section")
+        sourceColumn.append(node(doc, "h4", uiText("原文", "Source")), original); resultColumn.append(node(doc, "h4", uiText("译文", "Translation")), result); columns.append(sourceColumn, resultColumn)
+        sourceTitle.textContent = uiText("打开原文", "Open original")
+        const actions = node(doc, "div", undefined, "jdx-history-actions")
+        state.setAttribute("role", "status")
+        actions.append(sourceTitle, button(doc, uiText("复制译文", "Copy translation"), async () => { try { await copy(host, record.result.text); state.textContent = uiText("已复制", "Copied") } catch (error) { state.textContent = errorText(error) } }), state)
+        body.append(columns, actions); article.append(summary, body)
+        list.append(article)
       }
     }
   }
+  search.addEventListener("input", refresh); type.addEventListener("change", refresh); period.addEventListener("change", refresh)
   const open = (id: string) => {
-    const task = jobs.get(id); if (!task) return
+    const task = jobs?.get(id); if (!task || !jobs) return
     if (!selected) savedScroll = root.scrollTop
     selected = id; stopDetail(); root.replaceChildren()
     const back = button(doc, uiText("← 翻译历史", "← Translation history"), () => { selected = undefined; stopDetail(); refresh(); root.scrollTop = savedScroll })
@@ -319,9 +377,19 @@ export function renderDocumentHistory(root: HTMLElement, host: ZoteroLike, openS
     root.classList.add("jdx-history-detail"); root.style.setProperty("--jdx-history-top", `${root.getBoundingClientRect().top + 24}px`)
     root.append(header, detail); stopDetail = mountFullTranslation(detail, host, id, open)
   }
-  histories.set(root, { refresh, open }); const stop = jobs.subscribe(refresh)
-  doc.defaultView?.addEventListener("unload", () => { stop(); stopDetail() }, { once: true })
-  void jobs.ready.then(() => { if (taskID) open(taskID); else refresh() })
+  const stop = jobs?.subscribe(refresh)
+  let observer: unknown
+  try { observer = host.Prefs?.registerObserver?.(TRANSLATION_HISTORY_PREF_KEY, refresh) } catch { /* 手动刷新仍可用。 */ }
+  const remove = () => {
+    stop?.(); stopDetail(); stopTheme(); histories.delete(root)
+    if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer)
+    doc.defaultView?.removeEventListener("unload", remove)
+  }
+  histories.set(root, { refresh, open, remove })
+  doc.defaultView?.addEventListener("unload", remove, { once: true })
+  refresh()
+  if (jobs) void jobs.ready.then(() => { if (!histories.has(root)) return; if (taskID) open(taskID); else refresh() })
+  return remove
 }
 
 /** 兼容旧引用组件路径，引用展示不再与翻译窗口共用样式或生命周期。 */

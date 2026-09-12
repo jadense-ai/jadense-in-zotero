@@ -68,6 +68,16 @@ describe("buildManifest", () => {
     })
     expect(buildManifest(releaseFacts(), "0.1.1")).not.toHaveProperty("icons")
   })
+
+  it("passes through the default locale for localized manifest metadata", () => {
+    const facts = releaseFacts()
+    facts.manifest = { ...facts.manifest, default_locale: "zh" } as typeof facts.manifest
+
+    expect(buildManifest(facts, "0.1.1")).toMatchObject({
+      default_locale: "zh",
+      description: "Sync literature metadata between Zotero and Jadense favorites.",
+    })
+  })
 })
 
 describe("release checksum", () => {

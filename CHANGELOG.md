@@ -1,6 +1,27 @@
 # 更新说明 / Changelog
 
 
+## 0.4.4 — 2026-09-12
+
+### 简体中文
+
+- 优化工作台顶部导航与聊天模型选择，让对话、翻译历史、文献解析和连接设置之间的切换更清晰；可继续跟随攻玉账号默认模型，也可为当前对话明确选择模型。
+- 提升全文翻译在跨章节、长段落和不同上下文容量下的稳定性：只在请求内部拆分超长内容，阅读与定位仍对应完整原文段落，已有译文可继续恢复。
+- 优化阅读工作区与管理界面的响应式布局、提示和上手引导，保留选文工具条的完整文字与宿主内容宽度适配。
+
+从 GitHub 0.4.3 可直接安装更新，保留设置和历史；旧 .com 身份需先禁用再安装。攻玉 AI 需要服务端临时执行 V1 协议，旧服务端会提示升级；本客户端发布不代表生产服务已部署。BYOK 独立可用。GitHub 发布不推进官网自动更新。
+
+### English
+
+- Clarify the workbench navigation and chat model selection, making it easier to move between Chat, translation history, literature analysis, and connection settings. Chat can still follow the Jadense account default or use an explicit model for the current conversation.
+- Improve full-translation stability across sections, long paragraphs, and different context capacities: oversized content is split only inside requests, while reading and source navigation continue to correspond to complete original paragraphs and completed translations remain recoverable.
+- Refine responsive layouts, notices, and the getting-started guide across the reader workspace and Manager while preserving full selection-toolbar labels and host-width containment.
+
+Install over GitHub 0.4.3 to retain settings and history. Disable legacy .com builds first. Jadense AI requires the temporary-execution V1 server protocol; older servers show an upgrade message. This client release does not establish production server readiness. BYOK remains independent. Website automatic updates are unchanged.
+
+Validation and final package checksum: [v0.4.4 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4).
+
+
 ## 0.4.3 — 2026-09-11
 
 ### 简体中文

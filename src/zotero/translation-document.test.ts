@@ -14,6 +14,18 @@ function fixture(pages: PdfTextDocument["pages"]): PdfTextDocument {
   return { source: { itemID: 1, libraryID: 1, itemKey: "PDF", title: "Scientific study" }, pages }
 }
 describe("translation reading order and semantic paragraphs", () => {
+  it("uses the normal baseline spacing despite small font changes and sentence endings", () => {
+    const result = prepareTranslationDocument(fixture([page(0, [
+      ["A full line completes a sentence.", 30, 700, 240, 10],
+      ["The same natural paragraph continues", 30, 678, 240, 12.6],
+      ["with the complete supporting evidence.", 30, 656, 240, 10],
+      ["A new indented paragraph.", 44, 634, 200, 10],
+    ])]))
+    expect(result.pages[0].paragraphs.map(row => row.text)).toEqual([
+      "A full line completes a sentence. The same natural paragraph continues with the complete supporting evidence.",
+      "A new indented paragraph.",
+    ])
+  })
   it("recovers geometry-only wraps without fragmenting vertical marginal identifiers", () => {
     const chars = [
       ...[..."A complete scientific argument continues"].map((c, i) => ({ c, rect: [30 + i * 5, 680, 35 + i * 5, 690] })),

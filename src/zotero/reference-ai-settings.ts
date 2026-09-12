@@ -16,7 +16,7 @@ export function wireReferenceAISetting(host: ZoteroLike, root: HTMLElement | nul
   const text = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span')
   text.textContent = uiText('AI 参与参考文献识别', 'Use AI for reference identification')
   const help = doc.createElementNS('http://www.w3.org/1999/xhtml', 'p')
-  help.textContent = uiText('默认关闭。开启后，新任务批量发送待识别参考文献，可能消耗积分；原文与非 AI 核验始终保留。', 'Off by default. New tasks send uncertain references in batches and may consume points. Source text and non-AI verification are preserved.')
+  help.textContent = uiText('默认关闭。始终先在本机提取并按 DOI 或标题查询；开启后仅将仍未解决的待定片段发送给 AI，可能消耗积分，不影响已匹配文献的使用。', 'Off by default. Extraction and DOI or title lookup run locally first. AI only receives unresolved fragments, may consume points, and does not gate matched publications.')
   label.append(control, text, help); root.insertBefore(label, root.querySelector('.jdx-temporary-recovery'))
   const sync = () => { control.checked = referenceAIEnabled(host) }
   control.addEventListener('change', () => { try { host.Prefs?.set(REFERENCE_AI_PREF, control.checked, true) } finally { sync() } })

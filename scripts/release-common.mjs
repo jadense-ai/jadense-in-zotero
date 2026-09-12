@@ -98,11 +98,13 @@ export function buildManifest(facts, version) {
   const sourceManifest = requireObject(facts.manifest, "release-facts.json manifest")
   const zotero = zoteroManifestFacts(facts)
   const icons = optionalManifestIcons(sourceManifest.icons)
+  const defaultLocale = optionalString(sourceManifest.default_locale)
   return {
     manifest_version: requireManifestVersion(sourceManifest.manifest_version),
     name: requireString(sourceManifest.name, "release-facts.json manifest.name"),
     version: requireString(version, "package.json version"),
     description: requireString(sourceManifest.description, "release-facts.json manifest.description"),
+    ...(defaultLocale ? { default_locale: defaultLocale } : {}),
     homepage_url: requireString(sourceManifest.homepage_url, "release-facts.json manifest.homepage_url"),
     ...(icons ? { icons } : {}),
     applications: {

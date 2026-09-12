@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { appendPaperAnalysisRecord, readPaperAnalysisHistory } from "@/chat/paper-analysis-history"
 import type { PdfAnalysisSnapshot, SavedAnalysisAnnotations } from "./reader-tools"
 import type { ZoteroLike } from "./runtime"
+import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from "./ai-settings"
 import {
   PAPER_ANALYSIS_MISSING_SUMMARY,
   paperAnalysisModelState,
@@ -10,7 +11,7 @@ import {
 } from "./paper-analysis-runner"
 
 function fakeZotero(options: { token?: string; analysisModel?: unknown; byok?: unknown } = {}) {
-  const values = new Map<string, unknown>()
+  const values = new Map<string, unknown>([[AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, false]])
   if (options.token) values.set("extensions.jadenseInZotero.token", options.token)
   if (options.analysisModel !== undefined) values.set("extensions.jadenseInZotero.paperAnalysisModel", JSON.stringify(options.analysisModel))
   if (options.byok !== undefined) values.set("extensions.jadenseInZotero.byokConfig", JSON.stringify(options.byok))

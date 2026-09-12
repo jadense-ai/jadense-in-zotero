@@ -1,6 +1,21 @@
 /** 浮窗交互的合成几何回归：覆盖标题拖动、四边缩放、视口约束、键盘等价操作和卸载。 */
 import { describe, expect, it, vi } from "vitest"
-import { makeTranslationWindowInteractive, translationGlassBackground } from "./document-ui"
+import { makeTranslationWindowInteractive, translationGlassBackground, matchesTranslationHistory, matchesTranslationSource } from "./document-ui"
+import type { TranslationRecord } from "@/chat/translation-history"
+import type { DocumentTask } from "./document-store"
+
+it("filters local translation history by normalized keywords, type and inclusive date range", () => {
+  const now = Date.parse("2026-09-11T12:00:00Z")
+  const record: TranslationRecord = { id: "selection", createdAt: "2026-09-04T12:00:00Z", source: { itemID: 1, title: "Frequency Comb", citation: "Ada 2026", text: "光谱原文", itemKey: "PDF001" }, result: { sourceLanguage: "en", targetLanguage: "zh", text: "翻译结果" } }
+  expect(matchesTranslationHistory(record, "  ＦＲＥＱＵＥＮＣＹ ada 翻译  ", "selection", 7, now)).toBe(true)
+  expect(matchesTranslationHistory(record, "PDF001 光谱", "all", 0, now)).toBe(true)
+  expect(matchesTranslationHistory(record, "comb missing", "all", 0, now)).toBe(false)
+  expect(matchesTranslationHistory(record, "", "full", 0, now)).toBe(false)
+  expect(matchesTranslationHistory(record, "", "all", 7, now + 1)).toBe(false)
+  const task = { source: { itemID: 1, title: "Frequency Comb", itemKey: "PDF001" }, createdAt: record.createdAt } as DocumentTask
+  expect(matchesTranslationHistory(task, "comb", "full", 30, now)).toBe(true)
+  expect(matchesTranslationHistory(task, "", "selection", 0, now)).toBe(false)
+})
 
 class TestDocument extends EventTarget {
   defaultView = Object.assign(new EventTarget(), { innerWidth: 1000, innerHeight: 800 })
@@ -143,4 +158,15 @@ describe("shared translation floating geometry", () => {
     expect(root.children).toEqual([])
     expect(register.mock.calls[3][1]).toBeNull()
   })
+})
+
+/** 不同附件、文库与复用 ID 不混入当前 PDF；旧记录兼容本地 ID。 */
+it("scopes selection history to the current PDF attachment", () => {
+  const current = { itemID: 42, libraryID: 1, itemKey: "PDF42" }
+  const source = { ...current, text: "selected text" }
+  expect(matchesTranslationSource(source, current)).toBe(true)
+  expect(matchesTranslationSource({ ...source, itemID: 43 }, current)).toBe(false)
+  expect(matchesTranslationSource({ ...source, libraryID: 2 }, current)).toBe(false)
+  expect(matchesTranslationSource({ ...source, itemKey: "OTHER" }, current)).toBe(false)
+  expect(matchesTranslationSource({ itemID: 42, text: "legacy" }, current)).toBe(true)
 })
