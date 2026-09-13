@@ -36,7 +36,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**未发布源码更新：**选文浮窗记住位置和大小，可改为跟随选文；支持可选的自动翻译或引用到新侧栏对话；新增 OCR 模型下载源和更新提示。这些改动尚未包含在 v0.4.7 下载包中，见[操作与配置说明](docs/usage-guide.md#unreleased-settings)。
+**v0.4.8 待发布：**新增可选选文 OCR，优化文字提取，包含选文浮窗位置记忆、自动选文操作、OCR 下载源与更新提示。验收完成后公开，见[操作与配置](docs/usage-guide.md#unreleased-settings)。
 
 <a id="requirements"></a>
 
@@ -46,7 +46,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 - **宿主程序**：需要 [Zotero 桌面版 8.0–10.0.*](https://www.zotero.org/download/)。自动识别 PDF 图片需要 Zotero 10.0.1 及以上版本的兼容 PDF 阅读器。
 - **AI 接入**：要使用 AI 功能，需要配置一种 AI 服务。可以使用 [BYOK 自带 API Key](docs/usage-guide.md#byok-provider)（Provider 的 API Key、Base URL 和模型 ID，不需要攻玉账号），也可以[连接攻玉学术](docs/usage-guide.md#connect)（攻玉账号和插件令牌）。模型调用费用按所选服务商或攻玉账号规则计算。
-- **本机 OCR**：问答、选文翻译等功能不需要 Python；[全文翻译和全文 Markdown 提取](docs/local-ocr.md)需要在本机安装 OCR 运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
+- **本机 OCR**：问答和默认选文翻译不需要 Python；可选选文 OCR 与[全文翻译和全文 Markdown 提取](docs/local-ocr.md)需要在本机安装 OCR 运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
 - **插件之外的文献工具**：Zotero Connector 不是本插件的依赖；它只负责从浏览器收集文献，是否安装不影响本插件在 Zotero 中阅读本地文献和 PDF。
 
 ### 当前可用的安装方式
@@ -56,7 +56,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.7.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.7/jadense-in-zotero-v0.4.7.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.8/jadense-in-zotero-v0.4.8.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 

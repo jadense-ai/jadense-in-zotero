@@ -1,4 +1,4 @@
-/** 全文专用本机 OCR：管理插件自己的 Python 环境和进程，其他功能不依赖此服务。 */
+/** 本机 OCR：管理独立 Python 环境；全文及显式开启的选文增强使用该服务。 */
 import type { ZoteroLike } from './runtime'
 import { checkCancelled, validateDocument, type DocumentHost, type PdfTextDocument, type PdfRect } from './pdf-document'
 import { uiText } from './ui-preferences'
@@ -16,6 +16,46 @@ const windows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platfor
 const network = (host: ZoteroLike) => { const win = host.getMainWindow?.(); return win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis) }
 
 export const OCR_MODEL_SOURCE_PREF = 'extensions.jadenseInZotero.ocrModelSource'
+export const OCR_SELECTION_PREF = 'extensions.jadenseInZotero.ocrSelection'
+/** 默认关闭；损坏或未知配置不能让普通选文依赖 OCR。 */
+export function readSelectionOCR(host: ZoteroLike): boolean {
+  try { return host.Prefs?.get(OCR_SELECTION_PREF, true) === true } catch { return false }
+}
+
+export type OCRSelectionRegion = { pageIndex: number; rects: number[][] }
+
+/** 复用附件校验和本机服务；选区任务只返回正文与公式 Markdown，不保存全文成果。 */
+export async function readOCRSelection(host: ZoteroLike, itemID: number, regions: OCRSelectionRegion[], signal: AbortSignal, progress: (text: string) => void): Promise<string> {
+  const item = await (host as unknown as DocumentHost).Items?.get?.(itemID) as { libraryID: number; key: string; attachmentModificationTime?: number | Promise<number>; getFilePathAsync(): Promise<string> } | undefined
+  const source = { itemID, libraryID: item?.libraryID ?? -1, itemKey: item?.key ?? '', title: 'PDF', modificationTime: await item?.attachmentModificationTime }
+  await validateDocument(host as unknown as DocumentHost, source); checkCancelled(signal)
+  const local = await service(host, progress); checkCancelled(signal)
+  const request = async (path: string, init?: RequestInit) => {
+    const response = await network(host)(local.url + path, { ...init, credentials: 'omit', headers: { Authorization: `Bearer ${local.token}`, ...init?.headers } })
+    if (!response.ok) throw new Error(`Selection OCR (${response.status})`)
+    return response.json()
+  }
+  const bytes = await platform().IOUtils.read(await item!.getFilePathAsync!()); checkCancelled(signal)
+  const job = await request('/selection-jobs', { method: 'POST', body: bytes as unknown as BodyInit,
+    headers: { 'X-Jadense-OCR-Model-Source': readOCRModelSource(host), 'X-Jadense-OCR-Selection': JSON.stringify(regions) } })
+  const cancel = () => { void request(`/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}) }
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    if (signal.aborted) { cancel(); checkCancelled(signal) }
+    for (;;) {
+      const status = await request(`/jobs/${job.id}`, { signal }); checkCancelled(signal)
+      if (status.state === 'complete') {
+        await validateDocument(host as unknown as DocumentHost, source); checkCancelled(signal)
+        const text = typeof status.result?.text === 'string' ? status.result.text.trim() : ''
+        if (!text) throw new Error('Selection OCR returned no text')
+        return text
+      }
+      if (status.state === 'error' || status.state === 'cancelled') throw new Error(String(status.error || 'Selection OCR cancelled'))
+      progress(uiText('正在 OCR 提取选文与公式，首次使用需要下载模型…', 'Extracting selected text and formulas with OCR; first use downloads models…'))
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  } finally { signal.removeEventListener('abort', cancel) }
+}
 /** 未知偏好沿用宿主环境；镜像必须由用户明确选择。 */
 export function readOCRModelSource(host: ZoteroLike): 'default' | 'hf-mirror' {
   try { return host.Prefs?.get(OCR_MODEL_SOURCE_PREF, true) === 'hf-mirror' ? 'hf-mirror' : 'default' } catch { return 'default' }

@@ -218,10 +218,16 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 
 <a id="unreleased-settings"></a>
 
-## 未发布源码：选文与 OCR 配置 / Unreleased settings
+## 0.4.8：选文与 OCR 配置 / Selection and OCR settings
 
-以下功能尚未包含在 v0.4.7 正式安装包中。选文浮窗的外观菜单可切换记住位置/跟随选文，以及等待操作、自动翻译、引用到新侧栏对话；引用只填入草稿，不自动发送。
+以下功能随 0.4.8 提供，当前候选版待发布。选文浮窗的外观菜单可切换记住位置/跟随选文；「设置 → 功能配置 → 选中文本」可选择等待、自动翻译或引用到新侧栏对话。引用只填入草稿，不自动发送。
 
 在「设置 → OCR」选择「OCR 模型下载源」。默认使用 Hugging Face（或环境地址）；连接超时时可选第三方 HF-Mirror，然后重新点击全文翻译，无需重装或重启。只从该来源下载公开模型，PDF 仍在本机识别；正在运行的任务不变。
 
-These source-only options are not in v0.4.7. Use the selection window appearance menu to change positioning and selection actions. Quoting creates a draft without sending it. Under Settings → OCR, select the model download source and retry full translation; no reinstall or restart is needed. The optional third-party mirror downloads public models while PDF recognition stays local.
+These options are included in the 0.4.8 candidate, pending release. Use the selection window appearance menu to change positioning, and Settings → Feature configuration → Selected text to choose selection actions. Quoting creates a draft without sending it. Under Settings → OCR, select the model download source and retry full translation; no reinstall or restart is needed. The optional third-party mirror downloads public models while PDF recognition stays local.
+
+在「设置 → 功能配置 → 选中文本」设置选文后的操作；默认等待。勾选「OCR增强选中文本内容提取」后，引用或翻译前在本机识别选区文字与公式。默认关闭，直接使用改进后的 PDF 文字层。首次使用需要 OCR 依赖和模型；失败时提示并使用原选文，可在「设置 → OCR配置」检查安装状态与下载源。切换开关不会重新处理已有选文或历史。公式识别仍需人工核对。
+
+Under Settings → Feature configuration → Selected text, choose the selection action (Wait by default) and optionally enable OCR-enhanced extraction. OCR runs locally before quoting or translating; first use needs dependencies and models. Failure shows a notice and uses the original selection. Check installation and download source under OCR configuration. Changing the setting does not reprocess existing selections or history. Verify recognized formulas against the PDF.
+
+![选文浮窗外观与定位设置](images/guide-selection-settings.png)

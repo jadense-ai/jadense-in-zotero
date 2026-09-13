@@ -1,12 +1,28 @@
 """本机 OCR 投影的轻量回归，不下载模型、不启动网络服务。"""
 import unittest
-from server import formula_text, normalize_document, model_environment
+from server import formula_text, normalize_document, model_environment, selection_regions, selection_image
 from unittest.mock import patch
 import os
 from types import SimpleNamespace
 
 
 class FormulaTests(unittest.TestCase):
+    def test_selection_scope_accepts_additive_fields_but_never_defaults_to_full_page(self):
+        region = {"pageIndex": 1, "rects": [[1, 2, 5, 8]]}
+        self.assertEqual(selection_regions([{**region, "extra": "ignored"}]), [region])
+        for value in (None, [], [{"pageIndex": 0, "rects": []}], [{"pageIndex": 0, "rects": [[0, 0, float("nan"), 4]]}]):
+            with self.assertRaises(ValueError):
+                selection_regions(value)
+
+    def test_selection_masks_unselected_pixels_between_regions(self):
+        from PIL import Image
+        source = Image.new("RGB", (100, 100), "black")
+        image = selection_image(source, 100, 100, [[10, 70, 20, 80], [40, 50, 50, 60]])
+        self.assertEqual(image.size, (40, 30))
+        self.assertEqual(image.getpixel((0, 0)), (0, 0, 0))
+        self.assertEqual(image.getpixel((20, 10)), (255, 255, 255))
+        self.assertEqual(image.getpixel((39, 29)), (0, 0, 0))
+
     def test_model_download_source_is_per_job_and_preserves_cache(self):
         """只改变显式镜像任务的下载地址，未知值沿用用户环境及模型缓存。"""
         with patch.dict(os.environ, {"HF_ENDPOINT": "https://configured.invalid", "HF_HOME": "/existing/models", "HF_HUB_DOWNLOAD_TIMEOUT": "300"}, clear=True):

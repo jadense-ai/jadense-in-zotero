@@ -1,4 +1,6 @@
 import { silentlyCheckForUpdates } from './update-notification'
+import { enhanceSelection } from './selection-ocr'
+import type { OCRSelectionRegion } from './local-ocr'
 import { openChatSidebar } from "./reader-sidebar"
 import { SELECTION_PREF, readSelectionPreferences, saveSelectionPreferences } from './selection-preferences'
 // Zotero 阅读器适配层：本地 PDF 字符坐标 -> 可引用原句 -> 原生批注；AI 只返回原句 ID。
@@ -53,7 +55,7 @@ type PdfSelectionRange = {
   anchorOffset?: number
   headOffset?: number
   text?: string
-  position?: { pageIndex?: number }
+  position?: { pageIndex?: number; rects?: number[][] }
 }
 type ReaderPdfView = {
   initializedPromise?: Promise<unknown>
@@ -621,6 +623,11 @@ function normalizeSelectedText(text: string): string {
   return text.replace(/\s+/gu, " ").trim()
 }
 
+/** 仅展开 Unicode 标准拉丁连字；不能对整段做 NFKC，否则会抹掉上下标等数学语义。 */
+function normalizeSelectionLigatures(text: string): string {
+  return text.replace(/[\uFB00-\uFB06]/gu, glyph => glyph.normalize('NFKD'))
+}
+
 function charRect(char: PdfChar): number[] | undefined {
   const rect = char.rect
   return rect?.length === 4 && rect.every(Number.isFinite) && rect[2] > rect[0] && rect[3] > rect[1]
@@ -642,7 +649,7 @@ function selectedCharsText(chars: readonly PdfChar[], replacements?: ReadonlyMap
 
 /**
  * PDF 弹窗文本会丢掉字号和基线；只在活动 range 与弹窗文本完全对应时，
- * 用仍在 reader 页缓存中的字形几何恢复 Unicode 上下标。证据不足时保留原文。
+ * 用仍在 reader 页缓存中的字形几何恢复 Unicode 上下标及剔除精确重复叠印。证据不足时保留原文。
  */
 function enrichSelectionScripts(annotationText: string, view?: ReaderPdfView): string {
   const ranges = view?._selectionRanges
@@ -666,6 +673,7 @@ function enrichSelectionScripts(annotationText: string, view?: ReaderPdfView): s
     if (range.text && normalizeSelectedText(range.text) !== normalizeSelectedText(plainText)) return annotationText
 
     const replacements = new Map<PdfChar, string>()
+    const seenGlyphs = new Set<string>()
     let line: PdfChar[] = []
     const recoverLine = () => {
       const measured = line.flatMap((char) => {
@@ -695,7 +703,12 @@ function enrichSelectionScripts(annotationText: string, view?: ReaderPdfView): s
       }
     }
     for (const char of chars) {
-      line.push(char)
+      // 只合并同页、同字、同矩形和同字号/基线的叠印；不同位置的 ff、1111 或公式字符不删。
+      const rect = charRect(char)
+      const key = rect && !char.ignorable && (char.rotation === undefined || char.rotation === 0)
+        ? JSON.stringify([char.c, rect, char.fontSize, char.baseline]) : undefined
+      if (key && seenGlyphs.has(key)) replacements.set(char, '')
+      else { if (key) seenGlyphs.add(key); line.push(char) }
       if (char.lineBreakAfter || char.paragraphBreakAfter) { recoverLine(); line = [] }
     }
     if (line.length) recoverLine()
@@ -717,12 +730,36 @@ function selectedAction(kind: ReaderToolbarAction["kind"], reader: ReaderInstanc
   if (typeof annotation?.text === "string" && annotation.text.trim()) {
     const text = annotation.text.trim()
     const activeView = primary ? internal?._primaryView : internal?._secondaryView
-    action.text = kind === "translate" ? enrichSelectionScripts(text, activeView) : text
+    action.text = normalizeSelectionLigatures(enrichSelectionScripts(text, activeView))
+    // 异步 OCR 前保存副本；只在 range 文本与当前 popup 一致时使用多页坐标。
+    const regions: OCRSelectionRegion[] = []
+    const rangeTexts: string[] = []
+    for (const range of activeView?._selectionRanges ?? []) {
+      const pageIndex = range.position?.pageIndex
+      const start = Math.min(range.anchorOffset ?? -1, range.headOffset ?? -1)
+      const end = Math.max(range.anchorOffset ?? -1, range.headOffset ?? -1)
+      const page = pageIndex === undefined ? undefined : activeView?._pdfPages?.[pageIndex]
+      if (!page || !Number.isInteger(pageIndex) || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > page.chars.length) { regions.length = 0; break }
+      const chars = page.chars.slice(start, end)
+      const plain = selectedCharsText(chars)
+      if (range.text && normalizeSelectedText(range.text) !== normalizeSelectedText(plain)) { regions.length = 0; break }
+      const rects = range.position?.rects?.length && range.position.rects.every(validRect)
+        ? range.position.rects : chars.filter(char => !char.ignorable).map(charRect)
+      if (rects.some(rect => !rect)) { regions.length = 0; break }
+      regions.push({ pageIndex: pageIndex!, rects: rects.map(rect => [...rect!]) }); rangeTexts.push(plain)
+    }
+    if (regions.length && normalizeSelectedText(rangeTexts.join(' ')) === normalizeSelectedText(text)) selectionRegions.set(action, regions)
+    else if (!activeView?._selectionRanges?.length && Number.isInteger(annotation.position?.pageIndex)
+      && annotation.position?.rects?.length && annotation.position.rects.every(validRect)) {
+      selectionRegions.set(action, [{ pageIndex: annotation.position.pageIndex!, rects: annotation.position.rects.map(rect => [...rect]) }])
+    }
   }
   if (Number.isInteger(annotation?.position?.pageIndex)) action.pageIndex = annotation!.position!.pageIndex
   if (typeof annotation?.pageLabel === "string") action.pageLabel = annotation.pageLabel
   return action
 }
+
+const selectionRegions = new WeakMap<ReaderToolbarAction, OCRSelectionRegion[]>()
 
 // 样式只命中自有节点；自有主题变量支持显式浅深色和跟随 Zotero，不覆盖 PDF。
 const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
@@ -788,6 +825,9 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 .jadense-translation-content {min-height:0;overflow-y:auto;padding:12px;}
 .jadense-translation-label {margin:0 0 4px;color:var(--jdx-reader-muted,currentColor);font-size:calc(11px * var(--jdx-font-scale,1));font-weight:650;letter-spacing:.02em;}
 .jadense-translation-text {margin:0 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;}
+/* 覆盖阅读器宿主的禁选样式，原文和 Markdown 译文均允许原生拖选复制。 */
+[data-jadense-translation-panel] .jadense-translation-text,
+[data-jadense-translation-panel] .jadense-translation-text * {-moz-user-select:text;user-select:text;}
 .jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--jdx-reader-surface,rgba(17,21,16,.04));}
 .jadense-translation-result[data-error="true"] {color:var(--jdx-reader-error,#b42318);}
 .jadense-translation-result[data-error="false"] {white-space:normal;}
@@ -955,12 +995,15 @@ export function registerReaderTools(
   const toolbarMenus = new Map<HTMLElement, ReturnType<typeof bindReaderActionMenu>>()
   const selectionAnchors = new Map<Document, () => { left: number; top: number; bottom: number } | undefined>()
   const automaticSelections = new Map<Document, { key: string; group: HTMLElement; timer: ReturnType<typeof setTimeout> }>()
+  const selectionJobs = new Map<Document, AbortController>()
+  const preparedSelections = new WeakSet<ReaderToolbarAction>()
   const documents = new Map<Document, {
     show: (anchor: HTMLElement, text: string) => void
     hide: () => void
     dismiss: () => boolean
     beginTranslation: (selection: ReaderToolbarAction) => number
     setTranslationLanguages: (requestID: number, languages: TranslationLanguages) => boolean
+    setTranslationSource: (requestID: number, selection: ReaderToolbarAction) => boolean
     updateTranslation: (requestID: number, text: string) => void
     finishTranslation: (requestID: number, text: string, error?: boolean) => void
     remove: () => void
@@ -969,10 +1012,6 @@ export function registerReaderTools(
   }>()
   let active = true
   const refreshSettings = () => {
-    const settings = readSelectionPreferences(zotero)
-    for (const node of nodes) for (const select of Array.from(node.querySelectorAll<HTMLSelectElement>('select'))) {
-      if (select.hasAttribute('data-jadense-selection-behavior')) select.value = settings.behavior
-    }
     for (const entry of documents.values()) entry.refreshSettings()
   }
   let settingsObserver: unknown
@@ -1077,7 +1116,7 @@ export function registerReaderTools(
       notice.hidden = true
       notice.textContent = ""
     }
-    const closeTranslation = () => { translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
+    const closeTranslation = () => { selectionJobs.get(doc)?.abort(); translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
     const dismiss = () => {
       if (appearance.close()) return true
       for (const [node, menu] of toolbarMenus) if (node.ownerDocument === doc && menu.close()) return true
@@ -1105,7 +1144,11 @@ export function registerReaderTools(
     sentenceLanguages.target.addEventListener("change", changeSentenceLanguages)
     retranslate.addEventListener("click", () => {
       if (!translationSelection || retranslate.disabled) return
-      translate(doc, retranslate, { ...translationSelection, languages: sentenceLanguages.get() })
+      const next = { ...translationSelection, languages: sentenceLanguages.get() }
+      if (preparedSelections.has(translationSelection)) preparedSelections.add(next)
+      const regions = selectionRegions.get(translationSelection)
+      if (regions) selectionRegions.set(next, regions)
+      translate(doc, retranslate, next)
     })
     copyTranslation.addEventListener("click", () => {
       const value = translationError ? "" : translationMarkdown.trim()
@@ -1113,6 +1156,7 @@ export function registerReaderTools(
       void doc.defaultView?.navigator.clipboard?.writeText(value)
     })
     const remove = () => {
+      selectionJobs.get(doc)?.abort(); selectionJobs.delete(doc)
       clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc); selectionAnchors.delete(doc)
       hide()
       for (const [root, stop] of themeCleanups) if (root.ownerDocument === doc) { stop(); themeCleanups.delete(root) }
@@ -1139,7 +1183,7 @@ export function registerReaderTools(
       remove,
       beginTranslation: (selection: ReaderToolbarAction) => {
         translationRequestID += 1
-        translationSelection = { ...selection }
+        translationSelection = selection
         sourceText.textContent = selection.text ?? ""
         sentenceLanguages.set(selection.languages ?? DEFAULT_TRANSLATION_LANGUAGES)
         sentenceLanguages.disable(true)
@@ -1158,6 +1202,12 @@ export function registerReaderTools(
         if (requestID !== translationRequestID || translationPanel.hidden) return false
         sentenceLanguages.set(languages)
         sentenceLanguages.disable(false)
+        return true
+      },
+      setTranslationSource: (requestID: number, selection: ReaderToolbarAction) => {
+        if (requestID !== translationRequestID || translationPanel.hidden) return false
+        translationSelection = selection
+        sourceText.textContent = selection.text ?? ''
         return true
       },
       updateTranslation: (requestID: number, text: string) => {
@@ -1202,20 +1252,48 @@ export function registerReaderTools(
       return
     }
     feedback.hide()
+    selectionJobs.get(doc)?.abort()
+    const controller = new AbortController(); selectionJobs.set(doc, controller)
     const requestID = feedback.beginTranslation(selection)
+    controller.signal.addEventListener('abort', () => {
+      if (active && documents.has(doc)) feedback.finishTranslation(requestID, uiText('选文提取已取消；可重新翻译或选择新文本。', 'Selection extraction cancelled. Translate again or select new text.'), true)
+    }, { once: true })
     void Promise.resolve().then(async () => {
+      const prepared = preparedSelections.has(selection) ? selection : await enhanceSelection(zotero as unknown as ZoteroLike, selection,
+        selectionRegions.get(selection), controller.signal, text => feedback.updateTranslation(requestID, text), text => feedback.show(anchor, text))
+      if (controller.signal.aborted || !active || !documents.has(doc) || !feedback.setTranslationSource(requestID, prepared)) return undefined
+      if (prepared !== selection) preparedSelections.add(prepared)
+      const regions = selectionRegions.get(selection)
+      if (regions) selectionRegions.set(prepared, regions)
       const languages = selection.languages
         ? normalizeTranslationLanguages(selection.languages)
         : await readArticleTranslationLanguages(zotero, selection.itemID)
-      if (!active || !documents.has(doc)) return undefined
+      if (controller.signal.aborted || !active || !documents.has(doc)) return undefined
       if (!feedback.setTranslationLanguages(requestID, languages)) return undefined
-      return onAction({ ...selection, languages }, { onTranslationText: (text) => feedback.updateTranslation(requestID, text) })
+      if (selectionJobs.get(doc) === controller) selectionJobs.delete(doc)
+      return onAction({ ...prepared, languages }, { onTranslationText: (text) => feedback.updateTranslation(requestID, text) })
     }).then((result) => {
-      if (!active || !documents.has(doc)) return
+      if (controller.signal.aborted || !active || !documents.has(doc)) return
       feedback.finishTranslation(requestID, result && typeof result === "object" ? result.translation?.trim() ?? "" : "")
     }).catch((error) => {
+      if (controller.signal.aborted) return
       if (!active || !documents.has(doc)) return
       feedback.finishTranslation(requestID, error instanceof Error ? error.message : uiText("翻译未完成，请稍后重试。", "Translation did not complete. Please try again."), true)
+    })
+  }
+  /** 手动引用和自动引用共享 OCR 准备，旧选区或已关闭 Reader 的结果不得继续打开对话。 */
+  const quote = (doc: Document, anchor: HTMLElement, selection: ReaderToolbarAction, send: (value: ReaderToolbarAction) => unknown) => {
+    selectionJobs.get(doc)?.abort()
+    const controller = new AbortController(); selectionJobs.set(doc, controller)
+    const feedback = documentTools(doc)
+    void enhanceSelection(zotero as unknown as ZoteroLike, selection, selectionRegions.get(selection), controller.signal,
+      text => feedback.show(anchor, text), text => feedback.show(anchor, text)).then(value => {
+      if (!active || controller.signal.aborted || !documents.has(doc)) return
+      if (selectionJobs.get(doc) === controller) selectionJobs.delete(doc)
+      if (value !== selection) feedback.hide()
+      return send(value)
+    }).catch(error => {
+      if (active && !controller.signal.aborted && documents.has(doc)) feedback.show(anchor, error instanceof Error ? error.message : String(error))
     })
   }
   /** PDF iframe 不向外层冒泡键盘事件；跟随主视图/分屏加载并在卸载时解除监听。 */
@@ -1224,7 +1302,7 @@ export function registerReaderTools(
     if (shortcutCleanups.has(doc)) return
     const bindings = new Map<NonNullable<ReaderPdfView["_iframeWindow"]>, EventListener>()
     const reposition = () => documents.get(doc)?.reposition()
-    const clearSelection = () => { clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc) }
+    const clearSelection = () => { selectionJobs.get(doc)?.abort(); clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc) }
     let disposed = false
     const bind = (win: ReaderPdfView["_iframeWindow"], primary?: boolean) => {
       if (!win?.addEventListener || bindings.has(win)) return
@@ -1411,6 +1489,7 @@ export function registerReaderTools(
             translate(event.doc, anchor, selection)
             return
           }
+          if (selection.kind === 'quote') { quote(event.doc, anchor, selection, value => onAction(value)); return }
           void Promise.resolve().then(() => { if (active) return onAction(selection) })
             .catch(() => {
               if (active && documents.has(event.doc)) feedback.show(anchor, uiText("操作未完成，请稍后重试，或打开 Jadense 对话查看。", "The action did not complete. Try again or open Jadense Chat for details."))
@@ -1429,28 +1508,18 @@ export function registerReaderTools(
         const previous = automaticSelections.get(event.doc)
         if (previous?.key === key) previous.group = group
         if (previous?.key !== key) {
+          selectionJobs.get(event.doc)?.abort()
           clearTimeout(previous?.timer)
           const timer = setTimeout(() => {
             const currentGroup = automaticSelections.get(event.doc)?.group
             if (!active || !currentGroup?.isConnected || !selection.text) return
             const behavior = readSelectionPreferences(zotero).behavior
             if (behavior === 'translate') translate(event.doc, group, selection)
-            if (behavior === 'quote') void openChatSidebar(zotero as unknown as ZoteroLike, event.doc, selection.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource, { text: selection.text, pageIndex: selection.pageIndex, pageLabel: selection.pageLabel })
-              .catch(error => feedback.show(group, error instanceof Error ? error.message : String(error)))
+            if (behavior === 'quote') quote(event.doc, group, selection, value => openChatSidebar(zotero as unknown as ZoteroLike, event.doc, value.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource, { text: value.text!, pageIndex: value.pageIndex, pageLabel: value.pageLabel }))
           }, 350)
           automaticSelections.set(event.doc, { key, group, timer })
         }
       }
-      const behavior = event.doc.createElement('select')
-      behavior.setAttribute('data-jadense-selection-behavior', '')
-      behavior.setAttribute('aria-label', uiText('选中文本后', 'After selecting text'))
-      behavior.title = uiText('选中文本后', 'After selecting text')
-      for (const [value, label] of [['wait', uiText('等待', 'Wait')], ['translate', uiText('自动翻译', 'Translate automatically')], ['quote', uiText('自动引用到新对话', 'Quote in a new chat')]]) {
-        const option = event.doc.createElement('option'); option.value = value; option.textContent = label; behavior.append(option)
-      }
-      behavior.value = readSelectionPreferences(zotero).behavior
-      behavior.addEventListener('change', () => saveSelectionPreferences(zotero, { behavior: behavior.value as 'wait' | 'translate' | 'quote' }))
-      actionList.append(behavior)
       if (actionList !== group) toolbarMenus.set(group, bindReaderActionMenu(group, actionList, group.querySelector<HTMLButtonElement>(".jadense-reader-actions-toggle")!))
     }
     handlers.set(type, handler)

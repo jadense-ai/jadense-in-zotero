@@ -1,11 +1,22 @@
 # 更新说明 / Changelog
 
-## 未发布 / Unreleased
+## 0.4.8 — 待发布 / Pending release
 
-- 选文浮窗记住位置与大小，支持跟随选区；可配置自动翻译或引用到新侧栏对话，引用不会自动发送请求。
-- OCR 模型下载支持可选第三方 HF-Mirror，下载失败后可调整来源并重试；PDF 继续在本机识别。
-- 改善更新提示与阅读操作。以上仅为当前源码变化，未重新发布 v0.4.7。
-- Selection window geometry, optional selection actions, OCR model download source, and update notices are available in source only; the v0.4.7 assets are unchanged.
+### 简体中文
+
+- 新增默认关闭的「OCR增强选中文本内容提取」。在「设置 → 功能配置 → 选中文本」开启后，引用或翻译前在本机识别选区文字和公式；失败时提示并沿用原选文。
+- 默认文字层提取改善段落换行、跨行断词、连字和上下标；复杂公式仍需对照原 PDF。
+- 选文浮窗记住位置与大小，可跟随选文；支持等待、自动翻译或引用到新侧栏对话，引用仅创建草稿。
+- OCR 模型支持可选第三方 HF-Mirror 下载源；新增正式版更新提示。
+- 安装后重启 Zotero，保留已有设置和历史。首次使用选文 OCR 需要准备本机依赖和模型。
+
+### English
+
+- Add opt-in local OCR before quoting or translating selected text, including formulas. Enable it under Settings → Feature configuration → Selected text. Failed recognition falls back to the original selection with a notice.
+- Improve text-layer extraction of paragraphs, line-end hyphenation, ligatures and superscripts/subscripts. Check complex formulas against the PDF.
+- Remember selection window geometry, optionally follow selections, translate automatically or quote into a new sidebar draft without sending.
+- Add an optional third-party HF-Mirror model download source and stable-release update notices.
+- Restart Zotero after installation. Existing settings and history are retained; first-time selection OCR requires local dependencies and models.
 
 ## 0.4.7 — 2026-09-13
 
