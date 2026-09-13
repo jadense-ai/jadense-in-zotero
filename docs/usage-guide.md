@@ -230,4 +230,4 @@ These options are included in the 0.4.8 candidate, pending release. Use the sele
 
 Under Settings → Feature configuration → Selected text, choose the selection action (Wait by default) and optionally enable OCR-enhanced extraction. OCR runs locally before quoting or translating; first use needs dependencies and models. Failure shows a notice and uses the original selection. Check installation and download source under OCR configuration. Changing the setting does not reprocess existing selections or history. Verify recognized formulas against the PDF.
 
-![选文操作与 OCR 设置](images/guide-selection-settings.png)
+![选文浮窗外观与定位设置](images/guide-selection-settings.png)
