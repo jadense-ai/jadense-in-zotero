@@ -31,6 +31,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Check release naming and README summaries
+        run: node .github/scripts/check-docs.mjs
       - name: Resolve release and check tag
         id: release
         run: node .github/scripts/release.mjs resolve

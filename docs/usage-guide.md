@@ -214,3 +214,14 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 连接攻玉后，在 Zotero 选中文献，打开「攻玉学术 → 文献同步」，选择目标收藏夹与是否包含 PDF，再主动上传。该操作是 **Zotero → 攻玉单向上传**，元数据与 PDF 分别报告结果；不会自动同步插件对话、笔记和批注。
 
 遇到问题先查 [FAQ](faq.md)，提交反馈前去除 API Key、插件令牌和私人论文内容。
+
+
+<a id="unreleased-settings"></a>
+
+## 未发布源码：选文与 OCR 配置 / Unreleased settings
+
+以下功能尚未包含在 v0.4.7 正式安装包中。选文浮窗的外观菜单可切换记住位置/跟随选文，以及等待操作、自动翻译、引用到新侧栏对话；引用只填入草稿，不自动发送。
+
+在「设置 → OCR」选择「OCR 模型下载源」。默认使用 Hugging Face（或环境地址）；连接超时时可选第三方 HF-Mirror，然后重新点击全文翻译，无需重装或重启。只从该来源下载公开模型，PDF 仍在本机识别；正在运行的任务不变。
+
+These source-only options are not in v0.4.7. Use the selection window appearance menu to change positioning and selection actions. Quoting creates a draft without sending it. Under Settings → OCR, select the model download source and retry full translation; no reinstall or restart is needed. The optional third-party mirror downloads public models while PDF recognition stays local.

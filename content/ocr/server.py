@@ -17,6 +17,17 @@ VERSION = 1
 EXTRACTION_REVISION = 4
 
 
+def model_environment(source):
+    """仅本次识别子进程使用下载源；不修改宿主环境，不向镜像附带用户 Hub 凭据。"""
+    environment = os.environ.copy()
+    if source == "hf-mirror":
+        environment["HF_ENDPOINT"] = "https://hf-mirror.com"
+    environment["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+    environment.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+    environment.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
+    return environment
+
+
 def formula_text(text):
     """版面模型漏标的纯等式也使用原图；含自然语言词语的正文继续翻译。"""
     words = re.findall(r"[^\W\d_]+", text, flags=re.UNICODE)
@@ -146,6 +157,7 @@ def serve(root, token):
                 if not result.exists():
                     source.write_bytes(data)
                     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--convert", str(source), str(result), str(progress)], stdin=subprocess.DEVNULL,
+                                               env=model_environment(self.headers.get("X-Jadense-OCR-Model-Source")),
                                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
                     job["process"] = process
                 state.jobs[job_id] = job

@@ -8,7 +8,7 @@ import type { ResearchMessageContext } from '@/chat/research-presentation'
 import { JadenseApiError, jadenseModelSubscriptionErrorMessage } from '@/jadense/api'
 import { readChatImage, saveChatImage } from './chat-images'
 import { featureModelState, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
-import { collectSourceForItem } from './research-context'
+import { collectSourceForItem, createQuoteSource } from './research-context'
 import { readConnection, type ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { recordStarInvitationUse } from './star-invitation'
@@ -20,6 +20,7 @@ export type PreparedChat = {
   requireComplete?: boolean
   finish?: (text: string, signal: AbortSignal) => Promise<{ text: string; status: string; kind?: 'success' | 'error' | 'idle'; research?: ResearchMessageContext }>
 }
+export type SelectionQuote = Parameters<typeof createQuoteSource>[1]
 export type FigureChatContext = { image: ChatImageInput; paperTitle: string; pageLabel: string; caption?: string }
 export type ChatSend = {
   sessionID: string; prompt: string; image?: ChatImageInput; feature?: 'chat' | 'figure'
@@ -105,7 +106,7 @@ export class ChatRuntime {
     if (!source || !current || source.id !== identity.id || current.id !== identity.id) throw new Error(uiText('PDF 身份已改变，请重新打开文件后重试。', 'The PDF changed. Reopen it and try again.'))
     addLocalChatSources(this.preferences, sessionID, [source]); this.changed()
   }
-  async create(itemID: number) {
+  async create(itemID: number, quote?: SelectionQuote) {
     const source = await collectSourceForItem(this.host, itemID, { includeText: false })
     if (!source || source.kind !== 'file') throw new Error(uiText('当前 PDF 不可用。', 'This PDF is unavailable.'))
     // 新建不能改变其他视图的当前会话；存储格式保持 v1。
@@ -114,6 +115,11 @@ export class ChatRuntime {
     const state = readLocalChatState(this.preferences); state.activeSessionId = previous
     this.preferences.set(LOCAL_CHAT_PREF_KEY, JSON.stringify(state))
     await this.associate(session.id, itemID)
+    if (quote?.text.trim()) {
+      const linked = readLocalChatState(this.preferences).sessions.find(value => value.id === session.id)?.sources.find(value => value.kind === 'file')
+      if (linked) addLocalChatSources(this.preferences, session.id, [createQuoteSource(linked, quote)])
+    }
+    this.changed()
     return session.id
   }
   /** 所有界面共用发送路径；onAccepted 只用于清理已接纳的草稿。 */

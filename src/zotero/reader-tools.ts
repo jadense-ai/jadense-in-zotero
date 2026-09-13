@@ -1,4 +1,6 @@
+import { silentlyCheckForUpdates } from './update-notification'
 import { openChatSidebar } from "./reader-sidebar"
+import { SELECTION_PREF, readSelectionPreferences, saveSelectionPreferences } from './selection-preferences'
 // Zotero 阅读器适配层：本地 PDF 字符坐标 -> 可引用原句 -> 原生批注；AI 只返回原句 ID。
 // 私有读取接口核对自 Zotero 9.0.5 的 reader 子模块 9643fac7a4e86c8d7ff9548af0191e9df63aa998。
 import {
@@ -45,7 +47,7 @@ type PdfDocument = {
 type SelectionAnnotation = {
   text?: string
   pageLabel?: string
-  position?: { pageIndex?: number }
+  position?: { pageIndex?: number; rects?: number[][] }
 }
 type PdfSelectionRange = {
   anchorOffset?: number
@@ -62,7 +64,7 @@ type ReaderPdfView = {
     document?: Document
     addEventListener?: Window["addEventListener"]
     removeEventListener?: Window["removeEventListener"]
-    PDFViewerApplication?: { pdfDocument?: PdfDocument }
+    PDFViewerApplication?: { pdfDocument?: PdfDocument; pdfViewer?: { getPageView(index: number): { div: HTMLElement; viewport: { convertToViewportRectangle(rect: number[]): number[] } } } }
   }
 }
 type ReaderInstance = {
@@ -86,6 +88,34 @@ type ReaderEvent = {
 }
 type ReaderEventType = "renderToolbar" | "renderTextSelectionPopup"
 type ReaderHandler = (event: ReaderEvent) => void
+
+/** 保存原生选区的 PDF 坐标，显示时转换到外层 Reader 坐标；不依赖 popup 的存活。 */
+function selectionAnchor(reader: ReaderInstance, fallback: HTMLElement, annotation?: SelectionAnnotation, primary = reader._internalReader?._lastViewPrimary !== false) {
+  const internal = reader._internalReader
+  const view = primary ? internal?._primaryView : internal?._secondaryView
+  const position = (annotation ?? (primary ? internal?._state?.primaryViewSelectionPopup : internal?._state?.secondaryViewSelectionPopup)?.annotation)?.position
+  let last: { left: number; top: number; bottom: number } | undefined
+  return () => {
+    try {
+      const page = position?.pageIndex !== undefined ? view?._iframeWindow?.PDFViewerApplication?.pdfViewer?.getPageView(position.pageIndex) : undefined
+      const frame = (view?._iframeWindow as Window | undefined)?.frameElement?.getBoundingClientRect()
+      if (page && frame && position?.rects?.length) {
+        const rects = position.rects.map(rect => page.viewport.convertToViewportRectangle(rect)).filter(rect => rect.length === 4 && rect.every(Number.isFinite))
+        if (rects.length) {
+          const bounds = page.div.getBoundingClientRect()
+          // Gecko 跨 compartment 的 flatMap 不保证展开回调创建的数组；只跨边界传递数值。
+          return {
+            left: frame.left + bounds.left + Math.min(...rects.map(rect => Math.min(rect[0], rect[2]))),
+            top: frame.top + bounds.top + Math.min(...rects.map(rect => Math.min(rect[1], rect[3]))),
+            bottom: frame.top + bounds.top + Math.max(...rects.map(rect => Math.max(rect[1], rect[3]))),
+          }
+        }
+      }
+    } catch { /* 旧宿主退回原生 popup 的最后位置。 */ }
+    if (fallback.isConnected) { const rect = fallback.getBoundingClientRect(); last = { left: rect.left, top: rect.top, bottom: rect.bottom } }
+    return last
+  }
+}
 type AnnotationItem = {
   annotationText?: string
   annotationPosition?: string
@@ -780,6 +810,8 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-reader-tools] .jadense-translation-languages {margin-inline-start:4px;padding-inline-start:5px;border-inline-start:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
 .jadense-translation-languages select {box-sizing:border-box;width:82px;min-width:0;height:28px;padding:2px 3px;border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));border-radius:5px;color:inherit;background:var(--jdx-reader-background,Canvas);font:calc(12px * var(--jdx-font-scale,1)) system-ui,sans-serif;}
 .jadense-translation-languages select:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:1px;}
+[data-jadense-reader-tools] select {box-sizing:border-box;max-width:100%;min-width:0;padding:4px 6px;border:1px solid var(--jdx-reader-line);border-radius:5px;background:var(--jdx-reader-background,Canvas);color:inherit;font:inherit;}
+[data-jadense-reader-tools="renderTextSelectionPopup"] > select {flex:1 1 100%;width:100%;}
 [data-jadense-translation-panel] header {flex-wrap:wrap;gap:6px;}
 [data-jadense-sentence-languages] {flex-basis:100%;flex-wrap:wrap;}
 [data-jadense-sentence-languages] button {margin-inline-start:auto;}
@@ -921,6 +953,8 @@ export function registerReaderTools(
   const handlers = new Map<ReaderEventType, ReaderHandler>()
   const shortcutCleanups = new Map<Document, () => void>()
   const toolbarMenus = new Map<HTMLElement, ReturnType<typeof bindReaderActionMenu>>()
+  const selectionAnchors = new Map<Document, () => { left: number; top: number; bottom: number } | undefined>()
+  const automaticSelections = new Map<Document, { key: string; group: HTMLElement; timer: ReturnType<typeof setTimeout> }>()
   const documents = new Map<Document, {
     show: (anchor: HTMLElement, text: string) => void
     hide: () => void
@@ -930,8 +964,19 @@ export function registerReaderTools(
     updateTranslation: (requestID: number, text: string) => void
     finishTranslation: (requestID: number, text: string, error?: boolean) => void
     remove: () => void
+    reposition: () => void
+    refreshSettings: () => void
   }>()
   let active = true
+  const refreshSettings = () => {
+    const settings = readSelectionPreferences(zotero)
+    for (const node of nodes) for (const select of Array.from(node.querySelectorAll<HTMLSelectElement>('select'))) {
+      if (select.hasAttribute('data-jadense-selection-behavior')) select.value = settings.behavior
+    }
+    for (const entry of documents.values()) entry.refreshSettings()
+  }
+  let settingsObserver: unknown
+  try { settingsObserver = zotero.Prefs?.registerObserver?.(SELECTION_PREF, refreshSettings, true) } catch { /* 无观察器时仍在每次调用读取偏好。 */ }
   // 每个 reader document 共享一份 CSS 和就地提示，避免选区弹出层反复创建样式。
   const documentTools = (doc: Document) => {
     const existing = documents.get(doc)
@@ -998,7 +1043,24 @@ export function registerReaderTools(
     translationActions.append(appearance.element, copyTranslation)
     translationPanel.append(translationHeader, translationContent, translationActions)
     noticeHost.append(translationPanel)
-    const interaction = makeTranslationWindowInteractive(translationPanel, translationHeader)
+    const interaction = makeTranslationWindowInteractive(translationPanel, translationHeader, {
+      read: () => readSelectionPreferences(zotero),
+      save: (geometry, moved) => {
+        saveSelectionPreferences(zotero, { geometry, ...(moved ? { placement: 'remember' as const } : {}) })
+        if (moved) placement.value = 'remember'
+      },
+    })
+    const placement = doc.createElement('select')
+    placement.setAttribute('aria-label', uiText('浮窗位置', 'Panel position'))
+    for (const [value, label] of [['remember', uiText('记住窗口位置', 'Remember position')], ['selection', uiText('跟随选中文本', 'Near selection')]]) {
+      const option = doc.createElement('option'); option.value = value; option.textContent = label; placement.append(option)
+    }
+    placement.value = readSelectionPreferences(zotero).placement
+    placement.addEventListener('change', () => { saveSelectionPreferences(zotero, { placement: placement.value === 'selection' ? 'selection' : 'remember' }); interaction.clamp() })
+    const placementLabel = doc.createElement('label')
+    placementLabel.textContent = uiText('浮窗位置', 'Panel position')
+    placementLabel.append(placement)
+    appearance.element.querySelector('.jdx-window-appearance-menu')?.append(placementLabel)
     themeRoot(notice)
     themeRoot(translationPanel)
     let translationRequestID = 0
@@ -1051,6 +1113,7 @@ export function registerReaderTools(
       void doc.defaultView?.navigator.clipboard?.writeText(value)
     })
     const remove = () => {
+      clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc); selectionAnchors.delete(doc)
       hide()
       for (const [root, stop] of themeCleanups) if (root.ownerDocument === doc) { stop(); themeCleanups.delete(root) }
       shortcutCleanups.get(doc)?.()
@@ -1069,6 +1132,8 @@ export function registerReaderTools(
       documents.delete(doc)
     }
     const entry = {
+      reposition: interaction.clamp,
+      refreshSettings: () => { placement.value = readSelectionPreferences(zotero).placement; interaction.clamp() },
       hide,
       dismiss,
       remove,
@@ -1085,7 +1150,8 @@ export function registerReaderTools(
         resultText.setAttribute("data-error", "false")
         copyTranslation.disabled = true
         translationPanel.hidden = false
-        interaction.clamp()
+        placement.value = readSelectionPreferences(zotero).placement
+        interaction.open(selectionAnchors.get(doc))
         return translationRequestID
       },
       setTranslationLanguages: (requestID: number, languages: TranslationLanguages) => {
@@ -1157,6 +1223,8 @@ export function registerReaderTools(
     const { doc, reader } = event
     if (shortcutCleanups.has(doc)) return
     const bindings = new Map<NonNullable<ReaderPdfView["_iframeWindow"]>, EventListener>()
+    const reposition = () => documents.get(doc)?.reposition()
+    const clearSelection = () => { clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc) }
     let disposed = false
     const bind = (win: ReaderPdfView["_iframeWindow"], primary?: boolean) => {
       if (!win?.addEventListener || bindings.has(win)) return
@@ -1172,9 +1240,13 @@ export function registerReaderTools(
         if (!matchesReaderShortcut(key, readReaderShortcut(zotero, "translate"))) return
         key.preventDefault()
         key.stopImmediatePropagation()
+        selectionAnchors.set(doc, selectionAnchor(reader, doc.body || doc.documentElement, undefined, primary))
         translate(doc, doc.body || doc.documentElement, selectedAction("translate", reader, undefined, primary))
       }
       win.addEventListener("keydown", handler, true)
+      win.addEventListener('scroll', reposition, true)
+      win.addEventListener('resize', reposition)
+      if (primary !== undefined) win.addEventListener('pointerdown', clearSelection, true)
       bindings.set(win, handler)
     }
     const refresh = async () => {
@@ -1186,6 +1258,8 @@ export function registerReaderTools(
         for (const [win, handler] of bindings) {
           if (win !== doc.defaultView && !views.some((view) => view?._iframeWindow === win)) {
             win.removeEventListener?.("keydown", handler, true)
+            win.removeEventListener?.('scroll', reposition, true); win.removeEventListener?.('resize', reposition)
+            win.removeEventListener?.('pointerdown', clearSelection, true)
             bindings.delete(win)
           }
         }
@@ -1221,7 +1295,11 @@ export function registerReaderTools(
       disposed = true
       observer?.disconnect()
       doc.removeEventListener("load", onLoad, true)
-      for (const [win, handler] of bindings) win.removeEventListener?.("keydown", handler, true)
+      for (const [win, handler] of bindings) {
+        win.removeEventListener?.("keydown", handler, true)
+        win.removeEventListener?.('scroll', reposition, true); win.removeEventListener?.('resize', reposition)
+        win.removeEventListener?.('pointerdown', clearSelection, true)
+      }
       bindings.clear()
       shortcutCleanups.delete(doc)
     })
@@ -1229,6 +1307,7 @@ export function registerReaderTools(
   }
   const cleanup = () => {
     active = false
+    try { if (settingsObserver !== undefined) zotero.Prefs?.unregisterObserver?.(settingsObserver) } catch { /* 清理其他资源。 */ }
     for (const [type, handler] of handlers) {
       try { zotero.Reader?.unregisterEventListener?.(type, handler) } catch { /* 继续清理其他监听。 */ }
     }
@@ -1251,6 +1330,7 @@ export function registerReaderTools(
   for (const type of ["renderToolbar", "renderTextSelectionPopup"] as const) {
     const handler: ReaderHandler = (event) => {
       if (!active || !Number.isInteger(event.reader.itemID)) return
+      if (type === 'renderToolbar') void silentlyCheckForUpdates(event.doc, zotero, pluginID)
       for (const node of nodes) if (!node.isConnected) {
         toolbarMenus.get(node)?.remove()
         for (const [root, stop] of themeCleanups) if (root === node || node.contains?.(root)) { stop(); themeCleanups.delete(root) }
@@ -1306,6 +1386,7 @@ export function registerReaderTools(
         button.addEventListener("mousedown", (mouseEvent) => mouseEvent.preventDefault())
         button.addEventListener("click", () => {
           if (!active) return
+          clearTimeout(automaticSelections.get(event.doc)?.timer)
           const selection = selectedAction(action.kind, event.reader, event.params?.annotation)
           toolbarMenus.get(group)?.close()
           const anchor = group.getAttribute("data-compact") === "true"
@@ -1339,6 +1420,37 @@ export function registerReaderTools(
       }
       nodes.add(group)
       event.append(group)
+      // 原生选区 popup 在用户完成选择后渲染；短暂合并重复渲染，避免同一选区重复请求。
+      if (type === 'renderTextSelectionPopup') {
+        const selection = selectedAction('translate', event.reader, event.params?.annotation)
+        const position = event.params?.annotation?.position
+        selectionAnchors.set(event.doc, selectionAnchor(event.reader, group, event.params?.annotation))
+        const key = JSON.stringify([selection.itemID, selection.pageIndex, selection.text, position, event.reader._internalReader?._lastViewPrimary])
+        const previous = automaticSelections.get(event.doc)
+        if (previous?.key === key) previous.group = group
+        if (previous?.key !== key) {
+          clearTimeout(previous?.timer)
+          const timer = setTimeout(() => {
+            const currentGroup = automaticSelections.get(event.doc)?.group
+            if (!active || !currentGroup?.isConnected || !selection.text) return
+            const behavior = readSelectionPreferences(zotero).behavior
+            if (behavior === 'translate') translate(event.doc, group, selection)
+            if (behavior === 'quote') void openChatSidebar(zotero as unknown as ZoteroLike, event.doc, selection.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource, { text: selection.text, pageIndex: selection.pageIndex, pageLabel: selection.pageLabel })
+              .catch(error => feedback.show(group, error instanceof Error ? error.message : String(error)))
+          }, 350)
+          automaticSelections.set(event.doc, { key, group, timer })
+        }
+      }
+      const behavior = event.doc.createElement('select')
+      behavior.setAttribute('data-jadense-selection-behavior', '')
+      behavior.setAttribute('aria-label', uiText('选中文本后', 'After selecting text'))
+      behavior.title = uiText('选中文本后', 'After selecting text')
+      for (const [value, label] of [['wait', uiText('等待', 'Wait')], ['translate', uiText('自动翻译', 'Translate automatically')], ['quote', uiText('自动引用到新对话', 'Quote in a new chat')]]) {
+        const option = event.doc.createElement('option'); option.value = value; option.textContent = label; behavior.append(option)
+      }
+      behavior.value = readSelectionPreferences(zotero).behavior
+      behavior.addEventListener('change', () => saveSelectionPreferences(zotero, { behavior: behavior.value as 'wait' | 'translate' | 'quote' }))
+      actionList.append(behavior)
       if (actionList !== group) toolbarMenus.set(group, bindReaderActionMenu(group, actionList, group.querySelector<HTMLButtonElement>(".jadense-reader-actions-toggle")!))
     }
     handlers.set(type, handler)

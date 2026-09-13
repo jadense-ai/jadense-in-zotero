@@ -7,6 +7,14 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { createDraftRelease, resolveRelease } from "./release.mjs"
+import { summaryVersions } from "./check-docs.mjs"
+
+test("README release summaries reject excess, duplicates and mismatched links", () => {
+  const summary = (tags) => `<!-- release-summary:start -->\n${tags.map(tag => `- [${tag}](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/${tag}) — Update`).join('\n')}\n<!-- release-summary:end -->`
+  assert.deepEqual(summaryVersions(summary(['v1.0.0', 'v0.9.0'])), ['v1.0.0', 'v0.9.0'])
+  for (const tags of [[], ['v1.0.0', 'v1.0.0'], ['v0.9.0', 'v1.0.0'], ['v1.0.0', 'v0.9.0', 'v0.8.0', 'v0.7.0', 'v0.6.0', 'v0.5.0']]) assert.throws(() => summaryVersions(summary(tags)))
+  assert.throws(() => summaryVersions(summary(['v1.0.0']).replace('/tag/v1.0.0', '/tag/v2.0.0')))
+})
 
 /** 只清理本测试创建的临时目录。 */
 function fixture(t) {
@@ -58,7 +66,7 @@ function releaseFixture(t) {
   return { directory, env }
 }
 
-test("verified artifacts create one draft with generated notes and no publishing/overwrite command", (t) => {
+test("verified artifacts create one draft with user-facing notes and no publishing/overwrite command", (t) => {
   const input = releaseFixture(t)
   const calls = []
   createDraftRelease({ ...input, gh: (args, stdin) => { calls.push({ args, stdin }); return "v0.3.0\n" } })
@@ -67,7 +75,9 @@ test("verified artifacts create one draft with generated notes and no publishing
   const { args, stdin } = calls[1]
   assert.deepEqual(args.slice(0, 3), ["release", "create", "v0.3.1"])
   assert.deepEqual(args.slice(3, 6).map((file) => path.basename(file)), ["jadense-in-zotero-v0.3.1.xpi", "release-metadata.json", "SHA256SUMS"])
-  for (const flag of ["--verify-tag", "--draft", "--generate-notes"]) assert.ok(args.includes(flag))
+  for (const flag of ["--verify-tag", "--draft"]) assert.ok(args.includes(flag))
+  assert.equal(args[args.indexOf("--title") + 1], "v0.3.1");
+  assert.ok(!args.includes("--generate-notes"));
   assert.deepEqual(args.slice(-2), ["--notes-file", "-"])
   assert.match(stdin, /smoke:installed/)
   assert.match(stdin, /smoke:research/)

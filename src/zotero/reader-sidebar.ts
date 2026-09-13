@@ -1,3 +1,4 @@
+import type { SelectionQuote } from './chat-runtime'
 import type { AnalysisDetailTab } from "./analysis-workspace"
 import { mountDocumentResults, resultLabels, type DocumentResultMode } from "./document-results"
 import { openManagerWindow } from "./manager-window"
@@ -19,7 +20,7 @@ export type ReaderSidebarSource = { itemID: number; tabID?: string; _iframe?: HT
 type ResultPage = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab
 type Reader = ReaderSidebarSource
 type Details = HTMLElement & { tabID?: string; pinnedPane?: string; scrollToPane?(id: string, behavior: string): Promise<unknown>; render?(): Promise<unknown> }
-type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean): Promise<void>; remove(): void }
+type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean, quote?: SelectionQuote): Promise<void>; remove(): void }
 const surfaces = new WeakMap<ZoteroLike, Set<Surface>>()
 const bodies = new WeakMap<HTMLElement, Surface>()
 const docks = new WeakMap<Document, Surface>()
@@ -132,9 +133,9 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   pageSelect.onChange(next => { void setPage(next) }); void setPage(page)
   const value: Surface = {
     itemID, doc, root,
-    async show(shouldStart = false, _onHistory, newConversation) {
+    async show(shouldStart = false, _onHistory, newConversation, quote) {
       await options.activate()
-      if (newConversation) { await setPage('chat'); await chatView.newSession(); return }
+      if (newConversation) { await setPage('chat'); await chatView.newSession(quote); return }
       if (shouldStart) await setPage('translation')
       else if (page !== 'chat') await setPage(page)
     },
@@ -247,10 +248,10 @@ export function removeNativeReaderSidebar(body: HTMLElement) { bodies.get(body)?
 export async function openTranslationSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, onHistory: () => void, originReader?: Reader) {
   return openReaderSidebar(host, readerDoc, itemID, onHistory, originReader, false)
 }
-export async function openChatSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, originReader?: Reader) {
-  return openReaderSidebar(host, readerDoc, itemID, undefined, originReader, true)
+export async function openChatSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, originReader?: Reader, quote?: SelectionQuote) {
+  return openReaderSidebar(host, readerDoc, itemID, undefined, originReader, true, quote)
 }
-async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, onHistory: (() => void) | undefined, originReader: Reader | undefined, chat: boolean) {
+async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, onHistory: (() => void) | undefined, originReader: Reader | undefined, chat: boolean, quote?: SelectionQuote) {
   const reader = originReader?.itemID === itemID ? originReader : readers(host).find(value => value.itemID === itemID && value._iframeWindow?.document === readerDoc)
   const doc = reader?._window?.document
   if (doc && reader?.tabID) {
@@ -260,10 +261,10 @@ async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: 
     const body = detail?.querySelector<HTMLElement>(selector)
     if (body && !bodies.has(body)) mountNativeReaderSidebar(body, host, onHistory)
     const native = body && bodies.get(body)
-    if (native) { await native.show(!chat, onHistory, chat); return }
+    if (native) { await native.show(!chat, onHistory, chat, quote); return }
   }
   const previous = docks.get(readerDoc)
-  if (previous?.itemID === itemID) { await previous.show(!chat, onHistory, chat); return }
+  if (previous?.itemID === itemID) { await previous.show(!chat, onHistory, chat, quote); return }
   previous?.remove()
   const browser = reader?._iframe, parent = browser?.parentElement
   // 独立 Reader 有 chrome browser；极旧宿主在 Reader 根内预留实际宽度。
@@ -278,7 +279,7 @@ async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: 
   })
   const remove = () => value.remove()
   readerDoc.defaultView?.addEventListener("pagehide", remove, { once: true }); owner.defaultView?.addEventListener("resize", fit)
-  docks.set(readerDoc, value); await value.show(!chat, onHistory, chat)
+  docks.set(readerDoc, value); await value.show(!chat, onHistory, chat, quote)
 }
 
 export function removeReaderSidebars(host: ZoteroLike) {

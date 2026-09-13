@@ -1,10 +1,23 @@
 """本机 OCR 投影的轻量回归，不下载模型、不启动网络服务。"""
 import unittest
-from server import formula_text, normalize_document
+from server import formula_text, normalize_document, model_environment
+from unittest.mock import patch
+import os
 from types import SimpleNamespace
 
 
 class FormulaTests(unittest.TestCase):
+    def test_model_download_source_is_per_job_and_preserves_cache(self):
+        """只改变显式镜像任务的下载地址，未知值沿用用户环境及模型缓存。"""
+        with patch.dict(os.environ, {"HF_ENDPOINT": "https://configured.invalid", "HF_HOME": "/existing/models", "HF_HUB_DOWNLOAD_TIMEOUT": "300"}, clear=True):
+            mirror = model_environment("hf-mirror")
+            self.assertEqual(mirror["HF_ENDPOINT"], "https://hf-mirror.com")
+            self.assertEqual(mirror["HF_HUB_DISABLE_IMPLICIT_TOKEN"], "1")
+            self.assertEqual(mirror["HF_HOME"], "/existing/models")
+            self.assertEqual(mirror["HF_HUB_DOWNLOAD_TIMEOUT"], "300")
+            self.assertEqual(model_environment("unknown")["HF_ENDPOINT"], "https://configured.invalid")
+            self.assertEqual(os.environ["HF_ENDPOINT"], "https://configured.invalid")
+
     def test_ordered_pictures_tables_and_formulas(self):
         """版面适配必须保留普通插图，页脚剔除不影响图片和图注顺序。"""
         class Image:

@@ -188,7 +188,7 @@ export function createResearchFixturePdf(withReferences = false, translationLayo
   return Buffer.from(pdf, "ascii")
 }
 
-async function startStub() {
+async function startStub(selectionOnly = false) {
   const requests = []
   const failures = []
   const account = { signedToday: false, balancePoints: 36, currentStreakDays: 4, rewardPoints: 2 }
@@ -457,7 +457,7 @@ async function startStub() {
           if (input.selectedText !== PDF_SENTENCES[0][0]) throw new Error("Translation did not preserve selected source text")
           if (!["可直接渲染的 Markdown", "行内公式统一写成 `$...$`", "独立公式统一写成 `$$`、公式内容、`$$` 三行", "不要把公式放进反引号或 ``` 代码围栏"]
             .every((rule) => prompt.includes(rule))) throw new Error("Translation prompt lost its Markdown/formula output contract")
-          const languagePair = [
+          const languagePair = selectionOnly ? { sourceLanguage: '英文', targetLanguage: '简体中文' } : [
             { sourceLanguage: "英文", targetLanguage: "简体中文" },
             { sourceLanguage: "自动识别", targetLanguage: "日语" },
             { sourceLanguage: "法语", targetLanguage: "德语" },
@@ -1159,6 +1159,77 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const logoSession = currentSession()
     assert(JSON.stringify(localState()) === beforeLogoChatState
       && (!logoSession || (logoSession.messages.length === 0 && logoSession.sources.length === 0)), "Reader logo changed Chat state or dispatched a paper action")
+    if (config.selectionOnly) {
+      const figureWindow = view._iframeWindow
+      await view._ensureBasicPageData(0)
+      const chars = view._pdfPages[0].chars.slice(0, 40)
+      const first = { annotationText: config.sentences[0][0] }
+      const position = { pageIndex: 0, rects: chars.map(char => char.rect) }
+      const showSelection = async () => {
+        figureWindow.document.body.dispatchEvent(new figureWindow.PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+        view._setSelectionRanges(Components.utils.cloneInto([], reader._iframeWindow))
+        await Zotero.Promise.delay(100)
+        view._setSelectionRanges(Components.utils.cloneInto([{ pageIndex: 0, position, sortIndex: '00000|000000|00000', text: first.annotationText, collapsed: false, anchor: true, head: true, anchorOffset: 0, headOffset: chars.length - 1 }], reader._iframeWindow))
+        return waitFor(() => readerDoc.querySelector('[data-jadense-reader-tools="renderTextSelectionPopup"]'), 'selection experience popup')
+      }
+      let popup = await showSelection()
+      await Zotero.Promise.delay(450)
+      assert(!translationState().records?.length, 'Default waiting dispatched translation')
+      popup.querySelector('[data-jadense-action="translate"]').click()
+      const translationPanel = await waitFor(() => {
+        const panel = readerDoc.querySelector('[data-jadense-translation-panel]:not([hidden])')
+        return panel?.querySelector('.jadense-translation-result')?.textContent.includes(config.translationMarker) ? panel : null
+      }, 'initial selection translation')
+      const main = Zotero.getMainWindow()
+      const pref = 'extensions.jadenseInZotero.selectionExperience'
+      const stored = () => JSON.parse(Zotero.Prefs.get(pref, true) || '{}')
+      const save = patch => Zotero.Prefs.set(pref, JSON.stringify({ ...stored(), ...patch }), true)
+      assert(stored().placement === 'remember' && stored().behavior === 'wait', 'Selection defaults changed')
+      const title = translationPanel.querySelector('header')
+      // 直接向可聚焦标题发送，保持合成事件目标与真实键盘路径一致。
+      title.dispatchEvent(new reader._iframeWindow.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+      const geometry = stored().geometry
+      assert(geometry?.width > 0 && geometry?.height > 0, 'User geometry was not saved')
+      translationPanel.querySelector('.jadense-translation-close').click()
+      popup = await showSelection()
+      popup.querySelector('[data-jadense-action="translate"]').click()
+      await waitFor(() => !translationPanel.hidden, 'reopened remembered panel')
+      assert(Math.abs(translationPanel.getBoundingClientRect().left - geometry.left) <= 1, 'Panel did not restore user position')
+      const placement = translationPanel.querySelector('select[aria-label="浮窗位置"]')
+      placement.value = 'selection'; placement.dispatchEvent(new reader._iframeWindow.Event('change', { bubbles: true }))
+      await Zotero.Promise.delay(150)
+      const rect = translationPanel.getBoundingClientRect()
+      assert(rect.left >= 7 && rect.top >= 7 && rect.right <= reader._iframeWindow.innerWidth - 7 && rect.bottom <= reader._iframeWindow.innerHeight - 7, 'Anchored panel escaped Reader viewport')
+      assert(rect.left < geometry.left - 50, 'Selection mode did not move the panel beside the selected text')
+      await screenshot('selection-experience-anchor')
+      const appearance = translationPanel.querySelector('.jdx-window-appearance')
+      appearance.open = true
+      for (const theme of ['light', 'dark']) {
+        Zotero.Prefs.set('extensions.jadenseInZotero.theme', theme, true)
+        await Zotero.Promise.delay(100)
+        assert(placement.getBoundingClientRect().width > 0, 'Position setting is not visible in Appearance')
+        await screenshot('selection-experience-settings-' + theme)
+      }
+      appearance.open = false
+      translationPanel.querySelector('.jadense-translation-close').click()
+      const count = translationState().records.length
+      save({ behavior: 'translate' })
+      await showSelection()
+      await waitFor(() => !translationPanel.hidden && translationState().records.length > count, 'automatic selection translation')
+      await Zotero.Promise.delay(500)
+      const before = localState().sessions?.length ?? 0
+      const previousIDs = (localState().sessions ?? []).map(session => session.id)
+      save({ behavior: 'quote' })
+      await showSelection()
+      await waitFor(() => localState().sessions?.length === before + 1 && localState().sessions.some(session => !previousIDs.includes(session.id) && session.sources.some(source => source.kind === 'quote' && source.text === first.annotationText)), 'automatic quote source association')
+      const session = localState().sessions.find(session => !previousIDs.includes(session.id))
+      assert(session.messages.length === 0 && session.sources.some(source => source.kind === 'file' && source.itemID === attachment.id), 'Auto quote sent a message or lost its PDF')
+      const sidebar = await waitFor(() => [...main.document.querySelectorAll('.jdx-reader-workspace')].find(root => !root.hidden && root.dataset.page === 'chat'), 'automatic quote sidebar')
+      assert(sidebar.querySelector('textarea')?.value.includes(first.annotationText), 'Quote draft is missing from sidebar')
+      await screenshot('selection-experience-quote', main)
+      report.checks.push('selection-preference-defaults', 'selection-geometry-reopen', 'selection-anchor-contained', 'selection-auto-translation', 'selection-auto-new-chat-quote-no-send')
+      report.state = 'passed'; await persist(); return
+    }
     if (config.chatSidebarOnly) {
       await verifyReaderChat({ Zotero, reader, manager, assert, waitFor, screenshot, report })
       report.state = 'passed'; await persist(); return
@@ -2852,7 +2923,7 @@ async function main() {
   const referencePdfPath = path.join(smokeRoot, "synthetic-references.pdf")
   const translationPdfPath = path.join(smokeRoot, "synthetic-translation.pdf")
   const extensionsDir = path.join(profileDir, "extensions")
-  const stub = await startStub()
+  const stub = await startStub(argv.includes('--selection-only'))
   let child
   let stdout
   let stderr
@@ -2888,7 +2959,7 @@ async function main() {
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
-      literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [
@@ -2941,11 +3012,11 @@ async function main() {
       report.checks.push(...resumed.checks)
     }
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -2962,7 +3033,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

@@ -24,6 +24,15 @@ function harness() {
 }
 
 describe('shared Reader Chat lifecycle', () => {
+  it('associates selection text and physical page with a fresh PDF conversation without sending', async () => {
+    const { runtime, fetch } = harness()
+    const old = createLocalChatSession(runtime.preferences)
+    const id = await runtime.create(2, { text: 'Quoted evidence', pageIndex: 2, pageLabel: 'iii' })
+    const state = readLocalChatState(runtime.preferences), session = state.sessions.find(value => value.id === id)!
+    expect(state.activeSessionId).toBe(old.id)
+    expect(session.sources).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'file', itemID: 2 }), expect.objectContaining({ kind: 'quote', text: 'Quoted evidence', pageIndex: 2, pageLabel: 'iii', itemID: 2 })]))
+    expect(session.messages).toEqual([]); expect(fetch).not.toHaveBeenCalled()
+  })
   it('creates a linked PDF conversation without changing another view selection', async () => {
     const { runtime } = harness()
     const old = createLocalChatSession(runtime.preferences)

@@ -121,6 +121,29 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     await screenshot(`literature-workbench-${tab}`, manager)
   }
   report.checks.push('panel-gutters', 'transparent-source-toolbar', 'empty-toolbar-hidden', 'flat-analysis-tabs', 'no-saved-completion-banner')
+  // 旧解析仍有笔记、新解析只有总结时，跨页签必须保留用户选择的解析版本。
+  const analysisPref = 'extensions.jadenseInZotero.paperAnalysisHistory'
+  const savedAnalysis = Zotero.Prefs.get(analysisPref), analysisHistory = JSON.parse(savedAnalysis)
+  analysisHistory.records.unshift({ ...analysisHistory.records[0], id: 'analysis-summary-only', createdAt: new Date(Date.now() + 1000).toISOString(), summary: 'NEW_SUMMARY_ONLY', notes: undefined })
+  Zotero.Prefs.set(analysisPref, JSON.stringify(analysisHistory))
+  md.getElementById('jadense-analysis-history-refresh').click()
+  md.getElementById('jdx-literature-tab-history').click()
+  const oldEvent = await waitFor(() => [...md.querySelectorAll('.jdx-literature-event')].find(row => row.textContent.includes('ANALYSIS_RESULT_VISIBLE')), 'old analysis event')
+  oldEvent.querySelector('button').click()
+  md.getElementById('jdx-literature-tab-notes').click()
+  const notesPanel = () => md.querySelector('.jdx-literature-panel:not([hidden])')
+  await waitFor(() => notesPanel()?.textContent.includes('保留可读解析笔记。'), 'historical analysis notes retained across tabs')
+  notesPanel().querySelector('.jdx-result-version button').click()
+  const versionList = md.getElementById(notesPanel().querySelector('.jdx-result-version button').getAttribute('aria-controls'))
+  versionList.querySelector('[role="option"]').click()
+  md.getElementById('jdx-literature-tab-summary').click()
+  await waitFor(() => notesPanel()?.textContent.includes('NEW_SUMMARY_ONLY'), 'notes version selection updates summary')
+  md.getElementById('jdx-literature-tab-notes').click()
+  await waitFor(() => notesPanel()?.textContent.includes(isEnglish ? 'This record has no analysis notes.' : '这条记录没有解析笔记。'), 'summary-only version stays empty')
+  assert(!notesPanel().textContent.includes('保留可读解析笔记。'), 'Notes leaked from a different analysis version')
+  Zotero.Prefs.set(analysisPref, savedAnalysis)
+  md.getElementById('jadense-analysis-history-refresh').click()
+  report.checks.push('analysis-version-shared-between-summary-and-notes')
   // 详情状态会保留；切换主页面后同时核对 hidden 与实际布局，防止 CSS 将旧页重新显示。
   for (const name of ['settings', 'chat', 'migrate']) {
     md.getElementById(`jadense-manager-nav-${name}`).click()
