@@ -27,16 +27,16 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — Add optional selection OCR and improve text extraction and reading controls.
 - [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — Fix overlapping workbench pages.
 - [v0.4.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6) — Edit and delete references; clean citation numbering.
 - [v0.4.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5) — Improve OCR setup and reference formatting.
 - [v0.4.4](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4) — Add a literature workspace and local OCR.
-- [v0.4.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.3) — Add continuous translation reading and paper details.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**v0.4.8 release candidate:** adds optional selection OCR, improved text extraction, remembered selection window geometry, automatic selection actions, OCR download sources and update notices. Publication is pending verification. See [settings](docs/usage-guide.md#unreleased-settings).
+**v0.4.8:** optional selection OCR and improved text extraction, with configurable selection actions, window positioning and OCR download sources. See [settings](docs/usage-guide.md#unreleased-settings).
 
 <a id="requirements"></a>
 
@@ -54,7 +54,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.4.7.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7), with metadata and SHA-256 checksums |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.4.8.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
 | Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.8/jadense-in-zotero-v0.4.8.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
 

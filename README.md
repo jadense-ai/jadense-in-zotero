@@ -27,16 +27,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — 新增可选选文 OCR，优化文字提取与阅读操作。
 - [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — 修复工作台页面混显。
 - [v0.4.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6) — 支持编辑、删除参考文献，清理引用序号。
 - [v0.4.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5) — 改进 OCR 配置与参考文献格式。
 - [v0.4.4](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.4) — 提供文献成果工作区和本机 OCR。
-- [v0.4.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.3) — 提供连续全文译文与论文详情。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**v0.4.8 待发布：**新增可选选文 OCR，优化文字提取，包含选文浮窗位置记忆、自动选文操作、OCR 下载源与更新提示。验收完成后公开，见[操作与配置](docs/usage-guide.md#unreleased-settings)。
+**v0.4.8：**可选选文 OCR 与文字提取优化，支持配置选文操作、浮窗定位与 OCR 下载源。见[操作与配置](docs/usage-guide.md#unreleased-settings)。
 
 <a id="requirements"></a>
 
@@ -54,7 +54,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.7.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7)，同时提供元数据和 SHA-256 校验和 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.8.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
 | 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.8/jadense-in-zotero-v0.4.8.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
 
