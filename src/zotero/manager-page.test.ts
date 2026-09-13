@@ -9,7 +9,7 @@ import { normalizeChatSources } from "@/chat/research-context"
 import type { TranslationRecord } from "@/chat/translation-history"
 import { JadenseApiError, type JadenseChatModelCatalog } from "@/jadense/api"
 import type { ZoteroLike } from "./runtime"
-import { wireGuideNavigation } from "./manager-page"
+import { renderNewChatNavigation, wireGuideNavigation } from "./manager-page"
 
 describe("built-in getting started guide", () => {
   it("switches one chapter at a time with clicks and vertical keyboard navigation without a host", () => {
@@ -52,6 +52,23 @@ describe("built-in getting started guide", () => {
 })
 
 describe("manager chat session navigation", () => {
+  it("selects either the new draft or an existing conversation, including after navigation and sending", () => {
+    const button = { dataset: {} as Record<string, string>, setAttribute: vi.fn() }
+    for (const [visible, selectedID, expected] of [
+      [true, "chat-1", false],
+      [true, "", true],
+      [true, "chat-2", false],
+      [false, "chat-2", false],
+      [false, "", false],
+      [true, null, true],
+    ] as const) {
+      renderNewChatNavigation(button as unknown as HTMLButtonElement, visible, selectedID)
+      expect(button.dataset.active).toBe(String(expected))
+      expect(button.setAttribute).toHaveBeenLastCalledWith("aria-selected", String(expected))
+      expect(expected && isChatSessionActive(visible, "chat-2", selectedID)).toBe(false)
+    }
+  })
+
   it("keeps hidden manager pages above later detail layout rules in the cascade", () => {
     const css = readFileSync(new URL("../../content/manager.css", import.meta.url), "utf8")
     expect(css).toMatch(/\.jdx-manager-section\[hidden\]\s*\{[^}]*display:\s*none\s*!important/)

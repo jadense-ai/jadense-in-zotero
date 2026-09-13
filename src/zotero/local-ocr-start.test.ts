@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { DocumentJobs } from './document-jobs'
 import { DocumentStore } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, installLocalOCR, ocrFailureMessage, readOCRModelSource } from './local-ocr'
+import { checkLocalOCR, installLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection } from './local-ocr'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -12,6 +12,23 @@ it('keeps unrelated OCR errors intact and defaults unknown source preferences', 
   const f = coldProfile()
   f.host.Prefs!.set!('extensions.jadenseInZotero.ocrModelSource', { extra: 'ignored' }, true)
   expect(readOCRModelSource(f.host)).toBe('default')
+})
+
+it('sends selection scope to its own local job and returns recognized Markdown', async () => {
+  const f = coldProfile(), original = f.network.getMockImplementation()!
+  f.network.mockImplementation(async (url, init) => url.endsWith('/jobs/ocr-test')
+    ? Response.json({ state: 'complete', result: { text: 'Text $x^2$', extra: true } }) : original(url, init))
+  try {
+    const regions = [{ pageIndex: 2, rects: [[10, 20, 30, 40]] }]
+    const pending = readOCRSelection(f.host, 1, regions, new AbortController().signal, vi.fn())
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish()
+    expect(await pending).toBe('Text $x^2$')
+    const [url, init] = f.network.mock.calls.find(([, value]) => value?.method === 'POST')!
+    expect(url).toBe('http://127.0.0.1:12345/selection-jobs')
+    expect(JSON.parse(new Headers(init!.headers).get('X-Jadense-OCR-Selection')!)).toEqual(regions)
+    expect(init!.credentials).toBe('omit')
+    expect(f.translate).not.toHaveBeenCalled()
+  } finally { f.jobs.dispose() }
 })
 
 it('explains missing OCR models and allows retry through the selected download source', async () => {

@@ -36,7 +36,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**Unreleased source changes:** selection windows remember their geometry and can follow the selection; optional automatic translation or quoting into a new sidebar chat; configurable OCR model download source and update notices. These changes are not in the v0.4.7 download. See [operation and configuration notes](docs/usage-guide.md#unreleased-settings).
+**v0.4.8 release candidate:** adds optional selection OCR, improved text extraction, remembered selection window geometry, automatic selection actions, OCR download sources and update notices. Publication is pending verification. See [settings](docs/usage-guide.md#unreleased-settings).
 
 <a id="requirements"></a>
 
@@ -46,7 +46,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 - **Host application**: [Zotero Desktop 8.0–10.0.*](https://www.zotero.org/download/). Automatic figure detection additionally requires a compatible PDF reader in Zotero 10.0.1 or later.
 - **AI access**: to use AI features, configure one AI service. Use [BYOK](docs/usage-guide.md#byok-provider) with a provider API key, base URL, and model ID—no Jadense account required—or [connect Jadense](docs/usage-guide.md#connect) with a Jadense account and plugin token. Model usage follows the billing and access rules of the selected provider or Jadense account.
-- **Local OCR**: chat and selection translation do not require Python; [full translation and full Markdown extraction](docs/local-ocr.md) require a local OCR runtime, Python dependencies, and models. The first setup needs network access and several GB of disk space.
+- **Local OCR**: chat and default selection translation do not require Python; optional selection OCR and [full translation and full Markdown extraction](docs/local-ocr.md) require a local OCR runtime, Python dependencies, and models. The first setup needs network access and several GB of disk space.
 - **Optional Zotero Connector**: Zotero Connector is not a dependency of this plugin. It only collects papers from the browser; whether it is installed does not affect reading local papers and PDFs in Zotero.
 
 ### Current installation methods
@@ -56,7 +56,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.4.7.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.7/jadense-in-zotero-v0.4.7.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.8/jadense-in-zotero-v0.4.8.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 

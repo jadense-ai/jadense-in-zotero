@@ -1,3 +1,4 @@
+import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
 import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtime"
@@ -960,6 +961,13 @@ export function isChatSessionActive(chatSectionVisible: boolean, sessionID: stri
   return chatSectionVisible && sessionID === selectedSessionID
 }
 
+/** 新对话入口只选中空白草稿；页面切换和会话刷新共用同一判断。 */
+export function renderNewChatNavigation(button: HTMLButtonElement, chatSectionVisible: boolean, selectedSessionID: string | null) {
+  const active = chatSectionVisible && !selectedSessionID
+  button.dataset.active = String(active)
+  button.setAttribute("aria-selected", String(active))
+}
+
 export function activeAiState(zotero: ZoteroLike, invalidToken = invalidConnectionToken) {
   return featureModelState(zotero, activeChatFeature(zotero), invalidToken)
 }
@@ -1008,13 +1016,13 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   const isAnalysis = section === "analysis"
   const isUpload = section === "migrate"
   const isSettings = section === "settings" || section === "settings-connection"
-  elements.navChat.dataset.active = String(isChat)
+  const zotero = resolveZoteroFromWindow()
+  renderNewChatNavigation(elements.navChat, isChat, zotero?.Prefs ? currentChatSessionID(zotero) : null)
   elements.navTranslations.dataset.active = String(isTranslations)
   elements.navAnalysis.dataset.active = String(isAnalysis)
   elements.navUpload.dataset.active = String(isUpload)
   elements.navGuide.dataset.active = String(section === "guide")
   elements.navSettings.dataset.active = String(isSettings)
-  elements.navChat.setAttribute("aria-selected", String(isChat))
   elements.navTranslations.setAttribute("aria-selected", String(isTranslations))
   elements.navAnalysis.setAttribute("aria-selected", String(isAnalysis))
   elements.navUpload.setAttribute("aria-selected", String(isUpload))
@@ -1609,6 +1617,7 @@ function renderChat(elements: ManagerElements, zotero: ZoteroLike) {
   }
   const selectedSessionID = currentChatSessionID(zotero)
   const chatSectionVisible = !elements.chatSection.hidden
+  renderNewChatNavigation(elements.navChat, chatSectionVisible, selectedSessionID)
   const activeSession = state.sessions.find((session) => session.id === selectedSessionID) ?? null
   // 标题按 Unicode 字符截断；完整名称保留在 tooltip 和无障碍名称中。
   const title = activeSession?.title || uiText("新对话", "New conversation")
@@ -3139,8 +3148,10 @@ export function initJadenseManagerPage() {
   })
   const stopRecovery = wireTemporaryRecovery(zotero, document.getElementById("jadense-settings-panel-features"), window.fetch.bind(window))
   window.addEventListener('unload', stopRecovery, { once: true })
-  const stopReferenceAI = wireReferenceAISetting(zotero, document.getElementById("jadense-settings-panel-features"))
+  const stopReferenceAI = wireReferenceAISetting(zotero, elements.settingsPanelFeatures.querySelector('[data-feature-group="analysis"]'))
   window.addEventListener('unload', stopReferenceAI, { once: true })
+  const stopSelectionSettings = wireSelectionSettings(zotero, elements.settingsPanelFeatures.querySelector('[data-selection-settings-host]'))
+  window.addEventListener("unload", stopSelectionSettings, { once: true })
   const stopOCR = wireOCRSettings(zotero, elements.settingsPanelOcr.querySelector<HTMLElement>('[data-ocr-settings]'))
   window.addEventListener("unload", stopOCR, { once: true })
   const stopTranslationInterface = wireTranslationInterface(zotero, document.getElementById("jadense-settings-panel-features"))

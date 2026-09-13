@@ -1,3 +1,4 @@
+import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
 import { wireReferenceAISetting } from './reference-ai-settings'
 import { wireTranslationInterface } from './translation-interface'
@@ -586,6 +587,8 @@ export function initJadensePreferencesPage() {
   const generalStatus = element("jadense-in-zotero-general-status")
   const stopReferenceAI = wireReferenceAISetting(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
   const stopTranslationInterface = wireTranslationInterface(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
+  const stopSelectionSettings = wireSelectionSettings(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
+  window.addEventListener("unload", stopSelectionSettings, { once: true })
   const stopOCR = wireOCRSettings(Zotero, root.querySelector<HTMLElement>('[data-settings-section="ocr"]'))
   const stopReading = wireReadingPreferences(Zotero, root.querySelector<HTMLElement>('[data-settings-section="general"]')!)
   const stopTheme = observeTheme(Zotero, root, () => theme.setOptions(themeOptions, readTheme(Zotero)))

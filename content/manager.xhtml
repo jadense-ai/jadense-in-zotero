@@ -464,19 +464,27 @@
               <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, other AI features use the current Chat model. Turn it off to configure them separately. Translation services are independent.">开启后，其他 AI 功能使用当前对话模型；关闭后可分别配置。翻译接口不受此开关影响。</p></div>
               <label class="jdx-manager-checkbox"><input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" /><span data-ui-en="Enabled">启用</span></label>
             </div>
+            <div id="jadense-feature-model-status" class="jdx-manager-inline-status" role="status"></div>
+            <section class="jdx-feature-group" data-feature-group="translation">
+              <h3 data-ui-en="Translation">翻译</h3>
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-translation-label" data-ui-en="Live translation">实时翻译</h3><p data-ui-en="Translate selected text and full PDFs. Full translation uses the paper's language settings.">用于 PDF 选文与全文翻译；全文沿用文章语言设置。</p></div>
               <div><div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label"></div><p id="jadense-feature-translation-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
+            </section>
+            <div data-selection-settings-host=""></div>
+            <section class="jdx-feature-group" data-feature-group="analysis">
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3><p data-ui-en="Summaries, analysis notes, source annotations, and local fallback for uncertain references. Reference verification never uses AI.">生成总结、解析笔记与原文批注，并为不确定引用提供局部识别兜底；参考文献核验不使用 AI。</p></div>
               <div><div id="jadense-feature-analysis-model" aria-labelledby="jadense-feature-analysis-label"></div><p id="jadense-feature-analysis-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
+            </section>
+            <section class="jdx-feature-group" data-feature-group="figure">
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-figure-label" data-ui-en="Image interpretation">图片解读</h3><p data-ui-en="Automatic detection, manual capture, and image follow-ups. Choose a model that accepts images.">自动识图、手动截图及其后续带图追问，请选择支持图片的模型。</p></div>
               <div><div id="jadense-feature-figure-model" aria-labelledby="jadense-feature-figure-label"></div><p id="jadense-feature-figure-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
-            <div id="jadense-feature-model-status" class="jdx-manager-inline-status" role="status"></div>
+            </section>
           </section>
           <section id="jadense-settings-panel-ocr" role="tabpanel" aria-labelledby="jadense-settings-tab-ocr" hidden="hidden"><div class="jdx-manager-settings-card" data-ocr-settings=""></div></section>
           <section id="jadense-settings-panel-ai" role="tabpanel" aria-labelledby="jadense-settings-tab-ai" hidden="hidden">

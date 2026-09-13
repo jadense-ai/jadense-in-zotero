@@ -1,4 +1,6 @@
 import { openChatSidebar } from './reader-sidebar'
+import { readOCRSelection, OCR_SELECTION_PREF } from './local-ocr'
+vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRSelection: vi.fn() }))
 vi.mock('./reader-sidebar', () => ({ openChatSidebar: vi.fn(async () => {}), removeReaderDock: vi.fn() }))
 // 合成 Zotero 9 阅读器契约测试，不读取真实文库；验证坐标绑定、写入隔离和原生工具条生命周期。
 import { readFileSync } from "node:fs"
@@ -826,6 +828,95 @@ describe("native reader toolbars", () => {
     cleanup()
   })
 
+  it.each(['quote', 'translate'] as const)('prepares OCR before manual %s and preserves the captured range', async kind => {
+    const fixture = host(), register = vi.fn(), onAction = vi.fn(async () => ({ translation: '译文' }))
+    const prefs = new Map<string, unknown>([[OCR_SELECTION_PREF, true]])
+    fixture.zotero.Prefs = { get: key => prefs.get(key), set: (key, value) => { prefs.set(key, value) } }
+    fixture.zotero.Reader!.registerEventListener = register
+    const doc = new DocumentStub(), append = vi.fn((node: ElementStub) => doc.body.append(node))
+    let finish!: (text: string) => void
+    vi.mocked(readOCRSelection).mockReset().mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const cleanup = registerReaderTools(fixture.zotero, 'test@jadense', onAction)
+    const annotation = { text: 'raw fffff', position: { pageIndex: 0, rects: [[10, 20, 50, 80]] }, pageLabel: '1' }
+    register.mock.calls[1][1]({ reader: fixture.reader, doc, append, params: { annotation } })
+    actionButtons(append.mock.calls[0][0])[kind === 'translate' ? 0 : 1].handlers.get('click')!()
+    annotation.position.rects[0][0] = 999
+    await vi.waitFor(() => expect(readOCRSelection).toHaveBeenCalledOnce())
+    expect(readOCRSelection).toHaveBeenCalledWith(expect.anything(), 11, [{ pageIndex: 0, rects: [[10, 20, 50, 80]] }], expect.anything(), expect.any(Function))
+    expect(onAction).not.toHaveBeenCalled()
+    finish('Recognized text\n\n$$x^2$$')
+    await vi.waitFor(() => expect(onAction).toHaveBeenCalledOnce())
+    expect(onAction.mock.calls[0][0]).toMatchObject({ kind, text: 'Recognized text\n\n$$x^2$$' })
+    cleanup()
+  })
+
+  it.each(['quote', 'translate'] as const)('uses OCR for automatic %s', async behavior => {
+    const fixture = host(), register = vi.fn(), onAction = vi.fn(async () => ({ translation: '译文' }))
+    const prefs = new Map<string, unknown>([[OCR_SELECTION_PREF, true]])
+    fixture.zotero.Prefs = { get: key => prefs.get(key), set: (key, value) => { prefs.set(key, value) } }
+    saveSelectionPreferences(fixture.zotero, { behavior })
+    fixture.zotero.Reader!.registerEventListener = register
+    const doc = new DocumentStub(), append = vi.fn((node: ElementStub) => doc.body.append(node))
+    vi.mocked(readOCRSelection).mockReset().mockResolvedValue('OCR automatic $x^2$')
+    const cleanup = registerReaderTools(fixture.zotero, 'test@jadense', onAction)
+    register.mock.calls[1][1]({ reader: fixture.reader, doc, append,
+      params: { annotation: { text: 'raw', position: { pageIndex: 0, rects: [[10, 20, 50, 80]] } } } })
+    await vi.waitFor(() => expect(readOCRSelection).toHaveBeenCalledOnce())
+    if (behavior === 'translate') {
+      await vi.waitFor(() => expect(onAction).toHaveBeenCalledOnce())
+      expect(onAction.mock.calls[0][0]).toMatchObject({ text: 'OCR automatic $x^2$' })
+    } else {
+      await vi.waitFor(() => expect(openChatSidebar).toHaveBeenCalledOnce())
+      expect(vi.mocked(openChatSidebar).mock.calls[0][4]).toMatchObject({ text: 'OCR automatic $x^2$' })
+    }
+    cleanup()
+  })
+
+  it('discards pending quote OCR when a new selection arrives', async () => {
+    const fixture = host(), register = vi.fn(), onAction = vi.fn()
+    fixture.zotero.Prefs = { get: key => key === OCR_SELECTION_PREF ? true : undefined }
+    fixture.zotero.Reader!.registerEventListener = register
+    const doc = new DocumentStub(), append = vi.fn((node: ElementStub) => doc.body.append(node))
+    let finish!: (text: string) => void
+    vi.mocked(readOCRSelection).mockReset().mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const cleanup = registerReaderTools(fixture.zotero, 'test@jadense', onAction)
+    const render = (text: string) => register.mock.calls[1][1]({ reader: fixture.reader, doc, append,
+      params: { annotation: { text, position: { pageIndex: 0, rects: [[10, 20, 50, 80]] } } } })
+    render('old'); actionButtons(append.mock.calls[0][0])[1].handlers.get('click')!()
+    await vi.waitFor(() => expect(readOCRSelection).toHaveBeenCalledOnce())
+    render('new'); finish('old OCR')
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(onAction).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it.each(['quote', 'translate'] as const)('cleans verified duplicate glyphs and ligatures before %s without removing real repeats', async kind => {
+    const source = page('ofﬁce ff 1111 S1')
+    const ligature = source.chars.findIndex(char => char.c === 'ﬁ')
+    source.chars.splice(ligature, 0, { ...source.chars[ligature], rect: [...source.chars[ligature].rect] })
+    source.chars.at(-1)!.rect = [source.chars.at(-1)!.rect[0], 176, source.chars.at(-1)!.rect[2], 182]
+    const raw = source.chars.map(char => char.c + (char.spaceAfter ? ' ' : '')).join('')
+    const fixture = host([source]), register = vi.fn(), onAction = vi.fn()
+    fixture.reader._internalReader._primaryView._pdfPages[0] = source
+    Object.assign(fixture.reader._internalReader._primaryView, { _selectionRanges: [{ anchorOffset: 0, headOffset: source.chars.length, text: raw, position: { pageIndex: 0 } }] })
+    fixture.zotero.Reader!.registerEventListener = register
+    const doc = new DocumentStub(), append = vi.fn((node: ElementStub) => doc.body.append(node))
+    const cleanup = registerReaderTools(fixture.zotero, 'test@jadense', onAction)
+    const click = (text: string) => {
+      register.mock.calls[1][1]({ reader: fixture.reader, doc, append, params: { annotation: { text, position: { pageIndex: 0 } } } })
+      actionButtons(append.mock.calls.at(-1)![0])[kind === 'quote' ? 1 : 0].handlers.get('click')!()
+    }
+    click(raw)
+    await vi.waitFor(() => expect(onAction).toHaveBeenCalledOnce())
+    expect(onAction.mock.calls[0][0]).toMatchObject({ text: 'office ff 1111 S₁' })
+    // 过期几何不能用于新选文；只规范标准连字，不压缩乱码、不扁平化 Unicode 上下标。
+    click('New ﬃ ffiffiffiffi x² α₁ 1111')
+    await vi.waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
+    expect(onAction.mock.calls[1][0]).toMatchObject({ text: 'New ffi ffiffiffiffi x² α₁ 1111' })
+    expect(source.chars.filter(char => char.c === 'ﬁ')).toHaveLength(2)
+    cleanup()
+  })
+
   it("restores geometric super/subscripts before sending a translation action", async () => {
     const source = page("Beat signals S1, x2 and AS2 remain synchronized.")
     for (const [index, char] of source.chars.entries()) {
@@ -947,7 +1038,8 @@ describe("native reader toolbars", () => {
     })
     const popup = append.mock.calls[1][0] as ElementStub
     const popupButtons = actionButtons(popup)
-    expect(popup.children).toHaveLength(3)
+    expect(popup.children).toHaveLength(2)
+    expect(popup.querySelectorAll('select')).toHaveLength(0)
     expect(popupButtons.map((button) => button.children[1].textContent)).toEqual(["智能翻译", "引用选文"])
     expect(doc.head.children).toHaveLength(2)
     popupButtons[0].handlers.get("click")!()
@@ -995,6 +1087,8 @@ describe("native reader toolbars", () => {
     await vi.waitFor(() => expect(panel.children[1].children[3].textContent).toBe("## 完整译文\n\n- 公式：$E = mc^2$"))
     expect(panel.hidden).toBe(false)
     expect(panel.attributes.get("role")).toBe("region")
+    const readerStyle = doc.head.children.find(node => node.attributes.has("data-jadense-reader-style"))!.textContent
+    expect(readerStyle).toContain('[data-jadense-translation-panel] .jadense-translation-text * {-moz-user-select:text;user-select:text;}')
     expect(panel.children[1].children[1].textContent).toBe("Selected source")
     expect(onAction).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "translate", text: "Selected source" }),

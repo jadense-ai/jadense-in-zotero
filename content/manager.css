@@ -1409,6 +1409,25 @@ textarea {
 .jdx-feature-model-row .jdx-manager-inline-status { min-height: 0; margin-top: 8px; color: var(--jdx-red); }
 .jdx-feature-model-row .jdx-manager-inline-status:empty { display: none; }
 
+/* 功能配置只由容器控制间距，避免标题/段落默认 margin 与 grid gap 叠加。 */
+#jadense-settings-panel-features { --jdx-feature-gap: 12px; }
+#jadense-settings-panel-features .jdx-feature-group {
+  display: grid; gap: var(--jdx-feature-gap); min-width: 0;
+  margin: 14px 0 0; padding: 14px;
+  border: 1px solid var(--jdx-line); border-radius: 8px; background: transparent;
+}
+#jadense-settings-panel-features h3 { margin: 0; font-size: calc(14px * var(--jdx-font-scale,1)); line-height: 1.5; }
+#jadense-settings-panel-features p { margin: 0; }
+#jadense-settings-panel-features .jdx-feature-model-row { padding: 12px 0; gap: 12px 20px; }
+#jadense-settings-panel-features .jdx-feature-model-row h3 + p { margin-top: 4px; }
+#jadense-settings-panel-features .jdx-feature-group .jdx-feature-model-row { padding: 0; border: 0; }
+#jadense-settings-panel-features .jdx-reference-ai-setting { padding: 12px 0 0; gap: 6px 8px; }
+#jadense-settings-panel-features [role="status"]:empty { display: none; }
+#jadense-settings-panel-features .jdx-translation-interface { margin: 0; padding: 0; }
+#jadense-settings-panel-features [data-selection-settings] { gap: 8px; }
+#jadense-settings-panel-features [data-selection-settings] > h3 { margin-bottom: 4px; }
+#jadense-settings-panel-features [data-selection-settings] > label { margin-top: 4px; }
+
 /* 阅读外观与语言/主题同属常规设置，延用同一行宽、分隔线和下拉组件。 */
 #jadense-settings-panel-general .jdx-manager-settings-card { gap: 0; padding-block: 0; }
 #jadense-general-status:empty { display: none; }
