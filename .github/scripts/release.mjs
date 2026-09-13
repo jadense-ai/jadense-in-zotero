@@ -7,7 +7,19 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
-const NOTES = `## 发布验收（公开前由维护者填写）
+const NOTES = `## 本次更新
+
+待填写：相对上一正式版的用户可见变化。
+
+## 操作与配置
+
+待填写：功能入口、配置方式及用户指南链接。
+
+## 升级与兼容
+
+待填写：安装方式、兼容范围及迁移注意事项。
+
+## 发布验收（公开前由维护者填写）
 
 - 实测 Zotero 版本：待填写；操作系统及版本：待填写。
 - 兼容范围、功能限制与升级注意事项：待填写。
@@ -81,8 +93,8 @@ export function createDraftRelease({ directory, env = process.env, gh = runGh })
   }
   gh([
     "release", "create", tag, artifact, metadataPath, checksumsPath,
-    "--repo", repository, "--verify-tag", "--draft", "--generate-notes",
-    "--title", `Jadense in Zotero ${tag}`, "--notes-file", "-",
+    "--repo", repository, "--verify-tag", "--draft",
+    "--title", tag, "--notes-file", "-",
   ], NOTES)
 }
 

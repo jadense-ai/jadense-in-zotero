@@ -2,7 +2,7 @@
 import { readLocalChatState } from '@/chat/local-chat-store'
 import type { ChatImageInput } from '@/chat/image-input'
 import { JadenseApiClient, type JadenseChatModelCatalog } from '@/jadense/api'
-import { chatRuntime } from './chat-runtime'
+import { chatRuntime, type SelectionQuote } from './chat-runtime'
 import { mountChatComposer } from './chat-composer-ui'
 import { renderMessage, nearLatest, followMessageUpdate, updateLatestButton } from './chat-message-ui'
 import { createJdxSelect } from './ui/select'
@@ -37,6 +37,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   let source: Awaited<ReturnType<typeof collectSourceForItem>> = null
   let catalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }, catalogReady = false
   let sessionOptionsKey = '', modelOptionsKey = '', imageGeneration = 0
+  let newSessionGeneration = 0
   const saveDraft = () => drafts.set(sessionID, { text: input.value, image, scroll: messageList.scrollTop })
   const error = (value: unknown) => { chatStatus.textContent = value instanceof Error ? value.message : String(value); chatStatus.dataset.state = 'error' }
   const renderImage = () => {
@@ -96,6 +97,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     updateLatestButton(elements)
   }
   const select = (id: string) => {
+    ++newSessionGeneration; creating = false
     saveDraft(); sessionID = id
     newConversationDraft = false
     const draft = drafts.get(id); input.value = draft?.text ?? ''; image = draft?.image
@@ -104,11 +106,23 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   }
   sessions.onChange(select)
   models.onChange(value => { const selected = featureModelSelectionFromKey(value); if (selected) saveFeatureModelSelection(host, readAutoFollowChatModel(host) ? 'chat' : image ? 'chat' : runtime.feature(sessionID), selected); update() })
-  function newSession() {
-    if (creating) return
+  async function newSession(quote?: SelectionQuote) {
+    const generation = ++newSessionGeneration
+    creating = false
     if (sessionID) saveDraft(); else drafts.delete('')
     sessionID = ''; newConversationDraft = true; input.value = ''; image = undefined
     messageList.replaceChildren(); renderImage(); update()
+    if (quote) {
+      creating = true
+      input.value = quote.text.split('\n').map(line => `> ${line}`).join('\n') + '\n\n'
+      update()
+      try {
+        const id = await runtime.create(itemID, quote)
+        if (disposed || generation !== newSessionGeneration) return
+        const text = input.value
+        select(id); input.value = text; saveDraft(); update(); input.focus()
+      } finally { if (!disposed && generation === newSessionGeneration) { creating = false; update() } }
+    }
   }
   form.addEventListener('submit', async event => {
     event.preventDefault(); if (send.disabled) return

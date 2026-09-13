@@ -220,6 +220,13 @@ function installPreviewHost() {
       { id: "analysis-demo-old", createdAt: "2026-09-09T06:30:00Z", source, summary: "旧解析不会单独占据历史列表。" },
       { id: "analysis-demo-second", createdAt: "2026-09-08T06:30:00Z", source: { ...source, itemID: 6, itemKey: secondPdf.key, title: secondPaper.getField("title") }, summary: "另一篇独立文献的结果。用于验证快速切换时不会混入上一篇的参考文献。", warnings: ["部分结果已恢复，尚未写入原生批注。"] },
     ] })
+    // 复现历史版本切换：新记录只有总结，旧记录仍有完整笔记。
+    if (new URLSearchParams(location.search).has("analysis-version-fixture")) {
+      const history = JSON.parse(preferences["extensions.jadenseInZotero.paperAnalysisHistory"])
+      delete history.records[0].notes
+      history.records[1].notes = notes
+      preferences["extensions.jadenseInZotero.paperAnalysisHistory"] = JSON.stringify(history)
+    }
     const references = Array.from({ length: 18 }, (_, order) => {
       const fields = { title: ["Sentence-level evidence retrieval in scientific documents", "A framework for structured literature review", "Reasoning with attributable sources"][order % 3], authors: ["Smith, J.", "Chen, L."], year: String(2020 + order % 6), doi: `10.0000/fixture.reference.${order}`, url: `https://example.org/references/${order}` }
       const verification = order % 4 === 1 ? "unverified" : "verified"

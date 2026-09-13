@@ -69,7 +69,9 @@ export function showStarInvitation(document: Document, host: ZoteroLike) {
       #jadense-star-invitation::backdrop { background: #0005; }
       #jadense-star-invitation h2 { font-size: 20px; margin: 0 0 12px; }
       #jadense-star-invitation footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-      #jadense-star-invitation button { font: inherit; padding: 7px 12px; border: 1px solid #80808060; border-radius: 6px; cursor: pointer; }
+      /* 重置宿主按钮的固定高度，避免行高与内边距将文字挤出按钮。 */
+      #jadense-star-invitation button { appearance: none; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; height: auto; min-height: 36px; margin: 0; font: inherit; line-height: 1.4; padding: 7px 12px; color: inherit; background: light-dark(#eef2ec,#1a241d); border: 1px solid #80808060; border-radius: 6px; cursor: pointer; }
+      #jadense-star-invitation button:focus-visible { outline: 2px solid #16D78F; outline-offset: 2px; }
       #jadense-star-invitation button:first-child { background: #16D78F; color: #111510; }
     `)
     const title = element('h2', uiText('喜欢攻玉的话，送我们一颗 Star 吧', 'Enjoying Jadense? Give us a Star'))

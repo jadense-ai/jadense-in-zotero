@@ -54,10 +54,10 @@ function event(target: EventTarget, name: string, properties: Record<string, unk
   target.dispatchEvent(value)
   return value
 }
-function fixture() {
+function fixture(preferences?: Parameters<typeof makeTranslationWindowInteractive>[2]) {
   const doc = new TestDocument(), root = new TestElement(doc, "aside"), header = new TestElement(doc, "header")
   const button = new TestElement(doc, "button"); root.append(header); header.append(button)
-  const control = makeTranslationWindowInteractive(root as unknown as HTMLElement, header as unknown as HTMLElement)
+  const control = makeTranslationWindowInteractive(root as unknown as HTMLElement, header as unknown as HTMLElement, preferences)
   const down = (target: TestElement) => event(root, "pointerdown", { target, button: 0, pointerId: 1, clientX: 0, clientY: 0 })
   const move = (dx: number, dy: number) => event(doc, "pointermove", { pointerId: 1, clientX: dx, clientY: dy })
   const resize = (direction: string, dx: number, dy: number) => {
@@ -67,6 +67,32 @@ function fixture() {
 }
 
 describe("shared translation floating geometry", () => {
+  it('restores preferred geometry after a temporary viewport contraction without saving the clamp', () => {
+    const save = vi.fn(), geometry = { left: 500, top: 400, width: 430, height: 350 }
+    const f = fixture({ read: () => ({ placement: 'remember', geometry }), save })
+    f.control.open()
+    f.doc.defaultView.innerWidth = 320; f.doc.defaultView.innerHeight = 240
+    f.control.clamp()
+    expect(f.root.getBoundingClientRect()).toMatchObject({ left: 8, top: 8, width: 304, height: 224 })
+    expect(save).not.toHaveBeenCalled()
+    f.doc.defaultView.innerWidth = 1000; f.doc.defaultView.innerHeight = 800
+    f.control.clamp()
+    expect(f.root.getBoundingClientRect()).toMatchObject(geometry)
+    event(f.header, 'keydown', { key: 'ArrowLeft', target: f.header })
+    expect(save).toHaveBeenLastCalledWith({ ...geometry, left: 490 }, true)
+    f.control.remove()
+  })
+  it('positions below selection, flips above near the bottom, and contains oversized windows', () => {
+    const f = fixture({ read: () => ({ placement: 'selection', geometry: { left: 8, top: 8, width: 430, height: 350 } }), save: vi.fn() })
+    let top = 100
+    f.control.open(() => ({ left: 900, top, bottom: top + 20 }))
+    expect(f.root.getBoundingClientRect()).toMatchObject({ left: 562, top: 128 })
+    top = 700; f.control.clamp()
+    expect(f.root.getBoundingClientRect()).toMatchObject({ left: 562, top: 342 })
+    f.control.open(() => ({ left: NaN, top: NaN, bottom: NaN }))
+    expect(f.root.getBoundingClientRect()).toMatchObject({ left: 8, top: 8 })
+    f.control.remove()
+  })
   it("moves a title drag, ignores interactive controls, and stops on pointer cancellation", () => {
     const f = fixture()
     f.down(f.button); f.move(200, 100)

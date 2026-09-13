@@ -3,9 +3,35 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { DocumentJobs } from './document-jobs'
 import { DocumentStore } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, installLocalOCR } from './local-ocr'
+import { checkLocalOCR, installLocalOCR, ocrFailureMessage, readOCRModelSource } from './local-ocr'
 
 afterEach(() => vi.unstubAllGlobals())
+
+it('keeps unrelated OCR errors intact and defaults unknown source preferences', () => {
+  expect(ocrFailureMessage('OCR page 2 was not fully converted')).toBe('OCR page 2 was not fully converted')
+  const f = coldProfile()
+  f.host.Prefs!.set!('extensions.jadenseInZotero.ocrModelSource', { extra: 'ignored' }, true)
+  expect(readOCRModelSource(f.host)).toBe('default')
+})
+
+it('explains missing OCR models and allows retry through the selected download source', async () => {
+  const f = coldProfile(), original = f.network.getMockImplementation()!
+  let unavailable = true
+  f.network.mockImplementation(async (url, init) => url.endsWith('/jobs/ocr-test') && unavailable
+    ? Response.json({ state: 'error', error: 'Got: ConnectTimeout: [WinError 10060]. An error happened while trying to locate the files on the Hub, and we cannot find the appropriate snapshot folder for the specified revision on the local disk.' })
+    : original(url, init))
+  try {
+    const pending = expect(f.jobs.start('translation', 1)).rejects.toThrow(/OCR.*模型|OCR model/u)
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish(); await pending
+    expect(f.translate).not.toHaveBeenCalled()
+    f.host.Prefs!.set!('extensions.jadenseInZotero.ocrModelSource', 'hf-mirror', true)
+    unavailable = false
+    const task = await f.jobs.start('translation', 1); await f.jobs.idle()
+    expect(task.status).toBe('complete')
+    const posts = f.network.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(new Headers(posts.at(-1)![1]!.headers).get('X-Jadense-OCR-Model-Source')).toBe('hf-mirror')
+  } finally { f.jobs.dispose() }
+})
 
 /** 模拟尚未安装依赖的 profile，安装进程由测试显式放行。 */
 function coldProfile() {

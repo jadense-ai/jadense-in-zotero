@@ -43,10 +43,20 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
     const analysisTab = mode === 'summary' || mode === 'notes' || mode === 'references' ? mode : undefined
     if (!source || !current) return
     const previous = mounted.get(`${paperKey(source)}:${active}`); if (previous) previous.scroll = section.scrollTop
+    // 总结和笔记来自同一解析记录；保留实际选中的版本，包括子视图里的版本切换。
+    const previousRecordID = previous?.view?.selectedRecordID()
+    if ((active === 'summary' || active === 'notes') && previousRecordID) {
+      for (const tab of ['summary', 'notes']) recordIDs.set(`${paperKey(source)}:${tab}`, previousRecordID)
+    }
     active = mode
     tabs.forEach((tab, index) => { tab.setAttribute('aria-selected', String(modes[index] === mode)); tab.tabIndex = modes[index] === mode ? 0 : -1 })
     const key = `${paperKey(source)}:${mode}`
-    if (recordID && recordIDs.get(key) !== recordID) { mounted.get(key)?.view?.remove(); mounted.get(key)?.root.remove(); mounted.delete(key); recordIDs.set(key, recordID) }
+    const sharedAnalysis = mode === 'summary' || mode === 'notes'
+    if (sharedAnalysis) {
+      recordID ??= recordIDs.get(key)
+      if (recordID) for (const tab of ['summary', 'notes']) recordIDs.set(`${paperKey(source)}:${tab}`, recordID)
+    }
+    if (recordID && (sharedAnalysis ? mounted.get(key)?.view?.selectedRecordID() : recordIDs.get(key)) !== recordID) { mounted.get(key)?.view?.remove(); mounted.get(key)?.root.remove(); mounted.delete(key); recordIDs.set(key, recordID) }
     for (const [name, panel] of mounted) panel.root.hidden = name !== key
     let panel = mounted.get(key)
     if (!panel) {

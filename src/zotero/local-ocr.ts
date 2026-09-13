@@ -15,6 +15,21 @@ const platform = () => globalThis as unknown as Platform
 const windows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platform ?? globalThis.navigator?.platform ?? '').toLowerCase().startsWith('win')
 const network = (host: ZoteroLike) => { const win = host.getMainWindow?.(); return win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis) }
 
+export const OCR_MODEL_SOURCE_PREF = 'extensions.jadenseInZotero.ocrModelSource'
+/** 未知偏好沿用宿主环境；镜像必须由用户明确选择。 */
+export function readOCRModelSource(host: ZoteroLike): 'default' | 'hf-mirror' {
+  try { return host.Prefs?.get(OCR_MODEL_SOURCE_PREF, true) === 'hf-mirror' ? 'hf-mirror' : 'default' } catch { return 'default' }
+}
+
+/** 模型准备失败与翻译 Provider 无关；原始诊断仍保留在本机 OCR 任务中。 */
+export function ocrFailureMessage(error: unknown): string {
+  const text = String(error || 'OCR cancelled')
+  if (/snapshot folder|files on the Hub|huggingface|LocalEntryNotFound|ConnectTimeout|ReadTimeout|WinError 10060/iu.test(text)) {
+    return uiText('OCR 模型下载或加载失败，全文翻译尚未开始。请在设置 → OCR配置中选择可访问的模型下载源，检查网络后重新点击“全文翻译”。无需更换翻译模型或重装 Python；已保存的全文 Markdown 可继续翻译。', 'OCR model download or loading failed; full translation has not started. Choose an accessible model download source in Settings → OCR configuration, check your network, then click Translate full text again. No translation model change or Python reinstall is needed; saved full Markdown can still be translated.')
+  }
+  return text
+}
+
 /** 设置与首次全文任务共用固定安装资源。 */
 async function prepareOCR(host: ZoteroLike) {
   const { IOUtils: io, PathUtils: paths } = platform()
@@ -148,7 +163,7 @@ export async function readOCRDocument(host: ZoteroLike, itemID: number, signal: 
   }
   const bytes = await platform().IOUtils.read(await item.getFilePathAsync()); checkCancelled(signal)
   // 上传成功后才登记取消钩子，取消与响应同时到达时仍显式清理服务器任务。
-  const job = await request('/jobs', { method: 'POST', body: bytes as unknown as BodyInit })
+  const job = await request('/jobs', { method: 'POST', body: bytes as unknown as BodyInit, headers: { 'X-Jadense-OCR-Model-Source': readOCRModelSource(host) } })
   const cancel = () => { void request(`/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}) }
   signal.addEventListener('abort', cancel, { once: true })
   try {
@@ -159,7 +174,7 @@ export async function readOCRDocument(host: ZoteroLike, itemID: number, signal: 
         await validateDocument(host as unknown as DocumentHost, source); checkCancelled(signal)
         return projectOCR(status.result, source)
       }
-      if (status.state === 'error' || status.state === 'cancelled') throw new Error(String(status.error || 'OCR cancelled'))
+      if (status.state === 'error' || status.state === 'cancelled') throw new Error(ocrFailureMessage(status.error))
       progress(status.page ? uiText(`正在识别第 ${status.page} / ${status.total} 页`, `Recognizing page ${status.page} / ${status.total}`) : uiText('正在加载 OCR 模型（首次使用需要下载）…', 'Loading OCR models (download required on first use)…'))
       await new Promise(resolve => setTimeout(resolve, 500))
     }

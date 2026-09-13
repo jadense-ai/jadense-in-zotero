@@ -1,5 +1,12 @@
 # 更新说明 / Changelog
 
+## 未发布 / Unreleased
+
+- 选文浮窗记住位置与大小，支持跟随选区；可配置自动翻译或引用到新侧栏对话，引用不会自动发送请求。
+- OCR 模型下载支持可选第三方 HF-Mirror，下载失败后可调整来源并重试；PDF 继续在本机识别。
+- 改善更新提示与阅读操作。以上仅为当前源码变化，未重新发布 v0.4.7。
+- Selection window geometry, optional selection actions, OCR model download source, and update notices are available in source only; the v0.4.7 assets are unchanged.
+
 ## 0.4.7 — 2026-09-13
 
 ### 简体中文

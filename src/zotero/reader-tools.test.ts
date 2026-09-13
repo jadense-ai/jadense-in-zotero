@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { initializeUiLocale, saveTheme, THEME_PREF, DISPLAY_LANGUAGE_PREF } from "./ui-preferences"
 beforeEach(() => { initializeUiLocale({ locale: "zh-CN" }); vi.mocked(openChatSidebar).mockReset().mockResolvedValue(undefined) })
 import { readArticleTranslationLanguages, writeArticleTranslationLanguages } from "./translation-settings"
+import { saveSelectionPreferences } from './selection-preferences'
 import {
   readPdfForAnalysis,
   registerReaderTools,
@@ -485,6 +486,30 @@ function descendants(element: ElementStub): ElementStub[] {
 }
 
 describe("native reader toolbars", () => {
+  it('waits by default, coalesces selection rerenders, quotes without dispatch, and cancels on unload', async () => {
+    vi.useFakeTimers()
+    const fixture = host(), values = new Map<string, unknown>(), register = vi.fn(), action = vi.fn()
+    fixture.zotero.Prefs = { get: key => values.get(key), set: (key, value) => { values.set(key, value) } }
+    fixture.zotero.Reader!.registerEventListener = register
+    const stop = registerReaderTools(fixture.zotero, 'test', action)
+    const doc = new DocumentStub()
+    const render = (text: string) => register.mock.calls[1][1]({ reader: fixture.reader, doc, append: (node: ElementStub) => doc.body.append(node), params: { annotation: { text, position: { pageIndex: 0 } } } })
+    try {
+      render('Waiting'); await vi.advanceTimersByTimeAsync(400)
+      expect(action).not.toHaveBeenCalled(); expect(openChatSidebar).not.toHaveBeenCalled()
+      saveSelectionPreferences(fixture.zotero, { behavior: 'translate' })
+      render('Translate'); render('Translate'); await vi.advanceTimersByTimeAsync(400)
+      expect(action).toHaveBeenCalledTimes(1)
+      expect(action).toHaveBeenCalledWith(expect.objectContaining({ text: 'Translate', kind: 'translate' }), expect.any(Object))
+      saveSelectionPreferences(fixture.zotero, { behavior: 'quote' })
+      render('Quoted'); await vi.advanceTimersByTimeAsync(400)
+      expect(openChatSidebar).toHaveBeenCalledTimes(1)
+      expect(openChatSidebar).toHaveBeenCalledWith(fixture.zotero, doc, 11, fixture.reader, { text: 'Quoted', pageIndex: 0, pageLabel: undefined })
+      expect(action).toHaveBeenCalledTimes(1)
+      render('Closed'); stop(); await vi.advanceTimersByTimeAsync(400)
+      expect(openChatSidebar).toHaveBeenCalledTimes(1)
+    } finally { stop(); vi.useRealTimers() }
+  })
   it("uses the selected UI language and updates only plugin surfaces when theme preferences change", async () => {
     const fixture = host()
     const values = new Map<string, unknown>([[DISPLAY_LANGUAGE_PREF, "en-US"], [THEME_PREF, "dark"]])
@@ -922,7 +947,7 @@ describe("native reader toolbars", () => {
     })
     const popup = append.mock.calls[1][0] as ElementStub
     const popupButtons = actionButtons(popup)
-    expect(popup.children).toHaveLength(2)
+    expect(popup.children).toHaveLength(3)
     expect(popupButtons.map((button) => button.children[1].textContent)).toEqual(["智能翻译", "引用选文"])
     expect(doc.head.children).toHaveLength(2)
     popupButtons[0].handlers.get("click")!()

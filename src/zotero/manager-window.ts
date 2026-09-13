@@ -2,6 +2,7 @@ import type { BootstrapPluginContext } from "./native-preferences"
 import type { ZoteroLike } from "./runtime"
 import { chromeContentUrl } from "./chrome-registration"
 import type { ReaderAction } from "./reader-tools"
+import { silentlyCheckForUpdates } from './update-notification'
 
 export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings" | "settings-connection"
 
@@ -85,6 +86,7 @@ export function openManagerWindow(input: {
     }
     // Gecko 原生 focus 会恢复最小化窗口；不主动 restore，以保留用户的最大化状态。
     existing.focus()
+    void silentlyCheckForUpdates(existing.document, input.zotero, input.context.pluginID)
     return true
   }
 
@@ -117,6 +119,7 @@ export function openManagerWindow(input: {
       if (!href.startsWith(managerPageUrl)) return
       manager.removeEventListener?.("load", attachUnloadAfterManagerLoad)
       manager.addEventListener?.("unload", clearContext, { once: true })
+      void silentlyCheckForUpdates(manager.document, input.zotero, input.context.pluginID)
     }
     // 新 chrome 窗口会先卸载 about:blank；等 Manager 页面完成 load 后再监听，避免误删首个 Reader 动作。
     manager.addEventListener?.("load", attachUnloadAfterManagerLoad)

@@ -185,7 +185,10 @@ export function translationGlassBackground(root: HTMLElement) {
 }
 
 /** 标题栏移动、八个边缘缩放共用几何约束；键盘聚焦标题栏后方向键移动，Shift + 方向键缩放。 */
-export function makeTranslationWindowInteractive(root: HTMLElement, header: HTMLElement) {
+export function makeTranslationWindowInteractive(root: HTMLElement, header: HTMLElement, preferences?: {
+  read(): { placement: 'remember' | 'selection'; geometry?: { left: number; top: number; width: number; height: number } }
+  save(geometry: { left: number; top: number; width: number; height: number }, moved: boolean): void
+}) {
   const doc = root.ownerDocument, win = doc.defaultView
   const glass = translationGlassBackground(root)
   root.setAttribute("data-jdx-floating-window", "")
@@ -194,6 +197,8 @@ export function makeTranslationWindowInteractive(root: HTMLElement, header: HTML
   header.title = hint; header.setAttribute("aria-label", hint)
   const limit = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(value, Math.max(minimum, maximum)))
   const bounds = () => ({ right: (win?.innerWidth || 800) - 8, bottom: (win?.innerHeight || 600) - 8 })
+  let anchor: (() => { left: number; top: number; bottom: number } | undefined) | undefined
+  let preferred: { left: number; top: number; width: number; height: number } | undefined
   const fitMenu = () => {
     const height = root.getBoundingClientRect().height
     const footerHeight = root.querySelector?.("footer")?.getBoundingClientRect().height || 48
@@ -202,11 +207,28 @@ export function makeTranslationWindowInteractive(root: HTMLElement, header: HTML
   }
   const clamp = () => {
     if (root.hidden) return
-    const rect = root.getBoundingClientRect(), edge = bounds()
+    let rect = root.getBoundingClientRect()
+    const edge = bounds()
+    if (preferences && !drag) {
+      preferred ??= preferences.read().geometry ?? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+      const width = Math.min(Math.max(300, preferred.width), Math.max(1, edge.right - 8)), height = Math.min(Math.max(220, preferred.height), Math.max(1, edge.bottom - 8))
+      const candidate = preferences.read().placement === 'selection' ? anchor?.() : undefined
+      const selection = candidate && [candidate.left, candidate.top, candidate.bottom].every(Number.isFinite) ? candidate : undefined
+      const left = selection?.left ?? preferred.left
+      const top = selection ? (selection.bottom + 8 + height <= edge.bottom ? selection.bottom + 8 : selection.top - height - 8) : preferred.top
+      root.style.width = `${width}px`; root.style.height = `${height}px`
+      rect = { ...rect, left, top, width, height } as DOMRect
+    }
     root.style.left = `${limit(rect.left, 8, edge.right - rect.width)}px`
     root.style.top = `${limit(rect.top, 8, edge.bottom - rect.height)}px`
     root.style.right = "auto"
     fitMenu()
+  }
+  const remember = (moved = false) => {
+    if (!preferences) return
+    const rect = root.getBoundingClientRect()
+    preferred = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+    preferences.save(preferred, moved)
   }
   const change = (rect: DOMRect, direction: string, dx: number, dy: number) => {
     const edge = bounds(), minWidth = Math.min(300, edge.right - 8), minHeight = Math.min(220, edge.bottom - 8)
@@ -242,27 +264,29 @@ export function makeTranslationWindowInteractive(root: HTMLElement, header: HTML
     change(drag.rect, drag.direction, event.clientX - drag.x, event.clientY - drag.y)
     event.preventDefault()
   }
-  const end = () => { drag = undefined }
+  const end = () => { if (drag) remember(!drag.direction); drag = undefined }
   const keyboard = (event: KeyboardEvent) => {
     // Gecko 事件目标可能经过不同的跨区包装；监听已限定标题栏，只排除其中的交互控件。
     if ((event.target as Element)?.closest?.("button,select,input,textarea,summary,a") || event.altKey || event.ctrlKey || event.metaKey) return
     const arrows: Record<string, [number, number]> = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }
     const delta = arrows[event.key]; if (!delta || (event.shiftKey && root.dataset.minimized === "true")) return
-    change(root.getBoundingClientRect(), event.shiftKey ? "se" : "", ...delta); event.preventDefault(); event.stopPropagation()
+    change(root.getBoundingClientRect(), event.shiftKey ? "se" : "", ...delta); remember(!event.shiftKey); event.preventDefault(); event.stopPropagation()
   }
   root.addEventListener("pointerdown", start); root.addEventListener("lostpointercapture", end)
   doc.addEventListener("pointermove", move); doc.addEventListener("pointerup", end); doc.addEventListener("pointercancel", end)
   header.addEventListener("keydown", keyboard); win?.addEventListener("resize", clamp)
+  doc.addEventListener('scroll', clamp, true)
   let observer: ResizeObserver | undefined
   try {
     observer = new (win as Window & typeof globalThis).ResizeObserver(clamp); observer.observe(root)
     const footer = root.querySelector("footer"); if (footer) observer.observe(footer)
   } catch { /* 没有观察器仍可拖动、缩放并响应窗口变化。 */ }
-  return { clamp, remove: () => {
+  return { clamp, open(getAnchor?: typeof anchor) { anchor = getAnchor; preferred = preferences?.read().geometry; const initial = !preferred; clamp(); if (initial && preferred) preferences?.save(preferred, false) }, remove: () => {
     end(); glass.remove(); observer?.disconnect(); win?.removeEventListener("resize", clamp)
     root.removeEventListener("pointerdown", start); root.removeEventListener("lostpointercapture", end)
     doc.removeEventListener("pointermove", move); doc.removeEventListener("pointerup", end); doc.removeEventListener("pointercancel", end)
     header.removeEventListener("keydown", keyboard); handles.forEach(handle => handle.remove())
+    doc.removeEventListener('scroll', clamp, true)
   } }
 }
 

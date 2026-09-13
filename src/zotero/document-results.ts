@@ -58,7 +58,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     feedbackTimer = setTimeout(() => { status.textContent = '' }, 3500)
   }
   cleanups.push(() => clearTimeout(feedbackTimer))
-  const report = (error: unknown) => { if (!disposed) { message.textContent = String(error); message.dataset.kind = 'error' } }
+  const report = (error: unknown) => { if (!disposed) { message.textContent = error instanceof Error ? error.message : String(error); message.dataset.kind = 'error' } }
   const startExtraction = async (fresh: boolean) => {
     if (active) return
     active = new AbortController(); extract.disabled = true; cancel.hidden = false; status.textContent = ''; message.dataset.kind = 'running'
@@ -177,7 +177,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     try { const id = host.Prefs?.registerObserver?.(key, () => { void refresh() }); if (id !== undefined) cleanups.push(() => host.Prefs?.unregisterObserver?.(id)) } catch { /* 切换视图仍会读取。 */ }
   }
   void jobs.ready.then(refresh)
-  return { refresh, setRun(run: AnalysisRunView) { if (paperKey(run.source) === paperKey(source)) { analysisRun = run; analysis?.setRun(run) } }, remove() { disposed = true; stopContent(); versions.destroy(); cleanups.forEach(stop => stop()) } }
+  return { refresh, selectedRecordID: () => selected, setRun(run: AnalysisRunView) { if (paperKey(run.source) === paperKey(source)) { analysisRun = run; analysis?.setRun(run) } }, remove() { disposed = true; stopContent(); versions.destroy(); cleanups.forEach(stop => stop()) } }
 }
 
 /** 空状态沿用文档式层级，不依赖系统表单外观。 */
