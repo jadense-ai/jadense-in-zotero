@@ -256,7 +256,7 @@ function installPreviewHost() {
           : 'Synthetic OCR installation log\n'
         return { stdout: { readString: async () => { const value = output; output = null; return value } }, wait: async () => {
           if (!checking) { await new Promise(resolve => setTimeout(resolve, 1500)); installed = ocrFixture !== 'failure' }
-          return { exitCode: !checking && ocrFixture === 'failure' ? 1 : 0 }
+          return { exitCode: (checking && ocrFixture === 'read-failure') || (!checking && ocrFixture === 'failure') ? 1 : 0 }
         } }
       },
     } }) }
@@ -415,6 +415,7 @@ async function serveChat(request, response) {
 
 const assets = new Map([
   ["/ui.css", ["ui.css", "text/css; charset=utf-8"]],
+  ["/status.css", ["status.css", "text/css; charset=utf-8"]],
   ["/translation-interface.css", ["translation-interface.css", "text/css; charset=utf-8"]],
   ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],
   ["/manager.js", ["manager.js", "text/javascript; charset=utf-8"]],

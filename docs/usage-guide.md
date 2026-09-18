@@ -235,16 +235,16 @@ Under Settings → Feature configuration → Selected text, choose the selection
 
 <a id="unreleased-049"></a>
 
-## 未发布源码 0.4.9 / Unreleased source 0.4.9
+## 0.4.9：全文翻译恢复、OCR 状态与诊断 / Full-translation recovery, OCR status and diagnostics
 
-本节只对应主分支源码，不表示已发布新的安装包。
+本节对应正式版 0.4.9。全文翻译、OCR 配置和本机诊断的具体操作如下。
 
 - 在「设置 → OCR配置」点击「启用本机 OCR」，失败后点击「继续准备」。打开设置自动读取状态；已有环境和模型尽量复用。全文 Markdown、全文翻译和参考文献任务需要先准备完成。详见[本机 OCR 指南](local-ocr.md)。
 - 下载源可选 Hugging Face、HF-Mirror 或魔搭 ModelScope。切换来源不上传 PDF，也不改变翻译服务；重试会复用已完成下载的文件。
 - 全文翻译中断后保留已完成内容，按提示手动继续；积分、账号或模型配置问题需先修复。不会自动重发失败请求。
 - 在工作台帮助菜单中，5 秒内点击版本号 5 次，启用「错误诊断」。可筛选、复制、导出和清空本机记录；最多保留 7 天、500 条、2 MiB。导出前仍请核对内容，再决定是否主动分享。
 
-This section describes main-branch source, not a newly published installation package.
+This section describes the published v0.4.9 release.
 
 - Open Settings → OCR configuration and choose Enable local OCR, or Continue setup after a failure. Readiness loads automatically and existing environments/models are reused where possible. Prepare OCR before full Markdown extraction, full translation or reference extraction.
 - Choose Hugging Face, HF-Mirror or ModelScope as the model download source. Changing it neither uploads PDFs nor changes your translation provider; retries reuse completed files.
