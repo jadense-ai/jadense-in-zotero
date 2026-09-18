@@ -2,16 +2,12 @@
 import assert from 'node:assert/strict'
 import process from 'node:process'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version
 const branch = process.env.GITHUB_HEAD_REF || (process.env.GITHUB_REF_TYPE === 'branch' ? process.env.GITHUB_REF_NAME : '') || ''
 assert.ok(!/^codex[/-]/i.test(branch), 'Use a descriptive feature branch or vX.X.X release branch')
 if (/release|^v\d/i.test(branch)) assert.equal(branch, `v${version}`, 'Release branch must be exactly vX.X.X and match package.json')
-if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
-  const base = JSON.parse(execFileSync('git', ['show', 'origin/main:package.json'], { encoding: 'utf8' })).version
-  if (version !== base) assert.equal(branch, `v${version}`, 'Version changes require the matching vX.X.X branch')
-}
+// 上游未发布版本可经普通源码同步 PR 合并；版本号变化本身不代表发布。
 
 /** README 摘要只列正式版本；语言之间一致，完整历史由 CHANGELOG 保存。 */
 export function summaryVersions(markdown) {

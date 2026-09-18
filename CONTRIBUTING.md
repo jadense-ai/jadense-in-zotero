@@ -43,7 +43,7 @@ pnpm run preview:research
 1. 从最新 `main` 创建短期功能分支；外部贡献者使用 fork，PR 的目标分支为 `main`。
 2. 一份 PR 解决一个明确问题，说明修改前后的行为、验证结果，以及兼容性或用户数据影响。推荐标题前缀 `feat`、`fix`、`docs`、`test`、`ci`、`chore`，不强制格式检查。
 3. UI 修改提供去除个人信息的截图。涉及阅读器、批注、本地历史或升级的修改，补充实际 Zotero/操作系统版本及针对性验证；没有环境时明确尚未验证的范围。
-4. 普通 PR 不改版本号，不提交 `build/`、`release/`、生成的 `manifest.json`、profile、日志或凭据。升级打包依赖时同步更新 `THIRD_PARTY_NOTICES.md`。
+4. 普通功能 PR 不主动改版本号；上游源码同步可携带尚未发布的版本号，通过普通描述性分支提交，并在中英文 README 与 CHANGELOG 中明确标注未发布，不要求创建发布分支。版本号变化本身不创建标签或 Release。不要提交 `build/`、`release/`、生成的 `manifest.json`、profile、日志或凭据。升级打包依赖时同步更新 `THIRD_PARTY_NOTICES.md`。
 5. 维护者解决评审讨论、确保分支与最新 `main` 同步且 `verify` 成功后 squash merge。只保留 `main` 作为长期开发分支，合并后删除功能分支。
 
 当前采用单维护者规则：所有改动经过 PR，强制批准人数为 0；外部 PR 仍由维护者审阅后合并。没有自动合并、强制 CODEOWNERS 审批、提交签名或日常管理员绕过。安全问题按 [SECURITY.md](SECURITY.md) 私下报告。
