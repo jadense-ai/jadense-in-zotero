@@ -83,7 +83,8 @@ for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "ma
 await writeFile(managerHtmlPath, managerHtml)
 
 const manifestJson = stringifyJson(manifest)
-await writeFile(generatedManifestPath, manifestJson)
+// 同版本重建无需触碰源码清单，避免 Windows 编辑器/索引器共享读锁打断打包。
+if (await readFile(generatedManifestPath, "utf8").catch(error => { if (error.code === "ENOENT") return ""; throw error }) !== manifestJson) await writeFile(generatedManifestPath, manifestJson)
 await writeFile(path.join(buildDir, "manifest.json"), manifestJson)
 
 const zip = new JSZip()

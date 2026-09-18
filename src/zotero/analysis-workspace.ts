@@ -111,16 +111,24 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.title.textContent = paper.source.title; detail.meta.textContent = [metadataText(paper.source), paper.source.doi ? `DOI ${paper.source.doi}` : ""].filter(Boolean).join(" · ")
     detail.meta.hidden = !detail.meta.textContent
     detail.date.textContent = [record ? uiText(`解析于 ${timeText(record.createdAt)}`, `Analyzed ${timeText(record.createdAt)}`) : uiText("尚未生成解析总结", "No analysis summary yet"), uiText("本地保存", "Stored locally")].join(" · ")
-    detail.status.textContent = run?.message || ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
+    if (!record) detail.date.textContent = run?.busy ? uiText('正在解析 · 可继续阅读', 'Analyzing · Keep reading') : ''
+    detail.status.setAttribute('role', 'status')
+    detail.status.textContent = run?.busy || run?.error ? run.message : ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
     detail.stop.hidden = !(run?.busy || run?.references?.running || paper.references?.status === "running")
     detail.status.parentElement!.hidden = !detail.status.textContent && detail.stop.hidden
     detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...(record?.warnings || [])].filter(Boolean).join("\n")
     detail.warning.dataset.kind = record && options.unsaved(record.id) ? "error" : "neutral"
-    const signature = JSON.stringify(record || null)
+    const signature = JSON.stringify([record || null, Boolean(run?.busy), Boolean(run?.error)])
     if (signature !== detail.signature) {
       detail.signature = signature
       updateChatMarkdown(detail.summary, record?.summary || uiText("尚无解析总结。请在 PDF 阅读器中点击「解析」。", "No analysis summary yet. Click Analyze in the PDF reader."))
-      renderNotes(detail.notes, record)
+      if (!record && run?.busy) {
+        updateChatMarkdown(detail.summary, uiText('正在解析这篇文献，可继续阅读 PDF。结果准备好后会显示在这里。', 'Analysis is running. Keep reading your PDF; results will appear here when ready.'))
+        detail.notes.replaceChildren(element(doc, 'p', 'jdx-result-empty', uiText('解析笔记将在生成完成后呈现。', 'Analysis notes will appear when ready.')))
+      } else if (!record && run?.error) {
+        updateChatMarkdown(detail.summary, uiText('本次解析未生成可展示的总结，可从阅读器工具条重试。', 'No summary is available from this run. Retry from the reader toolbar.'))
+        detail.notes.replaceChildren()
+      } else renderNotes(detail.notes, record)
     }
     const reference = options.referenceTaskID ? jobs.get(options.referenceTaskID) : paper.references
     detail.reference.update(reference && paperKey(reference.source) === paperKey(paper.source) ? reference : paper.references, run?.references)

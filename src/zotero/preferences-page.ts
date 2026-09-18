@@ -1,3 +1,4 @@
+import { diagnostics } from "./diagnostics"
 import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
 import { wireReferenceAISetting } from './reference-ai-settings'
@@ -303,6 +304,7 @@ async function saveTokenFromEdit(elements: PreferenceElements, strings: Preferen
     // 保存后立即用新令牌拉取收藏夹,顺带完成连接验证。
     await refreshFolders(elements, strings)
   } catch (error) {
+    diagnostics()?.record("preferences", "operation_error", error)
     setStatus(elements.status, error instanceof Error ? error.message : strings.unexpectedError, "error")
   } finally {
     elements.tokenSave.disabled = false
@@ -565,6 +567,7 @@ async function testByokDraft(elements: PreferenceElements, strings: PreferencesS
     })
     setStatus(elements.byokStatus, strings.byokTestSucceeded, "success")
   } catch (error) {
+    diagnostics()?.record("preferences", "operation_error", error)
     setStatus(elements.byokStatus, error instanceof Error ? error.message : strings.unexpectedError, "error")
   } finally {
     elements.byokTest.disabled = false
@@ -576,6 +579,7 @@ export function initJadensePreferencesPage() {
   if (!root || root.getAttribute("data-jadense-initialized") === "true") return
   root.setAttribute("data-jadense-initialized", "true")
   initializeUiLocale(Zotero)
+  diagnostics(Zotero)
   root.setAttribute("lang", getUiLocale())
   const strings = selectPreferencesStrings(getUiLocale())
   applyStrings(root, strings)

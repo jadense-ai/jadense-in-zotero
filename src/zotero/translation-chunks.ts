@@ -79,7 +79,8 @@ export function hasTranslatableText(text: string) { return /\p{L}/u.test(text.re
 
 /** 公式缺失不会被当成完成；保持草稿供查看，用户继续时重试此片。 */
 export function formulasPreserved(source: string, translated: string) {
-  const markers = /⟦F\d+⟧|!\[[^\]\n]*\]\(jdx-asset:image-\d+\)/gu
-  const expected = source.match(markers) ?? [], actual = translated.match(markers) ?? []
+  const markers = /⟦F\d+⟧|!\[[^\]\n]*\]\([^\s)]+\)/gu
+  const identity = (text: string) => (text.match(markers) ?? []).map(marker => marker.startsWith('![') ? marker.slice(marker.lastIndexOf('](') + 2, -1) : marker)
+  const expected = identity(source), actual = identity(translated)
   return expected.length === actual.length && expected.every((marker, i) => marker === actual[i])
 }

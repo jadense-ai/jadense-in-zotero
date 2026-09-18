@@ -1,3 +1,4 @@
+import { renderDocumentIssueActions } from './document-notices'
 /** 单篇参考文献视图：订阅指定任务，保留阅读/筛选/勾选；模型与原生写入只经过 DocumentJobs。 */
 import type { ReferenceEntry } from "@/chat/reference-list"
 import { referenceAIEnabled } from './reference-ai-settings'
@@ -96,6 +97,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     if (extracting) extracting.abort()
     else operate(id => jobs.pause(id))
   })
+  const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true; root.append(issueActions)
   const resume = action(doc, uiText("继续核验", "Continue verification"), () => operate(id => jobs.resume(id)))
   const identify = action(doc, uiText("识别待定片段", "Identify uncertain fragments"), () => operate(id => jobs.resume(id, true)))
   const skip = action(doc, uiText("跳过 AI，继续核验", "Skip AI and verify"), () => operate(id => jobs.skipReferenceAI(id)))
@@ -154,6 +156,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     const label = phase === "stopping" ? uiText("正在停止…", "Stopping…") : phase === "queued" ? uiText("等待处理", "Queued") : phase === "identifying" ? uiText("识别待定片段", "Identifying fragments") : phase === "verifying" ? uiText("正在核验", "Verifying") : phase === "importing" ? uiText("正在导入", "Importing")
       : task?.status === "paused" ? uiText("已暂停", "Paused") : task?.status === "error" ? uiText("核验失败", "Verification failed") : task ? uiText("提取完成", "Extraction finished") : ""
     status.textContent = [preparing ? preparation?.message : label && `${label} · ${task?.completed ?? 0} / ${task?.total ?? 0}`, preparation?.error, task?.error, ...(task?.warnings || []), task?.storageWarning ? uiText("结果尚未完整保存，关闭前请保留所需内容。", "Results are not fully saved. Keep needed content before closing.") : ""].filter(Boolean).join("\n")
+    renderDocumentIssueActions(issueActions, host, task?.issue)
     status.dataset.kind = task?.error || preparation?.error || task?.storageWarning ? "error" : "neutral"
     extract.hidden = preparing || running; extract.disabled = busy
     extract.textContent = task ? uiText("重新提取参考文献", "Extract references again") : uiText("提取参考文献", "Extract references")

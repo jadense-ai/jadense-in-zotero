@@ -1,3 +1,4 @@
+import { traceRequest, diagnosticFetch, markDiagnosticAbort } from "@/zotero/diagnostics"
 /** 新版 Zotero 攻玉客户端：先确认协议，再持久化/认领；重发只复用稳定执行身份。 */
 import { TemporaryChatClient, temporaryChatMessages, jadenseChatSelectionBody, consumeTemporaryChatStream, type TemporaryChatClientOptions, type TemporaryChatSendInput } from './temporary-chat'
 import { readJadenseApiError, JadenseApiError } from '@/jadense/api'
@@ -9,25 +10,29 @@ const HEADER = 'x-jadense-temporary-protocol'
 export class ReliableTemporaryChatClient extends TemporaryChatClient {
   private options: TemporaryChatClientOptions
   constructor(options: TemporaryChatClientOptions, private store = new TemporaryRequestStore()) { super(options); this.options = options }
-  private fetch(input: string, init: RequestInit) { return this.options.fetchImpl ? this.options.fetchImpl(input, init) : globalThis.fetch(input, init) }
+  private fetch(input: RequestInfo | URL, init?: RequestInit) { return this.options.fetchImpl ? this.options.fetchImpl(input, init) : globalThis.fetch(input, init) }
   private base() { return this.options.baseUrl.trim().replace(/\/+$/, '') }
   private headers() { return { authorization: `Bearer ${this.options.token.trim()}`, [HEADER]: '1' } }
   private async account() { return requestHash(this.base() + '\n' + this.options.token.trim()) }
   async pending() { return (await this.store.list()).filter(row => row.body.byok !== true && row.body.origin === this.base() && row.status === 'pending') }
 
   /** 只读恢复不需要原始提示词或模型选择；当前令牌仍需同用户同插件授权。 */
-  async recover(row: LocalTemporaryRequest, input?: Pick<TemporaryChatSendInput, 'signal' | 'onTextDelta'>): Promise<string> {
+  async recover(row: LocalTemporaryRequest, input?: Pick<TemporaryChatSendInput, 'signal' | 'onTextDelta' | 'diagnostic'>): Promise<string> {
+    if (!input?.diagnostic) return traceRequest({ ...input, clientRequestId: String(row.body.clientRequestId), conversationId: String(row.body.temporaryConversationId) }, { provider: 'jadense', feature: 'recovery' }, value => this.recoverRecorded(row, value))
+    return this.recoverRecorded(row, input)
+  }
+  private async recoverRecorded(row: LocalTemporaryRequest, input?: Pick<TemporaryChatSendInput, 'signal' | 'onTextDelta' | 'diagnostic'>): Promise<string> {
     if (row.body.origin !== this.base()) throw new Error(uiText('请求属于其他服务器。', 'This request belongs to another server.'))
     let response: Response
     const until = Date.now() + 60_000
     const deadline = new AbortController()
-    const abort = () => deadline.abort()
+    const abort = () => { markDiagnosticAbort(deadline.signal, input?.signal?.aborted ? 'parent_cancel' : 'recovery_timeout'); input?.diagnostic?.event('abort', { source: input?.signal?.aborted ? 'parent_cancel' : 'recovery_timeout' }); deadline.abort() }
     input?.signal?.addEventListener('abort', abort, { once: true })
     if (input?.signal?.aborted) abort()
     const timeout = setTimeout(abort, 60_000)
     try {
     do {
-      response = await this.fetch(`${this.base()}/api/chat/temporary?conversationId=${encodeURIComponent(String(row.body.temporaryConversationId))}&requestId=${encodeURIComponent(String(row.body.clientRequestId))}`, { headers: this.headers(), signal: deadline.signal })
+      response = await diagnosticFetch(input?.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat/temporary?conversationId=${encodeURIComponent(String(row.body.temporaryConversationId))}&requestId=${encodeURIComponent(String(row.body.clientRequestId))}`, { headers: this.headers(), signal: deadline.signal })
       if (response.status !== 202) return await this.consume(response, row, input)
       if (Date.now() >= until) throw new Error(uiText('仍在执行，稍后点击“恢复结果”；不会重复请求模型。', 'Still running. Use Recover result later; the model will not run again.'))
       const delay = Math.min(5000, Math.max(1000, Number(response.headers.get('retry-after') ?? 2) * 1000))
@@ -43,7 +48,7 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       throw error
     } finally { clearTimeout(timeout); input?.signal?.removeEventListener('abort', abort) }
   }
-  private async consume(response: Response, row: LocalTemporaryRequest, input?: Pick<TemporaryChatSendInput, 'signal' | 'onTextDelta'>): Promise<string> {
+  private async consume(response: Response, row: LocalTemporaryRequest, input?: Pick<TemporaryChatSendInput, 'signal' | 'onTextDelta' | 'diagnostic'>): Promise<string> {
     if (response.headers.get(HEADER) !== '1') throw new Error(uiText('服务器不支持安全恢复，请升级服务器。', 'Upgrade the server to support safe recovery.'))
     if (response.status === 202) return this.recover(row, input)
     if (!response.ok) {
@@ -56,9 +61,10 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     }
     let output: string
     if (response.headers.get('content-type')?.includes('text/event-stream')) {
-      output = await consumeTemporaryChatStream(response, input?.onTextDelta, true)
+      output = await consumeTemporaryChatStream(response, input?.onTextDelta, true, input?.diagnostic)
     } else {
       const result = await response.json() as { text?: string; complete?: boolean; error?: string; state?: string }
+      input?.diagnostic?.identify(result as Record<string, unknown>)
       output = result.text ?? ''
       input?.onTextDelta?.(output, output)
       if (!result.complete || result.state !== 'completed') { row.status = 'failed'; row.text = output; row.error = result.error ?? uiText('输出未完整结束，已有内容保留。', 'Output was incomplete; existing text is retained.'); await this.store.save(row); throw new Error(row.error) }
@@ -66,9 +72,12 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     row.status = 'completed'; row.text = output; await this.store.save(row)
     return output
   }
-  async send(input: TemporaryChatSendInput) {
+  async send(input: TemporaryChatSendInput): Promise<string> {
+    return traceRequest(input, { provider: 'jadense', model: this.options.selection?.kind === 'model' ? this.options.selection.modelId : undefined }, value => this.sendRecordedReliable(value))
+  }
+  private async sendRecordedReliable(input: TemporaryChatSendInput) {
     const body: Record<string, unknown> = { temporary: true, temporaryConversationId: input.conversationId, agentId: 'browser-extension',
-      clientContext: { version, feature: input.clientFeature ?? 'chat' }, clientRequestId: input.clientRequestId,
+      clientContext: { version, feature: input.clientFeature ?? 'chat', ...(input.clientOperation ? { operation: input.clientOperation, taskId: input.taskId, chunkId: input.operationId, chunkIndex: input.chunkIndex, chunkTotal: input.chunkTotal } : {}) }, clientRequestId: input.clientRequestId,
       origin: this.base(), taskId: input.taskId ?? input.conversationId, operationId: input.operationId ?? input.clientRequestId,
       ...(input.previousRequestId ? { previousRequestId: input.previousRequestId } : {}),
       messages: temporaryChatMessages(input.messages, input.sources, input.images), ...jadenseChatSelectionBody(this.options.selection) }
@@ -83,7 +92,7 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     // 只有显式同一子任务可恢复，不能因内容相同而合并两个不同的正常请求。
     let row = exact ?? rows.find(row => row.account === account && input.operationId && row.body.operationId === input.operationId && row.status === 'pending')
     if (row && row.fingerprint !== fingerprint) throw new Error(uiText('待恢复子任务的输入或模型已变化，请先恢复原请求。', 'The pending operation has different input or model settings. Recover the original request first.'))
-    const capability = await this.fetch(`${this.base()}/api/chat/temporary`, { method: 'HEAD', headers: this.headers(), signal: input.signal })
+    const capability = await diagnosticFetch(input.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat/temporary`, { method: 'HEAD', headers: this.headers(), signal: input.signal })
     if (capability.status === 401 || capability.status === 403) throw await readJadenseApiError(capability, uiText('请检查当前 Zotero 令牌与对话权限。', 'Check the current Zotero token and chat permissions.'))
     if (!capability.ok || capability.headers.get(HEADER) !== '1') throw new Error(uiText('服务器尚不支持安全的 AI 请求，请先升级服务器。', 'Upgrade the server before using safe AI requests.'))
     if (!row) {
@@ -92,8 +101,10 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       row = { id: crypto.randomUUID(), account, fingerprint, body, createdAt: new Date().toISOString(), status: 'pending' }
       await this.store.save(row)
     }
-    const response = await this.fetch(`${this.base()}/api/chat`, { method: 'POST', headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify({ ...row.body, transportAttemptId: crypto.randomUUID() }), signal: input.signal })
+    const transportAttemptId = crypto.randomUUID()
+    input.diagnostic?.identify({ transportAttemptId })
+    const response = await diagnosticFetch(input?.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat`, { method: 'POST', headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify({ ...row.body, transportAttemptId }), signal: input.signal })
     return this.consume(response, row, input)
   }
 }

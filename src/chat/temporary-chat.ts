@@ -1,3 +1,4 @@
+import { traceRequest, diagnosticFetch, type RequestDiagnostic } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 /**
  * 攻玉 temporary chat 客户端。
@@ -24,6 +25,10 @@ export type TemporaryChatClientOptions = {
 }
 
 export type TemporaryChatSendInput = {
+  clientOperation?: "full_translation" | "selection_translation" | "reference_identification"
+  chunkIndex?: number
+  chunkTotal?: number
+  diagnostic?: RequestDiagnostic
   taskId?: string
   operationId?: string
   previousRequestId?: string
@@ -68,6 +73,7 @@ export async function consumeTemporaryChatStream(
   response: Response,
   onTextDelta?: (delta: string, accumulatedText: string) => void,
   requireComplete = false,
+  diagnostic?: RequestDiagnostic,
 ) {
   if (!response.ok) {
     throw await readJadenseApiError(response, uiText("攻玉对话请求失败", "The Jadense chat request failed"), true)
@@ -87,11 +93,13 @@ export async function consumeTemporaryChatStream(
       .map((line) => line.slice(5).trimStart())
       .join("\n")
     if (data.trim() === "[DONE]") {
+      diagnostic?.event("DONE")
       complete = true
       return
     }
     const event = parseEventData(data)
     if (!event) return
+    if (["abort", "error", "finish"].includes(String(event.type))) diagnostic?.event(String(event.type), { source: typeof event.finishReason === "string" ? event.finishReason : undefined })
     if (event.type === "abort") throw new Error(uiText("对话已中止，未写入 PDF 批注。", "Chat was stopped. No PDF annotations were written."))
     if (event.type === "error") {
       throw new Error(typeof event.errorText === "string" && event.errorText.trim()
@@ -100,18 +108,20 @@ export async function consumeTemporaryChatStream(
     }
     if (event.type === "finish") {
       if (requireComplete && (event.finishReason === "error" || event.finishReason === "length")) {
-        throw new Error(uiText("解析输出未完整结束，未写入 PDF 批注。请重试。", "Analysis output was incomplete. No PDF annotations were written. Please retry."))
+        throw Object.assign(new Error(uiText("输出未完整结束，请重试。", "Output was incomplete. Please retry.")), { code: "STREAM_INCOMPLETE" })
       }
       complete = true
     }
     if (event.type !== "text-delta" || typeof event.delta !== "string") return
     accumulatedText += event.delta
-    onTextDelta?.(event.delta, accumulatedText)
+    diagnostic?.text(event.delta.length)
+    try { onTextDelta?.(event.delta, accumulatedText) } catch (error) { diagnostic?.fail(error, "callback_error"); throw error }
   }
 
   try {
     while (true) {
       const { done, value } = await reader.read()
+      diagnostic?.data(value?.byteLength ?? 0)
       pending += decoder.decode(value, { stream: !done })
       let boundary = pending.search(/\r?\n\r?\n/)
       while (boundary >= 0) {
@@ -120,13 +130,17 @@ export async function consumeTemporaryChatStream(
         pending = pending.slice(boundary + separator.length)
         boundary = pending.search(/\r?\n\r?\n/)
       }
+      if (complete) { await reader.cancel().catch(() => undefined); break }
       if (done) break
     }
-    if (pending.trim()) consumeBlock(pending)
+    if (!complete && pending.trim()) consumeBlock(pending)
     // 只有需要写 PDF 的动作要求终止事件；普通对话兼容原有文本流。
-    if (requireComplete && !complete) throw new Error(uiText("解析连接意外结束，未写入 PDF 批注。请重试。", "The analysis connection ended unexpectedly. No PDF annotations were written. Please retry."))
+    if (!complete) diagnostic?.fail(Object.assign(new Error(), { code: "STREAM_EARLY_EOF" }), "early_eof")
+    if (requireComplete && !complete) throw Object.assign(new Error(uiText("连接意外结束，已生成内容已保留，请重试。", "The connection ended unexpectedly. Generated content is retained. Please retry.")), { code: "STREAM_EARLY_EOF" })
     return accumulatedText
   } catch (error) {
+    diagnostic?.fail(error, "stream_error")
+    diagnostic?.event("cleanup_cancel", { source: "stream_cleanup" })
     await reader.cancel().catch(() => undefined)
     throw error
   } finally {
@@ -187,10 +201,13 @@ export class TemporaryChatClient {
     this.fetchImpl = options.fetchImpl ?? defaultFetch
   }
 
-  async send(input: TemporaryChatSendInput) {
+  async send(input: TemporaryChatSendInput): Promise<string> {
+    return traceRequest(input, { provider: 'jadense' }, value => this.sendRecorded(value))
+  }
+  private async sendRecorded(input: TemporaryChatSendInput) {
     if (!this.baseUrl) throw new Error(uiText("请先配置攻玉服务器地址。", "Configure the Jadense server URL first."))
     if (!this.token) throw new Error(uiText("请先配置包含对话权限的 Zotero 令牌。", "Configure a Zotero token with chat permission first."))
-    const response = await this.fetchImpl(`${this.baseUrl}/api/chat`, {
+    const response = await diagnosticFetch(input.diagnostic, this.fetchImpl, `${this.baseUrl}/api/chat`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.token}`,
@@ -200,13 +217,14 @@ export class TemporaryChatClient {
         temporary: true,
         temporaryConversationId: input.conversationId,
         agentId: "browser-extension",
-        clientContext: { version: clientVersion, feature: input.clientFeature ?? "chat" },
+        clientContext: { version: clientVersion, feature: input.clientFeature ?? "chat", ...(input.clientOperation ? { operation: input.clientOperation, taskId: input.taskId, chunkId: input.operationId, chunkIndex: input.chunkIndex, chunkTotal: input.chunkTotal } : {}) },
         clientRequestId: input.clientRequestId,
+        taskId: input.taskId, operationId: input.operationId,
         messages: temporaryChatMessages(input.messages, input.sources, input.images),
         ...jadenseChatSelectionBody(this.selection),
       }),
       signal: input.signal,
     })
-    return consumeTemporaryChatStream(response, input.onTextDelta, input.requireComplete)
+    return consumeTemporaryChatStream(response, input.onTextDelta, input.requireComplete, input.diagnostic)
   }
 }

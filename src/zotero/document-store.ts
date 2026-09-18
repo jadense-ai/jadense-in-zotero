@@ -9,6 +9,7 @@ export type DocumentTask = {
   version: 1; id: string; kind: "translation" | "references" | "extraction"; source: DocumentIdentity; createdAt: string
   status: "running" | "paused" | "complete" | "partial" | "error"; totalPages: number; completed: number; total: number
   languages?: TranslationLanguages; models: string[]; warnings: string[]; storageWarning?: boolean; error?: string; extractionVersion?: number
+  issue?: import("./document-notices").DocumentIssue
   chunkVersion?: number
   extractionID?: string
 }

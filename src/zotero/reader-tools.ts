@@ -1,3 +1,6 @@
+import { analysisRuntime } from './analysis-runtime'
+import { openAnalysisSidebar } from './reader-sidebar'
+import { markDiagnosticAbort } from "./diagnostics"
 import { silentlyCheckForUpdates } from './update-notification'
 import { enhanceSelection } from './selection-ocr'
 import type { OCRSelectionRegion } from './local-ocr'
@@ -791,6 +794,14 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 }
 :is([data-jadense-reader-tools], .jadense-reader-actions) svg {width:16px;height:16px;flex:none;pointer-events:none;}
 [data-jadense-reader-tools] .jadense-reader-brand svg {width:20px;height:20px;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:180px;max-width:32vw;position:relative;gap:6px;overflow:hidden;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"]::after {content:"";position:absolute;bottom:0;left:4px;width:28%;height:2px;background:#16cf8c;animation:jdx-analysis-progress 2s ease-in-out infinite;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="complete"] {color:var(--jdx-reader-text,CanvasText);box-shadow:inset 0 -2px #16cf8c;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="error"] {box-shadow:inset 0 -2px #c37d0d;}
+[data-jadense-reader-tools] .jadense-reader-runtime-stop[hidden] {display:none!important;}
+.jadense-reader-runtime-label {overflow:hidden;text-overflow:ellipsis;}
+@keyframes jdx-analysis-progress {0%,100% {transform:translateX(0)} 50% {transform:translateX(230%)}}
+@media(prefers-reduced-motion:reduce) {[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"]::after {animation:none;width:calc(100% - 8px);}}
 [data-jadense-reader-tools="renderTextSelectionPopup"] {
   display:flex;flex-wrap:wrap;width:100%;max-width:100%;min-width:0;
   margin-top:4px;padding:3px;background:var(--jdx-reader-surface,transparent);
@@ -992,6 +1003,7 @@ export function registerReaderTools(
   const nodes = new Set<HTMLElement>()
   const handlers = new Map<ReaderEventType, ReaderHandler>()
   const shortcutCleanups = new Map<Document, () => void>()
+  const analysisCleanups = new Map<HTMLElement, () => void>()
   const toolbarMenus = new Map<HTMLElement, ReturnType<typeof bindReaderActionMenu>>()
   const selectionAnchors = new Map<Document, () => { left: number; top: number; bottom: number } | undefined>()
   const automaticSelections = new Map<Document, { key: string; group: HTMLElement; timer: ReturnType<typeof setTimeout> }>()
@@ -1116,7 +1128,7 @@ export function registerReaderTools(
       notice.hidden = true
       notice.textContent = ""
     }
-    const closeTranslation = () => { selectionJobs.get(doc)?.abort(); translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
+    const closeTranslation = () => { markDiagnosticAbort(selectionJobs.get(doc)?.signal, "user_stop"); selectionJobs.get(doc)?.abort(); translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
     const dismiss = () => {
       if (appearance.close()) return true
       for (const [node, menu] of toolbarMenus) if (node.ownerDocument === doc && menu.close()) return true
@@ -1156,7 +1168,7 @@ export function registerReaderTools(
       void doc.defaultView?.navigator.clipboard?.writeText(value)
     })
     const remove = () => {
-      selectionJobs.get(doc)?.abort(); selectionJobs.delete(doc)
+      markDiagnosticAbort(selectionJobs.get(doc)?.signal, "reader_selection_changed"); selectionJobs.get(doc)?.abort(); selectionJobs.delete(doc)
       clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc); selectionAnchors.delete(doc)
       hide()
       for (const [root, stop] of themeCleanups) if (root.ownerDocument === doc) { stop(); themeCleanups.delete(root) }
@@ -1170,7 +1182,7 @@ export function registerReaderTools(
       translationPanel.remove()
       removeDocumentSurfaces(doc)
       for (const node of nodes) if (node.ownerDocument === doc) {
-        toolbarMenus.get(node)?.remove()
+        toolbarMenus.get(node)?.remove(); analysisCleanups.get(node)?.(); analysisCleanups.delete(node)
         node.remove(); nodes.delete(node); toolbarMenus.delete(node)
       }
       documents.delete(doc)
@@ -1252,6 +1264,7 @@ export function registerReaderTools(
       return
     }
     feedback.hide()
+    markDiagnosticAbort(selectionJobs.get(doc)?.signal, "reader_selection_changed")
     selectionJobs.get(doc)?.abort()
     const controller = new AbortController(); selectionJobs.set(doc, controller)
     const requestID = feedback.beginTranslation(selection)
@@ -1283,6 +1296,7 @@ export function registerReaderTools(
   }
   /** 手动引用和自动引用共享 OCR 准备，旧选区或已关闭 Reader 的结果不得继续打开对话。 */
   const quote = (doc: Document, anchor: HTMLElement, selection: ReaderToolbarAction, send: (value: ReaderToolbarAction) => unknown) => {
+    markDiagnosticAbort(selectionJobs.get(doc)?.signal, "reader_selection_changed")
     selectionJobs.get(doc)?.abort()
     const controller = new AbortController(); selectionJobs.set(doc, controller)
     const feedback = documentTools(doc)
@@ -1302,7 +1316,7 @@ export function registerReaderTools(
     if (shortcutCleanups.has(doc)) return
     const bindings = new Map<NonNullable<ReaderPdfView["_iframeWindow"]>, EventListener>()
     const reposition = () => documents.get(doc)?.reposition()
-    const clearSelection = () => { selectionJobs.get(doc)?.abort(); clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc) }
+    const clearSelection = () => { markDiagnosticAbort(selectionJobs.get(doc)?.signal, "reader_selection_changed"); selectionJobs.get(doc)?.abort(); clearTimeout(automaticSelections.get(doc)?.timer); automaticSelections.delete(doc) }
     let disposed = false
     const bind = (win: ReaderPdfView["_iframeWindow"], primary?: boolean) => {
       if (!win?.addEventListener || bindings.has(win)) return
@@ -1394,6 +1408,8 @@ export function registerReaderTools(
     documents.clear()
     for (const node of nodes) { try { node.remove() } catch { /* 阅读器窗口可能已经关闭。 */ } }
     nodes.clear()
+    for (const stop of analysisCleanups.values()) stop()
+    analysisCleanups.clear()
     for (const stop of themeCleanups.values()) stop()
     themeCleanups.clear()
   }
@@ -1410,7 +1426,7 @@ export function registerReaderTools(
       if (!active || !Number.isInteger(event.reader.itemID)) return
       if (type === 'renderToolbar') void silentlyCheckForUpdates(event.doc, zotero, pluginID)
       for (const node of nodes) if (!node.isConnected) {
-        toolbarMenus.get(node)?.remove()
+        toolbarMenus.get(node)?.remove(); analysisCleanups.get(node)?.(); analysisCleanups.delete(node)
         for (const [root, stop] of themeCleanups) if (root === node || node.contains?.(root)) { stop(); themeCleanups.delete(root) }
         nodes.delete(node); toolbarMenus.delete(node)
       }
@@ -1427,17 +1443,38 @@ export function registerReaderTools(
         brand.className = "jadense-reader-brand"
         brand.title = uiText("打开攻玉工作台", "Open Jadense workspace")
         brand.setAttribute("aria-label", brand.title)
-        brand.append(brandIcon(event.doc))
+        const icon = brandIcon(event.doc), stateLabel = event.doc.createElement('span')
+        stateLabel.className = 'jadense-reader-runtime-label'
+        brand.append(icon, stateLabel)
+        const runtime = analysisRuntime(zotero as unknown as ZoteroLike)
+        const stop = event.doc.createElement('button')
+        stop.type = 'button'; stop.className = 'jadense-reader-runtime-stop'; stop.textContent = '■'
+        stop.title = uiText('停止本次解析', 'Stop analysis'); stop.setAttribute('aria-label', stop.title)
+        stop.addEventListener('click', () => runtime.stop(event.reader.itemID))
+        const update = () => {
+          const run = runtime.get(event.reader.itemID)
+          brand.dataset.runtime = run ? run.busy ? 'running' : run.error ? 'error' : 'complete' : 'idle'
+          stateLabel.textContent = run ? run.busy ? run.message.replace('已收到 ', '').replace(' 字符', ' 字').replace('characters received', 'chars') : run.error ? uiText('查看解析提示', 'Review analysis') : uiText('查看解析', 'View analysis') : ''
+          brand.title = run ? `${run.message} · ${uiText('点击查看', 'Click to view')}` : uiText('打开攻玉工作台', 'Open Jadense workspace')
+          brand.setAttribute('aria-label', brand.title)
+          stop.hidden = !run?.busy
+        }
+        analysisCleanups.set(group, runtime.subscribe(update)); update()
         // 仅打开或聚焦工作台，不触发阅读器提问，也不附加当前文献。
         brand.addEventListener("click", () => {
           if (!active) return
           toolbarMenus.get(group)?.close()
           feedback.hide()
+          if (runtime.get(event.reader.itemID)) {
+            void openAnalysisSidebar(zotero as unknown as ZoteroLike, event.doc, event.reader.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource)
+              .catch(error => feedback.show(brand, error instanceof Error ? error.message : String(error)))
+            return
+          }
           try { onOpenManager?.() } catch {
             feedback.show(brand, uiText("无法打开攻玉工作台，请稍后重试。", "The Jadense workspace could not be opened. Please try again."))
           }
         })
-        group.append(brand)
+        group.append(brand, stop)
       }
       const actionList = type === "renderToolbar" ? event.doc.createElement("span") : group
       if (actionList !== group) {
@@ -1474,6 +1511,10 @@ export function registerReaderTools(
             return
           }
           feedback.hide()
+          if (selection.kind === 'analyze') {
+            void analysisRuntime(zotero as unknown as ZoteroLike).start(selection.itemID)
+            return
+          }
           if (selection.kind === 'attach') {
             void openChatSidebar(zotero as unknown as ZoteroLike, event.doc, selection.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource)
               .catch(error => feedback.show(anchor, error instanceof Error ? error.message : String(error)))
@@ -1508,7 +1549,7 @@ export function registerReaderTools(
         const previous = automaticSelections.get(event.doc)
         if (previous?.key === key) previous.group = group
         if (previous?.key !== key) {
-          selectionJobs.get(event.doc)?.abort()
+          markDiagnosticAbort(selectionJobs.get(event.doc)?.signal, "reader_selection_changed"); selectionJobs.get(event.doc)?.abort()
           clearTimeout(previous?.timer)
           const timer = setTimeout(() => {
             const currentGroup = automaticSelections.get(event.doc)?.group

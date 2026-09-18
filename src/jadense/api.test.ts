@@ -284,6 +284,7 @@ describe("JadenseApiClient", () => {
     )
     const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))
     expect(body).toEqual({
+      requestId: expect.any(String),
       folderIds: ["folder-1"],
       items: [
         {

@@ -36,6 +36,8 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
+**未发布源码（0.4.9）：**改进全文翻译的流式结束、进度保留与错误提示；统一 OCR 准备入口，复用已有环境与模型，并增加魔搭下载源和本机错误诊断。本次仅同步源码，不提供新的正式安装包。见[未发布操作说明](docs/usage-guide.md#unreleased-049)。
+
 **v0.4.8：**可选选文 OCR 与文字提取优化，支持配置选文操作、浮窗定位与 OCR 下载源。见[操作与配置](docs/usage-guide.md#unreleased-settings)。
 
 <a id="requirements"></a>

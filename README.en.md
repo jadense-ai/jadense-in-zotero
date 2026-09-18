@@ -36,6 +36,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
+**Unreleased source (0.4.9):** improve full-document streaming completion, progress recovery and error notices; unify OCR setup, reuse existing environments and models, and add ModelScope downloads and local diagnostics. This source update does not publish a new release package. See [unreleased instructions](docs/usage-guide.md#unreleased-049).
+
 **v0.4.8:** optional selection OCR and improved text extraction, with configurable selection actions, window positioning and OCR download sources. See [settings](docs/usage-guide.md#unreleased-settings).
 
 <a id="requirements"></a>

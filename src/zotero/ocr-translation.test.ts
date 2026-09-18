@@ -4,15 +4,16 @@ import { DocumentJobs } from './document-jobs'
 import { DocumentStore, type TaskIO } from './document-store'
 import { renderChatMarkdown } from '@/chat/markdown'
 import { capacitySlices, chunkTranslationDocument, formulasPreserved, tokenCost, translationCapacity } from './translation-chunks'
+import { extractReferences } from '@/chat/reference-list'
 import { projectOCR } from './local-ocr'
 import type { ZoteroLike } from './runtime'
 
-const mock = vi.hoisted(() => ({ read: vi.fn() }))
-vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRDocument: mock.read, stopLocalOCR: () => {} }))
+const mock = vi.hoisted(() => ({ read: vi.fn(), ensure: vi.fn() }))
+vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRDocument: mock.read, ensureLocalOCR: mock.ensure, stopLocalOCR: () => {} }))
 vi.mock('@/chat/translation-queue', async original => ({ ...await original<typeof import('@/chat/translation-queue')>(), queueTranslation: async (_host: unknown, _key: string, _signal: unknown, run: () => Promise<unknown>) => run() }))
 
 function fixture(texts = ['First sentence.', 'Second sentence.']) {
-  mock.read.mockReset()
+  mock.read.mockReset(); mock.ensure.mockReset(); mock.ensure.mockResolvedValue(undefined)
   const source = { itemID: 1, itemKey: 'PDF1', libraryID: 1, title: 'Synthetic paper', modificationTime: 1 }
   const document = projectOCR({ pages: texts.map((text, i) => ({ pageIndex: i, blocks: [{ text, locations: [{ pageIndex: i, rects: [[0, 0, 100, 100]] }] }] })) }, source)
   const prefs = new Map<string, unknown>([['extensions.jadenseInZotero.token', 'synthetic-test-only']])
@@ -228,7 +229,7 @@ describe('OCR continuous translation', () => {
     await jobs.start('extraction', 1)
     const task = await jobs.start('translation', 1); await jobs.idle()
     expect(task.status).toBe('error'); expect(task.completed).toBe(1)
-    expect(task.error).toContain('400'); expect(task.error).toContain('响应正文为空')
+    expect(task.error).toContain('已完成内容已保留'); expect(task.issue?.stage).toBe('generation')
     const completed = task.completed, calls = fetch.mock.calls.length
     fail = false; jobs.resume(task.id); await jobs.idle()
     expect(task.status).toBe('complete')
@@ -259,4 +260,82 @@ describe('OCR continuous translation', () => {
     expect(jobs.get(old.id)?.error).toContain('旧版历史')
     jobs.dispose()
   })
+})
+
+
+describe('full translation regression boundaries', () => {
+  it('accepts translated image labels but rejects changed resources and formulas', () => {
+    expect(formulasPreserved('Text ![Figure](jdx-asset:image-0)', '译文 ![图片](jdx-asset:image-0)')).toBe(true)
+    expect(formulasPreserved('Text', '译文 ![Extra](https://example.test/track.png)')).toBe(false)
+    expect(formulasPreserved('⟦F1⟧ ![Figure](jdx-asset:image-0)', '⟦F2⟧ ![图片](jdx-asset:image-0)')).toBe(false)
+  })
+  it.each(['translation', 'extraction', 'references'] as const)('blocks %s before creating work when OCR is unavailable', async kind => {
+    const { host } = fixture(); mock.ensure.mockRejectedValue(Object.assign(new Error('OCR not ready'), { code: 'OCR_NOT_READY' }))
+    const fetch = vi.fn(), jobs = new DocumentJobs(host, fetch, new DocumentStore())
+    await expect(jobs.start(kind, 1)).rejects.toThrow('OCR')
+    expect(jobs.list()).toHaveLength(0); expect(mock.read).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled()
+    jobs.dispose()
+  })
+  it('does not pause when unrelated preferences or the same value are saved', async () => {
+    const { host, prefs } = fixture(['Text '.repeat(4000)])
+    const callbacks = new Map<string, () => void>()
+    host.Prefs!.registerObserver = (key, callback) => { callbacks.set(key, callback); return key }
+    const fetch = vi.fn(async () => {
+      callbacks.get('extensions.jadenseInZotero.paperAnalysisModel')?.()
+      callbacks.get('extensions.jadenseInZotero.translationInterface')?.()
+      prefs.set('extensions.jadenseInZotero.byokConfig', '{}')
+      callbacks.get('extensions.jadenseInZotero.byokConfig')?.()
+      return reply('译文')
+    })
+    const jobs = new DocumentJobs(host, fetch, new DocumentStore())
+    const task = await jobs.start('translation', 1); await jobs.idle()
+    expect(task.status).toBe('complete'); expect(fetch.mock.calls.length).toBeGreaterThan(1)
+    jobs.dispose()
+  })
+})
+
+
+it('extracts OCR references across pages with raw headings, labels and coordinates', () => {
+  const { document } = fixture(['unused'])
+  const raw = projectOCR({ pages: [
+    { pageIndex: 0, blocks: [{ text: 'References', kind: 'section_header', locations: [{ pageIndex: 0, rects: [[0, 0, 10, 10]] }] }, { text: '[1] Smith, J. (2024). First research title.', locations: [{ pageIndex: 0, rects: [[0, 0, 10, 10]] }] }] },
+    { pageIndex: 1, blocks: [{ text: '[2] Brown, A. (2023). Second research title.', locations: [{ pageIndex: 1, rects: [[0, 0, 10, 10]] }] }] },
+  ] }, document.source)
+  const references = extractReferences(raw)
+  expect(references).toHaveLength(2); expect(references.map(row => row.label)).toEqual(['1', '2'])
+  expect(references[1].lines[0].pageIndex).toBe(1); expect(references[1].lines[0].rects).toHaveLength(1)
+})
+
+it('retains a points error and correlated chunk identity, then resumes only missing chunks', async () => {
+  const { host } = fixture(['Text '.repeat(4000)])
+  const fetch = vi.fn(async () => fetch.mock.calls.length === 2 ? Response.json({ code: 'POINTS_INSUFFICIENT', error: 'private provider data' }, { status: 402 }) : reply('译文'))
+  const disk = durableStore(), jobs = new DocumentJobs(host, fetch, disk.create())
+  const task = await jobs.start('translation', 1); await jobs.idle()
+  expect(task.status).toBe('error'); expect(task.completed).toBe(1)
+  expect(task.issue?.action).toBe('connection'); expect(task.error).toContain('积分不足'); expect(task.error).not.toContain('private')
+  const body = JSON.parse(String(fetch.mock.calls[1][1]?.body))
+  expect(body.clientContext).toMatchObject({ feature: 'translation', operation: 'full_translation', taskId: task.id, chunkIndex: 2, chunkTotal: task.total })
+  expect(body.operationId).toBe(body.clientContext.chunkId)
+  const reloaded = new DocumentJobs(host, fetch, disk.create()); await reloaded.ready
+  expect(reloaded.get(task.id)?.issue?.id).toBe(task.issue?.id)
+  jobs.resume(task.id); await jobs.idle(); expect(task.status).toBe('complete')
+  jobs.dispose(); reloaded.dispose()
+})
+
+it('blocks resume against saved Markdown when models are removed', async () => {
+  const { host } = fixture(), jobs = new DocumentJobs(host, vi.fn(async () => reply('译文')), durableStore().create())
+  const task = await jobs.start('translation', 1); await jobs.idle()
+  mock.ensure.mockRejectedValue(Object.assign(new Error('missing'), { code: 'OCR_NOT_READY' }))
+  jobs.resume(task.id); await jobs.idle()
+  expect(task.status).toBe('error'); expect(task.issue?.action).toBe('ocr')
+  expect(await jobs.copy(task.id)).toContain('译文'); jobs.dispose()
+})
+
+it('pauses when the active credential changes and retains a visible reason', async () => {
+  const { host, prefs } = fixture(['Text '.repeat(4000)])
+  const fetch = vi.fn(async () => { prefs.set('extensions.jadenseInZotero.token', 'changed-test-token'); return reply('译文') })
+  const jobs = new DocumentJobs(host, fetch, durableStore().create())
+  const task = await jobs.start('translation', 1); await jobs.idle()
+  expect(task.status).toBe('paused'); expect(task.issue?.code).toBe('CONFIG_CHANGED'); expect(fetch).toHaveBeenCalledOnce()
+  jobs.dispose()
 })

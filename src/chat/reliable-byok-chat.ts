@@ -1,3 +1,4 @@
+import { traceRequest } from "@/zotero/diagnostics"
 /** BYOK 本地执行日志：不冒充第三方幂等；不确定结果禁止自动再次派发。 */
 import { ByokChatClient, ByokResponseError, type ByokConfig, type ByokSendInput } from './byok-chat'
 import { TemporaryRequestStore, requestHash, type LocalTemporaryRequest } from './temporary-request-store'
@@ -5,6 +6,9 @@ import { uiText } from '@/zotero/ui-preferences'
 export class ReliableByokChatClient extends ByokChatClient {
   constructor(private options: { config: ByokConfig; fetchImpl?: typeof fetch }, private store = new TemporaryRequestStore()) { super(options) }
   async send(input: ByokSendInput): Promise<string> {
+    return traceRequest(input, { provider: 'byok', protocol: this.options.config.protocol, model: this.options.config.model }, value => this.sendReliable(value))
+  }
+  private async sendReliable(input: ByokSendInput): Promise<string> {
     // 配置探针不属于文献/对话业务执行，保留已有有界连通性探针。
     if (input.acceptTruncated) return super.send(input)
     // BYOK 的本地执行身份不随密钥轮换失效；配置属于冻结指纹，不能借换 Key 重发旧执行。

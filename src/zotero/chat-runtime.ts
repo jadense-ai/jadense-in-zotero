@@ -1,3 +1,4 @@
+import { markDiagnosticAbort } from "./diagnostics"
 /** 插件生命周期的本地 Chat：固定会话发送、共享生成锁；界面关闭只取消订阅。 */
 import { ReliableByokChatClient } from '@/chat/reliable-byok-chat'
 import { ReliableTemporaryChatClient } from '@/chat/reliable-temporary-chat'
@@ -69,7 +70,7 @@ export class ChatRuntime {
     for (const key of [LOCAL_CHAT_PREF_KEY, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), 'extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig']) {
       try {
         const observer = host.Prefs?.registerObserver?.(key, () => {
-          if (key !== LOCAL_CHAT_PREF_KEY && (!Object.values(FEATURE_MODEL_PREF_KEYS).includes(key) || key === FEATURE_MODEL_PREF_KEYS[this.activeFeature])) this.stop()
+          if (key !== LOCAL_CHAT_PREF_KEY && (!Object.values(FEATURE_MODEL_PREF_KEYS).includes(key) || key === FEATURE_MODEL_PREF_KEYS[this.activeFeature])) this.stop(`preference:${key}`)
           this.changed()
         }, true)
         if (observer !== undefined) this.observers.push(observer)
@@ -87,7 +88,7 @@ export class ChatRuntime {
     this.queued = true
     void Promise.resolve().then(() => { this.queued = false; for (const listener of this.listeners) { try { listener() } catch { /* 一个关闭的视图不影响其他视图。 */ } } })
   }
-  stop() { this.controller?.abort() }
+  stop(source = "user_stop") { markDiagnosticAbort(this.controller?.signal, source); this.controller?.abort() }
   feature(sessionID: string) {
     const session = readLocalChatState(this.preferences).sessions.find(item => item.id === sessionID)
     return this.figures.has(sessionID) || [...session?.messages ?? []].reverse().find(message => message.image)?.image?.origin === 'figure' ? 'figure' as const : 'chat' as const
@@ -187,7 +188,7 @@ export class ChatRuntime {
     }
     return accepted
   }
-  dispose() { this.disposed = true; this.stop(); for (const observer of this.observers) this.host.Prefs?.unregisterObserver?.(observer); this.listeners.clear(); this.figures.clear() }
+  dispose() { this.disposed = true; this.stop("plugin_shutdown"); for (const observer of this.observers) this.host.Prefs?.unregisterObserver?.(observer); this.listeners.clear(); this.figures.clear() }
 }
 type SharedHost = ZoteroLike & { __jadenseChatRuntime?: ChatRuntime }
 export function chatRuntime(host: ZoteroLike) {

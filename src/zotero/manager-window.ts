@@ -4,7 +4,7 @@ import { chromeContentUrl } from "./chrome-registration"
 import type { ReaderAction } from "./reader-tools"
 import { silentlyCheckForUpdates } from './update-notification'
 
-export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings" | "settings-connection"
+export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings" | "settings-ocr" | "settings-connection" | "diagnostics"
 
 export const JADENSE_MANAGER_WINDOW_NAME = "jadense-in-zotero-manager"
 export const JADENSE_MANAGER_RESOURCE = "manager.xhtml"
