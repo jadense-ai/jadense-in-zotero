@@ -1,0 +1,68 @@
+/* Manager 与原生 Preferences 共用状态外观；状态语义仍由各业务入口维护。 */
+.jdx-runtime-status,
+.jdx-manager-inline-status:not(:empty),
+#jadense-in-zotero-preferences-pane .jdx-pref-status:not(:empty) {
+  --jdx-status-text: var(--jdx-pref-text, var(--jdx-text, #17211b));
+  --jdx-status-line: var(--jdx-pref-line, var(--jdx-line, #d9e2dd));
+  --jdx-status-surface: var(--jdx-pref-subtle, var(--jdx-surface-sunken, #f1f4ef));
+  --jdx-status-accent: var(--jdx-pref-muted, var(--jdx-muted, #53625a));
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--jdx-status-line);
+  border-inline-start: 3px solid var(--jdx-status-accent);
+  border-radius: 6px;
+  background: var(--jdx-status-surface);
+  color: var(--jdx-status-text);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.jdx-runtime-status[data-state="ready"],
+.jdx-manager-inline-status[data-kind="success"]:not(:empty),
+#jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="success"]:not(:empty) {
+  --jdx-status-accent: var(--jdx-pref-success, var(--jdx-green-deep, #117a52));
+}
+
+.jdx-runtime-status[data-state="error"],
+.jdx-manager-inline-status:is([data-kind="error"], [data-state="error"], [data-tone="error"]):not(:empty),
+#jadense-in-zotero-preferences-pane .jdx-pref-status:is([data-kind="error"], [data-tone="error"]):not(:empty) {
+  --jdx-status-accent: var(--jdx-pref-error, var(--jdx-red, #b42318));
+}
+
+.jdx-manager-inline-status:empty,
+#jadense-in-zotero-preferences-pane .jdx-pref-status:empty { display: none; }
+
+/* 短反馈保留原文和 live region；符号提供颜色之外的视觉提示。 */
+.jdx-manager-inline-status:not(:empty)::before,
+#jadense-in-zotero-preferences-pane .jdx-pref-status:not(:empty)::before {
+  content: "ⓘ" / "";
+  margin-inline-end: 7px;
+  color: var(--jdx-status-accent);
+  font-weight: 700;
+}
+.jdx-manager-inline-status[data-kind="success"]:not(:empty)::before,
+#jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="success"]:not(:empty)::before { content: "✓" / ""; }
+.jdx-manager-inline-status:is([data-kind="error"], [data-state="error"], [data-tone="error"]):not(:empty)::before,
+#jadense-in-zotero-preferences-pane .jdx-pref-status:is([data-kind="error"], [data-tone="error"]):not(:empty)::before { content: "!" / ""; }
+
+.jdx-ocr-settings .jdx-runtime-status { padding: 14px 16px; }
+.jdx-ocr-settings .jdx-runtime-status-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-weight: 650;
+  color: var(--jdx-status-text);
+}
+.jdx-runtime-status-title::before { content: "ⓘ" / ""; color: var(--jdx-status-accent); }
+.jdx-runtime-status[data-state="ready"] .jdx-runtime-status-title::before { content: "✓" / ""; }
+.jdx-runtime-status[data-state="error"] .jdx-runtime-status-title::before { content: "!" / ""; }
+.jdx-runtime-status:is([data-state="loading"], [data-state="working"]) .jdx-runtime-status-title::before { content: "↻" / ""; }
+.jdx-ocr-settings .jdx-runtime-status-description { margin: 6px 0 0; color: var(--jdx-pref-muted, var(--jdx-muted)); }
+.jdx-ocr-settings .jdx-runtime-status .jdx-actions { margin: 12px 0 0; }
+.jdx-runtime-status progress { display: block; width: 100%; height: 5px; margin-top: 12px; accent-color: var(--jdx-status-accent); }
+.jdx-runtime-status [hidden] { display: none !important; }
+@media (forced-colors: active) {
+  .jdx-runtime-status, .jdx-manager-inline-status:not(:empty), #jadense-in-zotero-preferences-pane .jdx-pref-status:not(:empty) { border-color: CanvasText; }
+}

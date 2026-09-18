@@ -1,20 +1,20 @@
 # 更新说明 / Changelog
 
-## 未发布 / Unreleased — 0.4.9 source
+## 0.4.9 — 2026-09-18
 
 ### 简体中文
 
 - 全文翻译正确处理流式结束，保留已完成进度；模型配置变化、积分不足和中断提供明确提示与手动继续入口。
 - OCR 配置使用「启用本机 OCR / 继续准备」统一完成依赖、模型和离线验证，自动读取状态并复用已有缓存；支持魔搭 ModelScope 下载源。
 - 新增本机错误诊断的筛选、复制、导出与清空；改进解析任务状态和文献成果提示。
-- 仅同步源码，未创建标签、Release 或新的正式安装包。真实服务商、macOS/Linux 与完整首次模型下载未在本次同步中重新验收。
+- 验证：756 项单元测试、6 项发布边界测试、文档检查、lint、类型检查、XPI 构建与制品校验通过。当前发布环境未安装 Zotero，未重新执行原生冷启动/升级冒烟；真实服务商、macOS/Linux 与完整首次模型下载仍未实测。
 
 ### English
 
 - Handle full-document stream completion, preserve completed progress, and show actionable notices for configuration changes, insufficient points and interruptions, with manual resume.
 - Prepare OCR dependencies, models and offline verification through Enable local OCR / Continue setup; read readiness automatically, reuse existing caches and support ModelScope downloads.
 - Add local diagnostic filtering, copy, export and clear actions; improve analysis task state and document-result notices.
-- Source sync only: no tag, Release or new official package. Real providers, macOS/Linux and a complete first-time model download were not revalidated during this sync.
+- Validation: 756 unit tests, 6 release-boundary tests, documentation checks, lint, typecheck, XPI build and artifact verification passed. Zotero was not installed in the release environment, so native cold-start/upgrade smoke checks were not rerun; real providers, macOS/Linux and a complete first-time model download remain untested.
 
 ## 0.4.8 — 2026-09-14
 
