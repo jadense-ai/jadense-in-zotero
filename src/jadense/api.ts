@@ -1,3 +1,4 @@
+import { traceRequest, diagnosticFetch } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 import type { JadenseZoteroImportItem } from "@/sync/metadata"
 
@@ -290,6 +291,7 @@ export type JadensePdfImportResult = {
   skippedFolderIds: string[]
   /** 文件被回填到这些收藏夹中已存在但缺 PDF 的条目上(服务端 2026-08 起返回)。 */
   backfilledFolderIds?: string[]
+  conflicts?: { message: string }[]
 }
 
 function isFormDataBody(value: unknown) {
@@ -315,13 +317,14 @@ export class JadenseApiClient {
   }
 
   private async requestJson<T>(path: string, init: RequestInit = {}, payloadLabel?: string): Promise<T> {
+    return traceRequest({ signal: init.signal ?? undefined, diagnostic: undefined as import("@/zotero/diagnostics").RequestDiagnostic | undefined }, { feature: path.includes('/import') || path.includes('/upload') ? 'upload' : 'account' }, async input => {
     const headers = new Headers(init.headers)
     headers.set("authorization", `Bearer ${this.token}`)
     if (init.body && !isFormDataBody(init.body) && !headers.has("content-type")) {
       headers.set("content-type", "application/json")
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    const response = await diagnosticFetch(input.diagnostic, this.fetchImpl, `${this.baseUrl}${path}`, {
       ...init,
       headers,
     })
@@ -334,6 +337,7 @@ export class JadenseApiClient {
       if (payloadLabel) throw invalidPayload(payloadLabel)
       throw error
     }
+    })
   }
 
   async getCurrentProfile(signal?: AbortSignal) {
@@ -375,7 +379,7 @@ export class JadenseApiClient {
   importZoteroItems(folderIds: string[], items: JadenseZoteroImportItem[]) {
     return this.requestJson<JadenseZoteroImportResult>("/api/extension/favorite/import-zotero-items", {
       method: "POST",
-      body: JSON.stringify({ folderIds, items }),
+      body: JSON.stringify({ folderIds, items, requestId: globalThis.crypto.randomUUID() }),
     })
   }
 
@@ -386,6 +390,7 @@ export class JadenseApiClient {
     filename: string
   }) {
     const form = this.formDataFactory()
+    form.set("requestId",globalThis.crypto.randomUUID())
     form.set("file", input.file, input.filename)
     form.set("folderIds", JSON.stringify(input.folderIds))
     form.set("metadata", JSON.stringify(input.item.metadata))

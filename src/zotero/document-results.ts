@@ -1,7 +1,9 @@
+import { analysisRuntime } from './analysis-runtime'
+import { renderDocumentIssueActions } from './document-notices'
 /** 当前附件的只读成果界面：Reader 与文献详情共用，任务仅由明确按钮启动。 */
 import { updateChatMarkdown } from '@/chat/markdown'
 import { readTranslationHistory, TRANSLATION_HISTORY_PREF_KEY } from '@/chat/translation-history'
-import { readPaperAnalysisHistory, PAPER_ANALYSIS_HISTORY_PREF_KEY, type PaperAnalysisSource } from '@/chat/paper-analysis-history'
+import { PAPER_ANALYSIS_HISTORY_PREF_KEY, type PaperAnalysisSource } from '@/chat/paper-analysis-history'
 import { documentJobs } from './document-jobs'
 import { paperKey } from './analysis-workspace-model'
 import { mountAnalysisWorkspace, type AnalysisRunView, type AnalysisDetailTab } from './analysis-workspace'
@@ -40,7 +42,8 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   const versions = createJdxSelect(versionHost, { compact: true, portal: true, ariaLabel: uiText('成果版本', 'Result version'), popupWidth: 300 })
   const body = element(doc, 'div', 'jdx-result-content'), status = notice(doc)
   toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', resultLabels()[mode]); root.dataset.resultMode = mode
-  toolbar.append(versionHost); root.append(toolbar, message, body, status)
+  const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true
+  toolbar.append(versionHost); root.append(toolbar, message, issueActions, body, status)
   if (options.onWorkbench) { const open = action(doc, uiText('在工作台查看', 'Open in workbench'), () => options.onWorkbench?.(mode, selected)); actionIcon(open, 'workbench'); open.classList.add('jdx-result-workbench'); toolbar.append(open) }
   const cleanups: Array<() => void> = []
   let selected = options.recordID, disposed = false, refreshing = false, dirty = false, signature = '', stopContent = () => {}, active: AbortController | undefined
@@ -104,9 +107,9 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   const copy = Array.from(toolbar.children).find(child => child.textContent === uiText('复制 Markdown', 'Copy Markdown')) as HTMLButtonElement | undefined
   if (mode === 'source' && copy) actionIcon(copy, 'copy')
   const analysisOptions: AnalysisOptions = options.analysis ?? {
-    records: () => host.Prefs ? readPaperAnalysisHistory(host.Prefs).records : [], unsaved: () => false,
+    records: () => analysisRuntime(host).records(), unsaved: id => analysisRuntime(host).unsaved(id),
     openSource: async record => { await navigateDocument(host as unknown as DocumentHost, record, { pageIndex: 0 }, options.readerDocument); return true },
-    stop: record => { for (const task of jobs.list('references').filter(task => sameAttachment(task.source, record))) jobs.pause(task.id) }, onReferenceTask: () => {},
+    stop: record => { analysisRuntime(host).stop(record.itemID); for (const task of jobs.list('references').filter(task => sameAttachment(task.source, record))) jobs.pause(task.id) }, onReferenceTask: () => {},
   }
   async function refresh() {
     if (disposed) return
@@ -114,6 +117,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     refreshing = true
     try { do {
       dirty = false
+      if (mode === 'analysis' && !options.analysis) analysisRun = analysisRuntime(host).get(source.itemID)
       const records = mode === 'analysis' ? analysisOptions.records().filter(record => sameAttachment(record.source, source))
         : mode === 'selection' ? (host.Prefs ? readTranslationHistory(host.Prefs).records : []).filter(record => sameAttachment(record.source, source)) : rows()
       const ordered = [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -132,9 +136,10 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
         message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task && task.status !== 'complete' ? resultStatus(task.status) : '')
         message.dataset.kind = task?.error ? 'error' : running ? 'running' : task?.status || 'neutral'
       }
+      if (mode === 'source') renderDocumentIssueActions(issueActions, host, task?.issue)
       if (mode === 'translation') translate.disabled = startingTranslation
       if (mode === 'source' && task?.storageWarning) { message.textContent = uiText('成果未完整保存，关闭窗口前请复制。', 'Not fully saved. Copy before closing.'); message.dataset.kind = 'error' }
-      if (nextSignature === signature) { analysis?.refresh(); continue }
+      if (nextSignature === signature) { if (analysisRun) analysis?.setRun(analysisRun); analysis?.refresh(); continue }
       signature = nextSignature; stopContent(); stopContent = () => {}; analysis = undefined; body.replaceChildren()
       if (mode === 'source') {
         const value = selected ? await jobs.store.extraction(selected) : null, assets = selected ? await jobs.store.assets(selected) : {}
@@ -172,6 +177,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     } while (dirty && !disposed) } catch (error) { report(error) } finally { refreshing = false }
   }
   versions.onChange(value => { selected = value; void refresh() })
+  if (mode === 'analysis') cleanups.push(analysisRuntime(host).subscribe(() => { void refresh() }))
   cleanups.push(jobs.subscribe(() => { void refresh() }))
   for (const key of [TRANSLATION_HISTORY_PREF_KEY, PAPER_ANALYSIS_HISTORY_PREF_KEY]) {
     try { const id = host.Prefs?.registerObserver?.(key, () => { void refresh() }); if (id !== undefined) cleanups.push(() => host.Prefs?.unregisterObserver?.(id)) } catch { /* 切换视图仍会读取。 */ }

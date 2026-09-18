@@ -1,3 +1,4 @@
+import { verifyDiagnostics } from './smoke-diagnostics.mjs'
 import { verifyLiteratureWorkspace } from './smoke-literature-workspace.mjs'
 import { verifyReaderChat } from "./smoke-reader-chat.mjs"
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
@@ -435,11 +436,12 @@ async function startStub(selectionOnly = false) {
           requests.push({ kind: "analysis-jadense", temporary: true, passages: analysis.input.passages.length, pages: [...new Set(analysis.input.passages.map((passage) => passage.pageIndex))] })
           await delay(600)
         } else if (prompt.includes('<passage>')) {
-          requests.push({ kind: 'ocr-translation' })
+          if (prompt.includes('JDX_POINTS_PROBE')) { response.writeHead(402, { 'content-type': 'application/json' }); response.end(JSON.stringify({ code: 'POINTS_INSUFFICIENT', error: 'Synthetic points failure' })); return }
+          requests.push({ kind: 'ocr-translation', operation: payload.clientContext?.operation, taskId: payload.clientContext?.taskId, chunkIndex: payload.clientContext?.chunkIndex, chunkTotal: payload.clientContext?.chunkTotal })
           response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
           response.write(`data: ${JSON.stringify({ type: 'text-delta', delta: '## OCR_STREAM\n\n首片流式译文。\n\n' })}\n\n`)
           await delay(1800)
-          response.end(`data: ${JSON.stringify({ type: 'text-delta', delta: '全文已完成。' + (prompt.split('<passage>')[1]?.match(/⟦F\d+⟧|!\[[^\]\n]*\]\(jdx-asset:image-\d+\)/gu) ?? []).join(' ') })}\n\ndata: {"type":"finish"}\n\n`)
+          response.end(`data: ${JSON.stringify({ type: 'text-delta', delta: '全文已完成。' + (prompt.split('<passage>')[1]?.match(/⟦F\d+⟧|!\[[^\]\n]*\]\(jdx-asset:image-\d+\)/gu) ?? []).map(value => value.replace('![Figure]', '![图片]').replace('![Formula]', '![公式]')).join(' ') })}\n\ndata: {"type":"finish"}\n\n`)
           return
         } else if (prompt.startsWith("Translate every supplied passage") || prompt.startsWith("Translate the supplied continuous article passage")) {
           const passages = JSON.parse(prompt.split("\n").at(-1))
@@ -897,6 +899,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       return event.defaultPrevented
     }
     await waitFor(() => toolbarButton("analyze"), "actual release toolbar")
+    if (config.diagnosticsOnly) {
+      await stage('diagnostics')
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'diagnostic Manager')
+      await verifyDiagnostics({ Zotero, manager, readerDoc, findManager, assert, waitFor, screenshot, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.shellOnly) {
       await stage("unified-manager-shell")
       readerDoc.querySelector(".jadense-reader-brand").click()
@@ -2656,11 +2665,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const jobs = Zotero.__jadenseDocumentJobs
     assert(jobs, "Plugin lifecycle did not own the document jobs")
     if (config.literatureOnly) {
-      await verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager })
+      await verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager, runtimeOnly: config.analysisRuntimeOnly })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.ocrOnly) {
-      await verifyOCRTranslation({ Zotero, reader, jobs, assert, waitFor, screenshot, report })
+      await verifyOCRTranslation({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.translationPapers) {
@@ -2854,6 +2863,7 @@ async function writeCompanion(extensionsDir, config) {
   }))
   zip.file("bootstrap.js", [
     `const SMOKE_CONFIG = ${JSON.stringify(config)};`,
+    verifyDiagnostics.toString(),
     verifyReaderChat.toString(),
     verifyMachineTranslation.toString(),
     verifyOCRTranslation.toString(),
@@ -2959,7 +2969,7 @@ async function main() {
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
-      selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [
@@ -3012,11 +3022,11 @@ async function main() {
       report.checks.push(...resumed.checks)
     }
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -3033,7 +3043,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

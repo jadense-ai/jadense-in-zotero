@@ -244,13 +244,14 @@ function installPreviewHost() {
   const ocrFixture = new URLSearchParams(location.search).get('ocr-fixture')
   if (ocrFixture) {
     window.IOUtils.exists = async path => files.has(path)
-    let installed = false
+    let installed = ocrFixture === 'ready'
     window.ChromeUtils = { importESModule: () => ({ Subprocess: {
       getEnvironment: () => ({}),
       call: async options => {
         const checking = options.arguments.includes('-CheckOnly') || options.arguments.includes('--check')
+        const models = options.arguments.some(value => ['--verify-models', '--prepare-models'].includes(value))
         const missing = ocrFixture === 'missing' && !installed
-        let output = checking
+        let output = models ? JSON.stringify({ modelsReady: installed }) : checking
           ? `uvPath=${missing ? '' : 'C:/Users/Example/.local/bin/uv.exe'}\nuvVersion=${missing ? '' : 'uv 0.9.3'}\nuvSource=${missing ? '' : installed ? 'plugin' : 'user'}\nready=${installed}\n`
           : 'Synthetic OCR installation log\n'
         return { stdout: { readString: async () => { const value = output; output = null; return value } }, wait: async () => {

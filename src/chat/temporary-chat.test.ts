@@ -326,3 +326,13 @@ describe("temporary Zotero chat", () => {
     }
   })
 })
+
+
+it('finishes a semantic terminal event even when the transport remains open', async () => {
+  const cancelled = vi.fn()
+  const response = new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('data: {"type":"text-delta","delta":"complete"}\n\ndata: {"type":"finish","finishReason":"stop"}\n\n'))
+  }, cancel: cancelled }))
+  const result = await Promise.race([consumeTemporaryChatStream(response, undefined, true), new Promise(resolve => setTimeout(() => resolve('hung'), 100))])
+  expect(result).toBe('complete'); expect(cancelled).toHaveBeenCalledOnce()
+})

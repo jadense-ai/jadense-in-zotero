@@ -1,3 +1,4 @@
+import { stopAnalysisRuntime } from './analysis-runtime'
 import { openChatSidebar } from './reader-sidebar'
 import { readOCRSelection, OCR_SELECTION_PREF } from './local-ocr'
 vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRSelection: vi.fn() }))
@@ -563,6 +564,7 @@ describe("native reader toolbars", () => {
     await vi.waitFor(() => expect(panel.children[1].children[3].textContent).toBe("原样保留的 AI 译文"))
     expect(panel.children[1].children[1].textContent).toBe("未经改写的中文原文")
     cleanup()
+    stopAnalysisRuntime(fixture.zotero)
     expect(observers.size).toBe(0)
   })
 

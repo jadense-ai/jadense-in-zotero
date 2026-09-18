@@ -3,7 +3,46 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { DocumentJobs } from './document-jobs'
 import { DocumentStore } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, installLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection } from './local-ocr'
+import { checkLocalOCR, ensureLocalOCR, installLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection, prepareLocalOCRModels } from './local-ocr'
+
+it('prepares full-document models independently of optional selection models', async () => {
+  const f = coldProfile()
+  f.files.set('/profile/jadense-ocr/v1/.venv/Scripts/python.exe', 'python')
+  f.files.set('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2', 'ready')
+  f.host.Prefs!.set!('extensions.jadenseInZotero.ocrModelSource', 'modelscope', true)
+  f.host.Prefs!.set!('extensions.jadenseInZotero.ocrSelection', true, true)
+  f.spawn.mockImplementation(async () => ({
+    stdout: { readString: vi.fn().mockResolvedValueOnce('{"modelsReady":true}').mockResolvedValue(null) },
+    wait: async () => ({ exitCode: 0 }),
+  }) as never)
+  await prepareLocalOCRModels(f.host)
+  expect(f.spawn).toHaveBeenCalledOnce()
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['--prepare-models']), environment: expect.objectContaining({ JADENSE_OCR_MODEL_SOURCE: 'modelscope' }) }))
+  expect(f.files.get('/profile/jadense-ocr/v1/models-prepare.log')).toContain('"modelsReady":true')
+  f.jobs.dispose()
+})
+
+it('shares automatic status reads and verifies old caches offline', async () => {
+  const f = coldProfile()
+  f.installer.stdout.readString = vi.fn().mockResolvedValueOnce('ready=true\n').mockResolvedValue(null)
+  f.finish()
+  const values = await Promise.all([checkLocalOCR(f.host), checkLocalOCR(f.host)])
+  expect(values.every(value => value.modelsReady)).toBe(true)
+  expect(f.spawn).toHaveBeenCalledTimes(2)
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['--verify-models']), environment: expect.objectContaining({ HF_HUB_OFFLINE: '1' }) }))
+  f.jobs.dispose()
+})
+
+it('explicit repair synchronizes an old installation instead of trusting its ready marker', async () => {
+  const f = coldProfile()
+  f.files.set('/profile/jadense-ocr/v1/.venv/Scripts/python.exe', 'existing 0.4.7 Python')
+  f.files.set('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2', 'ready')
+  f.finish()
+  await installLocalOCR(f.host, undefined, true)
+  expect(f.spawn).toHaveBeenCalledOnce()
+  expect(f.files.get('/profile/jadense-ocr/v1/.venv/Scripts/python.exe')).toBe('existing 0.4.7 Python')
+  f.jobs.dispose()
+})
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -31,25 +70,6 @@ it('sends selection scope to its own local job and returns recognized Markdown',
   } finally { f.jobs.dispose() }
 })
 
-it('explains missing OCR models and allows retry through the selected download source', async () => {
-  const f = coldProfile(), original = f.network.getMockImplementation()!
-  let unavailable = true
-  f.network.mockImplementation(async (url, init) => url.endsWith('/jobs/ocr-test') && unavailable
-    ? Response.json({ state: 'error', error: 'Got: ConnectTimeout: [WinError 10060]. An error happened while trying to locate the files on the Hub, and we cannot find the appropriate snapshot folder for the specified revision on the local disk.' })
-    : original(url, init))
-  try {
-    const pending = expect(f.jobs.start('translation', 1)).rejects.toThrow(/OCR.*模型|OCR model/u)
-    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish(); await pending
-    expect(f.translate).not.toHaveBeenCalled()
-    f.host.Prefs!.set!('extensions.jadenseInZotero.ocrModelSource', 'hf-mirror', true)
-    unavailable = false
-    const task = await f.jobs.start('translation', 1); await f.jobs.idle()
-    expect(task.status).toBe('complete')
-    const posts = f.network.mock.calls.filter(([, init]) => init?.method === 'POST')
-    expect(new Headers(posts.at(-1)![1]!.headers).get('X-Jadense-OCR-Model-Source')).toBe('hf-mirror')
-  } finally { f.jobs.dispose() }
-})
-
 /** 模拟尚未安装依赖的 profile，安装进程由测试显式放行。 */
 function coldProfile() {
   const files = new Map<string, string>()
@@ -57,7 +77,7 @@ function coldProfile() {
   let installation = new Promise<{ exitCode: number }>(resolve => { finish = resolve })
   const installer = { stdout: { readString: async () => null }, wait: () => installation }
   const server = { stdin: { write: vi.fn(), close: vi.fn() }, stdout: { readString: vi.fn().mockResolvedValueOnce('{"port":12345}\n').mockResolvedValue(null) }, wait: () => new Promise(() => {}), kill: vi.fn() }
-  const spawn = vi.fn(async (options: { command: string }) => options.command.endsWith('python.exe') ? server : installer)
+  const spawn = vi.fn(async (options: { command: string; arguments: string[] }) => options.arguments.includes('--verify-models') ? { stdout: { readString: vi.fn().mockResolvedValueOnce('{"modelsReady":true}').mockResolvedValue(null) }, wait: async () => ({ exitCode: 0 }) } : options.command.endsWith('python.exe') ? server : installer)
   vi.stubGlobal('PathUtils', { profileDir: '/profile', join: (...parts: string[]) => parts.join('/') })
   vi.stubGlobal('IOUtils', { makeDirectory: async () => {}, exists: async (path: string) => files.has(path), writeUTF8: async (path: string, text: string) => { files.set(path, text) }, readUTF8: async (path: string) => files.get(path), getChildren: async () => [], read: async () => new Uint8Array([1]) })
   vi.stubGlobal('ChromeUtils', { importESModule: () => ({ Subprocess: { getEnvironment: () => ({}), call: spawn } }) })
@@ -73,49 +93,24 @@ function coldProfile() {
   return { host, files, installer, jobs, spawn, translate, network, finish: (exitCode = 0) => finish({ exitCode }), retry: () => { installation = new Promise(resolve => { finish = resolve }) } }
 }
 
-it.each(['translation', 'extraction'] as const)('%s waits for first-time dependency installation before OCR', async kind => {
-  const f = coldProfile(), progress = vi.fn()
-  try {
-    const pending = f.jobs.start(kind, 1, false, { onProgress: progress })
-    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce())
-    expect(f.files.get('/profile/jadense-ocr/v1/install.ps1')).toMatch(/^\uFEFF/u)
-    expect(progress.mock.calls.flat().join(' ')).toMatch(/Installing local OCR|正在安装本机 OCR/u)
-    expect(f.translate).not.toHaveBeenCalled()
-    expect(f.network.mock.calls.every(([url]) => url.startsWith('chrome://'))).toBe(true)
-    f.finish()
-    const task = await pending; await f.jobs.idle()
-    expect(task.status).toBe('complete')
-    expect(f.spawn).toHaveBeenCalledTimes(2)
-    expect(f.translate).toHaveBeenCalledTimes(kind === 'translation' ? 1 : 0)
-    if (kind === 'translation') {
-      await f.jobs.start(kind, 1, true); await f.jobs.idle()
-      expect(f.spawn).toHaveBeenCalledTimes(2)
-    }
-  } finally { f.jobs.dispose() }
-})
-
-it('keeps installation failure retryable without sending a translation', async () => {
+it.each(['translation', 'extraction', 'references'] as const)('%s rejects a cold profile without installing', async kind => {
   const f = coldProfile()
+  f.finish()
   try {
-    const failure = expect(f.jobs.start('translation', 1)).rejects.toThrow(/installation failed|安装失败/u)
-    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish(1); await failure
+    await expect(f.jobs.start(kind, 1)).rejects.toThrow(/OCR/u)
+    expect(f.jobs.list()).toHaveLength(0)
     expect(f.translate).not.toHaveBeenCalled()
-    f.retry()
-    const retry = f.jobs.start('translation', 1)
-    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(2)); f.finish()
-    const task = await retry; await f.jobs.idle()
-    expect(task.status).toBe('complete'); expect(f.translate).toHaveBeenCalledOnce()
+    expect(f.spawn.mock.calls.every(([options]) => options.arguments.includes('-CheckOnly'))).toBe(true)
   } finally { f.jobs.dispose() }
 })
 
-it('shares manual installation with a first-time full-document task', async () => {
+it('does not start a task while manual installation is running', async () => {
   const f = coldProfile()
   try {
     const manual = installLocalOCR(f.host)
-    const automatic = f.jobs.start('extraction', 1)
-    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce())
-    f.finish(); await manual; await automatic; await f.jobs.idle()
-    expect(f.spawn).toHaveBeenCalledTimes(2)
+    await expect(f.jobs.start('extraction', 1)).rejects.toThrow(/正在准备|being prepared/u)
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish(); await manual
+    expect(f.translate).not.toHaveBeenCalled(); expect(f.jobs.list()).toHaveLength(0)
   } finally { f.jobs.dispose() }
 })
 
@@ -136,4 +131,20 @@ it.each([true, false])('checks environment without installing or marking readine
   expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['-CheckOnly']) }))
   expect(f.files.has('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2')).toBe(false)
   expect(f.files.has('/profile/jadense-ocr/v1/install.log')).toBe(false)
+})
+
+
+it.each([false, true])('requires verified models in addition to dependencies (models=%s)', async ready => {
+  const f = coldProfile()
+  f.installer.stdout.readString = vi.fn().mockResolvedValueOnce('ready=true\n').mockResolvedValue(null)
+  const original = f.spawn.getMockImplementation()!
+  f.spawn.mockImplementation(async options => options.arguments.includes('--verify-models') ? {
+    stdout: { readString: vi.fn().mockResolvedValueOnce(JSON.stringify({ modelsReady: ready })).mockResolvedValue(null) },
+    wait: async () => ({ exitCode: ready ? 0 : 2 }),
+  } as never : original(options))
+  f.finish()
+  if (ready) await expect(ensureLocalOCR(f.host)).resolves.toBeUndefined()
+  else await expect(ensureLocalOCR(f.host)).rejects.toThrow(/OCR/u)
+  expect(f.translate).not.toHaveBeenCalled()
+  f.jobs.dispose()
 })

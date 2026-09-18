@@ -1,3 +1,6 @@
+import { analysisRuntime } from './analysis-runtime'
+import { diagnostics, markDiagnosticAbort } from "./diagnostics"
+import { wireDiagnosticsPanel } from "./diagnostics-panel"
 import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
@@ -30,7 +33,7 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import { renderMessage, followMessageUpdate, nearLatest, updateLatestButton } from "./chat-message-ui"
-import { appendPaperAnalysisRecord, readPaperAnalysisHistory, type PaperAnalysisRecord, type PaperAnalysisSource } from "@/chat/paper-analysis-history"
+import { appendPaperAnalysisRecord, type PaperAnalysisRecord, type PaperAnalysisSource } from "@/chat/paper-analysis-history"
 import { readTranslationHistory, type TranslationRecord } from "@/chat/translation-history"
 import { createQuoteSource, groupChatSources, type ChatSource } from "@/chat/research-context"
 
@@ -547,7 +550,7 @@ function resolveZoteroFromWindow() {
 }
 
 function sectionFromValue(value: unknown): ManagerSection {
-  if (value === "settings" || value === "settings-connection" || value === "migrate" || value === "translations" || value === "analysis" || value === "guide") return value
+  if (value === "settings" || value === "settings-ocr" || value === "settings-connection" || value === "migrate" || value === "translations" || value === "analysis" || value === "guide") return value
   return "chat"
 }
 
@@ -900,7 +903,7 @@ function renderTranslationHistory(elements: ManagerElements, zotero: ZoteroLike)
 
 /** 保持保存/临时结果的同 ID 覆盖语义，组件只获得用于阅读的投影。 */
 function paperAnalysisRecords(zotero: ZoteroLike) {
-  const saved = zotero.Prefs ? readPaperAnalysisHistory(zotero.Prefs).records : []
+  const saved = analysisRuntime(zotero).records()
   return [...unsavedPaperAnalyses.values(), ...saved.filter(record => !unsavedPaperAnalyses.has(record.id))]
 }
 
@@ -915,8 +918,10 @@ function linkAnalysisReference(zotero: ZoteroLike, recordID: string, task: Docum
 }
 
 function stopPaperAnalysis(zotero: ZoteroLike, source?: PaperAnalysisSource) {
+  if (source) analysisRuntime(zotero).stop(source.itemID)
   const session = source ? analysisSessions.get(source.itemID) : analysisSessions.get(preparingAnalysisItemID!)
   if (session && (!source || paperKey(session.view.source) === paperKey(source))) {
+    markDiagnosticAbort(session.controller.signal, "user_stop")
     session.controller.abort()
     if (session.view.referenceTaskID) documentJobs(zotero).pause(session.view.referenceTaskID)
     session.view.message = uiText("正在停止，已取得内容会保留。", "Stopping. Received content will be retained.")
@@ -924,13 +929,13 @@ function stopPaperAnalysis(zotero: ZoteroLike, source?: PaperAnalysisSource) {
   } else if (source) {
     const task = analysisPapers(paperAnalysisRecords(zotero), documentJobs(zotero).list("references")).find(paper => paper.key === paperKey(source))?.references
     if (task) documentJobs(zotero).pause(task.id)
-  } else if (activeOperation === "analysis") activeChatAbort?.abort()
+  } else if (activeOperation === "analysis") { markDiagnosticAbort(activeChatAbort?.signal, "user_stop"); activeChatAbort?.abort() }
 }
 
 function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLike) {
   analysisWorkspace ??= mountLiteratureWorkspace(elements.analysisHistory, zotero, {
     records: () => paperAnalysisRecords(zotero),
-    unsaved: id => unsavedPaperAnalyses.has(id),
+    unsaved: id => unsavedPaperAnalyses.has(id) || analysisRuntime(zotero).unsaved(id),
     openSource: source => openPaperAnalysisHistoryRecord(zotero, { id: "", createdAt: "", source, summary: "" }),
     stop: source => stopPaperAnalysis(zotero, source),
     onReferenceTask: (source, task) => {
@@ -945,6 +950,7 @@ function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLik
     },
   })
   analysisWorkspace.refresh()
+  for (const run of analysisRuntime(zotero).list()) analysisWorkspace.setRun(run)
 }
 
 /** 有图片上下文时，输入栏与追问共同使用图片解读模型。 */
@@ -1009,13 +1015,14 @@ export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConn
 }
 
 function setActiveSection(elements: ManagerElements, section: ManagerSection) {
+  if (section === "diagnostics" && !diagnostics()?.enabled) section = "chat"
   if (section === "translations") section = "analysis"
   elements.navTranslations.hidden = true
   const isChat = section === "chat"
   const isTranslations = false
   const isAnalysis = section === "analysis"
   const isUpload = section === "migrate"
-  const isSettings = section === "settings" || section === "settings-connection"
+  const isSettings = section === "settings" || section === "settings-ocr" || section === "settings-connection"
   const zotero = resolveZoteroFromWindow()
   renderNewChatNavigation(elements.navChat, isChat, zotero?.Prefs ? currentChatSessionID(zotero) : null)
   elements.navTranslations.dataset.active = String(isTranslations)
@@ -1034,6 +1041,8 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   elements.uploadSection.hidden = !isUpload
   elements.guideSection.hidden = section !== "guide"
   elements.settingsSection.hidden = !isSettings
+  const diagnosticSection = document.getElementById('jadense-manager-section-diagnostics')
+  if (diagnosticSection) diagnosticSection.hidden = section !== 'diagnostics' || !diagnostics()?.enabled
   if (!isChat) {
     elements.sessionList.querySelectorAll<HTMLElement>('[data-active="true"]').forEach(node => { node.dataset.active = "false" })
     elements.sessionList.querySelectorAll<HTMLElement>('[aria-current="true"]').forEach(node => node.removeAttribute("aria-current"))
@@ -2401,7 +2410,7 @@ async function saveTokenFromEdit(elements: ManagerElements, zotero: ZoteroLike) 
   try {
     const tokenChanged = readConnection(zotero).token !== token
     if (tokenChanged) {
-      activeChatAbort?.abort()
+      markDiagnosticAbort(activeChatAbort?.signal, "settings:token"); activeChatAbort?.abort()
       readerActionQueue.length = 0
       ++accountRefreshGeneration
       cancelJadenseAccountRequests()
@@ -2770,7 +2779,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   for (const stop of [elements.chatStop, elements.detailsStop]) {
     stop.addEventListener("click", () => {
       readerActionQueue.length = 0
-      activeChatAbort?.abort()
+      markDiagnosticAbort(activeChatAbort?.signal, "user_stop"); activeChatAbort?.abort()
       chatRuntime(zotero).stop()
     })
   }
@@ -2870,7 +2879,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     setStatus(elements.byokStatus, uiText("已添加提供商；请填写并保存连接信息。", "Provider added. Enter and save its connection details."), "success")
   })
   elements.byokProviderDelete.addEventListener("click", () => {
-    activeChatAbort?.abort()
+    markDiagnosticAbort(activeChatAbort?.signal, "settings:byokProviderDelete"); activeChatAbort?.abort()
     readerActionQueue.length = 0
     const providerId = readByokSettings(zotero).activeProviderId
     setByokModelEditorMode(elements.byokModelEditor, null)
@@ -2882,7 +2891,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.byokProviderSave.addEventListener("click", () => {
     try {
-      activeChatAbort?.abort()
+      markDiagnosticAbort(activeChatAbort?.signal, "settings:byokProviderSave"); activeChatAbort?.abort()
       readerActionQueue.length = 0
       saveByokProvider(zotero, byokProviderDraft(elements, zotero))
       renderByokConfig(elements, zotero)
@@ -2901,7 +2910,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     setStatus(elements.byokStatus, uiText("已打开添加模型表单；填写模型 ID 后保存。", "The add-model form is open. Enter a model ID and save."), "success")
   })
   elements.byokModelDelete.addEventListener("click", () => {
-    activeChatAbort?.abort()
+    markDiagnosticAbort(activeChatAbort?.signal, "settings:byokModelDelete"); activeChatAbort?.abort()
     readerActionQueue.length = 0
     const modelId = readByokSettings(zotero).activeModelId
     if (!modelId) return
@@ -2914,7 +2923,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.byokSave.addEventListener("click", () => {
     try {
-      activeChatAbort?.abort()
+      markDiagnosticAbort(activeChatAbort?.signal, "settings:byokSave"); activeChatAbort?.abort()
       readerActionQueue.length = 0
       const mode = readByokModelEditorMode(elements.byokModelEditor)
       if (!mode) return
@@ -2930,7 +2939,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.byokTest.addEventListener("click", () => void testByokDraft(elements, zotero))
   elements.byokClear.addEventListener("click", () => {
-    activeChatAbort?.abort()
+    markDiagnosticAbort(activeChatAbort?.signal, "settings:byokClear"); activeChatAbort?.abort()
     readerActionQueue.length = 0
     setByokModelEditorMode(elements.byokModelEditor, null)
     clearByokConfig(zotero)
@@ -2964,7 +2973,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.openBilling.addEventListener("click", () => openAccountPath("/app?settings=billing"))
   elements.openIntegrations.addEventListener("click", () => openAccountPath("/app?settings=integrations"))
   elements.disconnect.addEventListener("click", () => {
-    activeChatAbort?.abort()
+    markDiagnosticAbort(activeChatAbort?.signal, "settings:disconnect"); activeChatAbort?.abort()
     readerActionQueue.length = 0
     ++accountRefreshGeneration
     cancelJadenseAccountRequests()
@@ -3101,7 +3110,7 @@ export function wireManagerAppearance(
 
 export function initJadenseManagerPage() {
   const zotero = resolveZoteroFromWindow()
-  if (zotero) initializeUiLocale(zotero)
+  if (zotero) { initializeUiLocale(zotero); diagnostics(zotero) }
   localizeManagerStaticContent(document)
   wireManagerTitlebar(document)
   const dock = document.getElementById("jadense-chat-dock")
@@ -3112,10 +3121,11 @@ export function initJadenseManagerPage() {
   setActiveSection(elements, section)
   wireGuideNavigation(elements.guideSection)
   elements.navGuide.addEventListener("click", () => setActiveSection(elements, "guide"))
+  wireDiagnosticsPanel(document, zotero, () => setActiveSection(elements, 'diagnostics'), () => setActiveSection(elements, 'chat'))
   wireManagerHelp(document, zotero as (ZoteroLike & { launchURL?: (url: string) => void }) | null, (window as ManagerWindow).JadenseInZotero?.pluginID ?? "jadense-in-zotero@jadense.cn")
   syncChatDockOffset(elements.chatDock)
   wireConnectionTabs(elements, zotero)
-  wireSettingsTabs(elements, zotero, section === "settings-connection" ? "connection" : "general")
+  wireSettingsTabs(elements, zotero, section === "settings-ocr" ? "ocr" : section === "settings-connection" ? "connection" : "general")
   wireStarInvitation(document, zotero)
   wireManagerQuickStart(document, zotero, () => {
     elements.navSettings.click()
@@ -3175,13 +3185,16 @@ export function initJadenseManagerPage() {
     elements.detailsStop.hidden = elements.chatStop.hidden
   })
   window.addEventListener('unload', stopChatSubscription, { once: true })
+  window.addEventListener('unload', analysisRuntime(zotero).subscribe(() => {
+    if (!window.closed) renderPaperAnalysisHistory(elements, zotero)
+  }), { once: true })
   chatPreferences(zotero)
   for (const feature of AI_FEATURES) readFeatureModelSelection(zotero, feature)
   const stopObservingOperationPreferences = observeManagerOperationPreferences(zotero, (key) => {
     const feature = AI_FEATURES.find(feature => FEATURE_MODEL_PREF_KEYS[feature] === key)
     if (!feature || feature === (activeOperation === "analysis" ? "analysis" : activeChatFeature(zotero))) {
       readerActionQueue.length = 0
-      activeChatAbort?.abort()
+      markDiagnosticAbort(activeChatAbort?.signal, `preference:${key}`); activeChatAbort?.abort()
     }
     window.setTimeout(() => {
       if (window.closed) return
@@ -3241,6 +3254,7 @@ export function initJadenseManagerPage() {
       return
     }
     setActiveSection(elements, context.section)
+    if (context.section === "settings-ocr") elements.settingsTabOcr.click()
     if (context.section === "settings-connection") elements.settingsTabConnection.click()
     if (context.section === "migrate") void refreshJadenseAccount(elements, zotero)
     void drainReaderActions(elements, zotero)
@@ -3257,7 +3271,7 @@ export function initJadenseManagerPage() {
   }
   window.addEventListener("unload", () => {
     stopObservingOperationPreferences()
-    activeChatAbort?.abort()
+    markDiagnosticAbort(activeChatAbort?.signal, "window_unload"); activeChatAbort?.abort()
     analysisWorkspace?.remove(); analysisWorkspace = undefined; analysisSessions.clear()
     ++accountRefreshGeneration
     cancelJadenseAccountRequests()
@@ -3278,6 +3292,7 @@ export function initJadenseManagerPage() {
 
 function showManagerBootError(error: unknown) {
   const message = error instanceof Error ? error.message : uiText("Jadense 工作台无法启动。", "Jadense Workbench could not start.")
+  diagnostics()?.record("initialization", "manager_boot", error)
   console.error("[Jadense in Zotero] Manager failed to initialize", error)
   const target = document.getElementById(IDS.chatStatus) ?? document.getElementById(IDS.uploadStatus)
   if (target) {

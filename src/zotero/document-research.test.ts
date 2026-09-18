@@ -1,7 +1,7 @@
 /** 0.4.2 行为回归：完整来源覆盖、零 AI 常规引用、无副作用核验与恢复。 */
 import { describe, it, expect, vi } from "vitest"
 // 旧文字层/JSON 协议的历史回归使用 v4 适配器；v5 OCR 主路径在 ocr-translation.test.ts 覆盖。
-vi.mock('./local-ocr', async () => ({ readOCRDocument: async (host: unknown, id: number, signal: AbortSignal) => (await import('./pdf-document')).readTextDocument(host as never, id, signal), stopLocalOCR: () => {} }))
+vi.mock('./local-ocr', async () => ({ ensureLocalOCR: async () => {}, readOCRDocument: async (host: unknown, id: number, signal: AbortSignal) => (await import('./pdf-document')).readTextDocument(host as never, id, signal), stopLocalOCR: () => {} }))
 vi.mock('./translation-chunks', async importOriginal => ({ ...await importOriginal<typeof import('./translation-chunks')>(), OCR_EXTRACTION_VERSION: 4 }))
 vi.mock('@/chat/translation-queue', async importOriginal => ({ ...await importOriginal<typeof import('@/chat/translation-queue')>(), queueTranslation: async (_host: unknown, _key: string, _signal: unknown, run: () => Promise<unknown>) => run() }))
 // 本文件验证文档调度；全文翻译经过普通 temporary chat 客户端，参考文献 AI 的可靠传输单独测试。

@@ -1,3 +1,4 @@
+import { diagnostics } from "./diagnostics"
 import { literatureIdentity } from "./document-identity"
 import { uiText } from "@/zotero/ui-preferences"
 /**
@@ -134,6 +135,7 @@ export async function runIndependentPaperAnalysis(input: {
   notify(input.onProgress, uiText(`正在使用${model.label}按结构解析文献…`, `Analyzing the paper with ${model.label}…`))
   let response = ""
   let partialText = ""
+  let lastProgress = 0
   let generationWarning: string | undefined
   try {
     response = await services.send({
@@ -147,10 +149,14 @@ export async function runIndependentPaperAnalysis(input: {
       requireComplete: true,
       onTextDelta: (_delta, accumulatedText) => {
         partialText = accumulatedText.slice(0, 256_000)
+        if (Date.now() - lastProgress >= 1000) {
+          lastProgress = Date.now()
+          notify(input.onProgress, uiText(`AI 正在解析 · 已收到 ${accumulatedText.length.toLocaleString()} 字符`, `AI analyzing · ${accumulatedText.length.toLocaleString()} characters received`))
+        }
       },
     }, model)
     input.signal.throwIfAborted()
-  } catch (error) {
+  } catch (error) { diagnostics()?.record("paper-analysis-runner", "operation_error", error);
     response ||= partialText
     if (!response.trim()) throw error
     generationWarning = input.signal.aborted
@@ -190,7 +196,8 @@ export async function runIndependentPaperAnalysis(input: {
   try {
     if (!input.zotero.Prefs) throw new Error("missing preferences")
     services.appendHistory(input.zotero.Prefs, record)
-  } catch {
+  } catch (error) {
+    diagnostics()?.record("analysis", "history_save", error)
     historySaved = false
     historyError = uiText("解析历史保存失败；笔记暂留当前窗口，请及时复制。", "Could not save analysis history. Notes remain in this window; copy them before closing.")
       + (writePending ? uiText("已验证的原生批注仍会继续写入。", "Validated native annotations will still be written.") : "")
@@ -204,7 +211,8 @@ export async function runIndependentPaperAnalysis(input: {
   let annotationError: string | undefined
   try {
     annotations = await services.saveAnnotations(input.zotero, snapshot, analysis.annotations, { signal: input.signal })
-  } catch {
+  } catch (error) {
+    diagnostics()?.record("analysis", "annotation_save", error)
     annotations = { ...emptyAnnotations, unprocessed: analysis.annotations.length }
     annotationError = input.signal.aborted
       ? uiText("已停止写入；此前成功保存的批注予以保留，可展开笔记查看解析内容。", "Writing stopped. Previously saved annotations were retained; expand the notes to review the analysis.")

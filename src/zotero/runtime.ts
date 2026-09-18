@@ -959,11 +959,12 @@ async function uploadPdfForEntry(input: {
       file: attachment.file,
       filename: attachment.filename,
     })
-    // 全部收藏夹都 skipped 说明条目已存在且已有文件;否则无论新建还是回填,PDF 都已落到条目上。
+    if (result.conflicts?.length) return { status: "failed",error: result.conflicts.map(conflict => conflict.message).join(" ") }
+    // 新导入必须明确创建成功；已有条目由独立附加文件操作处理。
     const deliveredCount =
       (result.insertedFolderIds?.length ?? 0) + (result.backfilledFolderIds?.length ?? 0)
     if (deliveredCount === 0) {
-      return { status: "skipped", reason: "攻玉中已存在该条目及其 PDF,本次未重复上传。" }
+      return { status: "failed", error: "当前收藏夹已有同名或相同文献，已拒绝重复导入。" }
     }
     return { status: "uploaded", result }
   } catch (error) {
@@ -975,6 +976,23 @@ async function uploadPdfForEntry(input: {
         : message,
     }
   }
+}
+
+/** 带 PDF 的新条目一次导入；避免先写元数据后把同一次导入误判为收藏冲突。 */
+async function importEntriesWithPdf(client: JadenseApiClient, folderId: string, zotero: ZoteroLike, entries: CollectionItemEntry[], importItems: JadenseZoteroImportItem[], includePdf: boolean) {
+  const pdfs = new Map<string,ZoteroUploadPdfStatus>()
+  const results: JadenseZoteroImportResult["results"] = []
+  const metadataOnly: JadenseZoteroImportItem[] = []
+  for (const [index,entry] of entries.entries()) {
+    const item = importItems[index]!
+    const pdf = await uploadPdfForEntry({ client,folderId,zotero,entry,importItem: item,includePdf })
+    pdfs.set(item.clientItemId,pdf)
+    if (pdf.status === "uploaded") results.push({ clientItemId: item.clientItemId,status: "imported",result: pdf.result })
+    else if (pdf.status === "failed") results.push({ clientItemId: item.clientItemId,status: "failed",error: pdf.error })
+    else metadataOnly.push(item)
+  }
+  if (metadataOnly.length) results.push(...(await importMetadataBatches(client,folderId,metadataOnly)).results)
+  return { pdfs,metadata: { results,importedCount: results.filter(item => item.status === "imported").length,skippedCount: results.filter(item => item.status === "skipped").length,failedCount: results.filter(item => item.status === "failed").length } }
 }
 
 function savePushMapping(
@@ -1217,7 +1235,8 @@ export async function pushSelectedItemsToJadense(
   const items = entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
   if (items.length === 0) throw new Error(uiText("未选中可上传的 Zotero 条目。", "No uploadable Zotero items are selected."))
 
-  const result = await importMetadataBatches(client, folderId, items)
+  const imported = await importEntriesWithPdf(client,folderId,zotero,entries,items,Boolean(options.includePdf))
+  const result = imported.metadata
   const resultsById = resultByClientItemId(result.results)
   const mappingState = readSyncMappings(zotero)
   const itemResults: ZoteroCollectionUploadItemResult[] = []
@@ -1229,16 +1248,7 @@ export async function pushSelectedItemsToJadense(
       status: "failed" as const,
       error: "攻玉未返回该条目的导入结果。",
     }
-    const pdf = metadataResult.status === "failed"
-      ? { status: "skipped" as const, reason: "元数据导入失败，未继续上传 PDF。" }
-      : await uploadPdfForEntry({
-          client,
-          folderId,
-          zotero,
-          entry,
-          importItem,
-          includePdf: Boolean(options.includePdf),
-        })
+    const pdf = imported.pdfs.get(importItem.clientItemId)!
     savePushMapping(mappingState, {
       folderId,
       entry,
@@ -1307,7 +1317,8 @@ export async function pushSelectedCollectionToJadense(
   }
 
   const importItems = collected.entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
-  const metadataResult = await importMetadataBatches(client, folderId, importItems)
+  const imported = await importEntriesWithPdf(client,folderId,zotero,collected.entries,importItems,Boolean(options.includePdf))
+  const metadataResult = imported.metadata
   const resultsById = resultByClientItemId(metadataResult.results)
   const mappingState = readSyncMappings(zotero)
   const items: ZoteroCollectionUploadItemResult[] = []
@@ -1320,16 +1331,7 @@ export async function pushSelectedCollectionToJadense(
       status: "failed" as const,
       error: "攻玉未返回该条目的导入结果。",
     }
-    const pdf = result.status === "failed"
-      ? { status: "skipped" as const, reason: "元数据导入失败，未继续上传 PDF。" }
-      : await uploadPdfForEntry({
-          client,
-          folderId,
-          zotero,
-          entry,
-          importItem,
-          includePdf: Boolean(options.includePdf),
-        })
+    const pdf = imported.pdfs.get(importItem.clientItemId)!
 
     savePushMapping(mappingState, {
       folderId,

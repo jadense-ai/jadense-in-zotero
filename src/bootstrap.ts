@@ -1,3 +1,6 @@
+import { stopAnalysisRuntime } from './zotero/analysis-runtime'
+import { diagnostics, stopDiagnostics } from "@/zotero/diagnostics"
+import { installedPluginVersion } from "@/zotero/manager-help"
 import { chatRuntime, stopChatRuntime } from "@/zotero/chat-runtime"
 /** 插件生命周期与原生入口；就绪后固定会话语言，停止时清理窗口和宿主注册。 */
 import { initializeUiLocale, uiText } from "@/zotero/ui-preferences"
@@ -134,6 +137,7 @@ function loadLocalizationIntoWindow(win: JadenseMainWindow | null | undefined) {
     }
     log("localization loaded")
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Jadense Fluent resource loading failed.")
   }
 }
@@ -222,9 +226,11 @@ function warmFavoriteFoldersCache() {
   try {
     if (!readConnection(Zotero).token) return
     void Promise.resolve(refreshFavoriteFoldersCache(Zotero)).catch((error: unknown) => {
-      log(error instanceof Error ? error.message : "Favorite folders warm-up failed.")
+      diagnostics()?.record("initialization", "error", error)
+    log(error instanceof Error ? error.message : "Favorite folders warm-up failed.")
     })
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Favorite folders warm-up failed.")
   }
 }
@@ -282,6 +288,7 @@ function registerMenus() {
       log("Zotero MenuManager was unavailable.")
     }
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Menu registration failed.")
   }
 }
@@ -302,6 +309,7 @@ async function startup(data: BootstrapData = {}) {
       log("Chrome content registration was unavailable; manager and preferences chrome URLs may not load.")
     }
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Chrome content registration failed.")
   }
 
@@ -316,11 +324,15 @@ async function startup(data: BootstrapData = {}) {
     backgroundRuntime[name] = typeof value === "function" && ["structuredClone", "setTimeout", "clearTimeout"].includes(name) ? value.bind(windowRuntime) : value
   }
 
+  const collector = diagnostics(Zotero)!
+  collector.environment = { zotero: String((Zotero as unknown as { version?: string }).version ?? 'unknown'), os: String((windowRuntime?.navigator as Navigator | undefined)?.platform ?? 'unknown'), plugin: 'unknown' }
+  void installedPluginVersion(pluginContext.pluginID).then(version => { collector.environment.plugin = version }).catch(() => undefined)
   loadLocalizationIntoOpenWindows()
 
   try {
     registeredPreferencesPaneID = await registerPreferencesPane(Zotero, pluginContext)
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Preferences pane registration failed.")
   }
 
@@ -332,6 +344,7 @@ async function startup(data: BootstrapData = {}) {
       },
     })
   } catch (error) {
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Sync panel registration failed.")
   }
 
@@ -356,6 +369,7 @@ async function startup(data: BootstrapData = {}) {
     })
   } catch (error) {
     // 阅读器增强是可选入口，不能影响普通对话和原有上传。
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Reader tools were unavailable.")
   }
   try {
@@ -364,6 +378,7 @@ async function startup(data: BootstrapData = {}) {
     })
   } catch (error) {
     // 图片识别依赖 Zotero 10 Reader 私有能力；失败只关闭这一入口。
+    diagnostics()?.record("initialization", "error", error)
     log(error instanceof Error ? error.message : "Reader figure tools were unavailable.")
   }
   await probeLocalizationForSmoke()
@@ -373,6 +388,7 @@ async function startup(data: BootstrapData = {}) {
 }
 
 function shutdown() {
+  stopAnalysisRuntime(Zotero)
   stopChatRuntime(Zotero)
   stopDocumentJobs(Zotero)
   unregisterReaderFigureTools?.()
@@ -388,6 +404,7 @@ function shutdown() {
   unregisterChromeContent(registeredChromeContent)
   registeredChromeContent = null
   log("stopped")
+  stopDiagnostics(Zotero)
 }
 
 function onMainWindowLoad(data: { window?: Window & typeof globalThis } = {}) {

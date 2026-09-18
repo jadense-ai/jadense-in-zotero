@@ -43,4 +43,7 @@ export UV_PYTHON_INSTALL_DIR="$runtime/python"
 export UV_CACHE_DIR="$runtime/uv-cache"
 export UV_PROJECT_ENVIRONMENT="$runtime/.venv"
 printf 'Using uv: %s\n' "$uv_path"
+rm -f "$runtime/ready-2.126.0-3.9.2"
 "$uv_path" sync --project "$runtime" --python 3.12 --frozen
+"$runtime/.venv/bin/python" -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+printf 'ready\n' > "$runtime/ready-2.126.0-3.9.2"

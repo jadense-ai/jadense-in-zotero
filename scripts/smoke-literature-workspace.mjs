@@ -1,5 +1,5 @@
 /** 隔离真实 Zotero/XPI 验收：合成已提取成果，操作真实侧栏、文献聚合及翻译接口。 */
-export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager }) {
+export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager, runtimeOnly }) {
   const main = Zotero.getMainWindow(), doc = main.document, attachment = Zotero.Items.get(reader.itemID), parent = attachment.parentItem
   const source = { itemID: attachment.id, itemKey: attachment.key, libraryID: attachment.libraryID, title: parent.getField('title'), literature: { itemID: parent.id, itemKey: parent.key, libraryID: parent.libraryID, title: parent.getField('title') } }
   Zotero.Prefs.set('extensions.jadenseInZotero.quickStartShown', true)
@@ -19,6 +19,62 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   // 用真实存储构造新的生命周期实例，验证重新加载而非仅依赖任务缓存。
   jobs.dispose(); jobs = new jobs.constructor(Zotero, main.fetch.bind(main), jobs.store); Zotero.__jadenseDocumentJobs = jobs; await jobs.ready
   main.Zotero_Tabs.select(reader.tabID)
+  // 真实工具条/侧栏，合成延迟 runner：验证启动与完成均不夺走阅读布局。
+  const runtime = Zotero.__jadenseAnalysisRuntime, readerDoc = reader._iframeWindow.document
+  const originalRun = runtime.run, originalStart = jobs.start
+  const beforeManager = findManager(), beforeSidebar = doc.querySelector('.jdx-reader-workspace')?.getBoundingClientRect().width || 0
+  let finishAnalysis, dispatches = 0
+  runtime.run = async input => {
+    dispatches++; input.onProgress('AI 正在解析 · 已收到 1,280 字符')
+    await new Promise(resolve => { finishAnalysis = resolve })
+    return { record: JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.paperAnalysisHistory')).records[0], historySaved: true, annotations: { created: 0, skipped: 0, failed: 0, unprocessed: 0 } }
+  }
+  jobs.start = function(kind, ...args) { if (kind === 'references') return Promise.reject(new Error('Synthetic optional references unavailable')); return originalStart.call(this, kind, ...args) }
+  try {
+    readerDoc.querySelector('[data-jadense-action="analyze"]').click()
+    await waitFor(() => finishAnalysis, 'background analysis dispatch')
+    readerDoc.querySelector('[data-jadense-action="analyze"]').click()
+    assert(dispatches === 1, 'Duplicate analysis dispatch')
+    assert(findManager() === beforeManager, 'Analysis opened Manager')
+    assert((doc.querySelector('.jdx-reader-workspace')?.getBoundingClientRect().width || 0) === beforeSidebar, 'Analysis expanded sidebar before results')
+    const brand = readerDoc.querySelector('.jadense-reader-brand')
+    assert(brand.dataset.runtime === 'running' && brand.textContent.includes('1,280'), 'Real progress missing from toolbar')
+    await screenshot('analysis-runtime-reading', main)
+    finishAnalysis(); await waitFor(() => !runtime.get(reader.itemID).busy, 'analysis completed')
+    assert((doc.querySelector('.jdx-reader-workspace')?.getBoundingClientRect().width || 0) === beforeSidebar, 'Completion expanded sidebar')
+    brand.click()
+    await waitFor(() => doc.querySelector('.jdx-reader-workspace[data-page="summary"]')?.textContent.includes('ANALYSIS_RESULT_VISIBLE'), 'analysis opens sidebar summary')
+    await screenshot('analysis-runtime-result', main)
+    Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
+    await Zotero.Promise.delay(200)
+    await screenshot('analysis-runtime-result-light', main)
+    Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'dark', true)
+    report.checks.push('analysis-background-no-layout-change', 'analysis-real-toolbar-progress', 'analysis-deduplicated', 'analysis-explicit-sidebar-result')
+    if (runtimeOnly) {
+      const pref = 'extensions.jadenseInZotero.paperAnalysisHistory', saved = Zotero.Prefs.get(pref)
+      Zotero.Prefs.set(pref, JSON.stringify({ version: 1, records: [] }))
+      finishAnalysis = undefined
+      runtime.run = async input => { input.onProgress('AI 正在解析 · 已收到 2,560 字符'); await new Promise(resolve => { finishAnalysis = resolve }); input.signal.throwIfAborted(); throw new Error('Synthetic provider failure') }
+      readerDoc.querySelector('[data-jadense-action="analyze"]').click()
+      await waitFor(() => finishAnalysis, 'second analysis')
+      brand.click()
+      await waitFor(() => doc.querySelector('.jdx-analysis-summary')?.textContent.includes('结果准备好'), 'running replaces empty summary')
+      assert(!doc.querySelector('.jdx-analysis-summary').textContent.includes('尚无解析'), 'Contradictory empty summary')
+      await screenshot('analysis-runtime-pending', main)
+      readerDoc.querySelector('.jadense-reader-runtime-stop').click(); finishAnalysis()
+      await waitFor(() => !runtime.get(reader.itemID).busy, 'analysis stopped')
+      assert(brand.dataset.runtime === 'error', 'Stopped analysis reported success')
+      await screenshot('analysis-runtime-stopped', main)
+      runtime.run = async () => { throw new Error('Synthetic provider unavailable') }
+      readerDoc.querySelector('[data-jadense-action="analyze"]').click()
+      await waitFor(() => runtime.get(reader.itemID)?.message.includes('Synthetic provider unavailable'), 'failed analysis')
+      await screenshot('analysis-runtime-error', main)
+      Zotero.Prefs.set(pref, saved)
+      report.checks.push('analysis-pending-no-empty-copy', 'analysis-stop', 'analysis-failure')
+    }
+  } finally { runtime.run = originalRun; jobs.start = originalStart }
+  if (runtimeOnly) return
+
   reader._iframeWindow.document.querySelector('[data-jadense-action="fullTranslate"]').click()
   const root = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), 'literature sidebar')
   const choose = async label => {

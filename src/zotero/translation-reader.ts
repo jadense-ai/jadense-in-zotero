@@ -1,3 +1,4 @@
+import { openDocumentSettings } from './document-notices'
 import { createJdxSelect } from "./ui/select"
 /** 连续译文阅读器：Reader 原生侧栏、停靠栏和 Manager 历史共用；不拥有模型请求生命周期。 */
 import { updateChatMarkdown } from "@/chat/markdown"
@@ -90,6 +91,9 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const toast = element(doc, "div", "jdx-notice jdx-result-toast"); toast.setAttribute("role", "status")
   let toastTimer: ReturnType<typeof setTimeout> | undefined, previousStatus: string | undefined
   const feedback = (message: string) => { clearTimeout(toastTimer); toast.textContent = message; toastTimer = setTimeout(() => { toast.textContent = "" }, 3500) }
+  const issueAction = action(doc, uiText('检查设置', 'Check settings'), () => { const action = jobs.get(taskID)?.issue?.action; if (action) openDocumentSettings(host, action) }); issueAction.hidden = true
+  const issueCopy = action(doc, uiText('复制诊断编号', 'Copy diagnostic ID'), () => { const id = jobs.get(taskID)?.issue?.id; if (id) void copyTextToClipboard(host, id) }); issueCopy.hidden = true
+  footer.append(issueAction, issueCopy)
   const state = element(doc, "span", "jdx-reading-state"); state.setAttribute("role", "status")
   const locations = element(doc, "div", "jdx-reading-location"); locations.hidden = true; locations.setAttribute("aria-label", uiText("当前段落原文位置", "Source locations for this paragraph"))
   const locationSelect = createJdxSelect(locations, { compact: true, portal: true, ariaLabel: uiText("原文位置", "Source location"), popupWidth: 180 })
@@ -285,6 +289,8 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
         previousStatus = task.status
         const layoutWarnings = [...new Set(rows.map(row => row.page?.layoutWarning).filter(Boolean))]
         state.textContent = task.storageWarning ? uiText("译文未完整保存，请及时复制", "Not fully saved; copy your translation") : task.error || lastNotice || (task.status === 'running' ? jobs.translationPhase(taskID) : '') || status + (layoutWarnings.length ? uiText(" · 需核对版式", " · check source layout") : "")
+        issueAction.hidden = !task.issue?.action; issueAction.textContent = task.issue?.action === 'ocr' ? uiText('前往 OCR 配置', 'Open OCR configuration') : uiText('账户 / 连接', 'Account / connection')
+        issueCopy.hidden = !task.issue?.id
         state.title = state.textContent; state.dataset.error = String(Boolean(task.error || task.storageWarning))
         if (task.storageWarning && copyAll.parentElement !== footer) footer.append(copyAll)
         else if (!task.storageWarning && copyAll.parentElement !== more.content) more.content.prepend(copyAll)

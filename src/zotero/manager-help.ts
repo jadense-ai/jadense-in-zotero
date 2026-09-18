@@ -82,10 +82,11 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
     trigger.setAttribute("aria-expanded", "false")
     if (focus) trigger.focus()
   }
-  const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"))
+  const visibleMenuItems = () => Array.from(menu.querySelectorAll<HTMLButtonElement>("button")).filter(item => !item.hidden)
   const showMenu = (last = false) => {
     menu.hidden = false
     trigger.setAttribute("aria-expanded", "true")
+    const menuItems = visibleMenuItems()
     menuItems[last ? menuItems.length - 1 : 0]?.focus()
   }
   trigger.addEventListener("click", () => menu.hidden ? showMenu() : closeMenu(true))
@@ -94,6 +95,7 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
     event.preventDefault(); showMenu(event.key === "ArrowUp")
   })
   menu.addEventListener("keydown", event => {
+    const menuItems = visibleMenuItems()
     const index = menuItems.indexOf(document.activeElement as HTMLButtonElement)
     if (event.key === "Escape") { event.preventDefault(); closeMenu(true) }
     else if (event.key === "Tab") closeMenu(true)

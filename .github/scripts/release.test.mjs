@@ -4,10 +4,23 @@ import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
+import process from "node:process"
 import path from "node:path"
 import { test } from "node:test"
 import { createDraftRelease, resolveRelease } from "./release.mjs"
 import { summaryVersions } from "./check-docs.mjs"
+
+test("source sync accepts unreleased versions while release branches retain naming checks", () => {
+  const version = JSON.parse(readFileSync('package.json', 'utf8')).version
+  const check = (branch) => execFileSync(process.execPath, ['.github/scripts/check-docs.mjs'], {
+    env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_HEAD_REF: branch },
+    stdio: 'pipe', windowsHide: true,
+  })
+  assert.doesNotThrow(() => check('sync-upstream'))
+  assert.doesNotThrow(() => check(`v${version}`))
+  assert.throws(() => check('release-upstream'))
+  assert.throws(() => check('v999.999.999'))
+})
 
 test("README release summaries reject excess, duplicates and mismatched links", () => {
   const summary = (tags) => `<!-- release-summary:start -->\n${tags.map(tag => `- [${tag}](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/${tag}) — Update`).join('\n')}\n<!-- release-summary:end -->`

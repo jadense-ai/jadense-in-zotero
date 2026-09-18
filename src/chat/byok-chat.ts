@@ -1,3 +1,4 @@
+import { traceRequest, diagnosticFetch, type RequestDiagnostic } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 /**
  * BYOK 文本生成客户端：把本地 Chat 投影为三种标准 HTTP/SSE 协议。
@@ -136,6 +137,7 @@ export async function consumeByokStream(
   onTextDelta?: (delta: string, accumulatedText: string) => void,
   requireComplete = false,
   acceptTruncated = false,
+  diagnostic?: RequestDiagnostic,
 ) {
   if (!response.ok) throw await responseError(response, apiKey)
   if (!response.body) throw new Error(uiText("BYOK 响应缺少数据流。", "The BYOK response has no stream."))
@@ -157,7 +159,8 @@ export async function consumeByokStream(
   const append = (delta: unknown) => {
     if (typeof delta !== "string" || !delta) return
     accumulatedText += delta
-    onTextDelta?.(delta, accumulatedText)
+    diagnostic?.text(delta.length)
+    try { onTextDelta?.(delta, accumulatedText) } catch (error) { diagnostic?.fail(error, "callback_error"); throw error }
   }
 
   const consumeBlock = (block: string) => {
@@ -168,6 +171,7 @@ export async function consumeByokStream(
       .join("\n")
       .trim()
     if (!data) return
+    if (data === "[DONE]") diagnostic?.event("DONE")
     if (data === "[DONE]" && protocol === "openai-chat-completions") {
       complete = true
       return
@@ -182,6 +186,7 @@ export async function consumeByokStream(
       throw new Error(uiText("BYOK 提供商返回了无法解析的流事件。", "The BYOK provider returned an unreadable stream event."))
     }
 
+    if (["error", "response.failed", "response.completed", "response.incomplete", "message_stop"].includes(String(event.type))) diagnostic?.event(String(event.type))
     const errorMessage = providerErrorMessage(event)
     if (protocol === "openai-chat-completions") {
       if (event.error) throw redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed."))
@@ -190,6 +195,7 @@ export async function consumeByokStream(
         const choice = object(choiceValue)
         append(object(choice?.delta)?.content)
         if (typeof choice?.finish_reason === "string") {
+          diagnostic?.event("finish")
           complete = true
           if (choice.finish_reason !== "stop" && !acceptTruncated) throw incompleteError("truncated")
         }
@@ -203,6 +209,7 @@ export async function consumeByokStream(
       if (event.type === "message_delta") {
         const stopReason = object(event.delta)?.stop_reason
         if (typeof stopReason === "string" && stopReason) {
+          diagnostic?.event("finish")
           complete = true
           if (stopReason !== "end_turn" && stopReason !== "stop_sequence" && !acceptTruncated) throw incompleteError("truncated")
         }
@@ -226,6 +233,7 @@ export async function consumeByokStream(
   try {
     while (true) {
       const { done, value } = await reader.read()
+      diagnostic?.data(value?.byteLength ?? 0)
       pending += decoder.decode(value, { stream: !done })
       let boundary = pending.search(/\r?\n\r?\n/)
       while (boundary >= 0) {
@@ -237,9 +245,12 @@ export async function consumeByokStream(
       if (done) break
     }
     if (pending.trim()) consumeBlock(pending)
+    if (!complete) diagnostic?.event("early_eof")
     if (!complete) throw incompleteError("eof")
     return accumulatedText
   } catch (error) {
+    diagnostic?.fail(error, "stream_error")
+    diagnostic?.event("cleanup_cancel", { source: "stream_cleanup" })
     await reader.cancel().catch(() => undefined)
     if (object(error)?.name === "AbortError") throw error
     throw redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream."))
@@ -328,12 +339,15 @@ export class ByokChatClient {
     this.fetchImpl = options.fetchImpl ?? ((input, init) => globalThis.fetch(input, init))
   }
 
-  async send(input: ByokSendInput) {
+  async send(input: ByokSendInput): Promise<string> {
+    return traceRequest(input, { provider: 'byok', protocol: this.config.protocol, model: this.config.model }, value => this.sendRecorded(value))
+  }
+  private async sendRecorded(input: ByokSendInput) {
     const messages = localChatMessages(input.messages, input.sources)
     const outbound = request(this.config, messages, input.images)
     let response: Response
     try {
-      response = await this.fetchImpl(byokEndpoint(this.config.protocol, this.config.baseUrl), {
+      response = await diagnosticFetch(input.diagnostic, this.fetchImpl, byokEndpoint(this.config.protocol, this.config.baseUrl), {
         method: "POST",
         headers: outbound.headers,
         body: JSON.stringify(outbound.body),
@@ -350,6 +364,7 @@ export class ByokChatClient {
       input.onTextDelta,
       input.requireComplete,
       input.acceptTruncated,
+      input.diagnostic,
     )
   }
 }

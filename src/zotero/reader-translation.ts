@@ -1,3 +1,4 @@
+import { diagnostics } from "./diagnostics"
 import { literatureIdentity } from "./document-identity"
 /**
  * 阅读器选文翻译运行时。
@@ -82,7 +83,7 @@ export async function translateReaderSelection(input: {
         ? new ByokChatClient({ config: model.config!, fetchImpl: input.fetchImpl })
         : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: input.fetchImpl })
       translatedText = await client.send({
-        clientFeature: "translation",
+        clientFeature: "translation", clientOperation: "selection_translation",
         clientRequestId: createId("request"),
         conversationId: id,
         taskId: id,
@@ -101,7 +102,7 @@ export async function translateReaderSelection(input: {
         onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(accumulatedText),
       })
     }
-  } catch (error) {
+  } catch (error) { diagnostics()?.record("reader-translation", "operation_error", error);
     throw new Error(friendlyTranslationError(error))
   }
   if (!translatedText.trim()) throw new Error(uiText("AI 没有返回可显示的译文。", "The AI did not return a translation."))

@@ -471,7 +471,7 @@ describe("Zotero -> Jadense upload", () => {
       pdfUploadedCount: 1,
       pdfFailedCount: 0,
     })
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it("uploads selected collection recursively with dedupe, chunking, and optional PDFs", async () => {
@@ -572,7 +572,7 @@ describe("Zotero -> Jadense upload", () => {
       }),
     ]))
 
-    expect(metadataBatchSizes).toEqual([100, 1])
+    expect(metadataBatchSizes).toEqual([100])
     expect(pdfUploadCount).toBe(1)
     const mappings = JSON.parse(String(prefs.get(SYNC_MAPPING_PREF_KEY))) as {
       pushes: Record<string, { collectionPaths: string[]; pdfStatus: string }>
@@ -584,7 +584,7 @@ describe("Zotero -> Jadense upload", () => {
     })
   })
 
-  it("marks the PDF as skipped when the server reports the item already has a file", async () => {
+  it("reports a conflict when the server refuses an existing favorite", async () => {
     const { zotero, prefs, selectedItems, seedAttachment, seedItem } = createFakeZotero()
     const item = seedItem({ title: "Already has PDF" })
     const attachment = seedAttachment({ title: "already-has-pdf.pdf" })
@@ -618,15 +618,16 @@ describe("Zotero -> Jadense upload", () => {
     }))
 
     await expect(pushSelectedItemsToJadense(zotero, { includePdf: true })).resolves.toMatchObject({
-      importedCount: 1,
+      importedCount: 0,
+      failedCount: 1,
       pdfUploadedCount: 0,
-      pdfSkippedCount: 1,
-      pdfFailedCount: 0,
+      pdfSkippedCount: 0,
+      pdfFailedCount: 1,
     })
     const mappings = JSON.parse(String(prefs.get(SYNC_MAPPING_PREF_KEY))) as {
       pushes: Record<string, { pdfStatus: string; error?: string | null }>
     }
-    expect(mappings.pushes["1:I1"]?.pdfStatus).toBe("skipped")
+    expect(mappings.pushes["1:I1"]?.pdfStatus).toBe("failed")
   })
 })
 

@@ -1,4 +1,10 @@
 @import url("translation-interface.css");
+#jadense-in-zotero-preferences-pane .jdx-ocr-section { margin-top:20px; padding-top:16px; border-top:1px solid var(--jdx-pref-line); }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings h4 { font-size:13px; margin:0 0 8px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-tip { margin-top:20px; padding:14px 16px; background:var(--jdx-pref-subtle); border-radius:8px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings summary { cursor:pointer; font-weight:600; padding-block:4px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings details[open] summary { margin-bottom:16px; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-settings button[hidden] { display:none!important; }
 /* 原生偏好复用同一 OCR 内容，沿用本 pane 的按钮与主题变量。 */
 #jadense-in-zotero-preferences-pane .jdx-ocr-settings p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 #jadense-in-zotero-preferences-pane .jdx-ocr-settings .jdx-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }

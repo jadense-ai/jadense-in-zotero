@@ -20,7 +20,7 @@ export type ReaderSidebarSource = { itemID: number; tabID?: string; _iframe?: HT
 type ResultPage = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab
 type Reader = ReaderSidebarSource
 type Details = HTMLElement & { tabID?: string; pinnedPane?: string; scrollToPane?(id: string, behavior: string): Promise<unknown>; render?(): Promise<unknown> }
-type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean, quote?: SelectionQuote): Promise<void>; remove(): void }
+type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean, quote?: SelectionQuote, resultPage?: ResultPage): Promise<void>; remove(): void }
 const surfaces = new WeakMap<ZoteroLike, Set<Surface>>()
 const bodies = new WeakMap<HTMLElement, Surface>()
 const docks = new WeakMap<Document, Surface>()
@@ -133,10 +133,11 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   pageSelect.onChange(next => { void setPage(next) }); void setPage(page)
   const value: Surface = {
     itemID, doc, root,
-    async show(shouldStart = false, _onHistory, newConversation, quote) {
+    async show(shouldStart = false, _onHistory, newConversation, quote, resultPage) {
       await options.activate()
       if (newConversation) { await setPage('chat'); await chatView.newSession(quote); return }
-      if (shouldStart) await setPage('translation')
+      if (resultPage) await setPage(resultPage)
+      else if (shouldStart) await setPage('translation')
       else if (page !== 'chat') await setPage(page)
     },
     remove() {
@@ -251,7 +252,7 @@ export async function openTranslationSidebar(host: ZoteroLike, readerDoc: Docume
 export async function openChatSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, originReader?: Reader, quote?: SelectionQuote) {
   return openReaderSidebar(host, readerDoc, itemID, undefined, originReader, true, quote)
 }
-async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, onHistory: (() => void) | undefined, originReader: Reader | undefined, chat: boolean, quote?: SelectionQuote) {
+async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: number, onHistory: (() => void) | undefined, originReader: Reader | undefined, chat: boolean, quote?: SelectionQuote, resultPage?: ResultPage) {
   const reader = originReader?.itemID === itemID ? originReader : readers(host).find(value => value.itemID === itemID && value._iframeWindow?.document === readerDoc)
   const doc = reader?._window?.document
   if (doc && reader?.tabID) {
@@ -261,10 +262,10 @@ async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: 
     const body = detail?.querySelector<HTMLElement>(selector)
     if (body && !bodies.has(body)) mountNativeReaderSidebar(body, host, onHistory)
     const native = body && bodies.get(body)
-    if (native) { await native.show(!chat, onHistory, chat, quote); return }
+    if (native) { await native.show(!chat, onHistory, chat, quote, resultPage); return }
   }
   const previous = docks.get(readerDoc)
-  if (previous?.itemID === itemID) { await previous.show(!chat, onHistory, chat, quote); return }
+  if (previous?.itemID === itemID) { await previous.show(!chat, onHistory, chat, quote, resultPage); return }
   previous?.remove()
   const browser = reader?._iframe, parent = browser?.parentElement
   // 独立 Reader 有 chrome browser；极旧宿主在 Reader 根内预留实际宽度。
@@ -279,7 +280,7 @@ async function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: 
   })
   const remove = () => value.remove()
   readerDoc.defaultView?.addEventListener("pagehide", remove, { once: true }); owner.defaultView?.addEventListener("resize", fit)
-  docks.set(readerDoc, value); await value.show(!chat, onHistory, chat, quote)
+  docks.set(readerDoc, value); await value.show(!chat, onHistory, chat, quote, resultPage)
 }
 
 export function removeReaderSidebars(host: ZoteroLike) {
@@ -291,3 +292,8 @@ export function removeReaderSidebars(host: ZoteroLike) {
   }
 }
 export function removeReaderDock(doc: Document) { docks.get(doc)?.remove() }
+
+/** 明确查看解析时才展开当前 PDF 的总结侧栏。 */
+export function openAnalysisSidebar(host: ZoteroLike, doc: Document, itemID: number, reader?: Reader) {
+  return openReaderSidebar(host, doc, itemID, undefined, reader, false, undefined, "summary")
+}

@@ -62,6 +62,10 @@ $env:UV_CACHE_DIR = Join-Path ([Environment]::GetFolderPath('LocalApplicationDat
 $env:UV_PROJECT_ENVIRONMENT = Join-Path $runtimePath '.venv'
 Write-Output "Using uv: $uvPath"
 Write-Output 'Installing Python 3.12 and OCR dependencies...'
+Remove-Item -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Force -ErrorAction SilentlyContinue
 & $uvPath sync --project $runtimePath --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw 'OCR dependency installation failed. Retry or follow the manual installation README.' }
+& (Join-Path $runtimePath '.venv\Scripts\python.exe') -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+if ($LASTEXITCODE -ne 0) { throw 'OCR dependency import failed. See install.log for the missing dependency or native library.' }
+Set-Content -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Value 'ready'
 Write-Output 'OCR runtime ready'
