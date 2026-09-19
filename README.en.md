@@ -36,7 +36,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**Unreleased (main):** local OCR gains stage/download progress, timeout and cache-recovery improvements, and dependency removal/reinstallation. The published v0.4.9 package is unchanged. See [Unreleased](CHANGELOG.md#unreleased--尚未发布).
+**v0.4.10 pending release:** local OCR gains stage/download progress, timeout and cache-recovery improvements, and dependency removal/reinstallation. The published v0.4.9 package is unchanged. See [v0.4.10 changes](CHANGELOG.md#0410--待发布--pending-release).
 
 **v0.4.9:** improve full-document streaming completion, progress recovery and error notices; unify OCR setup, reuse existing environments and models, and add ModelScope downloads and local diagnostics. See the [local OCR guide](docs/local-ocr.md) and [v0.4.9 instructions](docs/usage-guide.md#unreleased-049).
 
@@ -60,7 +60,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.4.9.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.9/jadense-in-zotero-v0.4.9.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.10/jadense-in-zotero-v0.4.10.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 

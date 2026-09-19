@@ -250,3 +250,11 @@ This section describes the published v0.4.9 release.
 - Choose Hugging Face, HF-Mirror or ModelScope as the model download source. Changing it neither uploads PDFs nor changes your translation provider; retries reuse completed files.
 - Interrupted full translations retain completed content. Resolve account, points or model configuration problems, then resume manually; failed requests are not automatically resent.
 - In the workbench Help menu, activate the version number five times within five seconds to enable Error diagnostics. Filter, copy, export or clear local records (up to 7 days, 500 records or 2 MiB). Review any export before choosing to share it.
+
+<a id="ocr-0410"></a>
+
+## 0.4.10（待发布）：OCR 安装进度与重装 / OCR setup and reinstallation (pending release)
+
+「设置 → OCR配置」显示准备阶段、下载量和等待时间。失败后先换下载源并继续；组件损坏时选择「修复识别组件」。需要重装时在「环境与故障排查 → 删除与重装」确认删除，默认保留模型与历史成果，然后点击「重新安装 OCR」。[完整指南](local-ocr.md)包含 Windows、Linux、macOS 手动安装和模型验证。
+
+Settings → OCR configuration shows setup stages, download size and elapsed time. Retry with another model source after download failures, or use Repair recognition components for damaged dependencies. Under Environment and troubleshooting → Remove and reinstall, confirm dependency removal (models and saved results are retained by default), then choose Reinstall OCR. The [full guide (Chinese)](local-ocr.md) includes separate Windows, Linux and macOS manual steps and model verification.
