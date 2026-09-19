@@ -5,6 +5,7 @@ $OutputEncoding = [Console]::OutputEncoding
 # Zotero 可能继承 PowerShell 7 的模块路径；补入当前 Windows PowerShell 模块。
 $env:PSModulePath = (Join-Path $PSHOME 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $runtimePath = [IO.Path]::GetFullPath($RuntimeDirectory)
+Write-Output 'JADENSE_OCR_PROGRESS {"stage":"environment"}'
 # 只探测用户可执行文件，不执行 shell 配置，也不修改用户 uv。
 $uvPath = $null
 $uvVersion = $null
@@ -34,10 +35,11 @@ New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
 if (-not $uvPath) {
     $uvPath = Join-Path $runtimePath 'uv.exe'
     Write-Output 'Downloading uv...'
+    Write-Output 'JADENSE_OCR_PROGRESS {"stage":"uv"}'
     $archive = Join-Path $runtimePath 'uv.zip'
     $url = 'https://github.com/astral-sh/uv/releases/download/0.9.3/uv-x86_64-pc-windows-msvc.zip'
-    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-    $checksumBody = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing).Content
+    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing -TimeoutSec 300
+    $checksumBody = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing -TimeoutSec 120).Content
     if ($checksumBody -is [byte[]]) { $checksumBody = [Text.Encoding]::UTF8.GetString($checksumBody) }
     $expected = ($checksumBody.Trim() -split '\s+')[0]
     $stream = [IO.File]::OpenRead($archive)
@@ -62,9 +64,11 @@ $env:UV_CACHE_DIR = Join-Path ([Environment]::GetFolderPath('LocalApplicationDat
 $env:UV_PROJECT_ENVIRONMENT = Join-Path $runtimePath '.venv'
 Write-Output "Using uv: $uvPath"
 Write-Output 'Installing Python 3.12 and OCR dependencies...'
+Write-Output 'JADENSE_OCR_PROGRESS {"stage":"dependencies"}'
 Remove-Item -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Force -ErrorAction SilentlyContinue
 & $uvPath sync --project $runtimePath --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw 'OCR dependency installation failed. Retry or follow the manual installation README.' }
+Write-Output 'JADENSE_OCR_PROGRESS {"stage":"imports"}'
 & (Join-Path $runtimePath '.venv\Scripts\python.exe') -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
 if ($LASTEXITCODE -ne 0) { throw 'OCR dependency import failed. See install.log for the missing dependency or native library.' }
 Set-Content -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Value 'ready'

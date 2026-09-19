@@ -1,97 +1,378 @@
-# 本机 OCR 安装与全文翻译
+# 本机 OCR 依赖安装与使用指南
 
-> 以下准备流程适用于正式版 0.4.9。已发布 0.4.8 的界面可能不同。
+全文 Markdown、全文翻译和参考文献提取需要本机 OCR；普通问答和默认选文翻译不需要 Python。建议先通过设置页准备，失败后按本机系统手动安装。
 
-## 全文翻译与本机 OCR
+> 版本范围：统一准备入口已包含在正式版 **0.4.9**。细分下载进度、超时提示及「删除依赖 / 重新安装 OCR」是 **main 中尚未发布的改进**，v0.4.9 已发布 XPI 不一定有这些控件。源码版本号相同不代表安装包内容相同；旧版以实际界面为准。
 
-设置 → **OCR配置**中点击 **启用本机 OCR**，插件自动完成依赖安装、模型准备与验证；中途失败后点击 **继续准备**，复用已下载内容。打开设置自动读取状态，就绪后无需反复检查；全文 Markdown、全文翻译和参考文献任务要求提前准备完成。插件先使用 Docling + RapidOCR 在本机识别完整 PDF，再将有序正文发送给所选 AI 或 Bing/Google；PDF 文件和公式裁图不会上传给 OCR 云服务。其他功能不要求安装 Python。
+- [设置界面操作](#settings)
+- [环境要求与下载来源](#requirements)
+- [手动安装前：目录和文件](#manual-preparation)
+- [Windows 手动安装](#windows)
+- [Linux 手动安装](#linux)
+- [macOS 手动安装](#macos)
+- [模型准备与验证](#models)
+- [手动取得 uv](#uv-download)
+- [修复、删除与重装](#repair)
+- [常见故障](#troubleshooting)
+- [全文使用、数据位置与验证范围](#usage)
 
-整页 OCR 使用 Docling 的 [Egret Large 版面模型](https://huggingface.co/docling-project/docling-layout-egret-large) 重建阅读顺序，段落和跨页正文按容量组成请求，不再逐个文字层碎片请求。AI 返回 Markdown 并流式显示；Bing、Google 每片分别最多 1,000、5,000 UTF-16 字符。公式在本机以原图保留，随正文发送的是占位符。页码采用 PDF 实际第 1～N 页，定位范围对应当前容量片覆盖的来源区域；机器翻译不保证逐句与原文一一对齐。
+<a id="settings"></a>
 
-生成期间禁用定位；暂停、失败或完成后可以定位已完成内容。未完成内容标为草稿，仅保存在当前插件会话内。继续只请求未完成的切片；限流显示可继续时间，不自动重试或换服务。网络中断后手动继续会重新请求该未完成片，先前请求可能已产生费用。旧历史不会自动重译，需要主动点击「重新翻译」使用 OCR。
+## 1. 设置界面操作（推荐）
 
-## 安装环境
+1. 在 Zotero 打开 Jadense 工作台，点击左下角设置，进入 **OCR配置**。Zotero 原生设置中的 Jadense OCR 区域使用同一套状态与操作。
+2. 在 **模型下载源** 选择来源：默认是 Hugging Face（或系统 `HF_ENDPOINT`）；连接困难时可选 **魔搭 ModelScope（中国国内）** 或 **HF-Mirror（第三方镜像）**。切换来源保留已有缓存，仅影响后续模型下载，不改变 Python 包下载源或翻译服务。
+3. 点击 **启用本机 OCR**，插件自动检查 uv、安装独立 Python 及依赖、准备模型，最后用合成样例离线验证。不需要填写 Python 路径、端口、API Key 或攻玉令牌。
+4. 等待 **已就绪 · 可以开始全文任务**。可以离开设置页，但应保持 Zotero 运行。当前源码显示阶段、文件/批次、下载量、平均速度和等待时间；总大小未知时显示不定进度，不应直接视为卡死。组件安装和模型准备各最多 30 分钟。
+5. 显示 **识别组件已安装 · 还需准备模型** 时，点击 **继续准备**。失败后展开 **环境与故障排查**，查看最近错误及日志路径；模型下载失败可换源后继续，完整文件会复用。
+6. 打开一个本机 PDF，在阅读器侧栏 **全文 Markdown → 提取原文** 验证正文提取。全文翻译还需配置对应的 AI 或 Bing/Google 翻译服务。
 
-自动安装在当前 Zotero **配置目录**（不是文献数据目录）的 `jadense-ocr/v1/` 中进行：
+**重新检查**检查环境及已有模型，不负责联网安装或下载；**修复识别组件**重新同步锁定依赖并验证模型，保留已下载模型。每次打开设置会自动读取状态，就绪后无需反复修复。
 
-- Windows x64：系统 Windows PowerShell、HTTPS 网络；无需预装 Python 或管理员权限。
-- macOS Intel/Apple Silicon、Linux x64/ARM64：`/bin/sh`、`curl`、`tar`、`shasum`。平台与 Python 依赖的 wheel 支持以实际安装结果为准。
-- 优先检测 PATH 和常见用户安装目录中的 uv（>= 0.9.3），其次使用插件已有 uv；均不可用时下载 uv 0.9.3 并校验官方 SHA-256，不修改用户 uv。独立 CPython 3.12、Docling 2.126.0、RapidOCR 3.9.2；间接依赖由 [uv.lock](../content/ocr/uv.lock) 固定。
-- Windows 构建缓存使用 `%LOCALAPPDATA%\Jadense\uv`，避免在深层 profile 内构建旧依赖；`.venv` 和模型仍属于当前 profile。其他系统保持 profile 内缓存。
-- 默认 CPU、4 个 Docling 计算线程；无需 CUDA。首次下载 Python、PyTorch/ONNX 依赖和版面模型，需数 GB 可用磁盘空间及稳定网络。首次加载比后续慢，识别速度随 CPU 和页数变化。
-- 下载来源：GitHub 的 astral-sh/uv 与 Python 发行资产、PyPI；Docling 版面、表格和选文公式模型可选择 Hugging Face、HF-Mirror 或中国国内的魔搭 ModelScope。RapidOCR 3.9.2 的文字识别模型使用其内置的官方魔搭源，首次识别可能需要下载，并非所有权重都随 Python 包提供。不需要攻玉令牌或模型下载密钥。
+| 状态 | 下一步 |
+| --- | --- |
+| 尚未启用 | 点击「启用本机 OCR」 |
+| 识别组件已安装 · 还需准备模型 | 点击「继续准备」 |
+| 已就绪 · 可以开始全文任务 | 直接提取原文或运行全文任务 |
+| 准备未完成 · 已下载内容会保留 | 看错误，修复网络/空间或换模型源，再继续 |
+| 暂时无法读取状态 | 「重新读取状态」仅重读；持续失败时查看日志 |
+| 依赖已删除 · 需要重新安装（未发布） | 点击「重新安装 OCR」；历史成果仍可阅读 |
 
-### 0.4.7–0.4.9 升级后的恢复
+选文 OCR 是独立的可选功能：在 **设置 → 功能配置 → 选中文本 → OCR增强选中文本内容提取** 开启，默认关闭。选文公式使用额外的 CodeFormulaV2 模型，首次使用时另行准备；全文就绪不代表该模型已就绪。识别失败时提示并沿用原选文，不阻断引用和选文翻译。
 
-两个正式版使用相同的 `jadense-ocr/v1/`、Docling 2.126.0、RapidOCR 3.9.2 和 Egret Large 全文模型。升级不要求删除环境或重新下载全部模型。0.4.8 新增选文公式 OCR，需要额外的 CodeFormulaV2；旧版全文可用不代表此额外模型已经下载。
+<a id="requirements"></a>
 
-当前修复版优先检查旧 HF 或魔搭缓存，避免已有模型仍因 Hub 网络查询而等待；有效凭据直接复用；缺少旧凭据时自动离线识别合成 PDF，成功后补写，无需手动检查。缺失模型仅在点击“启用本机 OCR / 继续准备”后下载并离线验证。选文公式模型首次使用时单独加载，不影响全文就绪状态。
+## 2. 环境要求与下载来源
 
-国内网络可选择 **魔搭 ModelScope（中国国内）**。适配固定的 `ds4sd/docling-layout-egret-large`、`ds4sd/docling-models` 和 `ds4sd/CodeFormulaV2`，下载文件与已核对的 HF 模型摘要一致，SHA-256 校验成功后才替换目标文件。下载中断保留已完成文件，重试只补缺失/损坏文件；不是字节级断点续传。切换来源仍复用已有缓存，不上传 PDF，不改变翻译 Provider。
+| 项目 | 当前要求 |
+| --- | --- |
+| Python | CPython **3.12**（`>=3.12,<3.13`）；自动安装无需预装 Python |
+| Python 依赖 | `docling[rapidocr]==2.126.0`、`rapidocr==3.9.2`；间接依赖由 [uv.lock](../content/ocr/uv.lock) 固定 |
+| 安装工具 | 优先复用 uv **>=0.9.3**，否则下载插件专用 uv 0.9.3 并校验官方 SHA-256 |
+| Windows | 自动下载目标为 **x64**，需要 Windows PowerShell；不宣称支持 Windows ARM64 原生安装 |
+| Linux | 脚本提供 **x86_64 / aarch64** 的 GNU/Linux uv，建议 glibc 发行版；Alpine/musl 不在此安装路径范围内 |
+| macOS | 脚本提供 **Intel x86_64 / Apple Silicon arm64**；依赖是否有兼容 wheel 仍取决于系统版本和架构 |
+| Unix 工具 | `/bin/sh`、`curl`、`tar`、`shasum`、`awk`、`cut` 等常见命令 |
+| 资源 | 稳定 HTTPS 网络、数 GB 可用磁盘空间；默认 CPU、4 个 Docling 计算线程，无需 CUDA |
 
-若依赖确实缺失，再点击 **安装 OCR 依赖**：显式安装不再因为旧成功标记而跳过，重新执行锁定依赖同步并验证关键模块导入；复用当前环境，不做强制全量重装。模型准备失败查看 `models-prepare.log`，选文公式失败查看 `selection-models-prepare.log`，无需盲目删除整个目录。磁盘文件损坏或系统动态库缺失仍需根据日志处理；同步不承诺修复任意文件损坏。
+依赖和模型使用不同下载来源：
 
-环境目录中的 `.venv/` 是 Python 依赖，`models/` 是模型缓存，`cache/` 是按 PDF 内容摘要与解析版本缓存的识别结果。缓存包含本机论文正文，使用操作系统当前用户目录权限保护。服务只监听随机本机回环端口，凭证仅经进程 stdin 传入；不接收任意文件路径，不提供 CORS。插件退出会关闭其服务与正在识别的子进程。
+- uv/Python：GitHub 的 `astral-sh/uv` 与 Python 发行资产。
+- Python 包：锁文件中的 PyPI 索引及发行文件；OCR 设置中的模型源不能解决 PyPI 下载失败。
+- 版面/表格/公式模型：Hugging Face、HF-Mirror 或 ModelScope。全文版面使用 [Egret Large](https://huggingface.co/docling-project/docling-layout-egret-large)。
+- 文字识别模型：RapidOCR 3.9.2 内置的官方 ModelScope 来源，不完全随 Python 包提供，首次识别仍可能下载。
 
-## 自动安装失败后的手动步骤
+ModelScope 适配固定的 `ds4sd/docling-layout-egret-large`、`ds4sd/docling-models`、`ds4sd/CodeFormulaV2`，文件经 SHA-256 核验；重试复用完整文件，不是字节级断点续传。切换模型源不要求重装环境。这些公开模型不需要模型站点密钥。
 
-先在“设置 → OCR配置”重试安装。界面保留安装错误末尾信息，完整输出尽可能保存到环境目录的 `install.log`（每次安装覆盖）；网络受限、磁盘不足或依赖下载失败时，不会改用云端 OCR。修复网络或空间后可以再次安装，成功标记仅在安装完整结束后写入。设置检查中的“已安装”依据 Python 文件及成功标记，不代表模型已下载或复杂 PDF 识别已验证。
+<a id="manual-preparation"></a>
 
-从 Zotero「帮助 → 调试输出日志」或配置目录入口确认当前 **profile** 路径。安装按钮会先将下面 5 个文件复制到 `jadense-ocr/v1/`；也可以手动复制仓库 `content/ocr/` 中的 `install.ps1`、`install.sh`、`server.py`、`pyproject.toml`、`uv.lock`。不要复制开发环境的 `.venv`。
+## 3. 手动安装前：目录和文件
 
-Windows PowerShell（把路径替换为自己的配置目录）：
+### 找到当前 profile
+
+运行目录是当前 Zotero **profile 配置目录**下的 `jadense-ocr/v1/`，不是存放论文和 `zotero.sqlite` 的文献数据目录。
+
+打开 **OCR配置 → 环境与故障排查 → 本机日志**，查看 `install.log` 的完整路径，其父目录就是运行目录。默认位置参见 [Zotero 官方说明](https://www.zotero.org/support/kb/profile_directory)：
+
+| 系统 | 常见 profile 位置 |
+| --- | --- |
+| Windows | `%APPDATA%\Zotero\Zotero\Profiles\<profile>` |
+| Linux | `~/.zotero/zotero/<profile>` |
+| macOS | `~/Library/Application Support/Zotero/Profiles/<profile>` |
+
+自定义 profile、多 profile 或沙盒安装可能不同，以日志路径为准。不要用通配符同时安装到所有 profile。下文 `<profile>` 和源码路径都须替换为自己的真实位置。
+
+### 准备同一版本的五个文件
+
+点击过安装按钮后，运行目录通常已经有 `install.ps1`、`install.sh`、`server.py`、`pyproject.toml`、`uv.lock`。齐全时跳过下面各系统的复制步骤。
+
+如果缺少文件，从与插件匹配的源码包 **content/ocr/** 复制这五个文件。已发布插件可使用对应 Release 的 **Source code** 压缩包；main 构建的插件使用同一次源码。Source code 仅用于取得文件，不能作为 `.xpi` 安装。不要混用不同版本的服务脚本和锁文件，不要复制他人的 `.venv`、模型就绪标记或整个 profile。
+
+**手动操作前等待准备任务结束，并退出 Zotero**，避免并发修改环境。只有安装系统工具时按包管理器要求提升权限，不以管理员/root 身份运行 OCR 安装器。
+
+<a id="windows"></a>
+
+## 4. Windows 手动安装（PowerShell）
+
+### 4.1 准备目录与文件
+
+在普通 PowerShell 中替换实际路径；五个文件已存在时只设置 `$ocrRuntime`，跳过复制：
 
 ```powershell
-$ocrRuntime = 'C:\path\to\profile\jadense-ocr\v1'
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ocrRuntime\install.ps1" -RuntimeDirectory $ocrRuntime
+$ocrRuntime = Join-Path $env:APPDATA 'Zotero\Zotero\Profiles\<profile>\jadense-ocr\v1'
+$ocrSource = 'C:\path\to\jadense-in-zotero\content\ocr'
+New-Item -ItemType Directory -Force -Path $ocrRuntime | Out-Null
+foreach ($name in @('install.ps1', 'install.sh', 'server.py', 'pyproject.toml', 'uv.lock')) {
+    Copy-Item -LiteralPath (Join-Path $ocrSource $name) -Destination (Join-Path $ocrRuntime $name) -ErrorAction Stop
+}
 ```
 
-macOS / Linux：
+### 4.2 运行安装器
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ocrRuntime\install.ps1" -RuntimeDirectory $ocrRuntime
+if ($LASTEXITCODE -ne 0) { throw 'OCR 依赖安装失败；先解决上面的错误，再继续。' }
+```
+
+`Bypass` 只作用于这次进程，不修改系统执行策略。脚本探测 PATH、`%USERPROFILE%\.local\bin`、`%USERPROFILE%\.cargo\bin` 和运行目录中的 uv，不覆盖用户 uv。构建缓存使用 `%LOCALAPPDATA%\Jadense\uv`，Python 与虚拟环境仍属于当前 profile。
+
+### 4.3 不运行安装脚本：手动使用 uv
+
+这是 4.2 的替代方案，无需重复执行。按 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/)安装 uv，例如已有 WinGet 时运行 `winget install --id=astral-sh.uv -e`，重开终端并检查 `uv --version` >=0.9.3；不在 PATH 时使用绝对路径。
+
+在同一 PowerShell 会话中设置 `$ocrRuntime` 后执行：
+
+```powershell
+$env:UV_PYTHON_INSTALL_DIR = Join-Path $ocrRuntime 'python'
+$env:UV_CACHE_DIR = Join-Path $env:LOCALAPPDATA 'Jadense\uv'
+$env:UV_PROJECT_ENVIRONMENT = Join-Path $ocrRuntime '.venv'
+Remove-Item -LiteralPath (Join-Path $ocrRuntime 'ready-2.126.0-3.9.2') -ErrorAction SilentlyContinue
+uv sync --project $ocrRuntime --python 3.12 --frozen
+if ($LASTEXITCODE -ne 0) { throw '锁定依赖同步失败' }
+& "$ocrRuntime\.venv\Scripts\python.exe" -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+if ($LASTEXITCODE -ne 0) { throw '依赖导入失败，不得写入就绪标记' }
+Set-Content -LiteralPath (Join-Path $ocrRuntime 'ready-2.126.0-3.9.2') -Value 'ready'
+```
+
+不要以 Python 3.13/3.14 替代 3.12，不要用只锁两个直接依赖的 `pip install` 代替 `uv.lock`。安装后继续[模型准备与验证](#models)。
+
+<a id="linux"></a>
+
+## 5. Linux 手动安装（终端）
+
+### 5.1 检查系统工具
 
 ```sh
-sh '/path/to/profile/jadense-ocr/v1/install.sh' '/path/to/profile/jadense-ocr/v1'
+uname -m
+command -v sh curl tar shasum awk cut
 ```
 
-如果安装脚本也无法下载 uv，可从 [uv 官方发行页](https://github.com/astral-sh/uv/releases/tag/0.9.3) 手动下载对应系统压缩包并核对 SHA-256，将 `uv.exe` 或 `uv` 放进该目录，再运行上述脚本。
+Debian/Ubuntu 缺少工具时：
 
-最后兜底：自行安装 Python 3.12，在环境目录手动建立 venv 并安装依赖（此方式只固定直接依赖，优先使用 uv.lock）：
-
-```powershell
-Set-Location $ocrRuntime
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install 'docling[rapidocr]==2.126.0' 'rapidocr==3.9.2'
-.\.venv\Scripts\python.exe -c "from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; print('OCR dependencies ready')"
-Set-Content -LiteralPath 'ready-2.126.0-3.9.2' -Value 'ready'
+```sh
+sudo apt-get update
+sudo apt-get install curl ca-certificates tar perl
 ```
 
-macOS/Linux 对应命令使用 `python3.12 -m venv .venv` 与 `.venv/bin/python`；依赖导入检查成功后执行 `touch ready-2.126.0-3.9.2`。随后回到插件，若未自动显示就绪则点击“继续准备”，完成后启动全文任务；插件会管理随机端口和会话凭证，无需手动运行 HTTP 服务。
+Fedora 可使用 `sudo dnf install curl ca-certificates tar perl-Digest-SHA`。其他发行版使用自己的包管理器提供相同命令。确认全部命令存在后，以下操作使用运行 Zotero 的普通用户。
 
-公式、表格、异常字体及复杂混合栏版式仍需核对原 PDF；使用开源 OCR 不等于保证识别正确。截图对应论文尚未作为此仓库的实测样本。
+### 5.2 准备文件并运行安装器
 
-## 本地开发与验证
+五个文件已存在时，只设置 `ocr_runtime` 并运行最后的安装命令：
+
+```sh
+ocr_runtime="$HOME/.zotero/zotero/<profile>/jadense-ocr/v1"
+ocr_source='/path/to/jadense-in-zotero/content/ocr'
+(
+  set -eu
+  mkdir -p "$ocr_runtime"
+  for name in install.ps1 install.sh server.py pyproject.toml uv.lock; do
+    cp "$ocr_source/$name" "$ocr_runtime/$name"
+  done
+)
+# 上面复制成功后执行；任何报错都应解决后再继续。
+sh "$ocr_runtime/install.sh" "$ocr_runtime"
+```
+
+确认最后命令退出码为 0（`echo $?`）。脚本选择 x86_64 或 aarch64 的 GNU/Linux uv。用 `sh` 执行不要求脚本有可执行权限。
+
+### 5.3 不运行安装脚本：手动使用 uv
+
+这是 5.2 安装命令的替代方案，仍须先准备五个文件。按 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/)安装 uv，或按[手动取得 uv](#uv-download)放到运行目录，确认版本 >=0.9.3。
+
+```sh
+# 使用运行目录内 uv 时改为 uv_bin="$ocr_runtime/uv"。
+uv_bin=uv
+(
+  set -eu
+  export UV_PYTHON_INSTALL_DIR="$ocr_runtime/python"
+  export UV_CACHE_DIR="$ocr_runtime/uv-cache"
+  export UV_PROJECT_ENVIRONMENT="$ocr_runtime/.venv"
+  rm -f "$ocr_runtime/ready-2.126.0-3.9.2"
+  "$uv_bin" sync --project "$ocr_runtime" --python 3.12 --frozen
+  "$ocr_runtime/.venv/bin/python" -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+  printf 'ready\n' > "$ocr_runtime/ready-2.126.0-3.9.2"
+)
+```
+
+子 shell 的 `set -eu` 确保同步或导入失败后不写成功标记。不使用 `sudo uv sync` 或 `sudo pip`。Flatpak/Snap 中的 profile、PATH 和宿主程序访问可能不同，宿主终端安装成功不证明沙盒插件可用；此类环境未验收。完成后继续[模型准备与验证](#models)。
+
+<a id="macos"></a>
+
+## 6. macOS 手动安装（Terminal）
+
+### 6.1 确认架构并准备文件
+
+五个文件已存在时，只设置 `ocr_runtime`，无需复制：
+
+```sh
+uname -m
+command -v sh curl tar shasum awk cut
+ocr_runtime="$HOME/Library/Application Support/Zotero/Profiles/<profile>/jadense-ocr/v1"
+ocr_source='/path/to/jadense-in-zotero/content/ocr'
+(
+  set -eu
+  mkdir -p "$ocr_runtime"
+  for name in install.ps1 install.sh server.py pyproject.toml uv.lock; do
+    cp "$ocr_source/$name" "$ocr_runtime/$name"
+  done
+)
+```
+
+Apple Silicon 原生终端通常显示 `arm64`，Intel 为 `x86_64`。不要在同一虚拟环境混用两种架构。Finder 可用「前往 → 前往文件夹」打开 `~/Library/Application Support/Zotero/Profiles/`；实际目录仍以插件日志为准。
+
+### 6.2 运行安装器
+
+```sh
+sh "$ocr_runtime/install.sh" "$ocr_runtime"
+```
+
+确认退出码为 0（`echo $?`）。脚本自动选择 Apple Silicon 或 Intel 的 uv，不需要预装 Homebrew/Python；也探测 `/opt/homebrew/bin/uv`、`/usr/local/bin/uv`、`~/.local/bin/uv` 和 `~/.cargo/bin/uv`，适配桌面程序不继承终端 PATH 的情况。
+
+### 6.3 不运行安装脚本：手动使用 uv
+
+这是 6.2 的替代方案。已有 Homebrew 时可执行 `brew install uv`，用 `uv --version` 确认 >=0.9.3；没有 Homebrew 可直接按 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/)取得二进制。
+
+```sh
+uv_bin=uv
+(
+  set -eu
+  export UV_PYTHON_INSTALL_DIR="$ocr_runtime/python"
+  export UV_CACHE_DIR="$ocr_runtime/uv-cache"
+  export UV_PROJECT_ENVIRONMENT="$ocr_runtime/.venv"
+  rm -f "$ocr_runtime/ready-2.126.0-3.9.2"
+  "$uv_bin" sync --project "$ocr_runtime" --python 3.12 --frozen
+  "$ocr_runtime/.venv/bin/python" -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+  printf 'ready\n' > "$ocr_runtime/ready-2.126.0-3.9.2"
+)
+```
+
+若 uv 放在运行目录，将 `uv_bin=uv` 改为 `uv_bin="$ocr_runtime/uv"`。路径含空格，保留所有引号。没有对应系统/架构 wheel 时，记录具体包名和系统版本；不要混用架构或随意升级锁定依赖。继续下一节。
+
+<a id="models"></a>
+
+## 7. 模型准备与验证
+
+### 7.1 回到设置页完成（推荐）
+
+重开 Zotero，在 **设置 → OCR配置** 点击 **重新检查**（刷新手动安装前的缓存状态），再点击 **继续准备**。等到“已就绪”，用小型本机 PDF 执行全文 Markdown 提取。`ready-2.126.0-3.9.2` 仅表示 Python 组件安装完成，不能代替模型验证。
+
+### 7.2 完全通过终端准备模型
+
+适合观察完整输出；保持 Zotero 退出，沿用前文运行目录变量。来源值为 `default`、`hf-mirror` 或 `modelscope`，以下以 ModelScope 为例。环境变量只影响当前终端及子进程，**不保存插件设置页选项**。
+
+Windows PowerShell：
 
 ```powershell
-pnpm install
+$env:JADENSE_OCR_MODEL_SOURCE = 'modelscope'
+$env:JADENSE_OCR_SETUP_PROGRESS = '1'
+& "$ocrRuntime\.venv\Scripts\python.exe" "$ocrRuntime\server.py" --prepare-models $ocrRuntime
+if ($LASTEXITCODE -ne 0) { throw '模型准备或样例识别失败' }
+& "$ocrRuntime\.venv\Scripts\python.exe" "$ocrRuntime\server.py" --check-models $ocrRuntime
+if ($LASTEXITCODE -ne 0) { throw '模型尚未就绪' }
+```
+
+Linux / macOS（`ocr_runtime` 使用对应系统前文设置的值）：
+
+```sh
+JADENSE_OCR_MODEL_SOURCE=modelscope JADENSE_OCR_SETUP_PROGRESS=1 \
+  "$ocr_runtime/.venv/bin/python" "$ocr_runtime/server.py" --prepare-models "$ocr_runtime"
+# 上一步成功退出后再检查。
+"$ocr_runtime/.venv/bin/python" "$ocr_runtime/server.py" --check-models "$ocr_runtime"
+```
+
+最后应看到 `{"modelsReady": true}` 且退出码为 0。`--prepare-models` 先验证已有缓存，必要时下载缺失文件，再通过合成 PDF 识别写入 `models-ready.json`；`--check-models` 只检查就绪凭据。不要手工创建或从另一台电脑复制模型就绪 JSON。
+
+提前准备**选文公式模型**时，将准备命令中的 `--prepare-models` 换成 `--prepare-selection-models`，成功后生成独立的 `selection-models-ready.json`；它不能替代全文模型准备。普通全文提取用户可跳过。
+
+命令行输出默认留在终端，不保证写入设置页日志，排障时保存当前终端输出。不要无参数启动 `server.py` 来配置固定端口：插件会管理随机本机端口、会话凭证和服务退出。
+
+<a id="uv-download"></a>
+
+## 8. 安装器无法下载 uv 时
+
+从 [uv 0.9.3 官方发行页](https://github.com/astral-sh/uv/releases/tag/0.9.3)取得对应压缩包和同名 `.sha256` 文件：
+
+| 环境 | 压缩包 |
+| --- | --- |
+| Windows x64 | `uv-x86_64-pc-windows-msvc.zip` |
+| Linux x64 | `uv-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 | `uv-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS Intel | `uv-x86_64-apple-darwin.tar.gz` |
+| macOS Apple Silicon | `uv-aarch64-apple-darwin.tar.gz` |
+
+Windows 用 `Get-FileHash -Algorithm SHA256 'C:\path\to\uv-....zip'`，Linux/macOS 用 `shasum -a 256 '/path/to/uv-....tar.gz'`，与官方 `.sha256` 内容核对。通过后解压，将 `uv.exe`（Windows）或 `uv`（Unix）直接放进运行目录，不多套一层 `uv-<target>/`。Unix 确认可执行，必要时运行 `chmod +x "$ocr_runtime/uv"`，然后重跑安装器。
+
+这只是离线取得 uv，不是完整离线安装：Python、锁定依赖及模型仍需下载或已有完整缓存；不同系统的 `.venv` 不能直接互拷。
+
+<a id="repair"></a>
+
+## 9. 修复、删除与重装
+
+0.4.7–0.4.9 使用相同的 `jadense-ocr/v1/` 和当前锁定依赖，无需仅因升级就删除环境；0.4.8 新增选文公式模型需额外准备。有效模型凭据直接复用，旧缓存缺少凭据时可先离线验证再补写。
+
+1. **下载失败**：修复网络或换模型源，再点击「继续准备」。
+2. **组件损坏或持续无法启动**：点击「修复识别组件」，重新同步依赖、检查关键模块导入并验证模型，保留已下载模型。
+3. **修复仍失败**（以下为未发布按钮）：展开「环境与故障排查 → 删除与重装」，点击「删除依赖…」。默认不勾选「同时删除已下载模型」；怀疑模型损坏或确需释放空间时才勾选。确认后先停止服务，再删除插件专用依赖。
+4. 删除成功后点击「重新安装 OCR」，等待依赖和模型重新验证。删除本身不自动开始下载。
+
+删除范围包括运行目录内 `.venv`、插件专用 Python/uv、安装缓存及就绪标记，默认保留 `models/`。PDF、已保存原文/翻译/解析成果、识别缓存 `cache/`、日志及用户自行安装的 Python/uv 均保留；Windows 共享缓存 `%LOCALAPPDATA%\Jadense\uv` 不由此操作清理。随 Python 包安装的少量模型仍可能重下，保留 `models/` 不等于完全免下载。
+
+OCR 或准备任务进行中应先结束任务再删除；文件占用/停止超时会报错，可重启 Zotero 再试。旧版没有删除按钮时优先修复或重跑安装器，不要删除整个 profile。
+
+<a id="troubleshooting"></a>
+
+## 10. 常见故障
+
+| 现象 | 检查与处理 |
+| --- | --- |
+| uv 下载失败 / SHA-256 不匹配 | 检查 GitHub 发行资产访问、代理及下载完整性；从官方来源重新下载核验，不关闭校验 |
+| Python 或依赖下载失败 | 确认 Python 3.12、uv >=0.9.3、网络和空间；查看完整输出。模型源设置不影响 PyPI |
+| `shasum: not found` | Linux 安装发行版的 Perl/Digest::SHA 工具后重试 |
+| Unix 出现 `\r` / `bad interpreter` | 使用原始 LF 文件；Windows 克隆可用 `git -c core.autocrlf=false clone https://github.com/jadense-ai/jadense-in-zotero.git`，避免编辑器改成 CRLF |
+| Windows 长路径构建错误 | 使用安装器的 `%LOCALAPPDATA%\Jadense\uv` 缓存，避免深层 profile 构建路径；按具体包错误排查 |
+| `DLL load failed` / 缺少 `.so` / 无兼容 wheel | 确认失败模块、系统和 CPU 架构，补齐对应官方运行库/发行版包后重做导入检查；不手工伪造 ready 标记 |
+| 组件已安装，仍提示需要准备 | 模型未验证；点「继续准备」或运行模型命令，不只看 Python 文件是否存在 |
+| 模型下载停滞/超时 | 查看阶段和日志，选择 ModelScope/HF-Mirror 后继续，已完成文件保留，不必先删全部缓存 |
+| 手动安装后界面仍显示旧状态 | 确认当前 profile，重开 Zotero 后「重新检查」；“已删除”状态也需要刷新 |
+| 选文公式失败但全文可用 | 额外 CodeFormulaV2 未准备/加载失败；查看 `selection-models-prepare.log` |
+| 权限错误/文件占用 | 退出 Zotero 后再手动修改；确认目录属于当前用户且可写、空间足够 |
+
+设置页安装的 `install.log` 每次安装覆盖；模型准备看 `models-prepare.log`，选文公式看 `selection-models-prepare.log`。反馈时提供插件/Zotero/系统版本、架构、失败阶段和脱敏错误片段，不提交整个 profile 或含论文正文的缓存。
+
+<a id="usage"></a>
+
+## 11. 全文使用、数据位置与验证范围
+
+### 全文提取与翻译
+
+阅读器侧栏提供「对话 / 全文 Markdown / 全文翻译 / 选中翻译历史 / 解析结果」。在全文 Markdown 点击「提取原文」，检查正文、表格、图片和公式；提取不会自动翻译。全文翻译复用已有原文，缺少时先提取。重新提取会创建新版本，旧译文仍对应旧原文，历史不自动重译。
+
+Docling + RapidOCR 本机处理 PDF，Egret Large 重建阅读顺序；公式以本机原图保留，正文请求中为占位符。翻译把提取文字发给所选 AI、Bing 或 Google，PDF 和公式裁图不上传 OCR 模型下载站点。Bing/Google 每片分别最多 1,000/5,000 UTF-16 字符，不保证逐句对齐。
+
+生成期间禁用定位，暂停/失败/完成后可定位已完成内容。未完成内容是当前会话内草稿；继续只请求未完成片段。网络中断后重试片段可能产生额外费用，限流后按提示手动继续，不自动换服务。工作台「解析历史」按文献汇总成果，详情可切换 PDF 和历史；图片缺失不影响已保存文字阅读。
+
+### 本机数据
+
+`.venv/` 保存依赖，`models/` 保存模型，`cache/` 按 PDF 内容摘要和解析版本保存识别结果，可能包含论文正文，由当前用户目录权限保护。服务仅监听随机回环端口，凭证经进程 stdin 传入，不接收任意文件路径、不提供 CORS；退出 Zotero 会停止服务和识别子进程。
+
+XPI 只包含五个安装/服务源文件，不包含 Python、模型或缓存。已有完整有效缓存时本机识别可离线运行，翻译仍有自己的网络和账号要求。复杂公式、表格、字体与混合栏版式应对照原 PDF；OCR 不保证识别正确。
+
+### 开发者验证
+
+在源码根目录运行：
+
+```powershell
+pnpm install --frozen-lockfile
 pnpm test
 pnpm lint
 pnpm build
 uv sync --project content/ocr --python 3.12 --frozen
+content/ocr/.venv/Scripts/python.exe -m unittest discover -s content/ocr -p test_server.py
 node scripts/smoke-local-ocr.mjs content/ocr/.venv/Scripts/python.exe content/ocr/.cache
 node scripts/smoke-local-ocr.mjs content/ocr/.venv/Scripts/python.exe content/ocr/.cache --complex --scan
-content/ocr/.venv/Scripts/python.exe -m unittest discover -s content/ocr -p test_server.py
-node scripts/smoke-research.mjs 'D:/Program Files/Zotero/zotero.exe' --documents-only --ocr-only --screenshots --keep-temp --timeout-ms 1200000
 ```
 
-原生 OCR smoke 使用隔离的 Zotero profile、真实本机 OCR 和合成 AI 流，首次会下载独立环境及模型。Python 环境、模型、缓存不进入 XPI；XPI 只包含 5 个安装/服务源文件。测试不证明真实 AI 译质或 Bing/Google 当前网络可用性。
+Linux/macOS 将 Python 路径改为 `content/ocr/.venv/bin/python`。原生检查遵循[贡献指南](../CONTRIBUTING.md#开发与本机验证)，使用隔离 profile，不使用真实资料库。
 
-Windows 原生一键安装与流式阅读已实测；macOS/Linux 安装脚本尚未在对应系统验收。三栏、跨栏摘要、首字下沉区域、水印和密集公式使用合成 PDF 及其纯扫描版本回归，不能替代真实论文对照；首字下沉仍可能产生多余空格。
-
-## 原文提取、翻译与成果历史
-
-阅读器侧栏可切换「对话 / 全文 Markdown / 全文翻译 / 选中翻译历史 / 解析结果」。先在「全文 Markdown」点击「提取原文」，查看重排后的正文、表格、图片和公式；提取完成不会自动翻译。选择目标语言后，手动点击「翻译全文」。原文只读，重新提取会创建新版本，已有译文仍对应原先的版本。
-
-工作台「文献解析」按文献汇总以上成果，同一文献的不同 PDF 可在详情中切换；「历史」展示各附件的提取、翻译及解析记录。阅读器侧栏只显示当前 PDF 的成果，对话界面仍可访问所有对话。旧翻译历史也从文献详情查看。图片仅存储在本机，缺失图片不影响已保存文字阅读。
-
-## 0.4.8 选文 OCR
-
-「设置 → 功能配置 → 选中文本 → OCR增强选中文本内容提取」默认关闭。开启后，引用或翻译使用本机 OCR 识别选区，包含公式；首次使用会准备依赖并下载模型。无有效坐标或识别失败时提示并保留原选文，不阻断引用和翻译。默认关闭时优化 PDF 文字层的换行、断词、连字与上下标，无需 Python。OCR 不能保证公式准确，请对照原 PDF。
+历史 Windows 原生一键安装与流式阅读已有实测；本次文档及源码同步完成单元/静态/构建检查，**不代表重新完成首次全量下载、macOS/Linux 安装或真实翻译服务验收**。合成复杂 PDF 回归不能替代真实论文对照。

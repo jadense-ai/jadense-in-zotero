@@ -1,5 +1,21 @@
 # 更新说明 / Changelog
 
+## Unreleased / 尚未发布
+
+### 简体中文
+
+- OCR 准备显示阶段、文件/批次、下载量、平均速度与等待时间；为环境检查、依赖安装和模型验证增加有界等待，复用已就绪缓存。
+- 新增依赖删除与重新安装，默认保留模型，可选择同时删除模型；已保存文献成果、PDF、日志及用户自行安装的 Python/uv 保留。
+- 扩展 [OCR 安装指南](docs/local-ocr.md)：设置操作、Windows/Linux/macOS 分环境手动安装、锁定依赖、模型验证与排障；中英文 README 增加独立入口。
+- 以上源码尚未生成新的正式 Release，已发布 v0.4.9 标签和附件保持不变。
+
+### English
+
+- Show OCR setup stages, files/batches, download size, average speed and elapsed time; bound environment checks, dependency installation and model verification, and reuse confirmed caches.
+- Add dependency removal and reinstallation, retaining models by default with optional model removal; keep saved results, PDFs, logs and user-installed Python/uv.
+- Expand the [OCR guide (Chinese)](docs/local-ocr.md) with settings, separate Windows/Linux/macOS manual steps, locked dependencies, model checks and troubleshooting; add dedicated sections to both READMEs.
+- These source changes have no new official Release; the published v0.4.9 tag and assets remain unchanged.
+
 ## 0.4.9 — 2026-09-18
 
 ### 简体中文

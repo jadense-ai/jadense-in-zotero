@@ -36,6 +36,8 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
+**尚未发布（main）：**本机 OCR 新增阶段/下载进度、超时与缓存恢复改进，以及依赖删除和重装。已发布 v0.4.9 安装包保持不变；详见 [Unreleased](CHANGELOG.md#unreleased--尚未发布)。
+
 **v0.4.9：**改进全文翻译的流式结束、进度保留与错误提示；统一 OCR 准备入口，复用已有环境与模型，并增加魔搭下载源和本机错误诊断。见[本机 OCR 指南](docs/local-ocr.md)和[0.4.9 操作说明](docs/usage-guide.md#unreleased-049)。
 
 **v0.4.8：**可选选文 OCR 与文字提取优化，支持配置选文操作、浮窗定位与 OCR 下载源。见[操作与配置](docs/usage-guide.md#unreleased-settings)。
@@ -63,9 +65,18 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
 
+<a id="ocr-installation"></a>
+
+## OCR 依赖安装
+
+全文 Markdown、全文翻译和参考文献提取需要本机 OCR；普通问答和默认选文翻译无需 Python。在 **设置 → OCR配置** 点击 **启用本机 OCR**，等待“已就绪”；失败后查看日志并点击 **继续准备**。首次需联网下载 Python、依赖和模型，预留数 GB 空间，无需预装 Python 或配置 CUDA。
+
+**[详细 OCR 安装指南](docs/local-ocr.md)**：包含[设置界面操作](docs/local-ocr.md#settings)、[Windows](docs/local-ocr.md#windows)、[Linux](docs/local-ocr.md#linux)、[macOS](docs/local-ocr.md#macos) 手动安装，以及[模型验证](docs/local-ocr.md#models)、[修复与重装](docs/local-ocr.md#repair)。指南明确区分当前正式版和未发布控件。
+
 ## 目录
 
 - [先看：依赖、安装方式与功能入口](#requirements)
+- [OCR 依赖安装](#ocr-installation)
 - [如何使用本插件](#quick-start)
   - [1. 安装与打开工作台](#安装)
   - [2. 选择 AI 接入方式](#ai-connection)
@@ -90,7 +101,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ## 如何使用本插件
 
-**安装插件 → 配置一种 AI 接入方式 → 选择模型 → 打开 PDF 开始阅读。** 问答与选文翻译无需 Python；全文翻译会自动安装本机 OCR 环境，首次需下载依赖和模型并预留数 GB 空间。BYOK 需要能访问所配置的模型 API。[OCR 安装与故障处理](docs/local-ocr.md)。
+**安装插件 → 配置一种 AI 接入方式 → 选择模型 → 打开 PDF 开始阅读。** 问答与默认选文翻译无需 Python；全文任务需先在「设置 → OCR配置」完成依赖与模型准备，首次预留数 GB 空间。BYOK 需要能访问所配置的模型 API。[OCR 安装与故障处理](docs/local-ocr.md)。
 
 下面给出最短上手步骤。[完整图文使用指南](docs/usage-guide.md)逐步说明提供商、模型、攻玉令牌和阅读操作。新接触 Zotero 的用户可先读 [Zotero 入门](docs/zotero-guide.md)。
 
