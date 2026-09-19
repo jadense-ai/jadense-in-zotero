@@ -10,10 +10,29 @@ from types import SimpleNamespace
 import hashlib
 import io
 import json
-from server import download_model, configure_model_downloads
+from server import download_model, configure_model_downloads, download_progress_class
 
 
 class DownloadTests(unittest.TestCase):
+    def test_download_progress_reports_bytes_and_speed_without_a_known_total(self):
+        with patch.dict(os.environ, {"JADENSE_OCR_SETUP_PROGRESS": "1"}), patch("sys.stdout", new_callable=io.StringIO) as output:
+            with download_progress_class()(total=None, unit="iB", disable=True) as bar:
+                bar.update(1024)
+            events = [json.loads(line.removeprefix("JADENSE_OCR_PROGRESS ")) for line in output.getvalue().splitlines() if line.startswith("JADENSE_OCR_PROGRESS ")]
+            self.assertEqual(events[-1]["completed"], 1024)
+            self.assertIsNone(events[-1]["total"])
+            self.assertEqual(events[-1]["unit"], "B")
+            self.assertGreater(events[-1]["speed"], 0)
+
+    def test_model_sample_timeout_never_writes_ready_marker(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch("importlib.metadata.version", return_value="test"), patch("server.importlib.util.find_spec", return_value=None), patch("server.subprocess.run", side_effect=subprocess.TimeoutExpired("sample", 1)) as run:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                model_check(directory, prepare=True)
+            self.assertGreater(run.call_args.kwargs["timeout"], 0)
+            self.assertFalse((Path(directory) / "models-ready.json").exists())
+            self.assertFalse((Path(directory) / "readiness.pdf").exists())
+
     def test_old_hf_cache_works_without_network_after_source_change(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"HF_HOME": directory, "JADENSE_OCR_MODEL_SOURCE": "modelscope"}), patch("huggingface_hub.snapshot_download", return_value=directory) as snapshot, patch("urllib.request.urlopen") as network:
             (Path(directory) / "weight").write_bytes(b"old model")

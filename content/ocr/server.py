@@ -13,11 +13,49 @@ from pathlib import Path
 import secrets
 import sys
 import threading
+import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = 1
 EXTRACTION_REVISION = 5
+
+
+def setup_progress(stage, **values):
+    """仅显式准备进程输出机器可读进度，不把第三方日志作为 UI 文案。"""
+    if os.environ.get("JADENSE_OCR_SETUP_PROGRESS") == "1":
+        print("JADENSE_OCR_PROGRESS " + json.dumps({"stage": stage, **values}), flush=True)
+
+
+def download_progress_class():
+    """复用下载库字节计数；节流输出，未知总量保持不定进度。"""
+    from tqdm.auto import tqdm
+
+    class SetupProgress(tqdm):
+        def close(self):
+            self.reported_at = 0
+            super().close()
+
+        def __init__(self, *args, **kwargs):
+            self.reported_at = 0
+            self.started_at = time.monotonic()
+            self.progress_name = kwargs.pop("name", "")
+            if kwargs.get("unit") == "iB": kwargs["unit"] = "B"
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+
+        def display(self, *args, **kwargs):
+            # 文件枚举条不是字节进度，不能覆盖下载指标。
+            if self.unit != "B" or self.progress_name == "huggingface_hub.snapshot_download":
+                return
+            now = time.monotonic()
+            if now - self.reported_at < 0.25 and self.n != self.total:
+                return
+            self.reported_at = now
+            setup_progress("download", file=str(self.desc or ""), completed=self.n,
+                           total=self.total, unit="B", speed=max(0, self.n - self.initial) / max(0.001, now - self.started_at))
+
+    return SetupProgress
 
 # 固定公开模型文件摘要；魔搭与 HF 同一模型，不随镜像 master 变化接受新权重。
 MODELSCOPE_FILES = {
@@ -68,7 +106,8 @@ def download_model(repo_id, local_dir=None, force=False, progress=False, revisio
         return directory
     if os.environ.get("JADENSE_OCR_MODEL_SOURCE") != "modelscope" or files is None or local_dir is not None:
         return Path(snapshot_download(repo_id, revision=revision, local_dir=local_dir, force_download=force,
-                                      local_files_only=os.environ.get("HF_HUB_OFFLINE") == "1"))
+                                      local_files_only=os.environ.get("HF_HUB_OFFLINE") == "1",
+                                      **({"tqdm_class": download_progress_class()} if os.environ.get("JADENSE_OCR_SETUP_PROGRESS") == "1" else {})))
     if os.environ.get("HF_HUB_OFFLINE") == "1":
         raise FileNotFoundError(f"OCR model is not cached: {repo_id}")
     for filename, digest in files.items():
@@ -82,8 +121,12 @@ def download_model(repo_id, local_dir=None, force=False, progress=False, revisio
             # 固定公开 URL，无 SDK 凭据、无 PDF；失败不覆盖已完成文件。
             url = f"https://www.modelscope.cn/models/ds4sd/{name}/resolve/master/{filename}"
             with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as output:
-                while chunk := response.read(1024 * 1024):
-                    output.write(chunk)
+                total = int(getattr(response, "headers", {}).get("Content-Length", 0)) or None
+                with download_progress_class()(total=total, unit="B", desc=f"{name}/{filename}") as bar:
+                    while chunk := response.read(1024 * 1024):
+                        output.write(chunk)
+                        bar.update(len(chunk))
+            setup_progress("checksum", file=f"{name}/{filename}")
             if not valid_model_file(temporary, digest):
                 raise ValueError(f"ModelScope checksum mismatch: {name}/{filename}")
             temporary.replace(target)
@@ -105,6 +148,9 @@ def configure_model_downloads():
     """只在识别子进程安装 Docling 2.126 下载适配，不改动包文件或全局 SDK。"""
     from docling.models.utils import hf_model_download
     hf_model_download.download_hf_model = download_model
+    if os.environ.get("JADENSE_OCR_SETUP_PROGRESS") == "1":
+        import rapidocr.utils.download_file as rapid_download
+        rapid_download.tqdm = download_progress_class()
     if os.environ.get("HF_HUB_OFFLINE") == "1":
         from rapidocr.utils.download_file import DownloadFile
         def offline_download(*_args, **_kwargs):
@@ -222,6 +268,11 @@ def model_files(root, selection=False):
 def model_check(root, prepare=False, selection=False, allow_download=True):
     """设置页显式下载并离线识别合成 PDF；普通准入只检查版本及已验证文件。"""
     from importlib.metadata import version
+    deadline = time.monotonic() + float(os.environ.get("JADENSE_OCR_SETUP_TIMEOUT", "1740"))
+    def run_sample(command, **options):
+        # subprocess.run 超时会终止并回收识别子进程，避免孤儿进程继续写凭据。
+        return subprocess.run(command, timeout=max(0.001, deadline - time.monotonic()), **options)
+    setup_progress("cache")
     root = Path(root)
     os.environ["HF_HOME"] = str(root / "models")
     marker = root / ("selection-models-ready.json" if selection else "models-ready.json")
@@ -260,17 +311,20 @@ def model_check(root, prepare=False, selection=False, allow_download=True):
                 command = [sys.executable, str(Path(__file__).resolve()), "--selection", str(source), str(result), str(progress), str(regions)]
             options = {"stdin": subprocess.DEVNULL, "creationflags": subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0}
             # 旧版没有 models-ready.json；先离线验证旧缓存，不因升级强制联网或重下。
-            offline = subprocess.run(command, env=environment, **options)
+            setup_progress("offline")
+            offline = run_sample(command, env=environment, **options)
             if offline.returncode != 0:
                 if not allow_download:
                     print(json.dumps({"modelsReady": False}), flush=True)
                     return False
                 online = {**environment, "HF_HUB_OFFLINE": "0"}
                 if selection: regions.write_text(json.dumps([{"pageIndex": 0, "rects": [[0, 0, 600, 800]]}]), encoding="utf8")
-                subprocess.run(command, env=online, check=True, **options)
+                setup_progress("models")
+                run_sample(command, env=online, check=True, **options)
                 result.unlink(missing_ok=True)
                 if selection: regions.write_text(json.dumps([{"pageIndex": 0, "rects": [[0, 0, 600, 800]]}]), encoding="utf8")
-                subprocess.run(command, env=environment, check=True, **options)
+                setup_progress("verify")
+                run_sample(command, env=environment, check=True, **options)
             data = json.loads(result.read_text(encoding="utf8"))
             text = data.get("text", "") if selection else " ".join(b.get("text", "") for p in data["pages"] for b in p["blocks"])
             if "readiness" not in text.lower():

@@ -36,6 +36,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
+**Unreleased (main):** local OCR gains stage/download progress, timeout and cache-recovery improvements, and dependency removal/reinstallation. The published v0.4.9 package is unchanged. See [Unreleased](CHANGELOG.md#unreleased--尚未发布).
+
 **v0.4.9:** improve full-document streaming completion, progress recovery and error notices; unify OCR setup, reuse existing environments and models, and add ModelScope downloads and local diagnostics. See the [local OCR guide](docs/local-ocr.md) and [v0.4.9 instructions](docs/usage-guide.md#unreleased-049).
 
 **v0.4.8:** optional selection OCR and improved text extraction, with configurable selection actions, window positioning and OCR download sources. See [settings](docs/usage-guide.md#unreleased-settings).
@@ -63,9 +65,18 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
 
+<a id="ocr-installation"></a>
+
+## OCR dependency installation
+
+Full Markdown, full translation and reference extraction require local OCR; ordinary chat and default selection translation do not need Python. Open **Settings → OCR configuration → Enable local OCR**, wait for **Ready**, or inspect the logs and choose **Continue setup** after a failure. First setup downloads Python, dependencies and models and needs several GB of disk space. Preinstalled Python and CUDA are not required.
+
+The **[detailed OCR installation guide (Chinese)](docs/local-ocr.md)** covers [settings](docs/local-ocr.md#settings), separate manual steps for [Windows](docs/local-ocr.md#windows), [Linux](docs/local-ocr.md#linux) and [macOS](docs/local-ocr.md#macos), [model verification](docs/local-ocr.md#models), and [repair/reinstallation](docs/local-ocr.md#repair). It distinguishes released features from unreleased controls.
+
 ## Contents
 
 - [Start here: requirements, installation methods, and feature links](#requirements)
+- [OCR dependency installation](#ocr-installation)
 - [How to use this plugin](#quick-start)
   - [1. Install and open the workbench](#install)
   - [2. Choose an AI connection](#ai-connection)
@@ -86,7 +97,7 @@ All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's *
 
 ## How to use this plugin
 
-**Install → configure one AI connection → select a model → open a PDF.** Chat and selection translation do not require Python. Full translation installs local OCR automatically; the first setup downloads dependencies and models and needs several GB of disk space. See [OCR setup and troubleshooting (Chinese)](docs/local-ocr.md). BYOK requires access to your configured model API.
+**Install → configure one AI connection → select a model → open a PDF.** Chat and default selection translation do not require Python. Prepare OCR dependencies and models under **Settings → OCR configuration** before full-document tasks; first setup needs several GB of disk space. See [OCR setup and troubleshooting (Chinese)](docs/local-ocr.md). BYOK requires access to your configured model API.
 
 The [illustrated guide (Chinese)](docs/usage-guide.md) walks through provider, model, token and reader settings.
 

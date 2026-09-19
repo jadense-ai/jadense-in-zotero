@@ -245,12 +245,35 @@ function installPreviewHost() {
   if (ocrFixture) {
     window.IOUtils.exists = async path => files.has(path)
     let installed = ocrFixture === 'ready'
+    const removeFile = window.IOUtils.remove
+    window.IOUtils.remove = async path => {
+      if (path.endsWith('/.venv')) installed = false
+      for (const key of files.keys()) if (key.startsWith(path + '/')) files.delete(key)
+      return removeFile(path)
+    }
+    window.PathUtils.normalize = path => path
+    window.PathUtils.parent = path => path.slice(0, path.lastIndexOf('/'))
     window.ChromeUtils = { importESModule: () => ({ Subprocess: {
       getEnvironment: () => ({}),
       call: async options => {
         const checking = options.arguments.includes('-CheckOnly') || options.arguments.includes('--check')
         const models = options.arguments.some(value => ['--verify-models', '--prepare-models'].includes(value))
         const missing = ocrFixture === 'missing' && !installed
+        if (ocrFixture === 'download' && options.arguments.includes('--prepare-models')) {
+          const events = [
+            { stage: 'offline' },
+            { stage: 'download', file: 'docling-layout-egret-large/model.safetensors', completed: 180000000, total: 720000000, speed: 3000000, unit: 'B' },
+            { stage: 'download', file: 'docling-layout-egret-large/model.safetensors', completed: 450000000, total: 720000000, speed: 3500000, unit: 'B' },
+            { stage: 'verify' },
+          ]
+          let done = false
+          return { stdout: { readString: async () => {
+            if (done) return null
+            await new Promise(resolve => setTimeout(resolve, 6000))
+            if (events.length) return 'JADENSE_OCR_PROGRESS ' + JSON.stringify(events.shift()) + '\n'
+            done = true; return '{"modelsReady":true}\n'
+          } }, wait: async () => ({ exitCode: 0 }), kill() {} }
+        }
         let output = models ? JSON.stringify({ modelsReady: installed }) : checking
           ? `uvPath=${missing ? '' : 'C:/Users/Example/.local/bin/uv.exe'}\nuvVersion=${missing ? '' : 'uv 0.9.3'}\nuvSource=${missing ? '' : installed ? 'plugin' : 'user'}\nready=${installed}\n`
           : 'Synthetic OCR installation log\n'

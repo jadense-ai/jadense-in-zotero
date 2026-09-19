@@ -61,8 +61,22 @@
 .jdx-runtime-status:is([data-state="loading"], [data-state="working"]) .jdx-runtime-status-title::before { content: "↻" / ""; }
 .jdx-ocr-settings .jdx-runtime-status-description { margin: 6px 0 0; color: var(--jdx-pref-muted, var(--jdx-muted)); }
 .jdx-ocr-settings .jdx-runtime-status .jdx-actions { margin: 12px 0 0; }
+.jdx-ocr-settings .jdx-runtime-status .jdx-button:not(.jdx-button-primary) { border-color: var(--jdx-status-line); color: var(--jdx-status-text); }
 .jdx-runtime-status progress { display: block; width: 100%; height: 5px; margin-top: 12px; accent-color: var(--jdx-status-accent); }
 .jdx-runtime-status [hidden] { display: none !important; }
+.jdx-ocr-settings .jdx-ocr-stage { margin: 12px 0 0; font-weight: 600; }
+.jdx-ocr-settings .jdx-ocr-metrics { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+.jdx-ocr-metrics > div { min-width: 0; }
+.jdx-ocr-metrics dt, .jdx-ocr-settings .jdx-ocr-elapsed { font-size: 12px; color: var(--jdx-pref-muted, var(--jdx-muted)); }
+.jdx-ocr-metrics dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.jdx-ocr-settings .jdx-ocr-elapsed { margin: 10px 0 0; }
+.jdx-ocr-removal { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--jdx-pref-line, var(--jdx-line)); }
+.jdx-ocr-removal .jdx-button { border-color: var(--jdx-pref-line, var(--jdx-line)); }
+.jdx-ocr-removal .jdx-ocr-danger { color: var(--jdx-pref-error, var(--jdx-red, #b42318)); border-color: currentColor; }
+.jdx-ocr-remove-confirmation { margin-top: 12px; padding: 12px 16px; border: 1px solid var(--jdx-pref-line, var(--jdx-line)); border-radius: 6px; }
+.jdx-ocr-remove-confirmation[hidden] { display: none !important; }
+.jdx-ocr-remove-models { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.jdx-ocr-removal-help { color: var(--jdx-pref-muted, var(--jdx-muted)); font-size: 12px; }
 @media (forced-colors: active) {
   .jdx-runtime-status, .jdx-manager-inline-status:not(:empty), #jadense-in-zotero-preferences-pane .jdx-pref-status:not(:empty) { border-color: CanvasText; }
 }
