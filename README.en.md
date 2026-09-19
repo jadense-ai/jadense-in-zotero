@@ -27,6 +27,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10) — Show OCR setup progress, improve timeout/cache recovery, add removal/reinstallation and platform installation guides.
 - [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9) — Improve full-translation completion, recovery and error notices; unify OCR setup, add ModelScope and local diagnostics.
 - [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — Add optional selection OCR and improve text extraction and reading controls.
 - [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — Fix overlapping workbench pages.

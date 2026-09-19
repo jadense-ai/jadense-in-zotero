@@ -27,6 +27,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10) — 展示 OCR 安装进度，改进超时与缓存恢复，支持删除重装，补齐三平台安装指南。
 - [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9) — 改进全文翻译完成、恢复与错误提示，统一 OCR 准备状态，支持 ModelScope 和本机错误诊断。
 - [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — 新增可选选文 OCR，优化文字提取与阅读操作。
 - [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — 修复工作台页面混显。
