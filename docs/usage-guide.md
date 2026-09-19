@@ -253,7 +253,7 @@ This section describes the published v0.4.9 release.
 
 <a id="ocr-0410"></a>
 
-## 0.4.10（待发布）：OCR 安装进度与重装 / OCR setup and reinstallation (pending release)
+## 0.4.10：OCR 安装进度与重装 / OCR setup and reinstallation
 
 「设置 → OCR配置」显示准备阶段、下载量和等待时间。失败后先换下载源并继续；组件损坏时选择「修复识别组件」。需要重装时在「环境与故障排查 → 删除与重装」确认删除，默认保留模型与历史成果，然后点击「重新安装 OCR」。[完整指南](local-ocr.md)包含 Windows、Linux、macOS 手动安装和模型验证。
 
