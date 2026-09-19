@@ -1,20 +1,20 @@
 # 更新说明 / Changelog
 
-## 0.4.10 — 待发布 / Pending release
+## 0.4.10 — 2026-09-19
 
 ### 简体中文
 
 - OCR 准备显示阶段、文件/批次、下载量、平均速度与等待时间；为环境检查、依赖安装和模型验证增加有界等待，复用已就绪缓存。
 - 新增依赖删除与重新安装，默认保留模型，可选择同时删除模型；已保存文献成果、PDF、日志及用户自行安装的 Python/uv 保留。
 - 扩展 [OCR 安装指南](docs/local-ocr.md)：设置操作、Windows/Linux/macOS 分环境手动安装、锁定依赖、模型验证与排障；中英文 README 增加独立入口。
-- v0.4.10 正在准备发布；公开前仍以 v0.4.9 为最新正式版。
+- 验证：766 项单元测试及 CI 通过；Windows 11 / Zotero 10.0.3 的标签原包通过三次冷启动、后台解析专项及从 v0.4.9 原地升级。旧综合脚本期待已取消的自动打开工作台，完整翻译专项缺少 OCR 就绪环境，英文选文 12px 布局断言在本版与 v0.4.9 均未通过。首次完整 OCR、其他平台及真实服务未验收，详见 [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)。
 
 ### English
 
 - Show OCR setup stages, files/batches, download size, average speed and elapsed time; bound environment checks, dependency installation and model verification, and reuse confirmed caches.
 - Add dependency removal and reinstallation, retaining models by default with optional model removal; keep saved results, PDFs, logs and user-installed Python/uv.
 - Expand the [OCR guide (Chinese)](docs/local-ocr.md) with settings, separate Windows/Linux/macOS manual steps, locked dependencies, model checks and troubleshooting; add dedicated sections to both READMEs.
-- v0.4.10 is being prepared for release; v0.4.9 remains the latest public release until publication.
+- Validation: 766 unit tests and CI passed. The tag-built XPI passed three cold starts, background-analysis checks and in-process upgrade from v0.4.9 on Windows 11 / Zotero 10.0.3. Legacy combined checks expect the removed automatic Manager opening; full translation lacked a ready OCR environment; the English selection popup 12px layout assertion failed on both this version and v0.4.9. First-time full OCR setup, other platforms and real providers remain unverified. See the [Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10).
 
 ## 0.4.9 — 2026-09-18
 

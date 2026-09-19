@@ -27,16 +27,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10) — 展示 OCR 安装进度，改进超时与缓存恢复，支持删除重装，补齐三平台安装指南。
 - [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9) — 改进全文翻译完成、恢复与错误提示，统一 OCR 准备状态，支持 ModelScope 和本机错误诊断。
 - [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — 新增可选选文 OCR，优化文字提取与阅读操作。
 - [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — 修复工作台页面混显。
 - [v0.4.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.6) — 支持编辑、删除参考文献，清理引用序号。
-- [v0.4.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.5) — 改进 OCR 配置与参考文献格式。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-**v0.4.10 待发布：**本机 OCR 新增阶段/下载进度、超时与缓存恢复改进，以及依赖删除和重装。已发布 v0.4.9 安装包保持不变；详见 [0.4.10 更新说明](CHANGELOG.md#0410--待发布--pending-release)。
+**v0.4.10：**本机 OCR 新增阶段/下载进度、超时与缓存恢复改进，以及依赖删除和重装。详见 [0.4.10 更新说明](CHANGELOG.md#0410--2026-09-19)。
 
 **v0.4.9：**改进全文翻译的流式结束、进度保留与错误提示；统一 OCR 准备入口，复用已有环境与模型，并增加魔搭下载源和本机错误诊断。见[本机 OCR 指南](docs/local-ocr.md)和[0.4.9 操作说明](docs/usage-guide.md#unreleased-049)。
 
@@ -58,7 +58,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.9.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9)，同时提供元数据和 SHA-256 校验和 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.10.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
 | 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.10/jadense-in-zotero-v0.4.10.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
 
@@ -71,7 +71,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 全文 Markdown、全文翻译和参考文献提取需要本机 OCR；普通问答和默认选文翻译无需 Python。在 **设置 → OCR配置** 点击 **启用本机 OCR**，等待“已就绪”；失败后查看日志并点击 **继续准备**。首次需联网下载 Python、依赖和模型，预留数 GB 空间，无需预装 Python 或配置 CUDA。
 
-**[详细 OCR 安装指南](docs/local-ocr.md)**：包含[设置界面操作](docs/local-ocr.md#settings)、[Windows](docs/local-ocr.md#windows)、[Linux](docs/local-ocr.md#linux)、[macOS](docs/local-ocr.md#macos) 手动安装，以及[模型验证](docs/local-ocr.md#models)、[修复与重装](docs/local-ocr.md#repair)。指南明确区分当前正式版和未发布控件。
+**[详细 OCR 安装指南](docs/local-ocr.md)**：包含[设置界面操作](docs/local-ocr.md#settings)、[Windows](docs/local-ocr.md#windows)、[Linux](docs/local-ocr.md#linux)、[macOS](docs/local-ocr.md#macos) 手动安装，以及[模型验证](docs/local-ocr.md#models)、[修复与重装](docs/local-ocr.md#repair)。指南说明 v0.4.10 的操作与旧版差异。
 
 ## 目录
 
@@ -109,7 +109,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 1. 安装与打开工作台
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，本次版本为 **0.4.9**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，本次版本为 **0.4.10**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -276,7 +276,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### 支持哪些版本？有哪些阅读限制？
 
-Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windows 11 / Zotero 10.0.2** 与 0.4.4 本地构建，数据和服务均为模拟；本次截图冒烟在宽屏阅读器检查处超时，不代表全量验收通过。macOS、Linux、Zotero 8/9 和真实付费 Provider 未在本次文档工作中实测。当前公开版本见 [v0.4.9 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9)；截图与原生验收记录仍以各版本发布说明为准。
+Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windows 11 / Zotero 10.0.2** 与 0.4.4 本地构建，数据和服务均为模拟；本次截图冒烟在宽屏阅读器检查处超时，不代表全量验收通过。macOS、Linux、Zotero 8/9 和真实付费 Provider 未在本次文档工作中实测。当前公开版本见 [v0.4.10 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)；截图与原生验收记录仍以各版本发布说明为准。
 
 全文翻译先在本机 OCR，扫描 PDF 也可识别；识别后的正文会发送至你选择的翻译服务。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
 
@@ -284,7 +284,7 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windo
 
 ### 从旧版怎样升级？
 
-从 GitHub 0.4.0–0.4.8 可直接安装 0.4.9；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
+从 GitHub 0.4.0–0.4.9 可直接安装 0.4.10；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 
