@@ -1,6 +1,6 @@
 # 更新说明 / Changelog
 
-## 0.5.0 — 发布候选 / Release candidate
+## 0.5.0 — 2026-09-21
 
 ## 本次更新
 
@@ -76,6 +76,21 @@ Compared with v0.4.10, v0.5.0 adds a standalone paper-classification window, doc
 - **Recover reading sessions:** improve sidebar initialization/recovery, saved-result retries, OCR cancellation/waiting and local diagnostics. Diagnostics are not automatically uploaded.
 
 Upgrade over GitHub 0.4.0–0.4.10 using the same `.cn` plugin ID; existing settings and local history remain. Restart Zotero after installation. Existing translations and reference extractions are not regenerated automatically. Disable the legacy `.com` add-on before installing this identity. The manifest supports Zotero 8.0–10.0.*; automatic figure detection requires a compatible Zotero 10.0.1+ reader. GitHub publishing does not update the website's automatic-update channel. Local storage does not mean offline AI: selected context is sent to the configured service. The non-commercial license remains in effect.
+
+
+## 验证与下载
+
+- 发布 PR：[#21](https://github.com/jadense-ai/jadense-in-zotero/pull/21)。PR、main 与 [v0.5.0 标签 CI](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/35561916138) 均通过：880 项单元测试、6 项发布边界测试、lint、类型检查、构建与制品验证。
+- 从草稿下载的同一 XPI 在 **Windows 11 Pro x64 build 26200 / Zotero 10.0.3** 完成三次冷启动；分类、文件附件、81 页长 PDF 与冷重启缓存复用、v0.4.10 原位升级及后台解析、侧栏恢复、诊断、中英文外观共 **107 项专项检查**通过。
+- 原生测试使用隔离 profile、合成文献与模拟服务。旧综合脚本仍等待已取消的“解析自动打开工作台”，在该步骤超时，**未全程通过**；后台解析的当前行为已由专项验证。首次完整 OCR 下载与识别、完整全文翻译链路、真实 TypeSafe/模型/翻译服务、macOS/Linux 和 Zotero 8/9 未在本次发布实测。
+- 下载 **`jadense-in-zotero-v0.5.0.xpi`**，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中安装，完成后重启。`Source code` 压缩包不是插件安装包。
+- 附件包含 XPI、`release-metadata.json`、`SHA256SUMS`。XPI 大小 **3,219,781 bytes**，SHA-256：
+
+```text
+fd743ff4cab1ab30fe89a7268f5d367e11dc19e9d8a43527be24fdf831272705
+```
+
+Validation: PR/main/tag CI passed (880 unit tests, six release-boundary tests, lint, typecheck and build). The exact draft XPI passed three cold starts and 107 targeted checks on Windows 11 Pro x64 build 26200 / Zotero 10.0.3, including an in-process upgrade from v0.4.10. Tests use synthetic data and mocked services. The legacy combined smoke timed out waiting for the removed automatic Manager opening and did not complete; current background-analysis behavior passed its targeted test. First-time complete OCR setup/recognition, the complete full-translation flow, real providers, macOS/Linux and Zotero 8/9 were not validated for this release. Download the XPI asset, install it from Zotero's Plugins menu and restart.
 
 
 ## 0.4.10 — 2026-09-19

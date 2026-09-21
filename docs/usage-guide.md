@@ -262,9 +262,9 @@ Settings → OCR configuration shows setup stages, download size and elapsed tim
 
 <a id="unreleased-050"></a>
 
-## 0.5.0 发布候选：文献分类、长文阅读与可选 OCR / Release candidate
+## 0.5.0：文献分类、长文阅读与可选 OCR / Classification, long PDFs and optional OCR
 
-本节适用于 0.5.0 发布候选，正式安装包将在验收后公开。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
+本节适用于已发布的 0.5.0。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
 
 ### 文献分类 / Paper classification
 
@@ -296,5 +296,8 @@ Full Markdown, full translation and reference extraction use the text layer by d
 
 ![分类预览](images/guide-classification-050.png)
 
-图示来自 0.5.0 候选包、Windows 11 / Zotero 10.0.3 的隔离 profile，文献与服务结果为合成数据。Screenshot from the 0.5.0 candidate on Windows 11 / Zotero 10.0.3 with synthetic data and mocked responses.
+图示来自 0.5.0 正式标签原包、Windows 11 / Zotero 10.0.3 的隔离 profile，文献与服务结果为合成数据。Screenshot from the tag-built 0.5.0 XPI on Windows 11 / Zotero 10.0.3 with synthetic data and mocked responses.
 
+![关联长 PDF 的阅读范围与页码 / Linked-PDF coverage and pages](images/guide-long-pdf-050.png)
+
+长 PDF 图示同样使用合成 81 页 PDF 和模拟模型，不代表真实模型推理效果。The long-PDF screenshot uses an 81-page synthetic PDF and a mocked model.
