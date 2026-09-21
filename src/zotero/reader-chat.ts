@@ -1,6 +1,8 @@
 /** Reader 对话视图：共享工作台消息/输入组件，视图选择和草稿不写入全局 activeSessionId。 */
 import { readLocalChatState } from '@/chat/local-chat-store'
-import type { ChatImageInput } from '@/chat/image-input'
+import type { ChatUploadInput } from '@/chat/file-input'
+import { readChatUpload } from './chat-files'
+import { renderUploadDraft } from './chat-attachment-ui'
 import { JadenseApiClient, type JadenseChatModelCatalog } from '@/jadense/api'
 import { chatRuntime, type SelectionQuote } from './chat-runtime'
 import { mountChatComposer } from './chat-composer-ui'
@@ -9,13 +11,15 @@ import { createJdxSelect } from './ui/select'
 import { element } from './ui/controls'
 import { uiText } from './ui-preferences'
 import { collectSourceForItem } from './research-context'
-import { normalizeFigureImage } from './reader-figure-tools'
 import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, featureModelState, readAutoFollowChatModel, saveFeatureModelSelection } from './ai-settings'
 import { buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue } from './ai-model-select'
 import { readConnection, type ZoteroLike } from './runtime'
 
 /** 每个 Reader 生命周期保留一份会话选择；功能页隐藏不销毁此视图。 */
 export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: ZoteroLike, itemID: number) {
+  const cleanups: Array<() => void> = []
+  let disposed = false
+  try {
   const doc = root.ownerDocument, win = doc.defaultView!, runtime = chatRuntime(host)
   const prefix = `reader-${Math.random().toString(36).slice(2)}`
   root.classList.add('jdx-reader-chat')
@@ -31,23 +35,19 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   dock.querySelector('.jdx-chat-status-panel')!.prepend(association); root.append(messageList, chatLatest, dock)
   const elements = { messageList, chatLatest, chatStatus }
   const sessions = createJdxSelect(selector, { compact: true, portal: true, ariaLabel: uiText('切换对话', 'Switch conversation'), popupWidth: 280 })
+  cleanups.push(() => sessions.destroy())
   const models = createJdxSelect(get('model-select'), { compact: true, portal: true, showSelectedIcon: true, popupWidth: 320, ariaLabel: uiText('对话模型', 'Chat model'), searchPlaceholder: uiText('搜索模型', 'Search models') })
-  const drafts = new Map<string, { text: string; image?: ChatImageInput; scroll: number }>()
-  let sessionID = '', image: ChatImageInput | undefined, disposed = false, creating = false, readingImage = false, newConversationDraft = false
+  cleanups.push(() => models.destroy())
+  const drafts = new Map<string, { text: string; image?: ChatUploadInput; scroll: number }>()
+  let sessionID = '', image: ChatUploadInput | undefined, creating = false, readingImage = false, newConversationDraft = false
   let source: Awaited<ReturnType<typeof collectSourceForItem>> = null
   let catalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }, catalogReady = false
   let sessionOptionsKey = '', modelOptionsKey = '', imageGeneration = 0
   let newSessionGeneration = 0
   const saveDraft = () => drafts.set(sessionID, { text: input.value, image, scroll: messageList.scrollTop })
-  const error = (value: unknown) => { chatStatus.textContent = value instanceof Error ? value.message : String(value); chatStatus.dataset.state = 'error' }
+  const error = (value: unknown) => { if (disposed) return; chatStatus.textContent = value instanceof Error ? value.message : String(value); chatStatus.dataset.state = 'error' }
   const renderImage = () => {
-    preview.replaceChildren(); preview.hidden = !image
-    if (!image) return
-    const img = element(doc, 'img'); img.src = image.dataUrl; img.alt = image.name ?? uiText("图片", "Image")
-    const name = element(doc, 'span', '', image.name)
-    const remove = element(doc, 'button', '', uiText('移除图片', 'Remove image')); remove.type = 'button'
-    remove.onclick = () => { image = undefined; saveDraft(); renderImage(); update() }
-    preview.append(img, name, remove)
+    renderUploadDraft(preview, image, () => { image = undefined; saveDraft(); renderImage(); update(); attach.focus() })
   }
   function update() {
     if (disposed) return
@@ -159,31 +159,36 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     const target = sessionID, generation = ++imageGeneration
     readingImage = true; update()
     try {
-      const data = await new Promise<string>((resolve, reject) => { const reader = new (win as Window & typeof globalThis).FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(value) })
-      const result = await normalizeFigureImage(data, doc, value.name)
+      const result = await readChatUpload(value, doc)
       if (disposed || generation !== imageGeneration) return
       if (sessionID === target) { image = result; renderImage(); saveDraft() }
       else { const draft = drafts.get(target) ?? { text: '', scroll: 0 }; drafts.set(target, { ...draft, image: result }) }
-    } catch (value) { if (!disposed) error(value) }
-    finally { readingImage = false; update() }
+    } catch (value) { if (!disposed && generation === imageGeneration) error(value) }
+    finally { if (generation === imageGeneration) { readingImage = false; update() } }
   }
   attach.onclick = () => file.click()
   file.onchange = () => { const value = file.files?.[0]; file.value = ''; if (value) void attachImage(value) }
-  input.addEventListener('paste', event => { const value = Array.from(event.clipboardData?.files ?? []).find(file => /^image\/(png|jpeg)$/.test(file.type)); if (value) { event.preventDefault(); void attachImage(value) } })
+  input.addEventListener('paste', event => { const value = event.clipboardData?.files?.[0]; if (value) { event.preventDefault(); void attachImage(value) } })
   root.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault() })
-  root.addEventListener('drop', event => { const value = Array.from(event.dataTransfer?.files ?? []).find(file => /^image\/(png|jpeg)$/.test(file.type)); if (value) { event.preventDefault(); void attachImage(value) } })
+  root.addEventListener('drop', event => { const value = event.dataTransfer?.files?.[0]; if (value) { event.preventDefault(); void attachImage(value) } })
   stop.onclick = () => runtime.stop()
   chatLatest.onclick = () => { messageList.scrollTop = messageList.scrollHeight; updateLatestButton(elements) }
   messageList.addEventListener('scroll', () => updateLatestButton(elements), { passive: true })
   const unsubscribe = runtime.subscribe(() => { if (disposed) return; chatStatus.textContent = runtime.activeSessionID === sessionID ? runtime.status : ''; chatStatus.dataset.state = runtime.statusKind; void refreshCatalog(); update() })
-  const resize = new (win as Window & typeof globalThis).ResizeObserver(update); resize.observe(root)
+  cleanups.push(unsubscribe)
+  const onResize = () => { if (!disposed) { update(); fitDock() } }
+  win.addEventListener('resize', onResize); cleanups.push(() => win.removeEventListener('resize', onResize))
+  const watch = (target: HTMLElement, update: () => void) => {
+    try { const observer = new (win as Window & typeof globalThis).ResizeObserver(update); cleanups.push(() => observer.disconnect()); observer.observe(target) } catch { /* 窗口 resize 保留布局能力。 */ }
+  }
+  watch(root, update)
   // 悬浮卡片的真实高度同时决定消息留白和回到最新按钮的位置。
-  const dockResize = new (win as Window & typeof globalThis).ResizeObserver(() => {
+  const fitDock = () => {
     const follow = nearLatest(elements)
     root.style.setProperty('--jdx-chat-dock-height', `${Math.ceil(dock.getBoundingClientRect().height)}px`)
     if (follow) messageList.scrollTop = messageList.scrollHeight
     updateLatestButton(elements)
-  }); dockResize.observe(dock)
+  }; watch(dock, fitDock)
   void collectSourceForItem(host, itemID, { includeText: false }).then(value => {
     if (disposed) return
     source = value
@@ -192,19 +197,25 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     update()
   }).catch(error)
   let catalogController = new AbortController(), catalogIdentity = ''
+  cleanups.push(() => catalogController.abort())
   async function refreshCatalog() {
+    try {
     const connection = readConnection(host), identity = `${connection.baseUrl}\n${connection.token}`
     if (identity === catalogIdentity || disposed) return
     catalogIdentity = identity; catalogController.abort(); catalogController = new AbortController()
     const controller = catalogController
     catalogReady = false; catalog = { options: [], defaultSelection: null }
     if (!connection.token) return
-    try {
       const value = await new JadenseApiClient({ ...connection, fetchImpl: win.fetch.bind(win) }).getChatModels(controller.signal)
       if (!disposed && !controller.signal.aborted) { catalog = value; catalogReady = true; update() }
     } catch { /* 目录是可选展示，不阻断已有模型发送。 */ }
   }
-  void refreshCatalog()
   update()
-  return { newSession, refresh: update, closeMenus() { sessions.close(); models.close() }, remove() { disposed = true; ++imageGeneration; unsubscribe(); resize.disconnect(); dockResize.disconnect(); catalogController.abort(); sessions.destroy(); models.destroy(); root.replaceChildren() } }
+  void refreshCatalog()
+  return { newSession, refresh: update, closeMenus() { sessions.close(); models.close() }, remove() { disposed = true; ++imageGeneration; for (const cleanup of cleanups.reverse()) { try { cleanup() } catch { /* 回收其他资源。 */ } } root.replaceChildren(); selector.replaceChildren() } }
+  } catch (error) {
+    disposed = true
+    for (const cleanup of cleanups.reverse()) { try { cleanup() } catch { /* 初始化失败也释放已订阅资源。 */ } }
+    root.replaceChildren(); selector.replaceChildren(); throw error
+  }
 }

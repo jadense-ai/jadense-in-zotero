@@ -24,6 +24,8 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (ๆ”ป็
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
+**Unreleased source (0.5.0):** adds a standalone paper-classification window, chat file attachments and layered reading for long PDFs. Full-document tasks use the text layer by default with optional OCR, alongside sidebar recovery and diagnostic improvements. This source update does not publish a new official installer. See [setup and limitations](docs/usage-guide.md#unreleased-050). Installation instructions below describe the released version; text-layer tasks in 0.5.0 do not require OCR.
+
 <!-- release-summary:start -->
 ## Recent releases
 

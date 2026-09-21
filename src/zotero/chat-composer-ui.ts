@@ -1,14 +1,15 @@
 /** 工作台和侧栏的同一输入区模板；只解析静态自有 XHTML，不插入用户内容。 */
+import { CHAT_FILE_ACCEPT } from '@/chat/file-input'
 import { getUiLocale } from './ui-preferences'
 export const CHAT_COMPOSER_MARKUP = `<div class="jdx-chat-status-panel"><div id="jadense-chat-status" class="jdx-manager-inline-status" role="status"></div></div>
                   <form id="jadense-chat-form" class="jdx-chat-composer">
                     <div class="jdx-chat-compose-field">
-                      <div id="jadense-chat-image-preview" class="jdx-chat-image-preview" aria-label="待发送图片" data-ui-en-aria-label="Image ready to send" hidden="hidden"></div>
-                      <input id="jadense-chat-image-input" type="file" accept="image/png,image/jpeg" hidden="hidden" aria-label="选择图片" data-ui-en-aria-label="Choose an image"/>
+                      <div id="jadense-chat-image-preview" class="jdx-chat-image-preview" aria-label="待发送附件" data-ui-en-aria-label="Attachment ready to send" hidden="hidden"></div>
+                      <input id="jadense-chat-image-input" type="file" accept="${CHAT_FILE_ACCEPT}" hidden="hidden" aria-label="选择文件" data-ui-en-aria-label="Choose a file"/>
                       <textarea id="jadense-chat-input" rows="2" maxlength="20000" aria-label="对话消息" data-ui-en-aria-label="Chat message" aria-describedby="jadense-chat-compose-hint" placeholder="向攻玉提问…" data-ui-en-placeholder="Ask Jadense…"></textarea>
                       <div class="jdx-chat-composer-footer">
                         <div class="jdx-chat-composer-meta">
-                          <button id="jadense-chat-attach-image" class="jdx-chat-icon-button" type="button" title="上传 PNG 或 JPEG 图片，也可粘贴或拖入图片" data-ui-en-title="Upload a PNG or JPEG image, or paste or drop an image" aria-label="上传图片" data-ui-en-aria-label="Upload image"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9"/></svg></button>
+                          <button id="jadense-chat-attach-image" class="jdx-chat-icon-button" type="button" title="上传文件（PDF、Word、文本或图片，最大 20 MB），也可粘贴或拖入" data-ui-en-title="Upload a file (PDF, Word, text or image, up to 20 MB), or paste or drop a file" aria-label="上传文件" data-ui-en-aria-label="Upload file"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9"/></svg></button>
                           <div id="jadense-chat-model-select" class="jdx-chat-model-select"></div>
                         </div>
                         <div class="jdx-chat-composer-actions">

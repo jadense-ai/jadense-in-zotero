@@ -1,3 +1,8 @@
+import { lifecycleTrace } from './zotero/lifecycle-diagnostics'
+import { selectedClassificationIDs } from './zotero/classification'
+import { openClassificationWindow, closeClassificationWindow } from './zotero/classification-window'
+declare const __JADENSE_BUILD_ID__: string
+import { saveDiagnosticExport } from './zotero/diagnostics-panel'
 import { stopAnalysisRuntime } from './zotero/analysis-runtime'
 import { diagnostics, stopDiagnostics } from "@/zotero/diagnostics"
 import { installedPluginVersion } from "@/zotero/manager-help"
@@ -75,6 +80,9 @@ let smokeManagerOpened = false
 let smokeLocalizationProbed = false
 let unregisterReaderTools: (() => void) | null = null
 let unregisterReaderFigureTools: (() => void) | null = null
+let lifecycleGeneration = 0
+let stopped = false
+let cancelStartupWait: (() => void) | undefined
 
 function smokeRequested() {
   try {
@@ -122,7 +130,11 @@ async function probeLocalizationForSmoke() {
 }
 
 function log(message: string) {
-  Zotero?.debug?.(`[Jadense in Zotero] ${message}`)
+  try { Zotero?.debug?.(`[Jadense in Zotero] ${message}`) } catch { /* 可选日志不可阻断生命周期。 */ }
+}
+
+function recordInitializationError(stage: string, error: unknown) {
+  const trace = lifecycleTrace(Zotero, 'initialization', stage); trace.fail(error, stage); trace.end('error')
 }
 
 function mainWindow() {
@@ -137,8 +149,7 @@ function loadLocalizationIntoWindow(win: JadenseMainWindow | null | undefined) {
     }
     log("localization loaded")
   } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Jadense Fluent resource loading failed.")
+    recordInitializationError('localization_failed', error)
   }
 }
 
@@ -156,15 +167,22 @@ function rootUriFromData(data: BootstrapData) {
 }
 
 /** Zotero 10 会在 collection tree 完成前调用插件 startup；窗口 UI 必须等到宿主明确就绪。 */
-async function waitForMainWindowUi() {
+async function waitForMainWindowUi(active: () => boolean) {
+  let cancel!: () => void
+  const cancelled = new Promise<void>(resolve => { cancel = resolve })
+  cancelStartupWait = cancel
+  let slow = false
+  const timer = setTimeout(() => { if (active()) { slow = true; log('host_wait_slow') } }, 10000)
+  let removeLoad = () => {}
   try {
-    await Zotero.uiReadyPromise
-  } catch {
-    // 较旧 Zotero 没有或拒绝该 Promise 时，继续使用文档 load 作为兼容边界。
-  }
-  const win = mainWindow()
-  if (!win || win.document.readyState !== "loading") return
-  await new Promise<void>((resolve) => win.addEventListener("load", () => resolve(), { once: true }))
+    await Promise.race([Promise.resolve(Zotero.uiReadyPromise).catch(() => undefined), cancelled])
+    if (!active()) return
+    const win = mainWindow()
+    if (win?.document.readyState === 'loading') await Promise.race([new Promise<void>(resolve => {
+      const loaded = () => resolve(); win.addEventListener('load', loaded, { once: true }); removeLoad = () => win.removeEventListener('load', loaded)
+    }), cancelled])
+  } finally { clearTimeout(timer); removeLoad(); if (cancelStartupWait === cancel) cancelStartupWait = undefined }
+  return slow
 }
 
 function alertUser(message: string) {
@@ -226,12 +244,10 @@ function warmFavoriteFoldersCache() {
   try {
     if (!readConnection(Zotero).token) return
     void Promise.resolve(refreshFavoriteFoldersCache(Zotero)).catch((error: unknown) => {
-      diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Favorite folders warm-up failed.")
+      if (!stopped) recordInitializationError('favorite_cache_failed', error)
     })
   } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Favorite folders warm-up failed.")
+    recordInitializationError('favorite_cache_failed', error)
   }
 }
 
@@ -270,6 +286,11 @@ function registerMenus() {
         openManager()
       },
       configureConnection,
+      classifySelectedItems: () => {
+        openClassificationWindow(Zotero, mainWindow() as ZoteroManagerWindow | null, selectedClassificationIDs(Zotero), () => { openManager('settings-features') })
+      },
+      canClassifySelectedItems: () => selectedClassificationIDs(Zotero).length > 0,
+      exportDiagnostics: () => { void exportDiagnostics() },
       exportSelectedItems: () => {
         void runCommand(() => pushSelectedItemsToJadense(Zotero, {
           includePdf: readCollectionUploadIncludePdfDefault(Zotero),
@@ -288,8 +309,7 @@ function registerMenus() {
       log("Zotero MenuManager was unavailable.")
     }
   } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Menu registration failed.")
+    recordInitializationError('menu_registration_failed', error)
   }
 }
 
@@ -298,60 +318,76 @@ function unregisterMenus() {
   registeredMenuIDs = []
 }
 
-async function startup(data: BootstrapData = {}) {
-  pluginContext = {
-    pluginID: data.id?.trim() || DEFAULT_PLUGIN_ID,
-    rootURI: rootUriFromData(data),
-  }
+/** 工具菜单直接导出安全投影，不依赖工作台页面成功加载。 */
+async function exportDiagnostics() {
+  const win = mainWindow()
+  if (!win) return
   try {
-    registeredChromeContent = registerChromeContent(pluginContext.rootURI)
-    if (!registeredChromeContent) {
-      log("Chrome content registration was unavailable; manager and preferences chrome URLs may not load.")
-    }
-  } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Chrome content registration failed.")
+    const store = diagnostics(Zotero)!
+    await store.ready
+    await saveDiagnosticExport(win, store.export())
+  } catch {
+    win.alert(uiText('无法导出诊断，请使用 Zotero 帮助菜单中的调试输出日志。', 'Could not export diagnostics. Use Debug Output Logging in Zotero Help.'))
   }
+}
 
-  await waitForMainWindowUi()
-  initializeUiLocale(Zotero)
-  // 后台任务不依附 Manager；bootstrap sandbox 缺少的 Web API 从常驻 Zotero 主窗口取得。
+async function startup(data: BootstrapData = {}) {
+  const generation = ++lifecycleGeneration; stopped = false
+  const active = () => !stopped && generation === lifecycleGeneration
+  pluginContext = { pluginID: data.id?.trim() || DEFAULT_PLUGIN_ID, rootURI: rootUriFromData(data) }
+  // 先补齐当前可用主窗口的 Web API，诊断在就绪之后初始化；等待过程保留原生日志。
+  const startedAt = new Date().toISOString()
+  log('initialization:wait_host')
+  const slowHost = await waitForMainWindowUi(active)
+  if (!active()) return
   const windowRuntime = mainWindow() as unknown as Record<string, unknown> | null
   const backgroundRuntime = globalThis as unknown as Record<string, unknown>
-  if (windowRuntime) for (const name of ["AbortController", "DOMException", "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "crypto", "structuredClone", "setTimeout", "clearTimeout"]) {
+  if (windowRuntime) for (const name of ["AbortController", "AbortSignal", "DOMException", "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "crypto", "structuredClone", "setTimeout", "clearTimeout"]) {
     if (backgroundRuntime[name] !== undefined) continue
     const value = windowRuntime[name]
     backgroundRuntime[name] = typeof value === "function" && ["structuredClone", "setTimeout", "clearTimeout"].includes(name) ? value.bind(windowRuntime) : value
   }
 
-  const collector = diagnostics(Zotero)!
-  collector.environment = { zotero: String((Zotero as unknown as { version?: string }).version ?? 'unknown'), os: String((windowRuntime?.navigator as Navigator | undefined)?.platform ?? 'unknown'), plugin: 'unknown' }
-  void installedPluginVersion(pluginContext.pluginID).then(version => { collector.environment.plugin = version }).catch(() => undefined)
-  loadLocalizationIntoOpenWindows()
-
-  try {
-    registeredPreferencesPaneID = await registerPreferencesPane(Zotero, pluginContext)
-  } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Preferences pane registration failed.")
+  const collector = (() => { try { return diagnostics(Zotero) } catch { return undefined } })()
+  if (collector) {
+    collector.environment = { zotero: String((Zotero as unknown as { version?: string }).version ?? 'unknown'), os: String((windowRuntime?.navigator as Navigator | undefined)?.platform ?? 'unknown'), plugin: 'unknown' }
+    collector.environment.build = typeof __JADENSE_BUILD_ID__ === 'string' ? __JADENSE_BUILD_ID__ : 'development'
+    void installedPluginVersion(pluginContext.pluginID).then(version => { if (active()) collector.environment.plugin = version }).catch(() => undefined)
   }
-
-  try {
+  const trace = lifecycleTrace(Zotero, 'initialization', 'startup', 'background', startedAt)
+  if (slowHost) trace.event('host_wait_slow')
+  trace.event('host_ready')
+  let degraded = false
+  const step = async (stage: string, run: () => unknown) => {
+    if (!active()) return
+    trace.event(stage)
+    try { await run() } catch (error) { degraded = true; trace.fail(error, stage, 'STARTUP_COMPONENT_FAILED') }
+  }
+  await step('chrome_registration', () => {
+    registeredChromeContent = registerChromeContent(pluginContext.rootURI)
+    if (!registeredChromeContent) throw Object.assign(new Error('Chrome content unavailable'), { code: 'CHROME_UNAVAILABLE' })
+  })
+  await step('locale', () => { initializeUiLocale(Zotero); loadLocalizationIntoOpenWindows() })
+  await step('menus', () => { registerMenus(); if (!registeredMenuIDs.length) throw new Error('Menus unavailable') })
+  await step('preferences', async () => {
+    const id = await registerPreferencesPane(Zotero, pluginContext)
+    if (!active()) { unregisterPreferencesPane(Zotero, id); return }
+    registeredPreferencesPaneID = id
+    if (!id) throw new Error('Preferences unavailable')
+  })
+  await step('native_panel', () => {
     registeredSyncPanelID = registerSyncPanel(Zotero, pluginContext, {
-      openTranslationHistory: () => { openManager("translations") },
-      openManager: () => {
-        openManager()
-      },
+      openTranslationHistory: () => { openManager('translations') }, openManager: () => { openManager() },
     })
-  } catch (error) {
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Sync panel registration failed.")
-  }
-
-  registerMenus()
-  documentJobs(Zotero)
-  try {
-    chatRuntime(Zotero)
+    if (!registeredSyncPanelID) throw new Error('Native panel unavailable')
+  })
+  await step('document_runtime', () => {
+    const jobs = documentJobs(Zotero)
+    // 异步存储加载不能延迟 Reader 入口注册；失败仍有诊断。
+    void jobs.ready.catch(error => { if (active()) { const failure = lifecycleTrace(Zotero, 'initialization', 'document_restore'); failure.fail(error, 'document_restore_failed'); failure.end('error') } })
+  })
+  await step('chat_runtime', () => { chatRuntime(Zotero) })
+  await step('reader_tools', () => {
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
         const win = mainWindow()
@@ -367,47 +403,42 @@ async function startup(data: BootstrapData = {}) {
     }, () => {
       if (!openManager()) throw new Error(uiText("无法打开攻玉工作台。", "Could not open Jadense Workspace."))
     })
-  } catch (error) {
-    // 阅读器增强是可选入口，不能影响普通对话和原有上传。
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Reader tools were unavailable.")
-  }
-  try {
-    unregisterReaderFigureTools = registerReaderFigureTools(Zotero, pluginContext.pluginID, (action) => {
-      if (!openManager("chat", action)) throw new Error(uiText("当前 Zotero 窗口不可用，无法解读图片。", "The Zotero window is unavailable for image interpretation."))
+  })
+  await step('reader_figures', () => {
+    unregisterReaderFigureTools = registerReaderFigureTools(Zotero, pluginContext.pluginID, action => {
+      if (!openManager('chat', action)) throw new Error(uiText('当前 Zotero 窗口不可用，无法解读图片。', 'The Zotero window is unavailable for image interpretation.'))
     })
-  } catch (error) {
-    // 图片识别依赖 Zotero 10 Reader 私有能力；失败只关闭这一入口。
-    diagnostics()?.record("initialization", "error", error)
-    log(error instanceof Error ? error.message : "Reader figure tools were unavailable.")
-  }
-  await probeLocalizationForSmoke()
-  openManagerForSmoke()
+  })
+  if (!active()) { trace.event('startup_cancelled'); trace.end('cancelled'); return }
+  await step('smoke', async () => { await probeLocalizationForSmoke(); if (active()) openManagerForSmoke() })
+  if (!active()) { trace.end('cancelled'); return }
   warmFavoriteFoldersCache()
-  log("started")
+  trace.event(degraded ? 'startup_degraded' : 'startup_complete'); trace.end(degraded ? 'error' : 'success')
+  log(degraded ? 'startup_degraded' : 'startup_complete'); log('started')
 }
 
 function shutdown() {
-  stopAnalysisRuntime(Zotero)
-  stopChatRuntime(Zotero)
-  stopDocumentJobs(Zotero)
-  unregisterReaderFigureTools?.()
-  unregisterReaderFigureTools = null
-  unregisterReaderTools?.()
-  unregisterReaderTools = null
-  closeManagerWindow(Zotero)
-  unregisterMenus()
-  unregisterPreferencesPane(Zotero, registeredPreferencesPaneID)
-  registeredPreferencesPaneID = null
-  unregisterSyncPanel(Zotero, registeredSyncPanelID, pluginContext.pluginID)
-  registeredSyncPanelID = null
-  unregisterChromeContent(registeredChromeContent)
-  registeredChromeContent = null
-  log("stopped")
-  stopDiagnostics(Zotero)
+  stopped = true; lifecycleGeneration++; cancelStartupWait?.(); cancelStartupWait = undefined
+  const trace = lifecycleTrace(Zotero, 'initialization', 'shutdown')
+  const cleanups: Array<[string, () => void]> = [
+    ['analysis', () => stopAnalysisRuntime(Zotero)], ['chat', () => stopChatRuntime(Zotero)], ['documents', () => stopDocumentJobs(Zotero)],
+    ['figures', () => { const remove = unregisterReaderFigureTools; unregisterReaderFigureTools = null; remove?.() }],
+    ['reader', () => { const remove = unregisterReaderTools; unregisterReaderTools = null; remove?.() }],
+    ['classification', () => closeClassificationWindow(Zotero)],
+    ['manager', () => closeManagerWindow(Zotero)], ['menus', unregisterMenus],
+    ['preferences', () => { const id = registeredPreferencesPaneID; registeredPreferencesPaneID = null; unregisterPreferencesPane(Zotero, id) }],
+    ['panel', () => { const id = registeredSyncPanelID; registeredSyncPanelID = null; unregisterSyncPanel(Zotero, id, pluginContext.pluginID) }],
+    ['chrome', () => { const handle = registeredChromeContent; registeredChromeContent = null; unregisterChromeContent(handle) }],
+  ]
+  let failed = false
+  for (const [stage, cleanup] of cleanups) { trace.event(stage); try { cleanup() } catch (error) { failed = true; trace.fail(error, stage, 'SHUTDOWN_COMPONENT_FAILED') } }
+  trace.end(failed ? 'error' : 'success'); log('stopped')
+  try { stopDiagnostics(Zotero) } catch { /* 诊断不能阻止卸载。 */ }
+  smokeManagerOpened = false; smokeLocalizationProbed = false
 }
 
 function onMainWindowLoad(data: { window?: Window & typeof globalThis } = {}) {
+  if (stopped) return
   loadLocalizationIntoWindow(data.window ?? mainWindow())
   registerMenus()
   openManagerForSmoke()

@@ -1,4 +1,4 @@
-import { analysisRuntime } from './analysis-runtime'
+import { analysisRuntime, confirmFirstAnalysis } from './analysis-runtime'
 import { diagnostics, markDiagnosticAbort } from "./diagnostics"
 import { wireDiagnosticsPanel } from "./diagnostics-panel"
 import { wireSelectionSettings } from './selection-settings'
@@ -24,8 +24,10 @@ import {
   type LocalChatPreferenceStore,
 } from "@/chat/local-chat-store"
 import type { ChatImageInput } from "@/chat/image-input"
+import type { ChatUploadInput } from "@/chat/file-input"
+import { readChatUpload, pruneChatFiles } from './chat-files'
+import { renderUploadDraft } from './chat-attachment-ui'
 import { pruneChatImages } from "./chat-images"
-import { normalizeFigureImage } from "./reader-figure-tools"
 import {
   BYOK_TEST_MAX_OUTPUT_TOKENS,
   byokEndpoint,
@@ -45,6 +47,7 @@ import {
   type JadenseProfile,
 } from "@/jadense/api"
 import { chooseChatSourceItems, collectChatSources, collectSourceForItem, openChatSource } from "./research-context"
+import { chatDocuments } from './chat-documents'
 import { type FigureInterpretationAction, type ReaderAction } from "./reader-tools"
 import { formatReaderShortcut, readReaderShortcut, readerShortcutFromEvent, READER_SHORTCUT_DEFAULTS, saveReaderShortcut } from "./reader-shortcuts"
 import { createJdxSelect, type JdxSelect } from "./custom-select"
@@ -96,6 +99,7 @@ import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-an
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
+import { mountClassificationSettings } from './classification-ui'
 import {} from "./document-ui"
 import { type AnalysisRunView } from "./analysis-workspace"
 import { mountLiteratureWorkspace } from "./literature-workspace"
@@ -435,7 +439,7 @@ let chatModelCatalogGeneration = 0
 let chatModelCatalogController: AbortController | null = null
 // 草稿只在当前窗口按会话保留；阅读器新对话不能继承上一对话的未发送内容。
 const sessionDrafts = new Map<string, string>()
-const sessionImageDrafts = new Map<string, ChatImageInput>()
+const sessionImageDrafts = new Map<string, ChatUploadInput>()
 const newConversationDrafts = new WeakSet<ZoteroLike>()
 const draftChatSources = new WeakMap<ZoteroLike, ChatSource[]>()
 type FigureChatContext = {
@@ -550,7 +554,7 @@ function resolveZoteroFromWindow() {
 }
 
 function sectionFromValue(value: unknown): ManagerSection {
-  if (value === "settings" || value === "settings-ocr" || value === "settings-connection" || value === "migrate" || value === "translations" || value === "analysis" || value === "guide") return value
+  if (value === "settings" || value === "settings-ocr" || value === "settings-connection" || value === "settings-features" || value === "migrate" || value === "translations" || value === "analysis" || value === "guide") return value
   return "chat"
 }
 
@@ -958,6 +962,7 @@ export function activeChatFeature(zotero: ZoteroLike): "chat" | "figure" {
   const state = zotero.Prefs ? readLocalChatState(zotero.Prefs) : null
   const session = state?.sessions.find(item => item.id === state.activeSessionId)
   if (newConversationDrafts.has(zotero) || !session || sessionImageDrafts.has(session.id)) return "chat"
+  if ([...session.messages].reverse().find(message => message.image || message.file)?.file) return 'chat'
   return figureChatContexts.has(session.id) || [...session.messages].reverse().find(message => message.image)?.image?.origin === "figure"
     ? "figure" : "chat"
 }
@@ -1015,14 +1020,13 @@ export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConn
 }
 
 function setActiveSection(elements: ManagerElements, section: ManagerSection) {
-  if (section === "diagnostics" && !diagnostics()?.enabled) section = "chat"
   if (section === "translations") section = "analysis"
   elements.navTranslations.hidden = true
   const isChat = section === "chat"
   const isTranslations = false
   const isAnalysis = section === "analysis"
   const isUpload = section === "migrate"
-  const isSettings = section === "settings" || section === "settings-ocr" || section === "settings-connection"
+  const isSettings = section === "settings" || section === "settings-ocr" || section === "settings-connection" || section === "settings-features"
   const zotero = resolveZoteroFromWindow()
   renderNewChatNavigation(elements.navChat, isChat, zotero?.Prefs ? currentChatSessionID(zotero) : null)
   elements.navTranslations.dataset.active = String(isTranslations)
@@ -1042,7 +1046,7 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection) {
   elements.guideSection.hidden = section !== "guide"
   elements.settingsSection.hidden = !isSettings
   const diagnosticSection = document.getElementById('jadense-manager-section-diagnostics')
-  if (diagnosticSection) diagnosticSection.hidden = section !== 'diagnostics' || !diagnostics()?.enabled
+  if (diagnosticSection) diagnosticSection.hidden = section !== 'diagnostics'
   if (!isChat) {
     elements.sessionList.querySelectorAll<HTMLElement>('[data-active="true"]').forEach(node => { node.dataset.active = "false" })
     elements.sessionList.querySelectorAll<HTMLElement>('[aria-current="true"]').forEach(node => node.removeAttribute("aria-current"))
@@ -1405,7 +1409,7 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
     : !readConnection(zotero).token ? uiText("连接攻玉后可加载内置模型；BYOK 模型可独立使用。", "Connect Jadense to load built-in models. BYOK models work independently.")
-      : autoFollow ? uiText("其他 AI 功能自动跟随对话模型；关闭上方开关后可逐项配置。翻译接口独立使用。", "Other AI features follow the Chat model. Turn off the switch above to configure them separately. Translation services are independent.")
+      : autoFollow ? uiText("翻译、解析和图片解读自动跟随对话模型；关闭上方开关后可逐项配置。翻译接口和 Jev 文献分类独立使用。", "Translation, analysis and image interpretation follow the Chat model. Turn off the switch above to configure them separately. Translation services and Jev classification are independent.")
       : uiText("选择后自动保存，各功能可独立配置。", "Choices save automatically and features can be configured independently."))
 }
 
@@ -1559,24 +1563,12 @@ function updateComposerState(elements: ManagerElements, zotero: ZoteroLike) {
 function renderImageDraft(elements: ManagerElements, zotero: ZoteroLike) {
   const sessionID = currentChatSessionID(zotero)
   const image = sessionImageDrafts.get(sessionID)
-  elements.chatImagePreview.replaceChildren()
-  elements.chatImagePreview.hidden = !image
-  if (!image) return
-  const thumbnail = create("img") as HTMLImageElement
-  thumbnail.src = image.dataUrl
-  thumbnail.alt = image.name || uiText("待发送图片", "Image ready to send")
-  const name = create("span")
-  name.textContent = image.name || uiText("待发送图片", "Image ready to send")
-  const remove = create("button") as HTMLButtonElement
-  remove.type = "button"
-  remove.textContent = uiText("移除图片", "Remove image")
-  remove.addEventListener("click", () => {
+  renderUploadDraft(elements.chatImagePreview, image, () => {
     sessionImageDrafts.delete(sessionID)
     renderImageDraft(elements, zotero)
     updateComposerState(elements, zotero)
     elements.chatAttachImage.focus()
   })
-  elements.chatImagePreview.append(thumbnail, name, remove)
 }
 
 /** 复用阅读器的尺寸/格式归一化；选图不立即发送，失败保留原草稿。 */
@@ -1588,19 +1580,14 @@ async function attachChatImage(elements: ManagerElements, zotero: ZoteroLike, fi
   activeChatAbort = controller
   activeOperation = "source"
   setChatBusy(elements, zotero, true)
-  setStatus(elements.chatStatus, uiText("正在读取图片…", "Reading the image…"))
+  setStatus(elements.chatStatus, uiText("正在读取文件…", "Reading the file…"))
   try {
-    const image = await waitForSourceRead(new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(new Error(uiText("无法读取图片", "Cannot read the image")))
-      reader.readAsDataURL(file)
-    }).then(data => normalizeFigureImage(data, document, file.name)), controller.signal)
+    const image = await waitForSourceRead(readChatUpload(file, document), controller.signal)
     controller.signal.throwIfAborted()
     sessionImageDrafts.set(sessionID, image)
-    setStatus(elements.chatStatus, uiText("图片已就绪，可补充问题后发送。", "Image ready. Add a question or send it now."), "success")
-  } catch {
-    setStatus(elements.chatStatus, controller.signal.aborted ? uiText("已取消读取图片。", "Image read cancelled.") : uiText("无法读取图片，请选择有效的 PNG 或 JPEG 图片。", "Cannot read the image. Choose a valid PNG or JPEG image."), controller.signal.aborted ? "idle" : "error")
+    setStatus(elements.chatStatus, uiText("文件已就绪，可补充问题后发送。", "File ready. Add a question or send it now."), "success")
+  } catch (error) {
+    setStatus(elements.chatStatus, controller.signal.aborted ? uiText("已取消读取文件。", "File read cancelled.") : error instanceof Error ? error.message : uiText('无法读取文件，请重新选择。', 'Cannot read the file. Select it again.'), controller.signal.aborted ? "idle" : "error")
   } finally {
     activeChatAbort = null
     activeOperation = null
@@ -1611,6 +1598,8 @@ async function attachChatImage(elements: ManagerElements, zotero: ZoteroLike, fi
 }
 
 function pruneUnusedChatImages(zotero: ZoteroLike) {
+  void chatDocuments(zotero).prune([...readLocalChatState(chatPreferences(zotero)).sessions.flatMap(session => session.sources), ...(draftChatSources.get(zotero) ?? [])]).catch(() => { /* 可选缓存清理失败不影响对话。 */ })
+  void pruneChatFiles(readLocalChatState(chatPreferences(zotero)).sessions.flatMap(session => session.messages.flatMap(message => message.file ? [message.file] : [])))
   return pruneChatImages(readLocalChatState(chatPreferences(zotero)).sessions.flatMap(session =>
     session.messages.flatMap(message => message.image ? [message.image] : [])))
 }
@@ -1804,7 +1793,7 @@ function setChatBusy(elements: ManagerElements, zotero: ZoteroLike, busy: boolea
 function renderSources(elements: ManagerElements, zotero: ZoteroLike, sources: ChatSource[]) {
   const groups = groupChatSources(sources)
   elements.sourceCount.textContent = sources.length ? uiText(`${groups.length} 组文献 · ${sources.length} 个来源`, `${groups.length.toLocaleString(getUiLocale())} paper groups · ${sources.length.toLocaleString(getUiLocale())} sources`) : uiText("关联资源", "Linked resources")
-  const missingText = sources.filter((source) => source.kind === "file" && !source.text).length
+  const missingText = sources.filter((source) => source.kind === "file" && !source.text && !source.document?.readablePages).length
   elements.sourceSummary.textContent = missingText ? uiText(`${missingText} 份附件无可读正文`, `${missingText.toLocaleString(getUiLocale())} attachments without readable text`) : uiText("仅用于当前对话", "Used only in this conversation")
   elements.sourceSummary.dataset.warning = String(missingText > 0)
   if (!sources.length) {
@@ -1835,6 +1824,7 @@ function renderSources(elements: ManagerElements, zotero: ZoteroLike, sources: C
     renderChat(elements, zotero)
     const titles = Array.from(elements.sourceList.querySelectorAll<HTMLButtonElement>(".jdx-chat-source-title"))
       .filter((button) => button.closest<HTMLDetailsElement>("details")?.open)
+    void pruneUnusedChatImages(zotero)
     const nextFocus = titles[Math.min(focusIndex, titles.length - 1)]
       ?? elements.sourceList.querySelector<HTMLElement>(".jdx-chat-source-group > summary") ?? elements.attachItems
     nextFocus.focus()
@@ -1872,6 +1862,7 @@ function renderSources(elements: ManagerElements, zotero: ZoteroLike, sources: C
     const detail = create("div", "jdx-chat-source-detail")
     const state = create("span", "jdx-chat-source-state")
     state.textContent = source.kind === "item" ? uiText("元数据与摘要", "Metadata and abstract")
+      : source.document ? uiText(`全文缓存 · ${source.document.readablePages}/${source.document.totalPages} 页有可读文字`, `Full text cache · ${source.document.readablePages}/${source.document.totalPages} readable pages`)
       : uiText(`${source.kind === "quote" ? "选文" : source.text ? "可读文本" : "仅来源信息"}${source.text ? ` · ${source.text.length.toLocaleString(getUiLocale())} 字符` : ""}${source.pageLabel ? ` · 第 ${source.pageLabel} 页` : ""}`, `${source.kind === "quote" ? "Passage" : source.text ? "Readable text" : "Source information only"}${source.text ? ` · ${source.text.length.toLocaleString(getUiLocale())} characters` : ""}${source.pageLabel ? ` · Page ${source.pageLabel}` : ""}`)
     detail.append(state)
     if (source.kind === "quote") {
@@ -1951,7 +1942,8 @@ async function attachSources(elements: ManagerElements, zotero: ZoteroLike, mode
     setStatus(elements.chatStatus, mode === "items" ? uiText("正在关联条目…", "Linking items…") : uiText("正在读取所选来源…", "Reading selected sources…"))
     const preferences = chatPreferences(zotero)
     const sessionID = currentChatSessionID(zotero)
-    const sources = await waitForSourceRead(collectChatSources(zotero, { mode, itemIDs: selectedIDs }), preparation.signal)
+    const sources = await waitForSourceRead(collectChatSources(zotero, { mode, itemIDs: selectedIDs, signal: preparation.signal,
+      progress: text => { if (!preparation.signal.aborted && !window.closed) setStatus(elements.chatStatus, text) } }), preparation.signal)
     preparation.signal.throwIfAborted()
     if (window.closed) return []
     if (sessionID) addLocalChatSources(preferences, sessionID, sources)
@@ -2028,7 +2020,7 @@ async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, op
 
 /** 独立解析不写 Chat；先备份可读笔记，再独立写入可验证的原生批注。 */
 async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemID: number) {
-  if (chatBusy || window.closed) return
+  if (chatBusy || window.closed || !confirmFirstAnalysis(zotero, window)) return
   setActiveSection(elements, "analysis")
   const operation = new AbortController()
   activeChatAbort = operation; activeOperation = "analysis"; preparingAnalysisItemID = itemID
@@ -2765,7 +2757,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     if (file) void attachChatImage(elements, zotero, file)
   })
   elements.chatInput.addEventListener("paste", (event) => {
-    const file = Array.from(event.clipboardData?.files ?? []).find(file => /^image\/(png|jpeg)$/u.test(file.type))
+    const file = event.clipboardData?.files?.[0]
     if (!file || chatBusy) return
     event.preventDefault()
     void attachChatImage(elements, zotero, file)
@@ -2818,7 +2810,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.chatWorkbench.addEventListener("drop", (event) => {
     delete elements.chatWorkbench.dataset.dragOver
     if (chatBusy) return
-    const file = Array.from(event.dataTransfer?.files ?? []).find(file => /^image\/(png|jpeg)$/u.test(file.type))
+    const file = event.dataTransfer?.files?.[0]
     if (file) {
       event.preventDefault()
       void attachChatImage(elements, zotero, file)
@@ -3125,7 +3117,9 @@ export function initJadenseManagerPage() {
   wireManagerHelp(document, zotero as (ZoteroLike & { launchURL?: (url: string) => void }) | null, (window as ManagerWindow).JadenseInZotero?.pluginID ?? "jadense-in-zotero@jadense.cn")
   syncChatDockOffset(elements.chatDock)
   wireConnectionTabs(elements, zotero)
-  wireSettingsTabs(elements, zotero, section === "settings-ocr" ? "ocr" : section === "settings-connection" ? "connection" : "general")
+  wireSettingsTabs(elements, zotero, section === "settings-ocr" ? "ocr" : section === "settings-connection" ? "connection" : section === "settings-features" ? "features" : "general")
+  const stopClassificationSettings = zotero ? mountClassificationSettings(document, zotero) : () => {}
+  window.addEventListener('unload', stopClassificationSettings, { once: true })
   wireStarInvitation(document, zotero)
   wireManagerQuickStart(document, zotero, () => {
     elements.navSettings.click()
@@ -3255,6 +3249,7 @@ export function initJadenseManagerPage() {
     }
     setActiveSection(elements, context.section)
     if (context.section === "settings-ocr") elements.settingsTabOcr.click()
+    if (context.section === "settings-features") elements.settingsTabFeatures.click()
     if (context.section === "settings-connection") elements.settingsTabConnection.click()
     if (context.section === "migrate") void refreshJadenseAccount(elements, zotero)
     void drainReaderActions(elements, zotero)

@@ -35,7 +35,7 @@ const CSS = `${READER_UI_THEME_CSS}
 .jdx-reading-progress::-moz-progress-bar{background:#16cf8c}
 .jdx-reading-progress::-webkit-progress-bar{background:transparent}
 .jdx-reading-progress::-webkit-progress-value{background:#16cf8c}
-.jdx-reading-body{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:24px;overflow-anchor:none;font-size:var(--jdx-reading-font,14px);line-height:var(--jdx-reading-line,1.8);text-align:start;user-select:text;word-break:normal;overflow-wrap:break-word}
+.jdx-reading-body{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:24px;overflow-anchor:none;font-size:calc(var(--jdx-reading-font,14px) * var(--jdx-font-scale,1));line-height:var(--jdx-reading-line,1.8);text-align:start;user-select:text;word-break:normal;overflow-wrap:break-word}
 .jdx-reading-block{position:relative;margin:0 auto .8em;max-width:40em;border:0;padding:0;background:transparent;scroll-margin-top:24px}
 .jdx-reading-block p{margin:0 0 .8em;line-height:inherit}
 .jdx-reading-block>:last-child{margin-bottom:0}
@@ -57,7 +57,7 @@ const CSS = `${READER_UI_THEME_CSS}
 @container (max-width:360px){.jdx-reading-body{padding:20px 16px}.jdx-reading-toolbar{padding-inline:8px;gap:0}.jdx-reading-toolbar button,.jdx-reading-popover>summary{padding-inline:6px}}
 `
 
-/** 单独阅读偏好不叠加通用字号倍率，非法可选值回退默认。 */
+/** 阅读偏好保存正文基准尺寸，渲染时叠加全局百分比；非法可选值回退默认。 */
 export function translationReadingAppearance(host: ZoteroLike) {
   const number = (key: string, fallback: number, min: number, max: number) => {
     try { const value = Number(host.Prefs?.get(key, true)); return Number.isFinite(value) && value >= min && value <= max ? value : fallback } catch { return fallback }
@@ -132,7 +132,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const font = element(doc, 'div'), line = element(doc, 'div')
   const fontSelect = createJdxSelect(font, { compact: true, portal: true, ariaLabel: uiText('字号', 'Font size'), popupWidth: 100 })
   const lineSelect = createJdxSelect(line, { compact: true, portal: true, ariaLabel: uiText('行距', 'Line height'), popupWidth: 100 })
-  fontSelect.setOptions(Array.from({ length: 13 }, (_, index) => ({ value: String(index + 12), label: `${index + 12}px` })), '14')
+  fontSelect.setOptions(Array.from({ length: 13 }, (_, index) => ({ value: String(index + 12), label: `${Math.round((index + 12) / 14 * 100)}%` })), '14')
   lineSelect.setOptions([1.4, 1.6, 1.8, 2, 2.2].map(value => ({ value: String(value), label: String(value) })), '1.8')
   const fontLabel = element(doc, "label", "", uiText("字号", "Font size")), lineLabel = element(doc, "label", "", uiText("行距", "Line height"))
   fontLabel.append(font); lineLabel.append(line); appearance.content.append(fontLabel, lineLabel)

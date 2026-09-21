@@ -6,6 +6,18 @@ import { ByokChatClient } from '@/chat/byok-chat'
 import { diagnosticGesture, saveDiagnosticExport } from './diagnostics-panel'
 
 const host = {}
+it('retains bounded operation metrics and build identity through persistence without raw data', async () => {
+  const disk = memoryDisk(), store = new Diagnostics(disk.platform); await store.ready
+  store.environment = { build: '0.4.11-test-build' }
+  const trace = store.start({ feature: 'ocr', operationId: 'operation-test' })
+  trace.event('service_start', { elapsedMs: 60000, exitCode: 2, width: 320, height: 600, visible: true, page: 'source', secret: 'PRIVATE' } as never)
+  trace.end(); await store.flush()
+  const restored = new Diagnostics(disk.platform); await restored.ready
+  expect(restored.list()[0].environment?.build).toBe('0.4.11-test-build')
+  expect(restored.list()[0].events[1]).toMatchObject({ elapsedMs: 60000, exitCode: 2, width: 320, height: 600, visible: true, page: 'source' })
+  expect(restored.export()).not.toContain('PRIVATE')
+  store.dispose(); restored.dispose()
+})
 afterEach(() => { stopDiagnostics(host); vi.useRealTimers() })
 const input = { clientRequestId: 'request-1', conversationId: 'conversation-1', messages: [{ id: 'message-1', role: 'user' as const, text: 'PRIVATE-PROMPT' }], requireComplete: true }
 function memoryDisk() {
@@ -14,6 +26,20 @@ function memoryDisk() {
   const paths = { profileDir: 'profile', join: (...parts: string[]) => parts.join('/') }
   return { io, platform: { IOUtils: io, PathUtils: paths }, read: () => disk }
 }
+it('preserves ReferenceError without inventing errors on normal events across persistence', async () => {
+  const disk = memoryDisk(), store = new Diagnostics(disk.platform); await store.ready
+  const success = store.start({ feature: 'account' })
+  success.event('headers', { status: 200 }); success.end()
+  store.record('ocr', 'service_start', new ReferenceError('PRIVATE runtime details'))
+  await store.flush()
+  const restored = new Diagnostics(disk.platform); await restored.ready
+  for (const records of [store.list(), restored.list(), JSON.parse(store.export()).records]) {
+    expect(records.find((row: { category: string }) => row.category === 'error').firstError.name).toBe('ReferenceError')
+    expect(records.find((row: { category: string }) => row.category === 'success').events.every((event: { name?: string }) => event.name === undefined)).toBe(true)
+  }
+  expect(disk.read()).not.toContain('PRIVATE')
+  store.dispose(); restored.dispose()
+})
 it('preserves callback failure before stream cleanup, without collecting content or credentials', async () => {
   const store = diagnostics(host)!
   const cancelled = vi.fn()

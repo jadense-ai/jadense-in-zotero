@@ -1,4 +1,7 @@
+import { lifecycleTrace } from './lifecycle-diagnostics'
 import { analysisRuntime } from './analysis-runtime'
+import { documentOCREnabled, readDocument } from './document-extraction'
+import { readPDFTextPage, type TextLayerPDF } from './pdf-document'
 import { openAnalysisSidebar } from './reader-sidebar'
 import { markDiagnosticAbort } from "./diagnostics"
 import { silentlyCheckForUpdates } from './update-notification'
@@ -404,6 +407,22 @@ export async function readPdfForAnalysis(
   const item = await getPdfItem(zotero, itemID)
   let modificationTime: number | null | undefined
   try { modificationTime = await item.attachmentModificationTime } catch { /* 只使用实际可用的文件版本信息。 */ }
+  if (documentOCREnabled(zotero as unknown as ZoteroLike)) {
+    const document = await readDocument(zotero as unknown as ZoteroLike, itemID, signal ?? new AbortController().signal)
+    const candidates: PdfAnalysisPassage[] = document.pages.flatMap(page => page.paragraphs.flatMap((paragraph, index) => {
+      const rects = paragraph.rects.filter(validRect)
+      if (!paragraph.text.trim() || !rects.length) return []
+      return [{ id: paragraph.id, text: paragraph.text, pageIndex: page.pageIndex, pageLabel: page.pageLabel,
+        position: { pageIndex: page.pageIndex, rects }, sortIndex: `${String(page.pageIndex).padStart(5, '0')}|${String(index).padStart(6, '0')}|00000` }]
+    }))
+    if (candidates.length) {
+      const passages = boundedPassages(candidates), metadata = paperMetadata(item)
+      return { itemID: item.id, libraryID: item.libraryID, itemKey: item.key, title: metadata.title, metadata,
+        ...(typeof document.source.modificationTime === 'number' ? { attachmentModificationTime: document.source.modificationTime } : {}), passages,
+        coverage: { pagesRead: document.pages.length, totalPages: document.pages.length, pageNumbers: document.pages.map(page => page.pageIndex + 1),
+          limited: passages.length < candidates.length || document.pages.some(page => Boolean(page.warning)), warnings: document.pages.flatMap(page => page.warning ? [page.warning] : []) } }
+    }
+  }
   let reader = zotero.Reader?._readers?.find((candidate) => candidate.itemID === itemID)
   if (!reader && zotero.Reader?.open) reader = await withAbort(zotero.Reader.open(itemID), signal)
   reader ??= zotero.Reader?._readers?.find((candidate) => candidate.itemID === itemID)
@@ -412,7 +431,7 @@ export async function readPdfForAnalysis(
   const view = reader._internalReader?._primaryView
   if (view?.initializedPromise) await withAbort(view.initializedPromise, signal)
   const pdf = view?._iframeWindow?.PDFViewerApplication?.pdfDocument
-  if (!view?._ensureBasicPageData || !view._pdfPages || !pdf || !Number.isInteger(pdf.numPages) || pdf.numPages < 1) {
+  if (!view || !pdf || !Number.isInteger(pdf.numPages) || pdf.numPages < 1) {
     throw new Error(uiText("当前阅读器无法提供 PDF 文字坐标，仍可使用普通对话。", "This reader cannot provide PDF text coordinates. Regular chat is still available."))
   }
   let labels: string[] | null = null
@@ -426,8 +445,9 @@ export async function readPdfForAnalysis(
     abortIfNeeded(signal)
     try {
       // 传入 primitive，让阅读器自己构造 worker 参数；跨 Gecko compartment 传对象会 DataCloneError。
-      await withAbort(view._ensureBasicPageData(pageIndex), signal)
-      const page = view._pdfPages[pageIndex]
+      let page
+      try { await withAbort(Promise.resolve(view._ensureBasicPageData?.(pageIndex)), signal); page = view._pdfPages?.[pageIndex] } catch { abortIfNeeded(signal) }
+      if (!page?.chars?.length && (pdf as TextLayerPDF).getPage) page = await withAbort(readPDFTextPage(pdf as TextLayerPDF, pageIndex), signal)
       if (!Array.isArray(page?.chars)) throw new Error("missing text layer")
       const passages = pagePassages(page, pageIndex, labels?.[pageIndex] || String(pageIndex + 1))
       candidates.push(...passages)
@@ -1408,12 +1428,12 @@ export function registerReaderTools(
     documents.clear()
     for (const node of nodes) { try { node.remove() } catch { /* 阅读器窗口可能已经关闭。 */ } }
     nodes.clear()
-    for (const stop of analysisCleanups.values()) stop()
+    for (const stop of analysisCleanups.values()) { try { stop() } catch { /* 已关闭窗口不阻断其余清理。 */ } }
     analysisCleanups.clear()
-    for (const stop of themeCleanups.values()) stop()
+    for (const stop of themeCleanups.values()) { try { stop() } catch { /* 已关闭窗口不阻断其余清理。 */ } }
     themeCleanups.clear()
   }
-  if (!zotero.Reader?.registerEventListener) return cleanup
+  if (!zotero.Reader?.registerEventListener) { const trace = lifecycleTrace(zotero, 'initialization', 'reader_tools'); trace.fail(new Error('Reader API unavailable'), 'reader_api_missing', 'READER_API_UNAVAILABLE'); trace.end('error'); return cleanup }
   const actions = [
     { kind: "attach", label: uiText("发起新对话，向 AI 提问（当前文献）", "Start a new AI chat about this document"), short: uiText("提问", "Ask") },
     { kind: "analyze", label: uiText("解析文献", "Analyze document"), short: uiText("解析", "Analyze") },
@@ -1564,7 +1584,7 @@ export function registerReaderTools(
       if (actionList !== group) toolbarMenus.set(group, bindReaderActionMenu(group, actionList, group.querySelector<HTMLButtonElement>(".jadense-reader-actions-toggle")!))
     }
     handlers.set(type, handler)
-    try { zotero.Reader.registerEventListener(type, handler, pluginID) } catch { cleanup(); break }
+    try { zotero.Reader.registerEventListener(type, handler, pluginID) } catch (error) { const trace = lifecycleTrace(zotero, 'initialization', 'reader_tools'); trace.fail(error, 'reader_registration_failed'); trace.end('error'); cleanup(); break }
   }
   return cleanup
 }

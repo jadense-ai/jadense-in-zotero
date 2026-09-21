@@ -26,10 +26,10 @@ describe("reading UI controls", () => {
     expect(shared).toMatch(/\.jdx-document-results \.jdx-reference-import input\[type=checkbox\][^{}]*\{[^{}]*appearance:auto/)
   })
 
-  it("keeps reference controls in the heading instead of a standalone row", () => {
+  it("groups reference actions, search and filter in one toolbar", () => {
     const view = read("./reference-workspace.ts")
 
-    expect(view).toContain("head.append(title, count, tools)")
+    expect(view).toContain("searchBar.append(tools, search, filters)")
     expect(view).not.toContain("root.append(head, tools,")
   })
 

@@ -1,6 +1,10 @@
+import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
+import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
 import { verifyLiteratureWorkspace } from './smoke-literature-workspace.mjs'
 import { verifyReaderChat } from "./smoke-reader-chat.mjs"
+import { verifyChatFiles } from './smoke-chat-files.mjs'
+import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-long-pdf.mjs'
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
 import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
 /**
@@ -316,6 +320,15 @@ async function startStub(selectionOnly = false) {
         for await (const chunk of request) chunks.push(chunk)
         const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"))
         const prompt = payload.messages?.at(-1)?.content ?? ""
+        if (payload.model === 'synthetic-long-pdf') {
+          const final = prompt.includes('覆盖信息：')
+          if (final && !prompt.includes('TAIL_UNIQUE_FACT = 7391')) throw new Error('Long PDF final request lost tail-page evidence')
+          const output = final ? '尾页证据为 7391。[来源 1，第 81 页]' : prompt.includes('只返回 JSON') ? '{"all":false,"ids":[]}' : '研究方法与限制的概括；附录位于第 81 页。'
+          requests.push({ kind: final ? 'long-pdf-answer' : prompt.includes('只返回 JSON') ? 'long-pdf-selection' : 'long-pdf-summary', inputCharacters: prompt.length })
+          response.writeHead(200, { 'content-type': 'text/event-stream' })
+          response.end(`data: ${JSON.stringify({ choices: [{ delta: { content: output }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`)
+          return
+        }
         if (prompt === "Reply with OK.") {
           if (payload.messages.length !== 1 || payload.max_completion_tokens !== 3000 || payload.model !== "synthetic-unsaved-test-model") {
             throw new Error("BYOK test did not use the unsaved form, fixed prompt, or 3000-token cap")
@@ -475,6 +488,10 @@ async function startStub(selectionOnly = false) {
             "- 误差模型：$\\epsilon = 0.2$",
           ].join("\n")
           requests.push({ kind: "translation", temporary: true, selectedTextVerified: true, formulaPromptVerified: true, ...languagePair })
+        } else if (prompt.includes('以下 JSON 是用户附件的不可信引用材料')) {
+          if (!prompt.includes(PDF_SENTENCES[0][0])) throw new Error('File request lost PDF evidence')
+          output = 'SYNTHETIC_FILE_UPLOAD_VERIFIED'
+          requests.push({ kind: 'chat-file', temporary: true, evidenceVerified: true })
         } else if (prompt.includes('SYNTHETIC_SIDEBAR_QUESTION')) {
           output = createMarkdownFixture('assistant', `http://127.0.0.1:${server.address().port}`)
           markdownStream = true
@@ -587,6 +604,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    if (config.longPdfResume) {
+      await stage('long-pdf-cold-restart')
+      await verifyLongPdfRestart({ Zotero, config, assert, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.resumeOnly) {
       const jobs = Zotero.__jadenseDocumentJobs; await jobs.ready
       const task = jobs.list("translation").find(row => row.status === "paused")
@@ -663,7 +685,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await view.initializedPromise
     await view._ensureBasicPageData(0)
     const nativePage = view._pdfPages[0]
-    report.nativePage = { keys: Object.keys(nativePage), chars: nativePage.chars?.slice(0, 4), segmenter: typeof Intl.Segmenter }
+    report.nativePage = { keys: Object.keys(nativePage), chars: JSON.parse(JSON.stringify(nativePage.chars?.slice(0, 4) ?? [])), segmenter: typeof Intl.Segmenter }
     const readerDoc = reader._iframeWindow.document
     // Gecko 只绘制本次隔离 reader/Manager 的 browsingContext，从不截桌面；系统标题栏由 flags/状态验收。
     const screenshot = async (name, win = reader._iframeWindow) => {
@@ -882,11 +904,61 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         await Zotero.Promise.delay(200)
       }
     }
+    if (config.sidebarRecoveryOnly) {
+      await verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID: config.pluginID, stage })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.machineOnly) {
       await stage('machine-translation')
       readerDoc.querySelector('.jadense-reader-brand').click()
       manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'machine Manager')
       await verifyMachineTranslation({ Zotero, reader, manager, waitFor, assert, screenshot, report, findWindowContaining, live: config.machineLive })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.classificationOnly) {
+      await stage('classification')
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'classification Manager')
+      await verifyClassification({ Zotero, manager, assert, waitFor, screenshot, report,
+        assertNoManager: () => assert(!findManagers().some(candidate => !candidate.closed), 'Classification opened the workbench'),
+        openClassification: async ids => {
+          const main = Zotero.getMainWindow()
+          main.Zotero_Tabs.select('zotero-pane')
+          await main.ZoteroPane.selectItems(ids)
+          await main.ZoteroPane.buildItemContextMenu()
+          const menu = main.document.getElementById('zotero-itemmenu')
+          menu.openPopupAtScreen(120, 120, true)
+          const grouped = main.document.querySelector('[data-l10n-id="menu-custom-group-submenu"]')
+          if (grouped) grouped.open = true
+          const command = await waitFor(() => main.document.querySelector('[data-l10n-id="jadense-in-zotero-menu-classify"]'), 'native classify menu item')
+          await main.document.l10n.translateElements([command])
+          assert(command.getAttribute('label') === '文献分类…', 'Native classify menu name is incorrect')
+          assert(command.classList.contains('menuitem-iconic') && command.style.getPropertyValue('--custom-menu-icon-light').includes('icons/logo-padded.png'), 'Native classify menu icon is missing')
+          command.doCommand(); menu.hidePopup()
+          return waitFor(() => {
+            const windows = Services.wm.getEnumerator(null)
+            while (windows.hasMoreElements()) {
+              const candidate = windows.getNext()
+              if (!candidate.closed && String(candidate.location?.href).startsWith('chrome://jadense-in-zotero/content/classification.xhtml') && candidate.receiveClassificationItems) return candidate
+            }
+            return null
+          }, 'independent classification window')
+        },
+      })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.longPdfOnly) {
+      await stage('long-pdf-chat')
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'long PDF Manager')
+      await verifyLongPdf({ Zotero, manager, config, assert, waitFor, screenshot, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.chatFilesOnly) {
+      await stage('chat-files')
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'file Manager')
+      await verifyChatFiles({ Zotero, manager, reader, config, waitFor, assert, screenshot, report })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (!config.documentsOnly) {
@@ -911,58 +983,63 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       readerDoc.querySelector(".jadense-reader-brand").click()
       manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), "unified Manager")
       const doc = manager.document, element = id => doc.getElementById("jadense-" + id)
+      element("quick-start-close")?.click()
       report.shellHost = { os: Services.appinfo.OS, version: Services.appinfo.version, build: Services.sysinfo.getProperty("build"), dpi: manager.devicePixelRatio, customtitlebar: doc.documentElement.getAttribute("customtitlebar") }
       report.shellHost.capabilities = [typeof manager.ChromeUtils, typeof manager.Services, typeof manager.minimize, typeof manager.maximize, typeof manager.restore]
       await persist()
       assert(doc.documentElement.getAttribute("customtitlebar") === "true", "Verified Windows host did not enable its integrated titlebar")
       assert(manager.getComputedStyle(element("titlebar")).getPropertyValue("-moz-window-dragging") === "drag", "Titlebar is not a native drag region")
       assert(manager.getComputedStyle(element("github")).getPropertyValue("-moz-window-dragging") === "no-drag", "Interactive control remains draggable")
-      const launchURL = Zotero.launchURL, helpLinks = []
-      Zotero.launchURL = url => helpLinks.push(url)
-      try { element("home").click(); element("github").click(); element("check-in").click() } finally { Zotero.launchURL = launchURL }
-      assert(helpLinks.join(",") === "https://jadense.cn,https://github.com/jadense-ai/jadense-in-zotero,https://jadense.cn", "Shell links did not use the system-browser API with fixed destinations")
-      assert(element("titlebar").querySelector("button") === element("manager-sidebar-toggle"), "Navigation toggle is not the first shell control")
-      const original = manager
-      readerDoc.querySelector(".jadense-reader-brand").click()
-      assert(findManager() === original, "Reopening created another Manager")
-      element("help-toggle").click()
-      assert(!element("help-menu").hidden && doc.activeElement === element("manager-nav-guide"), "Help menu focus is incorrect")
-      pressKey(manager, "End", {}, element("help-menu"))
-      assert(doc.activeElement === element("help-update"), "Help End navigation failed")
-      pressKey(manager, "Escape", {}, element("help-menu"))
-      assert(element("help-menu").hidden && doc.activeElement === element("help-toggle"), "Help Escape/focus failed")
-      element("help-about").click()
-      await waitFor(() => element("help-version").textContent.includes("0.4.5"), "runtime installed version")
-      assert(element("help-dialog").open, "About is not modal")
-      element("help-dialog").close()
-      await Zotero.Promise.delay(50)
-      assert(doc.activeElement === element("help-toggle"), "Dialog did not restore focus")
-      // 使用真实 Gecko 比较器，并仅替换可选 GitHub GET；不发送外网请求。
-      const fetchBefore = manager.fetch
-      let updateRequests = 0, mode = "available"
-      manager.fetch = async (url, options) => {
-        if (String(url).includes("api.github.com/repos/jadense-ai/jadense-in-zotero/releases/latest")) {
-          updateRequests++
-          if (mode === "failure") return { ok: false, status: 429 }
-          const tag = mode === "latest" ? "v0.4.5" : mode === "ahead" ? "v0.4.2" : "v0.4.10"
-          return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, future: true }) }
+      if (!config.titlebarOnly) {
+        const launchURL = Zotero.launchURL, helpLinks = []
+        Zotero.launchURL = url => helpLinks.push(url)
+        try { element("home").click(); element("github").click(); element("check-in").click() } finally { Zotero.launchURL = launchURL }
+        assert(helpLinks.join(",") === "https://jadense.cn,https://github.com/jadense-ai/jadense-in-zotero,https://jadense.cn/app", "Shell links did not use the system-browser API with fixed destinations")
+        assert(element("titlebar").querySelector("button") === element("manager-sidebar-toggle"), "Navigation toggle is not the first shell control")
+        const original = manager
+        readerDoc.querySelector(".jadense-reader-brand").click()
+        assert(findManager() === original, "Reopening created another Manager")
+        await waitFor(() => manager.document.hasFocus(), "reopened Manager focus")
+        element("help-toggle").click()
+        await waitFor(() => !element("help-menu").hidden && doc.activeElement === [...element("help-menu").querySelectorAll("button")].find(button => !button.hidden), "Help menu focus: " + doc.activeElement?.id + " hidden=" + element("help-menu").hidden)
+        pressKey(manager, "End", {}, element("help-menu"))
+        assert(doc.activeElement === element("help-update"), "Help End navigation failed")
+        pressKey(manager, "Escape", {}, element("help-menu"))
+        assert(element("help-menu").hidden && doc.activeElement === element("help-toggle"), "Help Escape/focus failed")
+        element("help-about").click()
+        const installedVersion = (await ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs").AddonManager.getAddonByID(config.pluginID)).version
+        await waitFor(() => element("help-version").textContent.includes(installedVersion), "runtime installed version")
+        assert(element("help-dialog").open, "About is not modal")
+        element("help-dialog").close()
+        await Zotero.Promise.delay(50)
+        assert(doc.activeElement === element("help-toggle"), "Dialog did not restore focus")
+        // 使用真实 Gecko 比较器，并仅替换可选 GitHub GET；不发送外网请求。
+        const fetchBefore = manager.fetch
+        let updateRequests = 0, mode = "available"
+        manager.fetch = async (url, options) => {
+          if (String(url).includes("api.github.com/repos/jadense-ai/jadense-in-zotero/releases/latest")) {
+            updateRequests++
+            if (mode === "failure") return { ok: false, status: 429 }
+            const tag = mode === "latest" ? `v${installedVersion}` : mode === "ahead" ? "v0.0.1" : "v99.0.0"
+            return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, future: true }) }
+          }
+          return fetchBefore.call(manager, url, options)
         }
-        return fetchBefore.call(manager, url, options)
+        try {
+          assert(updateRequests === 0, "Opening help checked updates automatically")
+          for (const state of ["available", "latest", "ahead", "failure"]) {
+            mode = state
+            element("help-update").click()
+            await waitFor(() => !element("help-retry").disabled, "manual update " + state)
+            const text = element("help-status").textContent
+            assert(state === "available" ? /发现新版本|New version available/.test(text) : state === "latest" ? /已是最新|up to date/.test(text) : state === "ahead" ? /无需降级|No downgrade/.test(text) : /检查失败|Check failed/.test(text), "Incorrect update state " + text)
+          }
+          mode = "latest"; element("help-retry").click()
+          await waitFor(() => !element("help-retry").disabled, "update retry")
+          assert(updateRequests === 5, "Unexpected update polling")
+        } finally { manager.fetch = fetchBefore; element("help-dialog").close() }
+        await waitFor(() => doc.activeElement === element("help-toggle"), "update dialog focus restored before window controls")
       }
-      try {
-        assert(updateRequests === 0, "Opening help checked updates automatically")
-        for (const state of ["available", "latest", "ahead", "failure"]) {
-          mode = state
-          element("help-update").click()
-          await waitFor(() => !element("help-retry").disabled, "manual update " + state)
-          const text = element("help-status").textContent
-          assert(state === "available" ? /发现新版本|New version available/.test(text) : state === "latest" ? /已是最新|up to date/.test(text) : state === "ahead" ? /无需降级|No downgrade/.test(text) : /检查失败|Check failed/.test(text), "Incorrect update state " + text)
-        }
-        mode = "latest"; element("help-retry").click()
-        await waitFor(() => !element("help-retry").disabled, "update retry")
-        assert(updateRequests === 5, "Unexpected update polling")
-      } finally { manager.fetch = fetchBefore; element("help-dialog").close() }
-      await waitFor(() => doc.activeElement === element("help-toggle"), "update dialog focus restored before window controls")
       manager.restore()
       await waitFor(() => manager.windowState === manager.STATE_NORMAL, "normal shell before controls")
       element("window-minimize").click()
@@ -986,10 +1063,24 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           assert(manager.getComputedStyle(panel).borderRadius === "8px" && manager.getComputedStyle(workbench).borderRadius === "0px", "Duplicate panel shell")
           const send = element("chat-send").getBoundingClientRect()
           assert(send.bottom <= manager.innerHeight && send.width > 0, "Composer outside viewport")
+          // 使用真实状态样式验证长提示换行后也不会被输入框遮住。
+          const status = element("chat-status"), previousStatus = status.textContent
+          status.textContent = "已打开新对话草稿，发送消息后保存。".repeat(width < 800 ? 6 : 1)
+          status.dataset.kind = "success"
+          await Zotero.Promise.delay(100)
+          const statusStyle = manager.getComputedStyle(status), statusPanel = status.parentElement
+          assert(statusStyle.borderTopWidth === "0px" && statusStyle.borderLeftWidth === "0px" && statusStyle.backgroundColor === "rgba(0, 0, 0, 0)", "Composer status regained an inner card")
+          assert(manager.getComputedStyle(statusPanel).backgroundColor !== "rgba(0, 0, 0, 0)" && manager.getComputedStyle(statusPanel).borderTopLeftRadius === "12px", "Composer status lost its single outer panel")
+          assert(status.getBoundingClientRect().bottom <= element("chat-form").getBoundingClientRect().top, "Composer overlaps status text")
           await screenshot("unified-" + (config.appearanceLanguage || "zh-CN") + "-" + theme + "-" + width, manager)
+          status.textContent = previousStatus
         }
       }
-      report.checks.push("unified-shell-geometry", "shell-home-github-and-check-in-links", "help-keyboard-and-focus", "runtime-installed-version", "gecko-version-numeric-order", "updates-manual-only-all-states-retry", "titlebar-minimize-maximize-restore", "window-reuse", "native-content-light-dark-compact")
+      report.checks.push("unified-shell-geometry", "titlebar-minimize-maximize-restore", "window-reuse", "native-content-light-dark-compact")
+      if (!config.titlebarOnly) report.checks.push("shell-home-github-and-check-in-links", "help-keyboard-and-focus", "runtime-installed-version", "gecko-version-numeric-order", "updates-manual-only-all-states-retry")
+      element("window-close").click()
+      await waitFor(() => manager.closed, "titlebar close")
+      report.checks.push("titlebar-close")
       report.state = "passed"; report.stage = "complete"; await persist(); return
     }
     if (config.appearanceLanguage) {
@@ -2839,10 +2930,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       attachDisabled: manager.document.getElementById("jadense-chat-attach-items")?.disabled,
       statusBusy: manager.document.getElementById("jadense-analysis-status")?.dataset?.busy,
     } : null
-    report.pdfPageData = Object.entries(view?._pdfPages ?? {}).map(([pageIndex, page]) => ({
+    try { report.pdfPageData = Object.entries(view?._pdfPages ?? {}).map(([pageIndex, page]) => ({
       pageIndex: Number(pageIndex),
       chars: Array.isArray(page?.chars) ? page.chars.length : null,
-    }))
+    })) } catch { report.pdfPageData = "Reader already closed" }
     await persist()
   }
 }
@@ -2863,8 +2954,13 @@ async function writeCompanion(extensionsDir, config) {
   }))
   zip.file("bootstrap.js", [
     `const SMOKE_CONFIG = ${JSON.stringify(config)};`,
+    verifySidebarRecovery.toString(),
+    verifyClassification.toString(),
     verifyDiagnostics.toString(),
     verifyReaderChat.toString(),
+    verifyChatFiles.toString(),
+    verifyLongPdf.toString(),
+    verifyLongPdfRestart.toString(),
     verifyMachineTranslation.toString(),
     verifyOCRTranslation.toString(),
     verifyLiteratureWorkspace.toString(),
@@ -2951,10 +3047,15 @@ async function main() {
     await writeFile(pdfPath, createResearchFixturePdf())
     await writeFile(referencePdfPath, createResearchFixturePdf(true))
     await writeFile(translationPdfPath, createResearchFixturePdf(false, true))
+    const longPdfPath = path.join(smokeRoot, 'synthetic-long.pdf')
+    if (argv.includes('--long-pdf-only')) await writeFile(longPdfPath, longPdfFixture())
     await copyFile(upgradeFrom ? path.resolve(upgradeFrom) : artifact, path.join(extensionsDir, `${pluginID}.xpi`))
     const upgradeXpi = upgradeFrom ? path.join(smokeRoot, "upgrade.xpi") : undefined
     if (upgradeXpi) await copyFile(artifact, upgradeXpi)
+    const wordFixture = new JSZip().file('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Synthetic Word evidence</w:t></w:r></w:p></w:body></w:document>')
     const companionConfig = {
+      longPdfOnly: argv.includes('--long-pdf-only'), longPdfPath,
+      wordBytes: argv.includes('--chat-files-only') ? Array.from(await wordFixture.generateAsync({ type: 'uint8array' })) : undefined,
       pluginID, profileDir, dataDir, pdfPath, referencePdfPath, translationPdfPath, reportPath, origin: stub.origin, upgradeXpi,
       translationPapers: argValue(argv, '--translation-papers') ? path.resolve(argValue(argv, '--translation-papers')) : undefined,
       token: SYNTHETIC_TOKEN, uploadFolderId: UPLOAD_FOLDER_ID,
@@ -2969,7 +3070,10 @@ async function main() {
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
-      analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'),
+      classificationOnly: argv.includes('--classification-only'),
+      chatFilesOnly: argv.includes('--chat-files-only'),
+      analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [
@@ -3003,6 +3107,24 @@ async function main() {
       await delay(250)
     }
     if (report?.state !== "passed") throw new Error(`Research smoke timed out at ${report?.stage ?? "companion startup"}`)
+    if (argv.includes('--long-pdf-only')) {
+      const summariesBefore = stub.requests.filter(row => row.kind === 'long-pdf-summary').length
+      await stopIsolatedProcess(child, profileDir); child = undefined
+      const restartReport = path.join(smokeRoot, 'long-pdf-restart-report.json')
+      await writeCompanion(extensionsDir, { ...companionConfig, longPdfResume: true, reportPath: restartReport })
+      child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
+      const until = Date.now() + timeoutMs
+      let restored
+      while (Date.now() < until) {
+        restored = await readFile(restartReport, 'utf8').then(JSON.parse).catch(() => undefined)
+        if (restored?.state === 'failed') throw new Error(restored.error)
+        if (restored?.state === 'passed') break
+        await delay(250)
+      }
+      if (restored?.state !== 'passed') throw new Error('Long PDF cold restart timed out')
+      if (stub.requests.filter(row => row.kind === 'long-pdf-summary').length !== summariesBefore) throw new Error('Cold restart unnecessarily regenerated document summaries')
+      report.checks.push(...restored.checks, 'native-cold-restart-summary-reuse')
+    }
     if (argv.includes("--document-restart")) {
       const requestsBefore = stub.requests.filter(row => row.kind === "full-translation").length
       await stopIsolatedProcess(child, profileDir)
@@ -3022,11 +3144,15 @@ async function main() {
       report.checks.push(...resumed.checks)
     }
     if (stub.failures.length) throw new Error(stub.failures.join("\n"))
-    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (argv.includes('--sidebar-recovery-only')) {
+      if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
+      report.checks.push('no-generation-or-upload-request')
+    }
+    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -3043,7 +3169,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

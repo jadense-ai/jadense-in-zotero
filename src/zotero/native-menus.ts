@@ -1,5 +1,6 @@
 /** 原生菜单保留宿主壳与 Fluent ID，只以启动语言参数选择插件文案。 */
 import { getUiLocale } from "./ui-preferences"
+import { chromeContentUrl } from "./chrome-registration"
 import type {
   ZoteroLike,
   ZoteroMenuRegistration,
@@ -14,6 +15,9 @@ export type MenuCallbacks = {
   exportSelectedItems: () => void
   exportSelectedCollection: () => void
   disconnect: () => void
+  exportDiagnostics?: () => void
+  classifySelectedItems?: () => void
+  canClassifySelectedItems?: () => boolean
 }
 
 export function buildJadenseMenuRegistrations(
@@ -21,6 +25,19 @@ export function buildJadenseMenuRegistrations(
   callbacks: MenuCallbacks,
 ): ZoteroMenuRegistration[] {
   return [
+    ...(callbacks.classifySelectedItems ? [{
+      menuID: 'jadense-in-zotero-classification-menu',
+      pluginID,
+      target: 'main/library/item',
+      menus: [{
+        menuType: 'menuitem' as const,
+        l10nArgs: JSON.stringify({ language: getUiLocale() }),
+        l10nID: 'jadense-in-zotero-menu-classify',
+        icon: chromeContentUrl('icons/logo-padded.png'),
+        onCommand: callbacks.classifySelectedItems,
+        onShowing: (_event: Event, context: { setEnabled?: (enabled: boolean) => void }) => context.setEnabled?.(callbacks.canClassifySelectedItems?.() ?? true),
+      }],
+    }] : []),
     {
       menuID: JADENSE_TOOLS_MENU_ID,
       pluginID,
@@ -43,6 +60,12 @@ export function buildJadenseMenuRegistrations(
               l10nID: "jadense-in-zotero-menu-configure",
               onCommand: callbacks.configureConnection,
             },
+            ...(callbacks.exportDiagnostics ? [{
+              menuType: "menuitem" as const,
+              l10nArgs: JSON.stringify({ language: getUiLocale() }),
+              l10nID: "jadense-in-zotero-menu-export-diagnostics",
+              onCommand: callbacks.exportDiagnostics,
+            }] : []),
             { menuType: "separator" },
             {
               menuType: "menuitem",

@@ -1,25 +1,21 @@
 /** 安装后的原生 OCR/流式验收；真实 OCR + 本机 AI 合成响应，不读用户文献或凭证。 */
 export async function verifyOCRTranslation({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager }) {
   const main = Zotero.getMainWindow(), doc = main.document
-  // 隔离 profile 先模拟缺少组件，再验证恢复旧模型凭据及真实配置入口。
+  // 无 OCR 的普通 PDF 必须可用；随后经真实设置入口在隔离 profile 安装。
   const { PathUtils, IOUtils } = globalThis
   const marker = PathUtils.join(PathUtils.profileDir, 'jadense-ocr', 'v1', 'models-ready.json')
-  if (await IOUtils.exists(marker)) await IOUtils.remove(marker)
   const dependencyMarker = PathUtils.join(PathUtils.profileDir, 'jadense-ocr', 'v1', 'ready-2.126.0-3.9.2')
-  const dependencyReceipt = await IOUtils.readUTF8(dependencyMarker)
-  await IOUtils.remove(dependencyMarker)
-  let blocked = false
-  try { await jobs.start('extraction', reader.itemID) } catch { blocked = true }
-  finally { await IOUtils.writeUTF8(dependencyMarker, dependencyReceipt) }
-  assert(blocked && jobs.list().length === 0, 'Missing OCR models started a document task')
-  const ocrToast = await waitFor(() => [...doc.querySelectorAll('#jadense-document-notices button')].find(button => /前往 OCR|Open OCR/u.test(button.textContent)), 'OCR setup toast')
-  ocrToast.click()
+  report.cleanOCRProfile = !await IOUtils.exists(dependencyMarker) && !await IOUtils.exists(marker)
+  const traditional = await jobs.start('extraction', reader.itemID)
+  assert(traditional.status === 'complete' || traditional.status === 'partial', 'Default extraction depends on OCR')
+  assert((await jobs.store.extraction(traditional.id))?.markdown.trim(), 'Default text extraction returned nothing')
+  await jobs.delete(traditional.id)
+  main.openDialog('chrome://jadense-in-zotero/content/manager.xhtml?section=settings-ocr', 'jadense-ocr-smoke',
+    'chrome,dialog=no,titlebar,resizable,width=1100,height=800', { zotero: Zotero, section: 'settings-ocr', pluginID: 'jadense-in-zotero@jadense.cn' })
   const manager = await waitFor(() => findManager(), 'OCR settings manager')
   await waitFor(() => manager.document.querySelector('#jadense-settings-tab-ocr')?.getAttribute('aria-selected') === 'true', 'OCR settings deep link')
-  await waitFor(() => manager.document.querySelector('#jadense-quick-start-dialog')?.open, 'initial quick start')
-  manager.document.querySelector('#jadense-quick-start-close').click()
-  await waitFor(() => !manager.document.querySelector('#jadense-quick-start-dialog').open, 'quick start dismissed')
-  await waitFor(() => !manager.document.querySelector('.jdx-ocr-settings')?.hasAttribute('aria-busy'), 'automatic OCR status', 900_000)
+  if (manager.document.querySelector('#jadense-quick-start-dialog')?.open) manager.document.querySelector('#jadense-quick-start-close').click()
+  await waitFor(() => manager.document.querySelector('[data-ocr-action="install"]')?.disabled === false, 'automatic OCR status', 900_000)
   const modelSource = manager.document.querySelector('[data-ocr-setting="model-source"]')
   modelSource.querySelector('button').click()
   const modelScope = await waitFor(() => [...manager.document.querySelectorAll('[role="option"]')].find(option => option.textContent.includes('ModelScope')), 'ModelScope download option')
@@ -30,8 +26,11 @@ export async function verifyOCRTranslation({ Zotero, reader, jobs, assert, waitF
   report.checks.push('native-modelscope-source')
   const prepare = manager.document.querySelector('[data-ocr-action="install"]')
   assert(prepare, 'Missing setup action'); if (!prepare.hidden) prepare.click()
-  await waitFor(() => !prepare.disabled && manager.document.querySelector('[data-ocr-state="ready"]'), 'native model preparation and offline verification', 900_000)
-  report.checks.push('ocr-preflight-blocks', 'ocr-toast-deep-link', 'ocr-model-prepare-offline-verify')
+  await waitFor(() => { if (!prepare.disabled && manager.document.querySelector('[data-ocr-state="error"]')) throw new Error(manager.document.querySelector('.jdx-runtime-status-description')?.textContent || 'OCR setup failed'); return !prepare.disabled && manager.document.querySelector('[data-ocr-state="ready"]') }, 'native model preparation and offline verification', 3600_000)
+  const enhancement = manager.document.querySelector('[data-ocr-setting="document-ocr"]') || manager.document.querySelector('.jdx-ocr-settings input[type="checkbox"]')
+  assert(enhancement, 'Missing optional OCR switch'); enhancement.click()
+  await waitFor(() => !enhancement.disabled && Zotero.Prefs.get('extensions.jadenseInZotero.documentOCR', true) === true, 'checked optional OCR enhancement', 900_000)
+  report.checks.push('no-ocr-default-text', 'ocr-settings-deep-link', 'ocr-model-prepare-offline-verify', 'optional-ocr-checked-enable')
   manager.close()
   main.Zotero_Tabs.select(reader.tabID)
   reader._iframeWindow.document.querySelector('[data-jadense-action="fullTranslate"]').click()

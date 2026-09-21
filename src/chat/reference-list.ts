@@ -34,7 +34,8 @@ export function parseReferenceFields(raw: string): ReferenceMetadata {
   let title = "", authorText = "", publicationTitle = ""
   const quoted = joined.match(/^(.*?)[“"](.+?)[”"]\s*[,，.]?\s*(.*)$/u)
   const typed = joined.match(/^(.*?)\.\s*(.+?)\s*\[(?:J|M|C|D|R|EB|N|S)(?:\/\w+)?\]\s*[.,]?\s*(.*)$/iu)
-  const parenthesizedYear = joined.match(/^(.*?)\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\s*[.,]?\s*(.+)$/u)
+  // 年份后必须有标题内容；句末 (2019). 的句点不能回溯成标题，否则整篇引用会被当成作者。
+  const parenthesizedYear = joined.match(/^(.*?)\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\s*[.,]?\s*([^.,\s].*)$/u)
     ?? joined.match(/^(.*?)\b(?:18|19|20)\d{2}[a-z]?\.\s+(.+)$/u)
   if (quoted || typed) {
     const parts = (quoted || typed)!

@@ -3,6 +3,8 @@ import type { ZoteroLike } from './runtime'
 import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
 import { createJdxSelect } from './custom-select'
 import { uiText } from './ui-preferences'
+import { DOCUMENT_OCR_PREF, documentOCREnabled } from './document-extraction'
+import { lifecycleTrace } from './lifecycle-diagnostics'
 
 /** 卸载只停止 UI 更新，不取消其他窗口共享的准备任务。 */
 export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | null) {
@@ -14,6 +16,22 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     return node
   }
   const body = make('div'); body.className = 'jdx-ocr-settings'
+  const enhancement = make('label')
+  const enabled = make('input'); enabled.type = 'checkbox'; enabled.checked = documentOCREnabled(host); enabled.dataset.ocrSetting = 'document'
+  enhancement.append(enabled, doc.createTextNode(uiText('全文解析与 Markdown 提取使用 OCR 增强', 'Use OCR enhancement for document analysis and Markdown extraction')))
+  const enhancementHelp = make('p', uiText('默认使用传统文字层，无需安装 OCR。检测正常后才能开启增强；OCR 不可用时回退传统提取。', 'Uses the text layer by default, without OCR installation. Enable enhancement after a successful check; unavailable OCR falls back to text extraction.'))
+  enhancementHelp.setAttribute('role', 'status')
+  enabled.addEventListener('change', async () => {
+    if (!enabled.checked) { host.Prefs?.set?.(DOCUMENT_OCR_PREF, false, true); return }
+    enabled.disabled = true
+    try {
+      const value = await checkLocalOCR(host, true)
+      enabled.checked = Boolean(value.ready && value.modelsReady)
+      host.Prefs?.set?.(DOCUMENT_OCR_PREF, enabled.checked, true)
+      enhancementHelp.textContent = enabled.checked ? uiText('OCR 增强已开启，将用于下一次提取。', 'OCR enhancement is enabled for the next extraction.') : uiText('OCR 检测未通过，请先完成下方安装和模型准备。', 'OCR check failed. Complete setup and model preparation below first.')
+    } catch { enabled.checked = false; enhancementHelp.textContent = uiText('OCR 检测失败，继续使用传统提取。', 'OCR check failed. Text extraction remains available.') }
+    finally { enabled.disabled = false }
+  })
   const title = make('h3', uiText('OCR配置', 'OCR configuration'))
   const note = make('p', uiText('将 PDF 中的文字、表格和版面转为可用内容，供全文 Markdown、全文翻译和参考文献解析使用。识别在本机完成。', 'Extract text, tables and layout from PDFs for full Markdown, translation and references. Recognition runs locally.'))
   const overview = make('section'); overview.className = 'jdx-ocr-section'
@@ -68,7 +86,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const confirmRemove = make('button', uiText('确认删除依赖', 'Remove dependencies')); confirmRemove.type = 'button'; confirmRemove.className = 'jdx-button jdx-ocr-danger'
   confirmActions.append(cancelRemove, confirmRemove)
   confirmation.append(removalTitle, scope, modelOption, modelHelp, confirmActions); removal.append(confirmation); details.append(removal)
-  body.append(title, note, overview, source, tip, details); root.append(body)
+  body.append(title, note, enhancement, enhancementHelp, overview, source, tip, details); root.append(body)
   let disposed = false, busy = false, retryRead = false
   // 单一状态出口：替换旧语义，保留可发现的手动兜底，不抑制进度播报。
   const showState = (kind: string, title: string, description: string) => {
@@ -78,6 +96,8 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     progressBar.removeAttribute('value'); stage.hidden = true; metrics.hidden = true; elapsed.hidden = progressBar.hidden
   }
   const stages: Record<string, string> = {
+    resources: uiText('读取插件内置安装资源', 'Reading bundled setup resources'),
+    service_start: uiText('启动本机 OCR 服务', 'Starting local OCR service'),
     environment: uiText('1 / 5 · 检查安装工具与运行环境', '1 / 5 · Checking tools and runtime'),
     uv: uiText('1 / 5 · 下载并校验安装工具 uv', '1 / 5 · Downloading and checking uv'),
     dependencies: uiText('2 / 5 · 安装 Python 与识别依赖', '2 / 5 · Installing Python and dependencies'),
@@ -119,8 +139,9 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     syncSource()
   })
   syncSource()
-  let observer: unknown
+  let observer: unknown, enhancementObserver: unknown
   try { observer = host.Prefs?.registerObserver?.(OCR_MODEL_SOURCE_PREF, syncSource, true) } catch { /* 可选跨窗同步不阻断设置。 */ }
+  try { enhancementObserver = host.Prefs?.registerObserver?.(DOCUMENT_OCR_PREF, () => { enabled.checked = documentOCREnabled(host) }, true) } catch { /* 可选跨窗同步不阻断设置。 */ }
   const render = (value: OCREnvironment) => {
     const ready = value.ready && value.modelsReady
     showState(ready ? 'ready' : 'missing', ready ? uiText('已就绪 · 可以开始全文任务', 'Ready · You can start full-document tasks') : value.ready ? uiText('识别组件已安装 · 还需准备模型', 'Components installed · Models need preparation') : uiText('尚未启用', 'Not enabled'),
@@ -137,12 +158,14 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   }
   const run = async (setup = false, repairing = false, force = false) => {
     if (busy || disposed) return
+    const trace = lifecycleTrace(host, 'ocr-settings', repairing ? 'repair' : setup ? 'prepare' : 'check')
+    let currentStage = 'environment', outcome: 'success' | 'error' = 'success'
     busy = true; retryRead = false; install.disabled = true; check.disabled = true; repair.disabled = true; sourceSelect.setDisabled(true)
     remove.disabled = true; confirmRemove.disabled = true; cancelRemove.disabled = true; removeModels.disabled = true; confirmation.hidden = true; remove.hidden = false
     const preparing = setup || isLocalOCRPreparing(host)
     errorDetails.hidden = true; errorDetails.textContent = ''
     showState(preparing ? 'working' : 'loading', preparing ? uiText('正在准备本机 OCR', 'Setting up local OCR') : uiText('正在读取本机状态…', 'Reading local status…'), preparing ? uiText('可离开此页面，准备会继续。', 'You can leave this page while setup continues.') : uiText('正在读取已保存的状态；尚未确认的环境才需要检查。', 'Reading saved status; only unconfirmed environments need checking.'))
-    unobserve = observeOCRProgress(host, showProgress)
+    unobserve = observeOCRProgress(host, value => { if (currentStage !== value.stage) { currentStage = value.stage; trace.event(currentStage) }; showProgress(value) })
     const started = Date.now()
     const tick = () => { if (!disposed) elapsed.textContent = `${uiText('本次等待', 'Waiting')} ${Math.floor((Date.now() - started) / 60000)}:${String(Math.floor((Date.now() - started) / 1000) % 60).padStart(2, '0')} · ${preparing ? uiText('组件安装、模型准备各最多 30 分钟', 'Components and models: up to 30 minutes each') : uiText('环境检查最多 2 分钟，模型检查最多 5 分钟', 'Environment: up to 2 minutes; models: up to 5 minutes')}` }
     tick(); const timer = setInterval(tick, 1000)
@@ -154,14 +177,18 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
       const value = await checkLocalOCR(host, force)
       if (!disposed) render(value)
     } catch (error) {
+      outcome = 'error'; trace.fail(error, currentStage)
       if (!disposed) {
         retryRead = !setup
-        showState('error', setup ? uiText('准备未完成 · 已下载内容会保留', 'Setup incomplete · Downloads are retained') : uiText('暂时无法读取状态', 'Status temporarily unavailable'), setup ? uiText('请重试；下载失败时可更换下方下载源。错误详情见“环境与故障排查”。', 'Retry, or change the source below if downloads fail. See Environment and troubleshooting for error details.') : uiText('请重新读取状态；此操作不会安装或下载。错误详情见“环境与故障排查”。', 'Read the status again; this will not install or download files. See Environment and troubleshooting for error details.'))
+        const modelStage = ['models', 'download', 'verify', 'offline', 'cache'].includes(currentStage)
+        const guidance = modelStage ? uiText('模型准备失败：检查模型下载源后继续准备，或重新验证已有模型。', 'Model setup failed: check the model source and continue, or verify existing models.') : uiText('组件准备失败：请查看当前阶段的错误详情并修复识别组件。模型下载源不影响 uv、Python 或依赖安装。', 'Component setup failed: inspect this stage and repair components. The model source does not affect uv, Python or dependency installation.')
+        showState('error', setup ? uiText('准备未完成 · 已下载内容会保留', 'Setup incomplete · Downloads are retained') : uiText('暂时无法读取状态', 'Status temporarily unavailable'), setup ? guidance : uiText('请重新读取状态；此操作不会安装或下载。错误详情见“环境与故障排查”。', 'Read the status again; this will not install or download files. See Environment and troubleshooting for error details.'))
         errorDetails.textContent = `${uiText('最近错误：', 'Latest error: ')}${error instanceof Error ? error.message : String(error)}`; errorDetails.hidden = false
         check.hidden = retryRead
         install.hidden = false; install.textContent = setup ? uiText('继续准备', 'Continue setup') : uiText('重新读取状态', 'Read status again')
       }
     } finally {
+      trace.end(outcome)
       clearInterval(timer)
       unobserve()
       busy = false
@@ -206,5 +233,5 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const refresh = () => { if (!busy && !disposed && confirmation.hidden) void run() }
   doc.defaultView?.addEventListener('focus', refresh)
   void run()
-  return () => { disposed = true; unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
+  return () => { disposed = true; unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); if (enhancementObserver !== undefined) host.Prefs?.unregisterObserver?.(enhancementObserver); sourceSelect.destroy(); body.remove() }
 }

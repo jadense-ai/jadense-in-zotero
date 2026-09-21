@@ -11,6 +11,21 @@ type Char = { c: string; rect?: number[]; inlineRect?: number[]; fontSize?: numb
 type Item = { id: number; libraryID: number; key: string; deleted?: boolean; parentItem?: Item; getField?(key: string): unknown; isPDFAttachment?(): boolean; attachmentModificationTime?: number | Promise<number | null> }
 type View = { initializedPromise?: Promise<unknown>; _ensureBasicPageData?(page: number): Promise<void>; _pdfPages?: Record<number, { chars: Char[]; viewBox?: number[] }>; _iframeWindow?: { PDFViewerApplication?: { pdfDocument?: { numPages: number; getPageLabels?(): Promise<string[] | null> } } } }
 type Reader = { itemID: number; _initPromise?: Promise<unknown>; _iframeWindow?: Window; navigate?(location: unknown): unknown; _internalReader?: { _primaryView?: View; navigate?(location: unknown, options?: unknown): unknown } }
+export type TextLayerPDF = { getPage?(page: number): Promise<{ view?: number[]; getTextContent(): Promise<{ items: Array<{ str?: string; transform?: number[]; width?: number; height?: number; hasEOL?: boolean }> }> }> }
+
+/** 原生 chars 不可用时直接读取 PDF.js 文字层；坐标来自原始文本块，不启动 OCR。 */
+export async function readPDFTextPage(pdf: TextLayerPDF, pageIndex: number) {
+  const page = await pdf.getPage?.(pageIndex + 1)
+  if (!page) throw new Error('PDF text layer unavailable')
+  const content = await page.getTextContent()
+  const chars: Char[] = content.items.flatMap(item => {
+    if (typeof item.str !== 'string') return []
+    const transform = item.transform, height = item.height ?? (transform ? Math.hypot(transform[2], transform[3]) : 0)
+    const rect = transform && transform[1] === 0 && transform[2] === 0 && item.width && height ? [transform[4], transform[5], transform[4] + item.width, transform[5] + height] : undefined
+    return [{ c: item.str, rect, spaceAfter: true, lineBreakAfter: item.hasEOL, fontSize: height }]
+  })
+  return { chars, viewBox: page.view }
+}
 export type DocumentHost = { Items?: { get?(id: number): unknown }; Reader?: { _readers?: Reader[]; open?(id: number, location?: unknown): Promise<Reader | undefined> } }
 
 /** Zotero 关闭窗口后可能暂留 Reader/Xray 对象；一个失效窗口不能阻断其他附件。 */
@@ -113,7 +128,7 @@ export function textPage(chars: Char[], pageIndex: number, pageLabel: string): D
   return { pageIndex, pageLabel, lines: ordered, paragraphs, ...(!lines.length ? { warning: uiText("无可提取文字（空白或扫描页）", "No extractable text (blank or scanned page)") } : {}) }
 }
 
-export async function readTextDocument(host: DocumentHost, itemID: number, signal?: AbortSignal, onPage?: (page: DocumentPage, total: number) => void): Promise<PdfTextDocument> {
+export async function readTextDocument(host: DocumentHost, itemID: number, signal?: AbortSignal, onPage?: (page: DocumentPage, total: number) => void | Promise<void>, resumePages: readonly DocumentPage[] = []): Promise<PdfTextDocument> {
   checkCancelled(signal)
   const item = await checkedItem(host, itemID)
   const source: DocumentIdentity = { itemID, libraryID: item.libraryID, itemKey: item.key, title: String(item.parentItem?.getField?.("title") || item.getField?.("title") || "PDF") }
@@ -123,23 +138,28 @@ export async function readTextDocument(host: DocumentHost, itemID: number, signa
   const view = reader?._internalReader?._primaryView
   await view?.initializedPromise
   const pdf = view?._iframeWindow?.PDFViewerApplication?.pdfDocument
-  if (!pdf || !view?._ensureBasicPageData || !view._pdfPages) throw new Error(uiText("请打开 PDF 阅读器后重试。", "Open the PDF reader and try again."))
+  if (!pdf || !view) throw new Error(uiText("请打开 PDF 阅读器后重试。", "Open the PDF reader and try again."))
   let labels: string[] | null = null
   try { labels = await pdf.getPageLabels?.() ?? null } catch { /* 页标签只用于展示。 */ }
   const pages: DocumentPage[] = []
+  const resumed = new Map(resumePages.filter(page => page.paragraphs.length && !page.warning).map(page => [page.pageIndex, page]))
   for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex++) {
     checkCancelled(signal)
     const pageLabel = labels?.[pageIndex] || String(pageIndex + 1)
+    const cached = resumed.get(pageIndex)
+    if (cached && cached.pageLabel === pageLabel) { pages.push(cached); await onPage?.(cached, pdf.numPages); continue }
     let page: DocumentPage
     try {
-      await view._ensureBasicPageData(pageIndex)
-      const data = view._pdfPages[pageIndex]
+      let data
+      try { await view._ensureBasicPageData?.(pageIndex); data = view._pdfPages?.[pageIndex] } catch { checkCancelled(signal) }
+      if (!data?.chars?.length && (pdf as TextLayerPDF).getPage) data = await readPDFTextPage(pdf as TextLayerPDF, pageIndex)
       if (!Array.isArray(data?.chars)) throw new Error("missing page text")
       page = textPage(data.chars, pageIndex, pageLabel)
       if (rectangle(data.viewBox)) page.viewBox = [...data.viewBox]
     } catch { page = { pageIndex, pageLabel, lines: [], paragraphs: [], warning: uiText("本页文字读取失败", "Could not read this page") } }
     pages.push(page)
-    onPage?.(page, pdf.numPages)
+    checkCancelled(signal)
+    await onPage?.(page, pdf.numPages)
   }
   checkCancelled(signal)
   await validateDocument(host, source)

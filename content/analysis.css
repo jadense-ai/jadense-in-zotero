@@ -56,12 +56,14 @@
 .jdx-reference-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; margin-bottom:12px; }
 .jdx-reference-heading h3 { margin:0; font-size:calc(16px * var(--jdx-font-scale,1)); }
 .jdx-reference-count { color:var(--jdx-muted); font-size:calc(11px * var(--jdx-font-scale,1)); }
-.jdx-reference-tools { display:flex; align-items:center; flex-wrap:wrap; gap:4px; margin:0 0 0 auto; font-size:calc(12px * var(--jdx-font-scale,1)); }
+.jdx-reference-tools { display:flex; align-items:center; flex-wrap:nowrap; gap:4px; font-size:calc(12px * var(--jdx-font-scale,1)); }
 .jdx-reference-tools:has(>button:not([hidden])) { min-height:32px; }
 .jdx-reference-tools button[hidden] { display:none; }
 .jdx-reference-details { min-height:0; }
 .jdx-reference-details>.jdx-notice:not(:empty) { margin-bottom:14px; }
-.jdx-reference-search { display:grid; grid-template-columns:minmax(0,1fr) minmax(140px,190px); gap:12px; padding-bottom:12px; border-bottom:1px solid var(--jdx-line); }
+.jdx-reference-search { display:grid; grid-template-columns:auto minmax(80px,1fr) minmax(110px,150px); align-items:center; gap:8px; flex:none; overflow-x:auto; padding:2px 2px 12px; border-bottom:1px solid var(--jdx-line); }
+.jdx-reference-search>.jdx-search { width:100%; height:34px; min-height:34px; background:var(--jdx-surface); color:var(--jdx-text); border-color:var(--jdx-line-strong); }
+.jdx-reference-search>.jdx-search::placeholder { color:var(--jdx-muted); opacity:1; }
 .jdx-reference-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:12px; padding:20px 0; border-bottom:1px solid var(--jdx-line); }
 .jdx-reference-number { color:var(--jdx-placeholder); font-size:calc(12px * var(--jdx-font-scale,1)); font-variant-numeric:tabular-nums; padding-top:3px; }
 .jdx-reference-body { min-width:0; }
@@ -84,7 +86,6 @@
   .jdx-reference-import>.jdx-check { flex-basis:100%; }
 }
 @media(max-width:650px) {
-  .jdx-reference-search { grid-template-columns:minmax(0,1fr); }
   .jdx-reference-heading,.jdx-analysis-row-top { gap:6px 14px; }
   .jdx-reference-heading>.jdx-reference-tools { margin-left:0; }
   .jdx-reference-destination { grid-template-columns:minmax(0,1fr) minmax(0,1fr); flex-basis:100%; }

@@ -54,8 +54,9 @@ describe("manual release checks", () => {
   it("uses the workbench for the titlebar check-in action", () => {
     expect(JADENSE_WORKBENCH_URL).toBe("https://jadense.cn/app")
   })
-  it("preserves native chrome on unverified platforms and versions", () => {
-    expect(supportsIntegratedTitlebar("WINNT", "10.0.2", "26200")).toBe(true)
-    for (const [os, version, build] of [["Darwin", "10.0.2", "26200"], ["Linux", "10.0.2", "26200"], ["WINNT", "9.0", "26200"], ["WINNT", "10.0.3", "26200"], ["WINNT", "10.0.2", "22631"]]) expect(supportsIntegratedTitlebar(os!, version!, build!)).toBe(false)
+  it("keeps Windows integrated chrome across host and OS updates", () => {
+    for (const [version, build] of [["10.0.2", "26200"], ["10.0.3", "26200"], ["10.0.4", "22631"], ["9.0", "26100"]]) expect(supportsIntegratedTitlebar("WINNT", version, build)).toBe(true)
+    expect(supportsIntegratedTitlebar("WINNT")).toBe(true)
+    for (const os of ["Darwin", "Linux"]) expect(supportsIntegratedTitlebar(os)).toBe(false)
   })
 })

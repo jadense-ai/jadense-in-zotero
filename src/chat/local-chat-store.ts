@@ -6,7 +6,9 @@ import { uiText } from "@/zotero/ui-preferences"
 
 import { normalizeChatSources, type ChatSource } from "./research-context"
 import { normalizeLocalChatImage, type LocalChatImage } from "./image-input"
+import { normalizeLocalChatFile, type LocalChatFile } from "./file-input"
 import { normalizeResearchMessageContext, type ResearchMessageContext } from "./research-presentation"
+import type { DocumentReading } from './long-document-context'
 
 export const LOCAL_CHAT_PREF_KEY = "extensions.jadenseInZotero.localChatState"
 
@@ -27,6 +29,8 @@ export type LocalChatMessage = {
   status: LocalChatMessageStatus
   research?: ResearchMessageContext
   image?: LocalChatImage
+  file?: LocalChatFile
+  reading?: DocumentReading
 }
 
 export type LocalChatSession = {
@@ -95,6 +99,25 @@ function status(value: unknown): LocalChatMessageStatus {
   return value === "streaming" || value === "failed" ? value : "complete"
 }
 
+/** 只采用本地来源身份和页码，附加字段不参与导航；坏条目局部丢弃。 */
+function normalizeDocumentReading(value: unknown): DocumentReading | undefined {
+  const row = record(value)
+  if (!row || !Array.isArray(row.sources)) return undefined
+  const sources: DocumentReading['sources'] = []
+  for (const candidate of row.sources) {
+    const entry = record(candidate), source = record(entry?.source)
+    const identity = normalizeResearchMessageContext({ source, pages: [] })?.source
+    if (!identity || !Array.isArray(entry?.pages)) continue
+    const pages = entry.pages.flatMap(value => {
+      const page = record(value)
+      return page && Number.isSafeInteger(page.pageIndex) && (page.pageIndex as number) >= 0 && typeof page.pageLabel === 'string'
+        ? [{ pageIndex: page.pageIndex as number, pageLabel: page.pageLabel.slice(0, 80) }] : []
+    })
+    sources.push({ source: { ...identity, ...(typeof source?.modificationTime === 'number' && Number.isFinite(source.modificationTime) ? { modificationTime: source.modificationTime } : {}) }, pages })
+  }
+  return { notice: nonEmptyText(row.notice, 1000), sources }
+}
+
 function normalizeMessage(value: unknown): LocalChatMessage | null {
   const row = record(value)
   if (!row) return null
@@ -104,6 +127,8 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
   if (!id || !role || !createdAt) return null
   const research = normalizeResearchMessageContext(row.research)
   const image = normalizeLocalChatImage(row.image)
+  const file = normalizeLocalChatFile(row.file)
+  const reading = normalizeDocumentReading(row.reading)
   return {
     id,
     role,
@@ -112,6 +137,8 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
     status: status(row.status),
     ...(research ? { research } : {}),
     ...(image ? { image } : {}),
+    ...(file ? { file } : {}),
+    ...(reading ? { reading } : {}),
   }
 }
 
@@ -169,11 +196,12 @@ function fitSerializedState(state: LocalChatState) {
   while (serialized.length > MAX_SERIALIZED_LENGTH) {
     const oldestSession = next.sessions[next.sessions.length - 1]
     if (!oldestSession) return JSON.stringify(emptyState())
-    const messageWithResearch = oldestSession.messages.find((message) => message.research)
+    const messageWithResearch = oldestSession.messages.find((message) => message.research || message.reading)
     const sourceWithText = oldestSession.sources.find((source) => source.text.length > 0)
     if (messageWithResearch) {
       // 页码导航是可选展示数据；超出总预算时先舍弃它，不因此删除原有解析正文。
       delete messageWithResearch.research
+      delete messageWithResearch.reading
     } else if (sourceWithText) {
       // JSON 转义可放大正文；先缩减可重建的来源文本，且每轮都必须实际减小状态。
       sourceWithText.text = sourceWithText.text.slice(0, Math.floor(sourceWithText.text.length / 2))
@@ -276,6 +304,7 @@ export function appendLocalChatMessage(
     if (session.id !== sessionId) return session
     const research = normalizeResearchMessageContext(input.research)
     const image = normalizeLocalChatImage(input.image)
+    const file = normalizeLocalChatFile(input.file)
     const message: LocalChatMessage = {
       id: input.id,
       role: input.role,
@@ -284,6 +313,7 @@ export function appendLocalChatMessage(
       status: input.status ?? "complete",
       ...(research ? { research } : {}),
       ...(image ? { image } : {}),
+      ...(file ? { file } : {}),
     }
     return {
       ...session,
@@ -300,7 +330,7 @@ export function updateLocalChatMessage(
   preferences: LocalChatPreferenceStore,
   sessionId: string,
   messageId: string,
-  patch: Pick<Partial<LocalChatMessage>, "text" | "status" | "research">,
+  patch: Pick<Partial<LocalChatMessage>, "text" | "status" | "research" | "reading">,
 ) {
   const state = readLocalChatState(preferences)
   state.sessions = state.sessions.map((session) => session.id === sessionId
@@ -312,12 +342,21 @@ export function updateLocalChatMessage(
               ...(patch.text !== undefined ? { text: messageText(patch.text) } : {}),
               ...(patch.status !== undefined ? { status: status(patch.status) } : {}),
               ...(Object.hasOwn(patch, "research") ? { research: normalizeResearchMessageContext(patch.research) } : {}),
+              ...(Object.hasOwn(patch, "reading") ? { reading: normalizeDocumentReading(patch.reading) } : {}),
             }
           : message),
       }
     : session)
   saveLocalChatState(preferences, state)
   return state
+}
+
+/** 更新已有关联的缓存引用，不改变来源编号，也不重新关联被移除的来源。 */
+export function refreshLocalChatSource(preferences: LocalChatPreferenceStore, sessionId: string, source: ChatSource) {
+  const state = readLocalChatState(preferences), session = state.sessions.find(row => row.id === sessionId)
+  if (!session) return
+  session.sources = normalizeChatSources(session.sources.map(row => row.id === source.id ? source : row))
+  saveLocalChatState(preferences, state)
 }
 
 /** 关联明确选择的来源；重新关联刷新快照，并优先为新来源保留有限正文预算。 */

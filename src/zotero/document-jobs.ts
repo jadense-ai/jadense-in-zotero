@@ -1,3 +1,4 @@
+import { lifecycleTrace } from './lifecycle-diagnostics'
 import { diagnostics, markDiagnosticAbort, type RequestDiagnostic } from "./diagnostics"
 /** 插件生命周期文档任务：Reader/Manager 共享实例，界面关闭不取消；持久结果独立于普通聊天。 */
 import { ReliableByokChatClient as ByokChatClient } from "@/chat/reliable-byok-chat"
@@ -22,7 +23,8 @@ import { literatureIdentity } from "./document-identity"
 import { buildTranslationReadingIndex, translationReadingRows } from "./translation-reading"
 import { readTranslationInterface, TRANSLATION_INTERFACE_PREF } from './translation-interface'
 import { translateMachineText, TRANSLATION_LIMITS } from '@/chat/machine-translation'
-import { readOCRDocument, stopLocalOCR, ensureLocalOCR } from './local-ocr'
+import { stopLocalOCR } from './local-ocr'
+import { readDocument } from './document-extraction'
 import { chunkTranslationDocument, translationCapacity, OCR_EXTRACTION_VERSION, TRANSLATION_CAPACITY_PREF, formulasPreserved, hasTranslatableText, capacitySlices, tokenCost } from './translation-chunks'
 import { documentIssue, notifyDocumentIssue } from './document-notices'
 import { queueTranslation, retryAt, TranslationRateLimitError } from '@/chat/translation-queue'
@@ -95,18 +97,20 @@ export class DocumentJobs {
     this.store = store
     this.verifier = new ReferenceVerifier(host as unknown as ReferenceHost, fetchImpl)
     this.ready = store.list().then(rows => { for (const task of rows) { if (task.status === "running") task.status = "paused"; this.tasks.set(task.id, task) } this.emit() })
+    try {
     const referenceObserver = host.Prefs?.registerObserver?.(REFERENCE_AI_PREF, () => {
       if (!referenceAIEnabled(host)) for (const [id, phase] of this.referencePhases) if (phase === 'identifying') this.skipReferenceAI(id)
       this.emit()
     }, true)
     if (referenceObserver !== undefined) this.observers.push(referenceObserver)
+    } catch (error) { const trace = lifecycleTrace(host, 'initialization', 'document_observer'); trace.fail(error, 'observer_unavailable'); trace.end('error') }
     for (const key of [TRANSLATION_INTERFACE_PREF, TRANSLATION_CAPACITY_PREF, "extensions.jadenseInZotero.baseUrl", "extensions.jadenseInZotero.token", "extensions.jadenseInZotero.byokConfig", AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS)]) {
       try { const id = host.Prefs?.registerObserver?.(key, () => {
         for (const [taskID, previous] of this.configurations) {
           const task = this.tasks.get(taskID)
           if (task && (task.kind === 'translation' || this.referencePhases.get(taskID) === 'identifying') && previous !== this.configuration(task)) this.pause(taskID, 'configuration_changed')
         }
-      }); if (id !== undefined) this.observers.push(id) } catch { /* 请求前仍检查有效配置。 */ }
+      }); if (id !== undefined) this.observers.push(id) } catch (error) { const trace = lifecycleTrace(host, 'initialization', 'document_observer'); trace.fail(error, 'observer_unavailable'); trace.end('error') }
     }
   }
   /** 仅冻结本次使用的配置；密钥只在内存比较，绝不记录到诊断。 */
@@ -176,7 +180,6 @@ export class DocumentJobs {
   async start(kind: DocumentTask["kind"], itemID: number, fresh = false, options: { signal?: AbortSignal; onProgress?: (text: string) => void; extractionID?: string; languages?: TranslationLanguages } = {}): Promise<DocumentTask> {
     await this.ready
     checkCancelled(options.signal)
-    try { await ensureLocalOCR(this.host) } catch (error) { this.fail(error, 'ocr_preflight'); throw error }
     checkCancelled(options.signal)
     const languages = kind === 'translation' ? options.languages ? normalizeTranslationLanguages(options.languages) : await readArticleTranslationLanguages(this.host, itemID) : undefined
     let extractionID = kind === 'translation' ? options.extractionID || this.list('extraction').find(task => task.source.itemID === itemID && ['complete', 'partial'].includes(task.status))?.id : undefined
@@ -222,7 +225,7 @@ export class DocumentJobs {
         task = { version: 1, id: crypto.randomUUID(), kind, source: { ...source, ...(literature ? { literature, title: literature.title } : {}) }, createdAt: new Date().toISOString(), status: 'running', totalPages: 0, completed: 0, total: 0, models: [], warnings: [] }
         this.tasks.set(task.id, task); this.controllers.set(task.id, controller); await this.save(task)
         const report = (text: string) => { this.activity = text; this.phases.set(task!.id, text); options.onProgress?.(text); this.emit() }
-        const raw = await waitForDocumentRead(readOCRDocument(this.host, itemID, controller.signal, report), controller.signal)
+        const raw = await waitForDocumentRead(readDocument(this.host, itemID, controller.signal, report), controller.signal)
         checkCancelled(controller.signal)
         task.source = { ...raw.source, ...(literature ? { literature } : {}) }
         task.totalPages = raw.pages.length; task.warnings = raw.pages.flatMap(page => page.warning ? [page.warning] : [])
@@ -285,7 +288,6 @@ export class DocumentJobs {
     const pendingImports = this.imports
     this.tail = this.tail.catch(() => undefined).then(async () => {
       try {
-        await ensureLocalOCR(this.host)
         if (task.kind === "references") await pendingImports
         checkCancelled(controller.signal); await this.validateSource(task)
         if (task.kind === "translation") await this.translate(task, controller.signal)
@@ -632,7 +634,7 @@ export class DocumentJobs {
     }
     return parts.join("\n\n")
   }
-  dispose() { this.stopped = true; for (const controller of this.controllers.values()) { markDiagnosticAbort(controller.signal,"plugin_shutdown"); controller.abort() } stopLocalOCR(this.host); for (const id of this.observers) this.host.Prefs?.unregisterObserver?.(id); this.listeners.clear() }
+  dispose() { this.stopped = true; for (const controller of this.controllers.values()) { markDiagnosticAbort(controller.signal,"plugin_shutdown"); controller.abort() } stopLocalOCR(this.host); for (const id of this.observers) { try { this.host.Prefs?.unregisterObserver?.(id) } catch { /* 继续释放其他监听。 */ } } this.listeners.clear() }
 }
 
 type SharedHost = ZoteroLike & { __jadenseDocumentJobs?: DocumentJobs }
@@ -640,7 +642,14 @@ export function documentJobs(host: ZoteroLike): DocumentJobs {
   const shared = host as SharedHost
   if (!shared.__jadenseDocumentJobs) {
     const win = host.getMainWindow?.()
-    shared.__jadenseDocumentJobs = new DocumentJobs(host, win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis))
+    const jobs = new DocumentJobs(host, win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis))
+    shared.__jadenseDocumentJobs = jobs
+    void jobs.ready.catch(() => {
+      if (shared.__jadenseDocumentJobs === jobs) {
+        delete shared.__jadenseDocumentJobs
+        try { jobs.dispose() } catch { /* 下次显式打开允许重新初始化。 */ }
+      }
+    })
   }
   return shared.__jadenseDocumentJobs
 }

@@ -258,3 +258,28 @@ This section describes the published v0.4.9 release.
 「设置 → OCR配置」显示准备阶段、下载量和等待时间。失败后先换下载源并继续；组件损坏时选择「修复识别组件」。需要重装时在「环境与故障排查 → 删除与重装」确认删除，默认保留模型与历史成果，然后点击「重新安装 OCR」。[完整指南](local-ocr.md)包含 Windows、Linux、macOS 手动安装和模型验证。
 
 Settings → OCR configuration shows setup stages, download size and elapsed time. Retry with another model source after download failures, or use Repair recognition components for damaged dependencies. Under Environment and troubleshooting → Remove and reinstall, confirm dependency removal (models and saved results are retained by default), then choose Reinstall OCR. The [full guide (Chinese)](local-ocr.md) includes separate Windows, Linux and macOS manual steps and model verification.
+
+
+<a id="unreleased-050"></a>
+
+## 0.5.0 未发布：文献分类、长文阅读与可选 OCR / Unreleased features
+
+本节适用于 0.5.0 源码，不表示已有新正式安装包。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
+
+### 文献分类 / Paper classification
+
+在 Zotero 文献列表选中条目，右键选择「文献分类…」，打开独立窗口。在工作台「设置 → 功能配置」保存 TypeSafe API Key 后返回，选择候选分类目录，点击「生成推荐预览」，核对结果后再应用；生成预览不会修改条目。可撤销本次归类。配置测试会发送示例请求，可能消耗额度；分类独立使用 Jev，仅发送标题、摘要、标签及候选目录，不发送 PDF。请求失败后停止后续请求，已完成的预览仍可核对。
+
+Select papers in Zotero and choose Paper classification from the context menu. Save a TypeSafe API key in Settings → Feature configuration, return to the standalone window, choose candidate collections and generate recommendations. Review before applying; previews do not change items, and applied classification can be undone. Testing the key may use credits. Classification uses Jev independently of Chat and sends titles, abstracts, tags and candidate collections, not PDFs. A failed request stops remaining requests while keeping completed recommendations available.
+
+### 文件与长 PDF / Files and long PDFs
+
+在对话输入区添加文件或关联 Zotero PDF。可读正文缓存在本机；短文直接进入上下文，长文按模型容量分块概括并召回相关原文，可能产生多次模型请求及相应费用。查看阅读进度、缺页提示与回答页码来源，并对照原文核查。扫描缺页需用户主动准备 OCR；缓存或提取失败会提示，不代表全文已读完。
+
+Attach files in the chat composer or link Zotero PDFs. Readable text is cached locally. Short documents fit directly into context; longer documents use chunked summaries and relevant source passages within model limits, potentially producing multiple billed requests. Check progress, missing-page warnings and page references against the original. Scanned pages require user-enabled OCR; extraction or cache warnings must not be interpreted as complete reading.
+
+### 全文提取与恢复 / Extraction and recovery
+
+全文 Markdown、全文翻译和参考文献提取默认使用文字层。需要识别扫描页时在「设置 → OCR配置」启用全文 OCR 增强并准备依赖与模型；OCR 失败时尝试文字层，并保留无文字页提示。翻译和分析仍需对应 AI 或传统翻译服务。侧栏异常可重试；仍无法恢复时，从 Zotero 工具菜单或「帮助 → 错误诊断」导出本机诊断。
+
+Full Markdown, full translation and reference extraction use the text layer by default. Enable full-document OCR in OCR configuration and prepare dependencies/models for scanned pages. OCR failures fall back to the text layer with warnings for unreadable pages. Translation and analysis still require their configured service. Retry a failed sidebar; if it remains unavailable, export local diagnostics from Zotero's Tools menu or Help → Error diagnostics.

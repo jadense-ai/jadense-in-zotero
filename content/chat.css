@@ -150,11 +150,11 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
   pointer-events: none;
 }
 
-/* 工作台与 Reader 共用薄状态面板：贴在输入卡片后方，空状态不占位。 */
+/* 工作台与 Reader 共用单层状态面板；内层纯文本，不与输入卡片重叠。 */
 .jdx-chat-status-panel {
   min-width: 0;
-  margin: 0 12px -10px;
-  padding: 6px 10px 14px;
+  margin: 0 12px;
+  padding: 6px 10px;
   border-radius: 12px 12px 0 0;
   background: var(--jdx-subtle);
   color: var(--jdx-muted);
@@ -177,10 +177,14 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.jdx-chat-dock .jdx-manager-inline-status {
+.jdx-chat-dock .jdx-manager-inline-status:not(:empty) {
   min-height: 0;
   margin: 0;
   padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   font: inherit;
   overflow-wrap: anywhere;
 }
@@ -253,6 +257,22 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
 .jdx-chat-image-preview img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; }
 .jdx-chat-image-preview span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: calc(12px * var(--jdx-font-scale,1)); }
 .jdx-chat-image-preview button { flex-shrink: 0; }
+
+/* 文件气泡沿用消息表面，窄 Reader 下收缩文件名，提取结果独立滚动。 */
+.jdx-chat-file-card { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid var(--jdx-line-strong); border-radius: 12px; background: var(--jdx-surface); color: var(--jdx-text); }
+.jdx-chat-file-icon { display: grid; place-items: center; flex: 0 0 42px !important; height: 48px; border-radius: 6px 12px 6px 6px; background: var(--jdx-surface-muted, rgb(128 128 128 / .1)); font-size: 10px !important; font-weight: 700; letter-spacing: .04em; }
+.jdx-chat-file-info { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.jdx-chat-file-name { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13px * var(--jdx-font-scale, 1)); font-weight: 600; }
+.jdx-chat-file-meta { font-size: calc(11px * var(--jdx-font-scale, 1)); opacity: .65; }
+.jdx-chat-file-warning { font-size: calc(11px * var(--jdx-font-scale, 1)); line-height: 1.5; overflow-wrap: anywhere; }
+.jdx-chat-file-remove { border: 0; border-radius: 6px; background: transparent; color: inherit; width: 28px; height: 28px; font-size: 20px; cursor: pointer; }
+.jdx-chat-file-remove:hover { background: rgb(128 128 128 / .12); }
+.jdx-chat-file-message { width: min(360px, 100%); margin-top: 10px; min-width: 0; }
+.jdx-chat-file-message > summary { list-style: none; cursor: pointer; border-radius: 12px; }
+.jdx-chat-file-message > summary:hover .jdx-chat-file-card { border-color: var(--jdx-text-muted, #819087); }
+.jdx-chat-file-message > summary:focus-visible, .jdx-chat-file-remove:focus-visible { outline: 2px solid #16d78f; outline-offset: 2px; }
+.jdx-chat-file-message[open] .jdx-chat-file-card { border-radius: 12px 12px 0 0; }
+.jdx-chat-file-text { margin: 0; padding: 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; border: 1px solid var(--jdx-line-strong); border-top: 0; border-radius: 0 0 12px 12px; background: var(--jdx-surface); }
 .jdx-chat-message-image { display: grid; gap: 6px; margin-top: 10px; min-width: 0; }
 .jdx-chat-message-image > button { padding: 0; border: 0; background: transparent; cursor: zoom-in; text-align: left; width: fit-content; max-width: 100%; }
 .jdx-chat-message-image img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; border-radius: 8px; }

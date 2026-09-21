@@ -22,6 +22,8 @@ import {
 } from "./release-common.mjs"
 
 const { facts, version, manifest } = await loadReleaseContext()
+const builtAt = resolveBuiltAt()
+const buildID = `${version}-${builtAt.replace(/[^0-9]/g, '')}`
 const releasePaths = buildReleasePaths(facts, version)
 await rm(buildDir, { recursive: true, force: true })
 await rm(releasePaths.versionDir, { recursive: true, force: true })
@@ -32,6 +34,14 @@ for (const directory of ["content", "locale", "_locales", "icons"]) {
   await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true,
     filter: source => !source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh'].includes(path.basename(source)) })
 }
+
+// PDF 文字解析完全离线，模块、worker、CJK 字符表和标准字体随 XPI 分发。
+const pdfRoot = path.join(projectRoot, 'node_modules/pdfjs-dist')
+const pdfTarget = path.join(buildDir, 'content/pdfjs')
+await mkdir(pdfTarget, { recursive: true })
+await writeFile(path.join(pdfTarget, 'loader.mjs'), "import * as pdfjs from './pdf.mjs'; globalThis.__jadenseChatPdfJS = pdfjs;\n")
+for (const name of ['pdf.mjs', 'pdf.worker.mjs']) await cp(path.join(pdfRoot, 'build', name), path.join(pdfTarget, name))
+for (const name of ['cmaps', 'standard_fonts']) await cp(path.join(pdfRoot, name), path.join(pdfTarget, name), { recursive: true })
 
 // 使用插件仓库内的品牌素材，开源仓库可独立安装依赖并构建发行包。
 const logos = JSON.parse(await readFile(path.join(projectRoot, "model-logos/catalog.json"), "utf8"))
@@ -51,6 +61,7 @@ await build({
   target: "firefox140",
   sourcemap: false,
   legalComments: "none",
+  define: { __JADENSE_BUILD_ID__: JSON.stringify(buildID) },
 })
 
 await build({
@@ -74,9 +85,20 @@ await build({
 })
 
 // Chrome 样式缓存按资源地址复用；内容摘要让热升级和同版本重建都加载匹配的 CSS/JS。
+await build({
+  entryPoints: [path.join(projectRoot, 'src/zotero/classification-page.ts')],
+  outfile: path.join(buildDir, 'content/classification.js'),
+  bundle: true, format: 'iife', target: 'firefox140', sourcemap: false, legalComments: 'none',
+})
+const classificationHtmlPath = path.join(buildDir, 'content/classification.xhtml')
+let classificationHtml = await readFile(classificationHtmlPath, 'utf8')
+for (const fileName of ['manager.css', 'status.css', 'classification.css', 'classification.js']) {
+  classificationHtml = classificationHtml.replace(`"${fileName}"`, `"${fileName}?v=${sha256(await readFile(path.join(buildDir, 'content', fileName))).slice(0, 12)}"`)
+}
+await writeFile(classificationHtmlPath, classificationHtml)
 const managerHtmlPath = path.join(buildDir, "content/manager.xhtml")
 let managerHtml = await readFile(managerHtmlPath, "utf8")
-for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "manager.js"]) {
+for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "classification.css", "manager.js"]) {
   const revision = sha256(await readFile(path.join(buildDir, "content", fileName))).slice(0, 12)
   managerHtml = managerHtml.replace(`"${fileName}"`, `"${fileName}?v=${revision}"`)
 }
@@ -109,9 +131,10 @@ const metadata = buildReleaseMetadata({
   releasePaths,
   artifactBuffer: xpi,
   buildMode: resolveBuildMode(facts),
-  builtAt: resolveBuiltAt(),
+  builtAt,
   bundledFiles: bundled.map((file) => file.archivePath),
 })
+metadata.buildID = buildID
 await writeFile(releasePaths.metadataPath, stringifyJson(metadata))
 
 console.log(`Built ${releasePaths.artifactRelativePath}`)

@@ -1,5 +1,6 @@
 /** 展示偏好回归：语言按进程快照隔离，主题跨窗口即时更新并释放监听。 */
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { FONT_SCALE_PREF, FONT_SIZE_PREF, readFontScale, saveFontScale } from "./ui-preferences"
 import { DISPLAY_LANGUAGE_PREF, THEME_PREF, TRANSLATION_OPACITY_PREF, getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, readTranslationOpacity, saveDisplayLanguage, saveTheme, saveTranslationOpacity, translationOpacityControl, uiText, type UiPreferenceHost } from "./ui-preferences"
 
 function host(locale = "zh-CN") {
@@ -27,6 +28,28 @@ function host(locale = "zh-CN") {
 }
 
 afterEach(() => initializeUiLocale({ locale: "zh-CN" }))
+
+describe("font scaling", () => {
+  it("preserves legacy sizes, defaults invalid values, and updates every window once", () => {
+    const { zotero, values, observers } = host()
+    expect(readFontScale(zotero)).toBe(100)
+    values.set(FONT_SIZE_PREF, 20)
+    expect(readFontScale(zotero)).toBe(154)
+    const windows = [new Map<string, string>(), new Map<string, string>()]
+    const stops = windows.map(properties => observeTheme(zotero, {
+      dataset: {}, ownerDocument: {}, style: { setProperty: (key: string, value: string) => properties.set(key, value) },
+    } as unknown as HTMLElement))
+    for (const [value, expected] of [[150, 150], [10, 80], [300, 200], ["", 100], [Symbol(), 100], [100, 100]] as const) {
+      expect(saveFontScale(zotero, value)).toBe(true)
+      expect(readFontScale(zotero)).toBe(expected)
+      for (const properties of windows) expect(properties.get("--jdx-font-scale")).toBe(String(expected / 100))
+    }
+    expect(values.get(FONT_SCALE_PREF)).toBe("100")
+    expect(values.get(FONT_SIZE_PREF)).toBe(20)
+    stops.forEach(stop => { stop(); stop() })
+    expect(observers.size).toBe(0)
+  })
+})
 
 describe("translation background transparency", () => {
   it("defaults old settings locally, normalizes numeric values, and contains unavailable persistence", () => {

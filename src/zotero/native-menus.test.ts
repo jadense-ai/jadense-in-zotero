@@ -20,6 +20,20 @@ function callbacks(): MenuCallbacks {
 }
 
 describe("native Zotero menus", () => {
+  it('registers a selection-aware item classification command', () => {
+    const classifySelectedItems = vi.fn(), setEnabled = vi.fn()
+    const registration = buildJadenseMenuRegistrations('plugin', { ...callbacks(), classifySelectedItems, canClassifySelectedItems: () => false }).find(row => row.target === 'main/library/item')!
+    registration.menus[0].onShowing?.({} as Event, { setEnabled })
+    expect(setEnabled).toHaveBeenCalledWith(false)
+    registration.menus[0].onCommand?.({} as Event, {})
+    expect(classifySelectedItems).toHaveBeenCalledTimes(1)
+  })
+  it('exposes diagnostic export independently of the Manager when supplied', () => {
+    const exportDiagnostics = vi.fn(), handlers = { ...callbacks(), exportDiagnostics }
+    const item = buildJadenseMenuRegistrations('plugin', handlers)[0].menus[0].menus?.find(row => row.l10nID === 'jadense-in-zotero-menu-export-diagnostics')
+    expect(item).toBeDefined(); item?.onCommand?.({} as never)
+    expect(exportDiagnostics).toHaveBeenCalledTimes(1); expect(handlers.openManager).not.toHaveBeenCalled()
+  })
   it("passes the startup language to Fluent independently of the host locale or pending language", () => {
     const values = new Map<string, unknown>([["extensions.jadenseInZotero.displayLanguage", "en-US"]])
     const zotero = { locale: "zh-CN", Prefs: { get: (key: string) => values.get(key), set: (key: string, value: unknown) => { values.set(key, value) } } }

@@ -4,12 +4,15 @@ import { updateChatMarkdown } from '@/chat/markdown'
 import { ANALYSIS_CATEGORIES } from '@/chat/paper-analysis'
 import { parseResearchPresentation, resolveResearchPage, type ResearchMessageContext } from '@/chat/research-presentation'
 import { readChatImage } from './chat-images'
+import { renderFileMessage } from './chat-attachment-ui'
 import { openChatSource } from './research-context'
 import { copyTextToClipboard } from './connection-display'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
+import { navigateDocument, type DocumentHost } from './pdf-document'
 export type ChatMessageElements = { messageList: HTMLElement; chatStatus: HTMLElement; chatLatest: HTMLButtonElement }
 const renderedMessageText = new WeakMap<HTMLElement, string>()
+const renderedReading = new WeakMap<HTMLElement, string>()
 function setStatus(node: HTMLElement, text: string, kind: string) { node.textContent = text; node.dataset.state = kind }
 export function nearLatest(elements: ChatMessageElements) { const log = elements.messageList; return log.scrollHeight - log.scrollTop - log.clientHeight < 64 }
 export function updateLatestButton(elements: ChatMessageElements) { elements.chatLatest.hidden = nearLatest(elements) }
@@ -135,6 +138,7 @@ export function renderMessage(elements: ChatMessageElements, zotero: ZoteroLike,
     actions.setAttribute("role", "group")
     actions.setAttribute("aria-label", uiText("消息操作", "Message actions"))
     wrapper.append(create("div", "jdx-chat-message-body"))
+    if (message.file) renderFileMessage(wrapper, message.file)
     if (message.image) {
       const attachment = create("div", "jdx-chat-message-image")
       const caption = create("span")
@@ -168,6 +172,33 @@ export function renderMessage(elements: ChatMessageElements, zotero: ZoteroLike,
       })
     }
     wrapper.append(actions)
+  }
+  const readingKey = JSON.stringify(message.reading)
+  if (renderedReading.get(wrapper) !== readingKey) {
+    wrapper.querySelector('[data-document-reading]')?.remove()
+    if (message.reading) {
+      const details = create('details'), summary = create('summary')
+      details.dataset.documentReading = 'true'
+      summary.textContent = uiText('本轮 PDF 阅读范围与页码', 'PDF coverage and pages for this answer')
+      const notice = create('p'); notice.textContent = message.reading.notice
+      details.append(summary, notice)
+      for (const entry of message.reading.sources) {
+        const title = create('p'); title.textContent = entry.source.title; details.append(title)
+        for (const page of entry.pages) {
+          const button = create('button', 'jdx-analysis-page') as HTMLButtonElement
+          button.type = 'button'; button.textContent = uiText(`第 ${page.pageLabel} 页`, `Page ${page.pageLabel}`)
+          button.title = uiText(`物理页 ${page.pageIndex + 1}`, `Physical page ${page.pageIndex + 1}`)
+          button.addEventListener('click', () => {
+            void navigateDocument(zotero as unknown as DocumentHost, entry.source, { pageIndex: page.pageIndex }).catch(() => {
+              setStatus(elements.chatStatus, uiText('原 PDF 不可用或版本已变化，请重新关联。', 'The original PDF is unavailable or changed. Link it again.'), 'error')
+            })
+          })
+          details.append(button)
+        }
+      }
+      wrapper.append(details)
+    }
+    renderedReading.set(wrapper, readingKey)
   }
   if (renderedMessageText.get(wrapper) === message.text && wrapper.dataset.status === message.status) return wrapper
   const body = wrapper.querySelector<HTMLElement>(".jdx-chat-message-body")!

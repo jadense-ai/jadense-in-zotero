@@ -242,8 +242,8 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   }
   all.addEventListener("change", () => { for (const entry of filterReferences(entries, search.value, filter.getValue()).filter(canImportReference)) { if (all.checked) selected.add(entry.id); else selected.delete(entry.id) } render() })
   search.addEventListener("input", render); filter.onChange(render)
-  head.append(title, count, tools); tools.append(extract, pause, resume, verify, identify, skip)
-  const searchBar = element(doc, "div", "jdx-reference-search"); searchBar.append(search, filters)
+  head.append(title, count); tools.append(extract, pause, resume, verify, identify, skip)
+  const searchBar = element(doc, "div", "jdx-reference-search"); searchBar.append(tools, search, filters)
   const destination = element(doc, "div", "jdx-reference-destination"); destination.append(libraryRoot, collectionRoot)
   importBar.append(allLabel, destination, importButton)
   root.append(head, status, searchBar, feedback, list, empty, importBar)

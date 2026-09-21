@@ -288,6 +288,30 @@ describe("complete PDF and reference evidence", () => {
     expect(metadataMatches({ ...fields, doi: undefined }, { ...fields, authors: ["Smith, K."], year: "2025" })).toBe(true)
     expect(metadataMatches({ ...fields, doi: undefined, authors: ["Smith", "et al."] }, { ...fields, authors: ["Smith", "Doe"] })).toBe(true)
   })
+  it.each([".", ""])('queries the extracted title for a year-at-end citation ending in "%s" without AI', async ending => {
+    const title = "Mid-infrared feed-forward dual-comb spectroscopy"
+    const raw = `Chen, Z., Hänsch, T. W. & Picqué, N. ${title}. Proc. Natl Acad. Sci. USA 116, 3454–3459 (2019)${ending}`
+    const fixture = host([["References", `[1] ${raw}`]])
+    const { store } = memoryStore()
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ message: { items: [
+      { title: [title], DOI: "10.1234/citation-fixture", published: { "date-parts": [[2019]] } },
+    ] } })))
+    const jobs = new DocumentJobs(fixture.zotero, fetchImpl, store)
+    try {
+      const task = await jobs.start("references", 11); await jobs.idle()
+      const [entry] = await store.references(task.id)
+      expect(entry.fields.title).toBe(title)
+      expect(entry.fields.year).toBe("2019")
+      expect(entry.fields.authors.every(author => !author.includes(title))).toBe(true)
+      expect(entry.uncertain).toBe(false)
+      expect(entry.verification).toBe("verified")
+      expect(entry.raw).toBe(raw)
+      expect(fetchImpl).toHaveBeenCalledOnce()
+      const query = new URL(String(fetchImpl.mock.calls[0][0]))
+      expect(query.origin).toBe("https://api.crossref.org")
+      expect(query.searchParams.get("query.title")).toBe(title)
+    } finally { jobs.dispose() }
+  })
   it("orders interleaved two-column lines, retaining hanging continuation and all source ranges", () => {
     const line = (id: string, x: number, y: number, text: string): PdfLine => ({ id, text, pageIndex: 0, pageLabel: "1", rects: [[x, y - 10, x + 180, y]] })
     const lines = [line("l1", 20, 700, citation), line("r1", 320, 700, citation.replace("[1]", "[3]")), line("l2", 20, 660, citation.replace("[1]", "[2]")), line("r2", 320, 660, "continuation")]

@@ -1,5 +1,6 @@
 import { analysisRuntime } from './analysis-runtime'
-import { renderDocumentIssueActions } from './document-notices'
+import { lifecycleTrace } from './lifecycle-diagnostics'
+import { renderDocumentIssueActions, openDocumentSettings } from './document-notices'
 /** 当前附件的只读成果界面：Reader 与文献详情共用，任务仅由明确按钮启动。 */
 import { updateChatMarkdown } from '@/chat/markdown'
 import { readTranslationHistory, TRANSLATION_HISTORY_PREF_KEY } from '@/chat/translation-history'
@@ -44,6 +45,12 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', resultLabels()[mode]); root.dataset.resultMode = mode
   const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true
   toolbar.append(versionHost); root.append(toolbar, message, issueActions, body, status)
+  if (mode === 'source') {
+    const tip = notice(doc)
+    tip.append(doc.createTextNode(uiText('默认使用传统文字层提取。若效果不佳，可安装配置 OCR，并在设置中开启增强。', 'Text-layer extraction is the default. If results are poor, install and configure OCR, then enable enhancement in settings.')),
+      action(doc, uiText('前往 OCR 配置', 'Open OCR configuration'), () => { openDocumentSettings(host, 'ocr') }))
+    root.insertBefore(tip, body)
+  }
   if (options.onWorkbench) { const open = action(doc, uiText('在工作台查看', 'Open in workbench'), () => options.onWorkbench?.(mode, selected)); actionIcon(open, 'workbench'); open.classList.add('jdx-result-workbench'); toolbar.append(open) }
   const cleanups: Array<() => void> = []
   let selected = options.recordID, disposed = false, refreshing = false, dirty = false, signature = '', stopContent = () => {}, active: AbortController | undefined
@@ -62,6 +69,23 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   }
   cleanups.push(() => clearTimeout(feedbackTimer))
   const report = (error: unknown) => { if (!disposed) { message.textContent = error instanceof Error ? error.message : String(error); message.dataset.kind = 'error' } }
+  /** 读取失败局部恢复，不重放提取/翻译；迟到的磁盘读取不再进入渲染分支。 */
+  const readResult = async <T,>(pending: Promise<T>): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try { return await Promise.race([pending, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('Result read timed out'), { code: 'SIDEBAR_RESULTS_TIMEOUT' })), 10000) })]) }
+    finally { clearTimeout(timer) }
+  }
+  const readFailed = (error: unknown) => {
+    if (disposed) return
+    signature = ''
+    const trace = lifecycleTrace(host, 'document-results', 'read')
+    trace.fail(error, 'content_read'); trace.end('error')
+    const empty = emptyResult(doc, uiText('成果暂时无法读取', 'Results are temporarily unavailable'), uiText('请重试读取，或在工作台查看。此操作不会重新提取或生成。', 'Retry reading, or view in the workspace. This does not extract or generate again.'))
+    if (trace.id) empty.append(element(doc, 'small', '', uiText(`诊断编号：${trace.id}`, `Diagnostic ID: ${trace.id}`)))
+    empty.append(action(doc, uiText('重试读取', 'Retry reading'), () => { void readResult(jobs.ready).then(refresh).catch(readFailed) }))
+    body.replaceChildren(empty)
+  }
+  body.append(emptyResult(doc, uiText('正在读取成果…', 'Loading results…'), ''))
   const startExtraction = async (fresh: boolean) => {
     if (active) return
     active = new AbortController(); extract.disabled = true; cancel.hidden = false; status.textContent = ''; message.dataset.kind = 'running'
@@ -133,7 +157,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
         actionIcon(extract, rows().length ? 'refresh' : 'extract')
         extract.disabled = Boolean(active || running); cancel.hidden = !active && !running
         translate.disabled = startingTranslation || !task || !['complete', 'partial'].includes(task.status)
-        message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task && task.status !== 'complete' ? resultStatus(task.status) : '')
+        message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task?.warnings.length ? task.warnings.join('\n') : task && task.status !== 'complete' ? resultStatus(task.status) : '')
         message.dataset.kind = task?.error ? 'error' : running ? 'running' : task?.status || 'neutral'
       }
       if (mode === 'source') renderDocumentIssueActions(issueActions, host, task?.issue)
@@ -142,8 +166,10 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       if (nextSignature === signature) { if (analysisRun) analysis?.setRun(analysisRun); analysis?.refresh(); continue }
       signature = nextSignature; stopContent(); stopContent = () => {}; analysis = undefined; body.replaceChildren()
       if (mode === 'source') {
-        const value = selected ? await jobs.store.extraction(selected) : null, assets = selected ? await jobs.store.assets(selected) : {}
+        body.append(emptyResult(doc, uiText('正在读取原文…', 'Loading source…'), ''))
+        const [value, assets] = selected ? await Promise.all([readResult(jobs.store.extraction(selected)), readResult(jobs.store.assets(selected)).catch((): Record<string, string> => ({}))]) : [null, {} as Record<string, string>]
         if (disposed) return
+        body.replaceChildren()
         const text = element(doc, 'div', 'jdx-markdown jdx-reading-block')
         updateChatMarkdown(text, value?.markdown || uiText('先提取原文。完成后可阅读图文 Markdown，再手动翻译。', 'Extract the source, read its Markdown, then translate when ready.'), assets)
         if (value) body.append(text)
@@ -174,7 +200,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
         }
         if (!body.childNodes.length) body.append(emptyResult(doc, uiText('暂无选中翻译', 'No selection translations'), uiText('在当前 PDF 中选中文字并翻译，记录会显示在这里。', 'Select and translate text in this PDF to keep a record here.')))
       }
-    } while (dirty && !disposed) } catch (error) { report(error) } finally { refreshing = false }
+    } while (dirty && !disposed) } catch (error) { readFailed(error) } finally { refreshing = false }
   }
   versions.onChange(value => { selected = value; void refresh() })
   if (mode === 'analysis') cleanups.push(analysisRuntime(host).subscribe(() => { void refresh() }))
@@ -182,7 +208,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   for (const key of [TRANSLATION_HISTORY_PREF_KEY, PAPER_ANALYSIS_HISTORY_PREF_KEY]) {
     try { const id = host.Prefs?.registerObserver?.(key, () => { void refresh() }); if (id !== undefined) cleanups.push(() => host.Prefs?.unregisterObserver?.(id)) } catch { /* 切换视图仍会读取。 */ }
   }
-  void jobs.ready.then(refresh)
+  void readResult(jobs.ready).then(refresh).catch(readFailed)
   return { refresh, selectedRecordID: () => selected, setRun(run: AnalysisRunView) { if (paperKey(run.source) === paperKey(source)) { analysisRun = run; analysis?.setRun(run) } }, remove() { disposed = true; stopContent(); versions.destroy(); cleanups.forEach(stop => stop()) } }
 }
 

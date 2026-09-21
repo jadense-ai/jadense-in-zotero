@@ -1,7 +1,7 @@
 /** 原生来源适配契约：仅显式材料、正确父子关系、独立降级及本地身份校验。 */
 import { describe, expect, it, vi } from "vitest"
 import { createQuoteSource, groupChatSources, normalizeChatSources } from "@/chat/research-context"
-import { chooseChatSourceItems, collectChatSources, collectSourceForItem, MAX_PDF_SOURCE_PAGES, openChatSource, type ResearchZotero } from "./research-context"
+import { chooseChatSourceItems, collectChatSources, collectSourceForItem, openChatSource, type ResearchZotero } from "./research-context"
 
 function paper(id = 1, attachmentIDs: number[] = []) {
   const fields: Record<string, string> = {
@@ -18,7 +18,7 @@ function paper(id = 1, attachmentIDs: number[] = []) {
 
 function attachment(id = 2, contentType = "application/pdf", parentID = 1) {
   return {
-    id, libraryID: 7, key: `FILE${id}`, parentID, itemType: "attachment", attachmentContentType: contentType,
+    id, libraryID: 7, key: `FILE${id}`, parentID, attachmentModificationTime: 1, itemType: "attachment", attachmentContentType: contentType,
     isAttachment: () => true,
     isPDFAttachment: () => contentType === "application/pdf",
     getField: (field: string) => field === "title" ? `Attachment ${id}` : "",
@@ -31,8 +31,11 @@ function harness(items: Array<{ id: number }>, selected: unknown[] = items) {
   const getAll = vi.fn(() => [...byId.values()])
   const getSelectedItems = vi.fn(() => selected)
   const selectItem = vi.fn(async () => true)
-  const open = vi.fn(async () => undefined)
-  const getFullText = vi.fn(async (_id: number, _maxPages: number) => ({ text: "Page one.\fPage two.", extractedPages: 2, totalPages: 2 }))
+  const getFullText = vi.fn(async (_id: number) => ({ text: "Page one.\fPage two.", extractedPages: 2, totalPages: 2 }))
+  const open = vi.fn(async (id: number) => {
+    const value = await getFullText(id)
+    return { itemID: id, _internalReader: { _primaryView: { _pdfPages: Object.fromEntries(Array.from({ length: value.totalPages }, (_, index) => [index, { chars: [{ c: value.text, paragraphBreakAfter: true }] }])), _iframeWindow: { PDFViewerApplication: { pdfDocument: { numPages: value.totalPages } } } } } }
+  })
   const zotero: ResearchZotero = {
     Items: { get, getAll },
     PDFWorker: { getFullText },
@@ -106,12 +109,12 @@ describe("Zotero local research sources", () => {
     ], [main])
     mock.getFullText.mockImplementation(async (id) => {
       if (id === 3) throw new Error("C:\\private\\missing.pdf")
-      return { text: "Readable evidence.", extractedPages: MAX_PDF_SOURCE_PAGES, totalPages: 120 }
+      return { text: "Readable evidence.", extractedPages: 120, totalPages: 120 }
     })
     const result = await collectChatSources(mock.zotero, { mode: "files" })
     expect(result.map((source) => source.itemID)).toEqual([1, 2, 3])
-    expect(mock.getFullText.mock.calls).toEqual([[2, MAX_PDF_SOURCE_PAGES], [3, MAX_PDF_SOURCE_PAGES]])
-    expect(result[1]).toMatchObject({ text: "Readable evidence.", warning: expect.stringContaining("80 / 120") })
+    expect(mock.getFullText.mock.calls).toEqual([[2], [3]])
+    expect(result[1]).toMatchObject({ text: "", document: { totalPages: 120, readablePages: 120 }, warning: expect.stringContaining("120/120") })
     expect(result[1]?.citation).toContain("Example study")
     expect(result[1]?.parentItem).toEqual({ itemID: 1, libraryID: 7, itemKey: "PAPER1", title: "Example study" })
     expect(result[2]).toMatchObject({ kind: "file", text: "", warning: expect.stringContaining("提取失败") })
@@ -143,7 +146,7 @@ describe("Zotero local research sources", () => {
     expect(sources.map((source) => source.itemID)).toEqual([1, 2])
     expect(sources[1]?.parentItem?.itemID).toBe(1)
     expect(main.getAttachments).not.toHaveBeenCalled()
-    expect(mock.getFullText.mock.calls).toEqual([[2, MAX_PDF_SOURCE_PAGES]])
+    expect(mock.getFullText.mock.calls).toEqual([[2]])
     const fileOnly = await collectChatSources(mock.zotero, { mode: "auto", itemIDs: [2] })
     expect(fileOnly.map((source) => source.itemID)).toEqual([2])
     expect(fileOnly[0]?.parentItem?.itemID).toBe(1)
@@ -192,8 +195,9 @@ describe("Zotero local research sources", () => {
     Object.defineProperty(pdf, "attachmentText", { get: textGetter })
     const mock = harness([pdf])
     delete mock.zotero.PDFWorker
+    delete mock.zotero.Reader
     const source = await collectSourceForItem(mock.zotero, 2)
-    expect(source).toMatchObject({ kind: "file", text: "", warning: expect.stringContaining("未提供") })
+    expect(source).toMatchObject({ kind: "file", text: "", warning: expect.stringContaining("提取失败") })
     expect(textGetter).not.toHaveBeenCalled()
   })
 

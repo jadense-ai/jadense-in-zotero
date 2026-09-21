@@ -1,5 +1,23 @@
 # 更新说明 / Changelog
 
+## Unreleased — 0.5.0
+
+### 简体中文
+
+- 新增独立文献分类窗口：选择候选目录、核对推荐后归类，支持撤销；需单独配置 TypeSafe API Key，不跟随对话模型。
+- 对话支持文件附件与长 PDF 分层阅读，保留正文缓存、阅读进度和页码来源；扫描缺页仍需 OCR，生成概括与回答可能产生多次模型请求。
+- 全文 Markdown、翻译和参考文献提取默认使用 PDF 文字层；OCR 按需启用，失败时尝试文字层并提示缺页。
+- 改进侧栏启动恢复、成果读取重试和本机诊断，增加 OCR 阶段等待与取消处理。
+- 这是未发布源码；正式安装包和更新渠道不变。配置和限制见[使用指南](docs/usage-guide.md#unreleased-050)。
+
+### English
+
+- Add a standalone paper-classification window with candidate collections, recommendation review, apply and undo. Configure a separate TypeSafe API key; classification does not use the Chat model.
+- Support chat file attachments and layered reading of long PDFs with cached text, reading progress and page references. Scanned pages still need OCR; summaries and answers may require multiple model requests.
+- Use the PDF text layer by default for full Markdown, translation and reference extraction. OCR is optional, with text-layer fallback and missing-page warnings.
+- Improve sidebar recovery, result-loading retries and local diagnostics, with bounded OCR waiting and cancellation.
+- Unreleased source only; official installers and update channels are unchanged. See the [usage guide](docs/usage-guide.md#unreleased-050).
+
 ## 0.4.10 — 2026-09-19
 
 ### 简体中文
