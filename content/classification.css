@@ -1,0 +1,74 @@
+/* 分类复用工作台主题；文件夹路径保留独立层级与可换行名称。 */
+.jdx-classification-window, .jdx-classification-window body { min-width: 0; min-height: 0; }
+.jdx-classification-window .jdx-classification-dialog { width: 100%; max-height: none; margin: 0; border: 0; border-radius: 0; }
+.jdx-classification-dialog {
+  box-sizing: border-box; width: min(1180px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+  padding: 24px; border: 1px solid var(--jdx-line-strong); border-radius: 12px;
+  background: var(--jdx-surface, #fff); color: var(--jdx-text, #17211b); font: inherit; overflow: auto;
+}
+.jdx-classification-dialog h2 { margin: 0 0 8px; font-size: 22px; }
+.jdx-classification-dialog h3 { margin: 18px 0 8px; font-size: 15px; }
+.jdx-classification-dialog p { line-height: 1.6; }
+.jdx-classification-dialog [hidden] { display: none !important; }
+.jdx-classification-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.jdx-classification-actions button { border: 1px solid var(--jdx-line-strong); border-radius: 6px; padding: 7px 12px; background: var(--jdx-surface); color: var(--jdx-text); cursor: pointer; }
+.jdx-classification-actions button.jdx-manager-primary { background: var(--jdx-green); border-color: var(--jdx-green); color: #07351f; }
+.jdx-classification-actions button:disabled { opacity: .5; cursor: default; }
+.jdx-classification-actions button:focus-visible, .jdx-classification-dialog input:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 2px; }
+.jdx-classification-dialog input[type="search"], .jdx-classification-settings input[type="password"], .jdx-classification-dialog select { border: 1px solid var(--jdx-line-strong); border-radius: 6px; padding: 7px 10px; background: var(--jdx-surface); color: var(--jdx-text); }
+.jdx-classification-dialog input[type="checkbox"] { accent-color: var(--jdx-green); }
+.jdx-classification-settings > input { display: block; width: min(100%, 440px); box-sizing: border-box; margin-top: 6px; }
+.jdx-classification-folders { max-height: 280px; overflow: auto; padding: 8px; margin: 10px 0; background: var(--jdx-sidebar); border-radius: 8px; }
+.jdx-classification-folders > label { display: flex; gap: 10px; align-items: flex-start; padding: 7px 4px; cursor: pointer; }
+.jdx-classification-paths { display: flex; flex-direction: column; gap: 6px; }
+.jdx-classification-path { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; overflow-wrap: anywhere; }
+.jdx-classification-separator { opacity: .6; }
+.jdx-classification-leaf { font-weight: 600; }
+.jdx-classification-replace { display: flex; align-items: center; gap: 8px; }
+.jdx-classification-table-scroll { max-height: 48vh; overflow: auto; border: 1px solid var(--jdx-line-strong); border-radius: 8px; }
+.jdx-classification-dialog table { width: 100%; border-collapse: collapse; text-align: left; min-width: 780px; }
+.jdx-classification-dialog th { position: sticky; top: 0; background: var(--jdx-sidebar); z-index: 1; white-space: nowrap; }
+.jdx-classification-dialog th, .jdx-classification-dialog td { padding: 12px 10px; border-bottom: 1px solid var(--jdx-line-strong); vertical-align: top; }
+.jdx-classification-dialog td:nth-child(2) { width: 32%; overflow-wrap: anywhere; }
+.jdx-classification-dialog td:last-child { white-space: nowrap; }
+.jdx-classification-error { color: var(--jdx-red); font-size: 12px; }
+.jdx-classification-applied { color: var(--jdx-green-deep); font-size: 12px; }
+@media (max-width: 700px) { .jdx-classification-dialog { padding: 14px; } }
+.jdx-classification-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.jdx-classification-steps { display: flex; gap: 24px; list-style: none; padding: 16px 0; margin: 12px 0 20px; border-bottom: 1px solid var(--jdx-line-strong); flex-wrap: wrap; }
+.jdx-classification-steps li { display: flex; align-items: center; gap: 8px; opacity: .55; }
+.jdx-classification-steps li[aria-current="step"], .jdx-classification-steps li.is-complete { opacity: 1; }
+.jdx-classification-steps li[aria-current="step"] { font-weight: 600; }
+.jdx-classification-steps span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--jdx-sidebar); }
+.jdx-classification-steps li[aria-current="step"] span { background: var(--jdx-green); color: #07351f; }
+.jdx-classification-footer { justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--jdx-line-strong); margin-top: 24px; }
+.jdx-classification-footer:has(> button:not([hidden])) { display: flex; }
+.jdx-classification-footer:not(:has(> button:not([hidden]))) { display: none; }
+.jdx-classification-complete { text-align: center; padding: 64px 12px; }
+.jdx-classification-success { font-size: 36px; color: var(--jdx-green-deep); }
+.jdx-classification-key-guide { max-width: min(420px, calc(100vw - 48px)); padding: 24px; border: 1px solid var(--jdx-line-strong); border-radius: 12px; background: var(--jdx-surface); color: var(--jdx-text); }
+.jdx-classification-key-guide::backdrop { background: rgb(0 0 0 / 25%); }
+/* 固定窗口壳与底部操作区；只有目录和预览内容滚动。 */
+.jdx-classification-window, .jdx-classification-window body { height: 100%; margin: 0; overflow: hidden; }
+.jdx-classification-window .jdx-classification-dialog { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.jdx-classification-dialog > :not(.jdx-classification-content) { flex-shrink: 0; }
+.jdx-classification-dialog > p { margin: 8px 0; }
+.jdx-classification-dialog h2 { margin: 0; }
+.jdx-classification-dialog h3 { margin: 0 0 12px; }
+.jdx-classification-steps { margin: 8px 0 16px; padding: 12px 0 16px; }
+.jdx-classification-content { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
+.jdx-classification-choose, .jdx-classification-preview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.jdx-classification-choose > :not(.jdx-classification-folders), .jdx-classification-preview > h3 { flex-shrink: 0; }
+.jdx-classification-choose > p { margin: 0 0 12px; }
+.jdx-classification-choose > .jdx-classification-actions { margin-top: 0; }
+.jdx-classification-folders { flex: 1; min-height: 72px; max-height: none; margin: 12px 0; }
+.jdx-classification-table-scroll { flex: 1; min-height: 72px; max-height: none; }
+.jdx-classification-dialog table { border-collapse: separate; border-spacing: 0; }
+.jdx-classification-replace { padding-bottom: 4px; }
+.jdx-classification-footer { margin-top: 16px; padding-top: 16px; }
+.jdx-classification-complete { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 24px 12px; }
+@media (max-height: 560px) {
+  .jdx-classification-dialog { padding: 14px; }
+  .jdx-classification-steps { padding: 8px 0; margin: 4px 0 12px; }
+  .jdx-classification-footer { margin-top: 10px; padding-top: 10px; }
+}

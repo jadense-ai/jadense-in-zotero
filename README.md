@@ -24,6 +24,8 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
+**v0.5.0 发布候选：**独立文献分类、对话文件附件、长 PDF 分层阅读与可选 OCR；改善侧栏恢复、参考文献年份识别与候选展示。正式附件将在验收后公开，当前可下载版本仍为 v0.4.10。详见[0.5.0 操作与限制](docs/usage-guide.md#unreleased-050)。
+
 <!-- release-summary:start -->
 ## 最近版本
 
@@ -50,7 +52,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 - **宿主程序**：需要 [Zotero 桌面版 8.0–10.0.*](https://www.zotero.org/download/)。自动识别 PDF 图片需要 Zotero 10.0.1 及以上版本的兼容 PDF 阅读器。
 - **AI 接入**：要使用 AI 功能，需要配置一种 AI 服务。可以使用 [BYOK 自带 API Key](docs/usage-guide.md#byok-provider)（Provider 的 API Key、Base URL 和模型 ID，不需要攻玉账号），也可以[连接攻玉学术](docs/usage-guide.md#connect)（攻玉账号和插件令牌）。模型调用费用按所选服务商或攻玉账号规则计算。
-- **本机 OCR**：问答和默认选文翻译不需要 Python；可选选文 OCR 与[全文翻译和全文 Markdown 提取](docs/local-ocr.md)需要在本机安装 OCR 运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
+- **本机 OCR**：问答和默认选文翻译不需要 Python；全文 Markdown、翻译和参考文献提取默认使用 PDF 文字层，无需 Python；仅在启用[可选 OCR](docs/local-ocr.md)识别扫描页时需要本机运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
 - **插件之外的文献工具**：Zotero Connector 不是本插件的依赖；它只负责从浏览器收集文献，是否安装不影响本插件在 Zotero 中阅读本地文献和 PDF。
 
 ### 当前可用的安装方式
@@ -60,7 +62,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.4.10.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.4.10/jadense-in-zotero-v0.4.10.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.5.0/jadense-in-zotero-v0.5.0.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
@@ -69,7 +71,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ## OCR 依赖安装
 
-全文 Markdown、全文翻译和参考文献提取需要本机 OCR；普通问答和默认选文翻译无需 Python。在 **设置 → OCR配置** 点击 **启用本机 OCR**，等待“已就绪”；失败后查看日志并点击 **继续准备**。首次需联网下载 Python、依赖和模型，预留数 GB 空间，无需预装 Python 或配置 CUDA。
+0.5.0 的全文 Markdown、全文翻译和参考文献提取默认使用文字层；识别扫描页可按需安装 OCR。普通问答和默认选文翻译无需 Python。在 **设置 → OCR配置** 点击 **启用本机 OCR**，等待“已就绪”；失败后查看日志并点击 **继续准备**。首次需联网下载 Python、依赖和模型，预留数 GB 空间，无需预装 Python 或配置 CUDA。
 
 **[详细 OCR 安装指南](docs/local-ocr.md)**：包含[设置界面操作](docs/local-ocr.md#settings)、[Windows](docs/local-ocr.md#windows)、[Linux](docs/local-ocr.md#linux)、[macOS](docs/local-ocr.md#macos) 手动安装，以及[模型验证](docs/local-ocr.md#models)、[修复与重装](docs/local-ocr.md#repair)。指南说明 v0.4.10 的操作与旧版差异。
 
@@ -101,7 +103,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ## 如何使用本插件
 
-**安装插件 → 配置一种 AI 接入方式 → 选择模型 → 打开 PDF 开始阅读。** 问答与默认选文翻译无需 Python；全文任务需先在「设置 → OCR配置」完成依赖与模型准备，首次预留数 GB 空间。BYOK 需要能访问所配置的模型 API。[OCR 安装与故障处理](docs/local-ocr.md)。
+**安装插件 → 配置一种 AI 接入方式 → 选择模型 → 打开 PDF 开始阅读。** 问答与默认选文翻译无需 Python；文字层全文任务无需 Python；扫描页需要 OCR 时，在「设置 → OCR配置」准备依赖与模型，首次预留数 GB 空间。BYOK 需要能访问所配置的模型 API。[OCR 安装与故障处理](docs/local-ocr.md)。
 
 下面给出最短上手步骤。[完整图文使用指南](docs/usage-guide.md)逐步说明提供商、模型、攻玉令牌和阅读操作。新接触 Zotero 的用户可先读 [Zotero 入门](docs/zotero-guide.md)。
 
@@ -203,11 +205,11 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 ### [翻译整篇 PDF，随时回到原文核对](docs/usage-guide.md#full-translation)
 
-在阅读操作中选择「全文翻译」，按段查看译文并定位原文。全文译文在阅读器侧栏连续展示，支持目录、独立字号/行距和阅读位置恢复；阅读模式专注浏览，定位模式可点击段落核对原文。隐藏侧栏后任务继续；中断或重启后可从翻译历史手动继续，保留已经完成的部分。在「设置 → 功能配置 → 翻译」选择 AI 或 Bing/Google。全文翻译先通过本机 OCR 识别完整 PDF，再发送正文；支持扫描件，不导出原版式双语 PDF。
+在阅读操作中选择「全文翻译」，按段查看译文并定位原文。全文译文在阅读器侧栏连续展示，支持目录、独立字号/行距和阅读位置恢复；阅读模式专注浏览，定位模式可点击段落核对原文。隐藏侧栏后任务继续；中断或重启后可从翻译历史手动继续，保留已经完成的部分。在「设置 → 功能配置 → 翻译」选择 AI 或 Bing/Google。全文翻译默认读取文字层；扫描页可启用本机 OCR，再发送提取正文。首次翻译会提示费用与稳定性，不导出原版式双语 PDF。
 
 ### [从参考文献继续追踪证据](docs/usage-guide.md#references)
 
-「解析」同时提取当前 PDF 的参考文献，在「文献解析 → 论文详情 → 参考文献」核对来源、验证 DOI，再选择已验证条目导入 Zotero。原始顺序、编号与重复项保留，无法确认的内容继续展示；导入按同库 DOI 去重，仅保存元数据与链接，不自动下载 PDF。
+「解析」同时提取当前 PDF 的参考文献，在「文献解析 → 论文详情 → 参考文献」核对来源、验证 DOI，再选择核对后的候选导入 Zotero；「已选首条」表示无精确匹配时的首条候选，须特别核查。原始顺序、编号与重复项保留，无法确认的内容继续展示；导入按同库 DOI 去重，仅保存元数据与链接，不自动下载 PDF。
 
 阅读器空间不足时，提问、解析、引用和全文翻译收在「•••」阅读操作菜单内；点击 Jadense 图标直接打开工作台。
 
@@ -267,7 +269,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | --- | --- |
 | 保存设置、对话、图片附件、翻译和解析历史 | 本机 Zotero profile；API Key 和攻玉令牌也保存在此处，请勿公开分享 profile |
 | BYOK 模型请求 | 插件直接发送给所选 Provider，包含请求所需的文字、文献上下文及图片；API Key 用于该 Provider 认证 |
-| 参考文献识别、核验与导入 | 不确定片段可交给所选解析模型；DOI/书目信息通过 Zotero 检索与 Crossref 核验，选定的已验证元数据导入本机资料库 |
+| 参考文献识别、核验与导入 | 不确定片段可交给所选解析模型；DOI/书目信息通过 Zotero 检索与 Crossref 核验，精确匹配或标记「已选首条」的候选经用户核对后导入本机资料库 |
 | 攻玉 AI 功能 | 攻玉接收临时请求及所需上下文，使用插件令牌鉴权，并接收插件版本和功能类型供问题定位；服务端按其规则处理请求、计费和运行记录 |
 | 文献同步 | 主动上传所选文献元数据，仅在选择包含 PDF 时上传本地 PDF |
 | 插件自动更新 | Zotero 请求攻玉官网的更新清单及安装包 |
@@ -278,13 +280,13 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 Manifest 声明兼容 Zotero **8.0 至 10.0.\***。本指南截图使用 **Windows 11 / Zotero 10.0.2** 与 0.4.4 本地构建，数据和服务均为模拟；本次截图冒烟在宽屏阅读器检查处超时，不代表全量验收通过。macOS、Linux、Zotero 8/9 和真实付费 Provider 未在本次文档工作中实测。当前公开版本见 [v0.4.10 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)；截图与原生验收记录仍以各版本发布说明为准。
 
-全文翻译先在本机 OCR，扫描 PDF 也可识别；识别后的正文会发送至你选择的翻译服务。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
+全文翻译默认提取 PDF 文字层；扫描页可启用 OCR，提取后的正文会发送至你选择的翻译服务。首次全文翻译会提示费用与稳定性，取消不会发起请求。解析结果受文本可提取范围和模型输出影响，请结合原文核对；中断或部分批注写入失败时会尽可能保留已生成笔记并提示结果。每条消息可新附一张图片，旧版本未保存的图片无法自动恢复。
 
 <a id="upgrade"></a>
 
 ### 从旧版怎样升级？
 
-从 GitHub 0.4.0–0.4.9 可直接安装 0.4.10；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
+v0.5.0 公开后，可从 GitHub 0.4.0–0.4.10 直接安装升级；相同 `.cn` 插件身份保留已有设置与本地历史。旧译文不会自动重译。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 

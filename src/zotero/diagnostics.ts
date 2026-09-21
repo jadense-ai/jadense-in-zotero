@@ -1,6 +1,6 @@
 /** 插件本地诊断：共享宿主实例、字段投影和有界持久化；任何诊断失败不得改变业务执行。 */
 export type DiagnosticCategory = 'running' | 'success' | 'error' | 'cancelled' | 'business'
-export type DiagnosticEvent = { at: string; stage: string; code?: string; name?: string; source?: string; status?: number; stack?: string }
+export type DiagnosticEvent = { at: string; stage: string; code?: string; name?: string; source?: string; status?: number; stack?: string; elapsedMs?: number; exitCode?: number; width?: number; height?: number; visible?: boolean; page?: string }
 export type DiagnosticRecord = {
   id: string; session: string; startedAt: string; endedAt?: string; category: DiagnosticCategory
   environment?: Record<string,string>; context: Record<string, string>; events: DiagnosticEvent[]; firstError?: DiagnosticEvent
@@ -15,23 +15,32 @@ const safe = (v: unknown) => typeof v === 'string' && /^[a-zA-Z0-9_.:@/-]{1,160}
 const time = () => new Date().toISOString()
 const id = () => globalThis.crypto?.randomUUID?.() ?? `diag-${Date.now()}-${Math.random().toString(16).slice(2)}`
 function context(input: Record<string, unknown>) { const result: Record<string, string> = {}; for (const key of CONTEXT) { const value = safe(input[key]); if (value) result[key] = value } return result }
+/** 只保留操作度量与固定页面名，不序列化异常或任意附加字段。 */
+function metrics(value: Partial<DiagnosticEvent>) {
+  const result: Partial<DiagnosticEvent> = {}
+  for (const key of ['elapsedMs', 'width', 'height'] as const) if (typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key]! >= 0) result[key] = Math.round(Math.min(value[key]!, 86400000))
+  if (Number.isSafeInteger(value.exitCode)) result.exitCode = value.exitCode
+  if (typeof value.visible === 'boolean') result.visible = value.visible
+  if (['chat', 'source', 'translation', 'selection', 'summary', 'notes', 'references'].includes(value.page ?? '')) result.page = value.page
+  return result
+}
 /** 不序列化异常 message/cause/body；外部可能在这些字段回显正文或凭据。 */
-function errorFields(error: unknown): Pick<DiagnosticEvent, 'code' | 'name' | 'status' | 'stack'> {
+function errorFields(error: unknown, defaultName = true): Pick<DiagnosticEvent, 'code' | 'name' | 'status' | 'stack'> {
   try {
     const value = error as { code?: unknown; name?: unknown; status?: unknown; stack?: unknown; cause?: { code?: unknown; cause?: { code?: unknown } } }
     const frames = typeof value?.stack === 'string' ? (value.stack.match(/(?:manager|bootstrap|preferences)\.js:\d+:\d+/g) ?? []).slice(0,8).join('\n') : undefined
     const code = value?.code ?? value?.cause?.code ?? value?.cause?.cause?.code
     return { stack: frames || undefined, code: typeof code === 'string' && /^[A-Za-z][A-Za-z0-9_]{1,79}$/.test(code) ? code : undefined,
-      name: ['Error','TypeError','AbortError','TimeoutError','SyntaxError','JadenseApiError','ByokResponseError','ResponseAborted'].includes(String(value?.name)) ? String(value.name) : 'Error',
+      name: ['Error','ReferenceError','TypeError','AbortError','TimeoutError','SyntaxError','JadenseApiError','ByokResponseError','ResponseAborted'].includes(String(value?.name)) ? String(value.name) : defaultName || value?.name ? 'Error' : undefined,
       status: typeof value?.status === 'number' && value.status >= 100 && value.status <= 599 ? value.status : undefined }
-  } catch { return { name: 'Error' } }
+  } catch { return defaultName ? { name: 'Error' } : {} }
 }
 function project(value: unknown): DiagnosticRecord | undefined {
   const r = value as DiagnosticRecord
   if (!r || !safe(r.id) || !Number.isFinite(Date.parse(r.startedAt))) return
-  const event = (e: DiagnosticEvent): DiagnosticEvent => ({ at: Number.isFinite(Date.parse(e?.at)) ? e.at : r.startedAt, stage: safe(e?.stage) ?? 'unknown', ...errorFields(e), source: safe(e?.source) })
+  const event = (e: DiagnosticEvent): DiagnosticEvent => ({ at: Number.isFinite(Date.parse(e?.at)) ? e.at : r.startedAt, stage: safe(e?.stage) ?? 'unknown', ...errorFields(e, false), ...metrics(e), source: safe(e?.source) })
   return { id: r.id, session: safe(r.session) ?? 'unknown', startedAt: r.startedAt, endedAt: r.endedAt && Number.isFinite(Date.parse(r.endedAt)) ? r.endedAt : undefined,
-    environment: Object.fromEntries(['plugin','zotero','os'].map(k => [k,safe(r.environment?.[k]) ?? 'unknown'])),
+    environment: Object.fromEntries(['plugin','zotero','os','build'].map(k => [k,safe(r.environment?.[k]) ?? 'unknown'])),
     category: ['running','success','error','cancelled','business'].includes(r.category) ? r.category : 'error', context: context(r.context ?? {}),
     events: Array.isArray(r.events) ? r.events.slice(0,32).map(event) : [], firstError: r.firstError ? event(r.firstError) : undefined,
     bytes: Number.isFinite(r.bytes) ? Math.max(0,r.bytes) : 0, characters: Number.isFinite(r.characters) ? Math.max(0,r.characters) : 0,
@@ -80,8 +89,8 @@ export class Diagnostics {
   changed(immediate = false) {
     if (this.disposed) return
     this.notify()
-    if (immediate) { if (this.timer) clearTimeout(this.timer); this.timer = undefined; void this.flush() }
-    else if (!this.timer) this.timer = setTimeout(() => { this.timer = undefined; void this.flush() }, 1000)
+    if (immediate) { if (this.timer) clearTimeout(this.timer); this.timer = undefined; void this.flush().catch(() => { this.storageAvailable = false }) }
+    else if (!this.timer) this.timer = setTimeout(() => { this.timer = undefined; void this.flush().catch(() => { this.storageAvailable = false }) }, 1000)
   }
   async flush() {
     const generation = this.generation
@@ -103,7 +112,7 @@ export class Diagnostics {
   setEnabled(value: boolean) { this.enabled = value; this.notify() }
   export(records = this.list(), filters: Record<string,string> = {}) { return JSON.stringify({ version: 1, exportedAt: time(), environment: this.environment, filters, notice: 'Local metadata only. Abrupt shutdown may lose unflushed events.', records: records.map(project).filter(Boolean) }, null, 2) }
   async clear() { this.generation++; this.rows = []; this.notify(); if (this.timer) clearTimeout(this.timer); this.timer = undefined; await this.flush() }
-  dispose() { this.enabled = false; if (this.timer) clearTimeout(this.timer); this.timer = undefined; void this.flush(); this.listeners.clear(); this.disposed = true }
+  dispose() { this.enabled = false; if (this.timer) clearTimeout(this.timer); this.timer = undefined; void this.flush().catch(() => { this.storageAvailable = false }); this.listeners.clear(); this.disposed = true }
 }
 
 export class RequestDiagnostic {
@@ -112,7 +121,7 @@ export class RequestDiagnostic {
   constructor(private store: Diagnostics, readonly row: DiagnosticRecord, private signal?: AbortSignal) { this.event('start'); signal?.addEventListener('abort', this.onAbort, { once: true }); if (signal?.aborted) this.onAbort() }
   event(stage: string, fields: Partial<DiagnosticEvent> = {}) {
     if (this.done) return
-    const entry: DiagnosticEvent = { at: time(), stage: safe(stage) ?? 'unknown', ...(fields.name || fields.code || fields.status ? errorFields(fields) : {}), source: safe(fields.source) }
+    const entry: DiagnosticEvent = { at: time(), stage: safe(stage) ?? 'unknown', ...(fields.name || fields.code || fields.status ? errorFields(fields, false) : {}), ...metrics(fields), source: safe(fields.source) }
     if (this.row.events.length >= 32) { const index = this.row.events.findIndex(e => !['start','error','abort','cleanup_cancel','finish','DONE','end'].includes(e.stage)); this.row.events.splice(index >= 0 ? index : 1,1) }
     this.row.events.push(entry); this.store.changed(stage === 'error' || stage === 'abort')
   }
@@ -127,7 +136,7 @@ export class RequestDiagnostic {
     this.row.category = ['POINTS_INSUFFICIENT','insufficient_scope','PROJECT_RESOURCE_OUT_OF_SCOPE','AI_MODEL_SELECTION_PLAN_REQUIRED','AI_USER_ROUTE_PLAN_REQUIRED'].includes(fields.code ?? '') || (fields.status === 402 && this.row.context.provider !== 'byok') ? 'business'
       : this.signal?.aborted && source && source !== 'unknown' ? 'cancelled' : 'error'
   }
-  end() { if (this.done) return; if (this.row.category === 'running') this.row.category = this.signal?.aborted ? 'cancelled' : 'success'; this.event('end'); this.row.endedAt = time(); this.done = true; this.signal?.removeEventListener('abort',this.onAbort); this.store.changed(true) }
+  end() { if (this.done) return; if (this.row.category === 'running') this.row.category = this.signal?.aborted ? 'cancelled' : 'success'; this.event('end', { elapsedMs: Date.now() - Date.parse(this.row.startedAt) }); this.row.endedAt = time(); this.done = true; this.signal?.removeEventListener('abort',this.onAbort); this.store.changed(true) }
 }
 
 const realmId = id()

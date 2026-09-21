@@ -77,7 +77,7 @@ export class ReferenceVerifier {
   }
   async verify(entry: ReferenceEntry, signal?: AbortSignal): Promise<void> {
     if (entry.verification === "verified" && entry.verified) return
-    entry.verification = "unverified"; delete entry.verified
+    entry.verification = "unverified"; delete entry.verified; delete entry.selectionMethod
     try {
       checkCancelled(signal)
       const doi = entry.fields.doi ? normalizeDoi(entry.fields.doi) : ""
@@ -96,9 +96,13 @@ export class ReferenceVerifier {
         candidates = await this.crossref(`?${query}`, signal)
       }
       checkCancelled(signal)
-      const matches = [...new Map(candidates.filter(row => metadataMatches(entry.fields, row)).map(row => [row.doi || normalizedTitle(row.title), row])).values()]
-      if (matches.length !== 1) { entry.reason = uiText("未找到唯一匹配文献，可按原文搜索", "No unique match; search using the original citation"); return }
-      entry.verified = matches[0]; entry.verification = "verified"; delete entry.reason
+      // 多个 DOI/标题命中时按查询顺序采用首条，不再因不唯一而停留未验证；重复候选也不能覆盖首条。
+      const match = candidates.find(row => metadataMatches(entry.fields, row))
+      const selected = match || candidates[0]
+      if (!selected) { entry.reason = uiText("未找到文献，可按原文搜索", "No publication found; search using the original citation"); return }
+      // 用户要求无精确匹配也选首条；保留来源字段，持久化选择方式供展示/导入使用，不能伪造 DOI/标题命中。
+      if (!match) entry.selectionMethod = "first-result"
+      entry.verified = selected; entry.verification = "verified"; delete entry.reason
     } catch (error) {
       checkCancelled(signal)
       entry.reason = error instanceof Error ? error.message : uiText("未验证", "Unverified")
@@ -106,10 +110,10 @@ export class ReferenceVerifier {
   }
 }
 
-/** 已验证状态和匹配证据在执行层再次核对；未验证条目不能通过批量调用进入此处。 */
+/** 导入已解析候选：精确匹配或用户要求的查询首条均可用，文库权限和不确定写入保护仍独立检查。 */
 export async function importReference(host: ReferenceHost, entry: ReferenceEntry, libraryID: number, collectionID?: number, beforeWrite?: () => Promise<void>) {
   const metadata = entry.verified
-  if (entry.verification !== "verified" || !metadata || !metadataMatches(entry.fields, metadata)) throw new Error(uiText("仅可导入已核验匹配的文献", "Only verified metadata matches can be imported"))
+  if (entry.verification !== "verified" || !metadata || !(metadataMatches(entry.fields, metadata) || entry.selectionMethod === "first-result" && metadata.title)) throw new Error(uiText("仅可导入已核验或已选首条的文献", "Only verified or first-result selections can be imported"))
   if (!host.Libraries?.get(libraryID)?.editable) throw new Error(uiText("目标文库不可写", "The destination library is read-only"))
   if (collectionID !== undefined && host.Collections?.get(collectionID)?.libraryID !== libraryID) throw new Error(uiText("分类不属于目标文库", "The collection is not in the destination library"))
   if (!host.Search || !host.Item) throw new Error(uiText("Zotero 导入接口不可用", "Zotero import is unavailable"))

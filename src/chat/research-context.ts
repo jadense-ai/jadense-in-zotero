@@ -31,6 +31,7 @@ export type ChatSource = {
   contentType?: string
   warning?: string
   parentItem?: ChatSourceParentItem
+  document?: { id: string; version: 1; totalPages: number; readablePages: number; complete: boolean }
 }
 
 export type ChatSourceGroup = {
@@ -108,13 +109,20 @@ export function normalizeChatSources(value: unknown): ChatSource[] {
     }
     const parentItem = source.kind !== "item" ? normalizeParentItem(row.parentItem, source.libraryID) : undefined
     if (parentItem) source.parentItem = parentItem
+    const document = row.document as ChatSource['document'] | undefined
+    if (source.kind === 'file' && document?.version === 1 && typeof document.id === 'string'
+      && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/iu.test(document.id)
+      && nonNegativeInteger(document.totalPages) && nonNegativeInteger(document.readablePages)) {
+      source.document = { id: document.id, version: 1, totalPages: document.totalPages, readablePages: Math.min(document.readablePages, document.totalPages), complete: document.complete === true }
+      source.text = '' // 正文在 profile 文件中，Prefs 只保留引用。
+    }
     const prefix = sourcePrefix(source)
     // 选区被存储预算截短后仍保留原 ID，使移除和再次引用保持稳定。
     const storedQuoteId = limitedText(row.id, 200)
     source.id = source.kind === "quote"
       ? storedQuoteId.startsWith(`${prefix}:`) ? storedQuoteId : quoteId(source)
       : prefix
-    if (typeof row.text === "string" && row.text.trim().length > source.text.length) {
+    if (!source.document && typeof row.text === "string" && row.text.trim().length > source.text.length) {
       addWarning(source, `来源文本已截断，仅保留前 ${source.text.length} 个字符。`)
     }
     if (!sources.has(source.id) && sources.size >= MAX_CHAT_SOURCES) {
@@ -185,7 +193,7 @@ export function buildSourceContext(sources: readonly ChatSource[]): string {
       ? "仅文献元数据和摘要；未读取附件正文。"
       : source.kind === "quote"
         ? "仅用户选中的原文片段；不代表文献全文。"
-        : source.text
+        : source.document ? "正文独立缓存；本轮实际提供的原文与摘要以 PDF 阅读范围为准，未附加部分不能视为已读。" : source.text
           ? "附件中可提取的文字；以 warning 中的页数和截断范围为准，不保证图表、扫描页或全文完整。"
           : "未提取到附件文字，仅提供来源引用。",
   }))

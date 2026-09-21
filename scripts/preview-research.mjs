@@ -6,7 +6,8 @@
  */
 /* global window, document, location */
 import http from "node:http"
-import { readFile } from "node:fs/promises"
+import { installClassificationPreview } from './preview-classification.mjs'
+import { readFile, readdir } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
 const contentDirectory = new URL("../build/content/", import.meta.url)
@@ -137,11 +138,11 @@ function installPreviewHost() {
         preferences[key] = key.endsWith(".baseUrl") ? location.origin
           : key.endsWith(".token") ? "synthetic-fixture-token-not-a-credential" : value
         persist()
-        for (const [callback, observedKey] of preferenceObservers) if (observedKey === key) callback()
+        for (const { callback, key: observedKey } of preferenceObservers.values()) if (observedKey === key) callback()
       },
       clear: (key) => { delete preferences[key]; persist() },
-      registerObserver: (key, callback) => { preferenceObservers.set(callback, key); return callback },
-      unregisterObserver: (callback) => preferenceObservers.delete(callback),
+      registerObserver: (key, callback) => { const id = Symbol(); preferenceObservers.set(id, { key, callback }); return id },
+      unregisterObserver: (id) => preferenceObservers.delete(id),
     },
     Items: {
       get: (id) => items.get(Number(id)),
@@ -437,16 +438,26 @@ async function serveChat(request, response) {
 }
 
 const assets = new Map([
+  ["/pdfjs/loader.mjs", ["pdfjs/loader.mjs", "text/javascript; charset=utf-8"]],
+  ["/pdfjs/pdf.mjs", ["pdfjs/pdf.mjs", "text/javascript; charset=utf-8"]],
+  ["/pdfjs/pdf.worker.mjs", ["pdfjs/pdf.worker.mjs", "text/javascript; charset=utf-8"]],
   ["/ui.css", ["ui.css", "text/css; charset=utf-8"]],
   ["/status.css", ["status.css", "text/css; charset=utf-8"]],
   ["/translation-interface.css", ["translation-interface.css", "text/css; charset=utf-8"]],
   ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],
+  ["/classification.css", ["classification.css", "text/css; charset=utf-8"]],
+  ["/classification.js", ["classification.js", "text/javascript; charset=utf-8"]],
   ["/manager.js", ["manager.js", "text/javascript; charset=utf-8"]],
   ["/manager.css", ["manager.css", "text/css; charset=utf-8"]],
   ["/chat.css", ["chat.css", "text/css; charset=utf-8"]],
   ["/icons/logo-padded.png", ["icons/logo-padded.png", "image/png"]],
 ])
 const fixtureAccount = { signedToday: false, balancePoints: 36, currentStreakDays: 4, rewardPoints: 2 }
+for (const directory of ['cmaps', 'standard_fonts']) {
+  for (const name of await readdir(new URL(`pdfjs/${directory}/`, contentDirectory))) {
+    assets.set(`/pdfjs/${directory}/${name}`, [`pdfjs/${directory}/${name}`, 'application/octet-stream'])
+  }
+}
 const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url || "/", "http://127.0.0.1").pathname
   response.setHeader("cache-control", "no-store")
@@ -510,11 +521,12 @@ const server = http.createServer(async (request, response) => {
     }
     if (pathname === "/__fixture__/host.js") {
       response.setHeader("content-type", "text/javascript; charset=utf-8")
-      response.end(`(${installPreviewHost.toString()})()`)
+      response.end(`(${installPreviewHost.toString()})(); (${installClassificationPreview.toString()})()`)
       return
     }
-    if (pathname === "/" || pathname === "/manager.xhtml") {
-      const page = await readFile(new URL("manager.xhtml", contentDirectory), "utf8")
+    if (pathname === "/" || pathname === "/manager.xhtml" || pathname === '/classification.xhtml') {
+      const classification = pathname === '/classification.xhtml' || new URL(request.url, 'http://127.0.0.1').searchParams.has('classification')
+      const page = await readFile(new URL(classification ? 'classification.xhtml' : 'manager.xhtml', contentDirectory), "utf8")
       response.setHeader("content-type", "text/html; charset=utf-8")
       response.end(page.replace(/<\?xml[^>]*\?>\s*/, "<!doctype html>\n")
         .replace("</head>", `<style>${styles}</style><script src="/__fixture__/host.js"></script></head>`)

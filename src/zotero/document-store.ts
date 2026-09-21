@@ -3,6 +3,7 @@ import { stripReferenceLabel, type ReferenceEntry } from "@/chat/reference-list"
 import { normalizeTranslationLanguages, type TranslationLanguages } from "@/chat/translation-languages"
 import type { DocumentIdentity, DocumentPage } from "./pdf-document"
 import type { TranslationReadingIndex, TranslationReadingPosition } from "./translation-reading"
+import type { ChatDocumentState } from './chat-documents'
 
 export type DocumentTask = {
   referenceAI?: { unavailable?: boolean; pausedReason?: string; batches: Array<{ id: string; requestId: string; previousRequestId?: string; entryIds: string[]; prompt: string; model: string; status: 'pending' | 'complete' | 'failed' }> }
@@ -27,13 +28,13 @@ const validID = (id: string) => /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/iu.t
 export class DocumentStore {
   private writes = new Map<string, Promise<boolean>>()
   private cache = new Map<string, unknown>()
-  constructor(private io?: TaskIO, private paths?: Paths) {
+  constructor(private io?: TaskIO, private paths?: Paths, private directory: 'jadense-document-tasks' | 'jadense-chat-documents' = 'jadense-document-tasks') {
     const host = globalThis as typeof globalThis & { IOUtils?: TaskIO; PathUtils?: Paths }
     this.io ??= host.IOUtils; this.paths ??= host.PathUtils
   }
   private path(id?: string, name?: string) {
     if (!this.paths || (id && !validID(id))) throw new Error("Local document storage unavailable")
-    return this.paths.join(this.paths.profileDir, "jadense-document-tasks", ...(id ? [id] : []), ...(name ? [name] : []))
+    return this.paths.join(this.paths.profileDir, this.directory, ...(id ? [id] : []), ...(name ? [name] : []))
   }
   private async write(id: string, name: string, value: unknown): Promise<boolean> {
     const key = `${id}/${name}`, snapshot = structuredClone(value)
@@ -66,6 +67,16 @@ export class DocumentStore {
       && value.translations && typeof value.translations === "object" ? value : null
   }
   savePage(id: string, page: TranslationPage) { return this.write(id, `page-${page.pageIndex}.json`, page) }
+  saveChat(state: ChatDocumentState) { return this.write(state.id, 'chat.json', state) }
+  async chat(id: string) {
+    const value = await this.read<ChatDocumentState>(id, 'chat.json')
+    return value?.version === 1 && value.id === id && value.source && Array.isArray(value.pageIndexes)
+      && Number.isSafeInteger(value.totalPages) && value.totalPages >= 0 && value.summaries && typeof value.summaries === 'object' ? value : null
+  }
+  async chats(): Promise<ChatDocumentState[]> {
+    const rows = await Promise.all((await this.ids()).map(id => this.chat(id)))
+    return rows.filter((row): row is ChatDocumentState => row !== null)
+  }
   saveExtraction(id: string, value: ExtractedDocument) { return this.write(id, 'extraction.json', value) }
   async extraction(id: string) {
     const value = await this.read<ExtractedDocument>(id, 'extraction.json')
@@ -97,11 +108,14 @@ export class DocumentStore {
   }
   async references(id: string) { const value = await this.read<ReferenceEntry[]>(id, "references.json"); return Array.isArray(value) ? value.filter(row => row && typeof row.raw === "string" && Array.isArray(row.lines) && row.fields).map(row => ({ ...row, raw: stripReferenceLabel(row.raw) })) : [] }
   saveReferences(id: string, entries: ReferenceEntry[]) { return this.write(id, "references.json", entries) }
-  async list(): Promise<DocumentTask[]> {
+  private async ids() {
     const ids = new Set([...this.cache.keys()].map(key => key.split("/")[0]))
     try { for (const path of await this.io!.getChildren(this.path())) { const id = this.paths!.filename(path); if (validID(id)) ids.add(id) } } catch { /* 首次使用无目录。 */ }
+    return [...ids]
+  }
+  async list(): Promise<DocumentTask[]> {
     const result: DocumentTask[] = []
-    for (const id of ids) {
+    for (const id of await this.ids()) {
       const task = await this.read<DocumentTask>(id, "task.json")
       if (task && task.id === id && (task.kind === "translation" || task.kind === "references" || task.kind === "extraction") && task.source
         && Number.isSafeInteger(task.source.itemID) && Number.isSafeInteger(task.source.libraryID) && typeof task.source.itemKey === "string"
@@ -129,7 +143,7 @@ export class DocumentStore {
       try { paths = await this.io.getChildren(this.path(id)) } catch { /* 未落盘记录没有目录。 */ }
         for (const path of paths.sort((a, b) => Number(this.paths!.filename(a) === "task.json") - Number(this.paths!.filename(b) === "task.json"))) {
           const name = this.paths.filename(path)
-          if (/^(task|references|reading|reading-position|extraction|image-\d+|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
+          if (/^(task|chat|references|reading|reading-position|extraction|image-\d+|page-\d+)\.json(?:\.tmp)?$/u.test(name)) await this.io.remove(this.path(id, name))
         }
     }
     for (const key of this.cache.keys()) if (key.startsWith(`${id}/`)) this.cache.delete(key)

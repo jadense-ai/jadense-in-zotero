@@ -177,6 +177,7 @@ export type ZoteroLike = {
 }
 
 export type ZoteroMenuItem = {
+  icon?: string
   menuType: "menuitem" | "separator" | "submenu"
   l10nID?: string
   l10nArgs?: string

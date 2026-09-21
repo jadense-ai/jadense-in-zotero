@@ -16,7 +16,7 @@ function fixture(texts = ['First sentence.', 'Second sentence.']) {
   mock.read.mockReset(); mock.ensure.mockReset(); mock.ensure.mockResolvedValue(undefined)
   const source = { itemID: 1, itemKey: 'PDF1', libraryID: 1, title: 'Synthetic paper', modificationTime: 1 }
   const document = projectOCR({ pages: texts.map((text, i) => ({ pageIndex: i, blocks: [{ text, locations: [{ pageIndex: i, rects: [[0, 0, 100, 100]] }] }] })) }, source)
-  const prefs = new Map<string, unknown>([['extensions.jadenseInZotero.token', 'synthetic-test-only']])
+  const prefs = new Map<string, unknown>([['extensions.jadenseInZotero.token', 'synthetic-test-only'], ['extensions.jadenseInZotero.documentOCR', true]])
   const host = { Items: { get: () => ({ id: 1, key: 'PDF1', libraryID: 1, isPDFAttachment: () => true, attachmentModificationTime: 1 }) }, Prefs: { get: (key: string) => prefs.get(key), set: (key: string, value: unknown) => prefs.set(key, value) } } as unknown as ZoteroLike
   mock.read.mockResolvedValue(document)
   return { host, prefs, document }
@@ -38,7 +38,7 @@ describe('independent Markdown extraction', () => {
   })
   it('extracts without AI configuration, persists images outside Markdown and makes zero translation requests', async () => {
     const { host, prefs, document } = fixture(['## Title', '| A | B |\n| --- | --- |\n| 1 | 2 |'])
-    prefs.clear(); const fetch = vi.fn(), disk = durableStore(), jobs = new DocumentJobs(host, fetch, disk.create())
+    prefs.clear(); prefs.set('extensions.jadenseInZotero.documentOCR', true); const fetch = vi.fn(), disk = durableStore(), jobs = new DocumentJobs(host, fetch, disk.create())
     document.pages[0].paragraphs.push({ ...document.pages[0].paragraphs[0], id: 'image', text: '⟦I1⟧', formulas: { '⟦I1⟧': 'data:image/png;base64,AA==' } })
     const extraction = await jobs.start('extraction', 1); await jobs.idle()
     expect(extraction.status).toBe('complete'); expect(fetch).not.toHaveBeenCalled(); expect(jobs.list('translation')).toEqual([])
@@ -65,7 +65,7 @@ describe('independent Markdown extraction', () => {
   it('does not send translation when automatic extraction fails or is cancelled', async () => {
     const { host } = fixture(), fetch = vi.fn(), jobs = new DocumentJobs(host, fetch, new DocumentStore())
     mock.read.mockRejectedValueOnce(new Error('OCR unavailable'))
-    await expect(jobs.start('translation', 1)).rejects.toThrow('OCR unavailable')
+    await expect(jobs.start('translation', 1)).rejects.toThrow('PDF')
     const controller = new AbortController()
     mock.read.mockImplementationOnce(() => new Promise(() => {}))
     const pending = jobs.start('translation', 1, false, { signal: controller.signal })
@@ -112,7 +112,7 @@ describe('independent Markdown extraction', () => {
     controller.abort(); await expect(pending).rejects.toMatchObject({ name: 'AbortError' }); release({ pages: [] })
     expect(jobs.list('extraction')[0].status).toBe('paused'); expect(fetch).not.toHaveBeenCalled()
     mock.read.mockRejectedValueOnce(new Error('OCR unavailable'))
-    await expect(jobs.start('extraction', 1, true)).rejects.toThrow('OCR unavailable')
+    await expect(jobs.start('extraction', 1, true)).rejects.toThrow('PDF')
     expect(jobs.list('extraction').some(task => task.status === 'error')).toBe(true); jobs.dispose()
   })
   it('keeps readable source and translations when persistence fails', async () => {
@@ -269,11 +269,11 @@ describe('full translation regression boundaries', () => {
     expect(formulasPreserved('Text', '译文 ![Extra](https://example.test/track.png)')).toBe(false)
     expect(formulasPreserved('⟦F1⟧ ![Figure](jdx-asset:image-0)', '⟦F2⟧ ![图片](jdx-asset:image-0)')).toBe(false)
   })
-  it.each(['translation', 'extraction', 'references'] as const)('blocks %s before creating work when OCR is unavailable', async kind => {
+  it.each(['translation', 'extraction', 'references'] as const)('attempts traditional extraction for %s when OCR is unavailable', async kind => {
     const { host } = fixture(); mock.ensure.mockRejectedValue(Object.assign(new Error('OCR not ready'), { code: 'OCR_NOT_READY' }))
     const fetch = vi.fn(), jobs = new DocumentJobs(host, fetch, new DocumentStore())
-    await expect(jobs.start(kind, 1)).rejects.toThrow('OCR')
-    expect(jobs.list()).toHaveLength(0); expect(mock.read).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled()
+    await expect(jobs.start(kind, 1)).rejects.toThrow('PDF')
+    expect(jobs.list().some(task => task.status === 'error')).toBe(true); expect(mock.read).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled()
     jobs.dispose()
   })
   it('does not pause when unrelated preferences or the same value are saved', async () => {
@@ -322,12 +322,12 @@ it('retains a points error and correlated chunk identity, then resumes only miss
   jobs.dispose(); reloaded.dispose()
 })
 
-it('blocks resume against saved Markdown when models are removed', async () => {
+it('resumes saved Markdown without OCR when models are removed', async () => {
   const { host } = fixture(), jobs = new DocumentJobs(host, vi.fn(async () => reply('译文')), durableStore().create())
   const task = await jobs.start('translation', 1); await jobs.idle()
   mock.ensure.mockRejectedValue(Object.assign(new Error('missing'), { code: 'OCR_NOT_READY' }))
   jobs.resume(task.id); await jobs.idle()
-  expect(task.status).toBe('error'); expect(task.issue?.action).toBe('ocr')
+  expect(task.status).toBe('complete'); expect(task.issue).toBeUndefined()
   expect(await jobs.copy(task.id)).toContain('译文'); jobs.dispose()
 })
 

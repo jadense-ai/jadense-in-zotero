@@ -11,10 +11,13 @@ function harness() {
   vi.stubGlobal('PathUtils', { profileDir: '/synthetic', join: (...parts: string[]) => parts.join('/'), filename: (path: string) => path.split('/').at(-1) })
   vi.stubGlobal('IOUtils', { makeDirectory: async () => {}, getChildren: async (path: string) => [...files.keys()].filter(key => key.startsWith(path + '/')), readUTF8: async (path: string) => files.get(path), writeUTF8: async (path: string, text: string) => { files.set(path, text) } })
   const values = new Map<string, unknown>()
-  const attachment = { id: 2, libraryID: 7, key: 'PDF2', itemType: 'attachment', attachmentContentType: 'application/pdf', isAttachment: () => true, isPDFAttachment: () => true, getField: () => 'Synthetic PDF' }
+  const attachment = { id: 2, libraryID: 7, key: 'PDF2', attachmentModificationTime: 1, itemType: 'attachment', attachmentContentType: 'application/pdf', isAttachment: () => true, isPDFAttachment: () => true, getField: () => 'Synthetic PDF' }
   const get = vi.fn(() => attachment as typeof attachment | undefined)
   const extract = vi.fn(async () => ({ text: 'Synthetic evidence', extractedPages: 1, totalPages: 1 }))
-  const host = { Prefs: { get: (key: string) => values.get(key), set: (key: string, value: unknown) => { values.set(key, value) }, clear: (key: string) => { values.delete(key) } }, Items: { get }, PDFWorker: { getFullText: extract } } as unknown as ZoteroLike
+  const host = { Prefs: { get: (key: string) => values.get(key), set: (key: string, value: unknown) => { values.set(key, value) }, clear: (key: string) => { values.delete(key) } }, Items: { get }, Reader: { open: async () => {
+    const value = await extract()
+    return { itemID: 2, _internalReader: { _primaryView: { _pdfPages: { 0: { chars: [{ c: value.text, paragraphBreakAfter: true }] } }, _iframeWindow: { PDFViewerApplication: { pdfDocument: { numPages: 1 } } } } } }
+  } } } as unknown as ZoteroLike
   const fetch = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response('data: {"choices":[{"delta":{"content":"Answer"}}]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }))
   const runtime = new ChatRuntime(host, fetch)
   saveByokProvider(host, { id: 'provider', name: 'Synthetic', protocol: 'openai-chat-completions', baseUrl: 'http://localhost:12345/v1', apiKey: 'synthetic' })
@@ -24,6 +27,19 @@ function harness() {
 }
 
 describe('shared Reader Chat lifecycle', () => {
+  it('sends extracted file text on upload and follow-up without persisting contents in messages', async () => {
+    const { runtime, fetch } = harness()
+    const session = createLocalChatSession(runtime.preferences)
+    const file = { name: 'evidence.docx', mimeType: 'application/test', size: 42, text: 'Unique file evidence', warning: 'Text only' }
+    await runtime.send({ sessionID: session.id, prompt: '', image: file })
+    expect(String(fetch.mock.calls[0]?.[1]?.body)).toContain(file.text)
+    const messages = readLocalChatState(runtime.preferences).sessions[0].messages
+    expect(messages[0].file?.name).toBe(file.name)
+    expect(JSON.stringify(messages)).not.toContain(file.text)
+    await runtime.send({ sessionID: session.id, prompt: 'Follow-up' })
+    expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(file.text)
+    expect(String(fetch.mock.calls[1]?.[1]?.body)).not.toContain('image_url')
+  })
   it('associates selection text and physical page with a fresh PDF conversation without sending', async () => {
     const { runtime, fetch } = harness()
     const old = createLocalChatSession(runtime.preferences)
@@ -39,7 +55,7 @@ describe('shared Reader Chat lifecycle', () => {
     const id = await runtime.create(2)
     const state = readLocalChatState(runtime.preferences)
     expect(state.activeSessionId).toBe(old.id)
-    expect(state.sessions.find(session => session.id === id)?.sources[0]).toMatchObject({ kind: 'file', itemID: 2, text: 'Synthetic evidence' })
+    expect(state.sessions.find(session => session.id === id)?.sources[0]).toMatchObject({ kind: 'file', itemID: 2, text: '', document: { totalPages: 1, readablePages: 1 } })
   })
   it('does not associate merely by selecting; sending associates before dispatch and deduplicates', async () => {
     const { runtime, fetch, extract } = harness()

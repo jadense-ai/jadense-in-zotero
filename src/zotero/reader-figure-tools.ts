@@ -1,3 +1,4 @@
+import { lifecycleTrace } from './lifecycle-diagnostics'
 // Zotero 10 PDF 图片交互层：支持 SDT 图片/图注和手动框选，Reader 原生裁图只在用户确认后执行。
 // 本模块独立注册 Reader 生命周期，不向原生顶部工具条或选区工具条插入任何节点。
 import type { ChatImageInput } from "@/chat/image-input"
@@ -1140,14 +1141,15 @@ export function registerReaderFigureTools(
   }
   try {
     register.call(zotero.Reader, "renderToolbar", handler, pluginID)
-  } catch {
+  } catch (error) {
+    const trace = lifecycleTrace(zotero, 'initialization', 'reader_figures'); trace.fail(error, 'figure_registration_failed'); trace.end('error')
     return () => undefined
   }
   return () => {
     if (disposed) return
     disposed = true
     try { zotero.Reader?.unregisterEventListener?.("renderToolbar", handler) } catch { /* optional Reader seam */ }
-    for (const runtime of runtimes.values()) runtime.destroy()
+    for (const runtime of runtimes.values()) { try { runtime.destroy() } catch { /* 关闭的窗口不影响其他视图释放。 */ } }
     runtimes.clear()
   }
 }

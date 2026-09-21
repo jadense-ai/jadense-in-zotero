@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="manager.css" />
     <link rel="stylesheet" href="ui.css" />
     <link rel="stylesheet" href="analysis.css" />
+    <link rel="stylesheet" href="classification.css" />
     <script defer="defer" src="manager.js"></script>
     <link rel="stylesheet" href="chat.css"/>
   </head>
@@ -455,13 +456,13 @@
             </div>
           </section>
           <section id="jadense-settings-panel-features" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
-            <p class="jdx-manager-settings-note" data-ui-en="Other AI features follow the current Chat model by default. Configure AI through Connect Jadense or BYOK. Translation services can be selected independently without an AI model.">其他 AI 功能默认自动跟随当前对话模型。可在「连接攻玉」或「BYOK」配置 AI；翻译接口可独立选择，无需 AI 模型。</p>
+            <p class="jdx-manager-settings-note" data-ui-en="Translation, analysis and image interpretation follow the Chat model by default. Configure AI through Connect Jadense or BYOK. Translation services and Jev classification are configured independently.">翻译、文献解析和图片解读默认跟随当前对话模型。可在「连接攻玉」或「BYOK」配置 AI；翻译接口和 Jev 文献分类独立配置。</p>
             <div class="jdx-feature-model-row">
               <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p data-ui-en="Everyday questions and paper discussions. Shared with the model selector in the Chat input.">日常问答与文献对话；与对话输入栏的模型选择保持一致。</p></div>
               <div><div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label"></div><p id="jadense-feature-chat-model-status" class="jdx-manager-inline-status" role="status"></p></div>
             </div>
             <div class="jdx-feature-model-row jdx-feature-model-follow-row">
-              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, other AI features use the current Chat model. Turn it off to configure them separately. Translation services are independent.">开启后，其他 AI 功能使用当前对话模型；关闭后可分别配置。翻译接口不受此开关影响。</p></div>
+              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, translation, analysis and image interpretation use the Chat model. Turn it off to configure them separately. Translation services and Jev classification are independent.">开启后，翻译、文献解析和图片解读使用当前对话模型；关闭后可分别配置。翻译接口和 Jev 文献分类不受此开关影响。</p></div>
               <label class="jdx-manager-checkbox"><input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" /><span data-ui-en="Enabled">启用</span></label>
             </div>
             <div id="jadense-feature-model-status" class="jdx-manager-inline-status" role="status"></div>

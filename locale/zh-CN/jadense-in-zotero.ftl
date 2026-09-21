@@ -1,6 +1,13 @@
 jadense-in-zotero-menu-main =
     .label = Jadense
 
+jadense-in-zotero-menu-classify =
+    .label = { $language ->
+        [zh-CN] 文献分类…
+        [en-US] Classify literature…
+       *[system] 文献分类…
+    }
+
 jadense-in-zotero-menu-open-manager =
     .label = { $language ->
         [zh-CN] 打开攻玉工作台
@@ -46,3 +53,10 @@ jadense-in-zotero-panel-header =
 
 jadense-in-zotero-panel-sidenav =
     .tooltiptext = Jadense
+
+jadense-in-zotero-menu-export-diagnostics =
+    .label = { $language ->
+        [zh-CN] 导出错误诊断
+        [en-US] Export diagnostics
+       *[system] Export diagnostics
+    }

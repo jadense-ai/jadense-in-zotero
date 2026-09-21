@@ -153,7 +153,7 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 3. 使用「阅读模式」浏览，或切换「定位模式」点击段落回到原文。
 4. 隐藏侧栏后任务继续；中断后到「翻译历史」手动继续，不必重新处理已完成部分。
 
-在「设置 → 功能配置 → 翻译」选择 AI 或传统翻译（Bing/Google）。先在「设置 → OCR配置」点击「启用本机 OCR / 继续准备」，等待依赖与模型就绪，再运行全文任务。全文翻译先本机 OCR，再将正文发给所选翻译服务。不提供原版式双语 PDF 导出。[详细 OCR 安装说明](local-ocr.md)包含设置操作及 Windows、Linux、macOS 手动步骤。
+在「设置 → 功能配置 → 翻译」选择 AI 或传统翻译（Bing/Google）。0.5.0 默认读取文字层；扫描页需要 OCR 时，在「设置 → OCR配置」点击「启用本机 OCR / 继续准备」，等待依赖与模型就绪。提取后的正文会发给所选翻译服务。首次全文翻译会提示费用与稳定性，可取消并改用选文翻译。不提供原版式双语 PDF 导出。[详细 OCR 安装说明](local-ocr.md)包含设置操作及 Windows、Linux、macOS 手动步骤。
 
 「文献解析」按文献和附件汇总原文、全文翻译、选中翻译与解析成果；Reader 侧栏仅展示当前 PDF 的成果。已有原文可独立阅读，打开历史不会自动重新翻译。
 
@@ -174,7 +174,7 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 ### 3.5 参考文献核验与导入
 
 1. 完成解析后，进入「文献解析 → 论文详情 → 参考文献」。
-2. 核对作者、标题、DOI 与验证状态，仅选择已验证的条目导入。
+2. 核对作者、标题、DOI 与验证状态，核对后再选择候选导入。「已选首条」表示无精确匹配时采用首条有效结果，不保证匹配准确。
 3. 选择可写的 Zotero 目标，查看每条导入结果。同库 DOI 用于去重；导入的是元数据与链接，不自动下载 PDF。
 
 「AI 参与参考文献识别」默认关闭；开启后，仍未解决的片段可能交给解析模型并产生费用。无法确认的条目继续显示，不应当作已验证来源。
@@ -258,3 +258,43 @@ This section describes the published v0.4.9 release.
 「设置 → OCR配置」显示准备阶段、下载量和等待时间。失败后先换下载源并继续；组件损坏时选择「修复识别组件」。需要重装时在「环境与故障排查 → 删除与重装」确认删除，默认保留模型与历史成果，然后点击「重新安装 OCR」。[完整指南](local-ocr.md)包含 Windows、Linux、macOS 手动安装和模型验证。
 
 Settings → OCR configuration shows setup stages, download size and elapsed time. Retry with another model source after download failures, or use Repair recognition components for damaged dependencies. Under Environment and troubleshooting → Remove and reinstall, confirm dependency removal (models and saved results are retained by default), then choose Reinstall OCR. The [full guide (Chinese)](local-ocr.md) includes separate Windows, Linux and macOS manual steps and model verification.
+
+
+<a id="unreleased-050"></a>
+
+## 0.5.0 发布候选：文献分类、长文阅读与可选 OCR / Release candidate
+
+本节适用于 0.5.0 发布候选，正式安装包将在验收后公开。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
+
+### 文献分类 / Paper classification
+
+在 Zotero 文献列表选中条目，右键选择「文献分类…」，打开独立窗口。在工作台「设置 → 功能配置」保存 TypeSafe API Key 后返回，选择候选分类目录，点击「生成推荐预览」，核对结果后再应用；生成预览不会修改条目。可撤销本次归类。配置测试会发送示例请求，可能消耗额度；分类独立使用 Jev，仅发送标题、摘要、标签及候选目录，不发送 PDF。请求失败后停止后续请求，已完成的预览仍可核对。
+
+Select papers in Zotero and choose Paper classification from the context menu. Save a TypeSafe API key in Settings → Feature configuration, return to the standalone window, choose candidate collections and generate recommendations. Review before applying; previews do not change items, and applied classification can be undone. Testing the key may use credits. Classification uses Jev independently of Chat and sends titles, abstracts, tags and candidate collections, not PDFs. A failed request stops remaining requests while keeping completed recommendations available.
+
+### 文件与长 PDF / Files and long PDFs
+
+在对话输入区添加 PDF、DOCX、HTML、Markdown 或常用文本文件，或关联 Zotero PDF。上传文件每个最大 20 MB、最多提取前 60,000 字符；DOCX 仅提取正文，不含图片、批注与页眉页脚，旧 DOC 需先转换。完整长 PDF 阅读请使用关联 Zotero PDF 的入口。可读正文缓存在本机；短文直接进入上下文，长文按模型容量分块概括并召回相关原文，可能产生多次模型请求及相应费用。查看阅读进度、缺页提示与回答页码来源，并对照原文核查。扫描缺页需用户主动准备 OCR；缓存或提取失败会提示，不代表全文已读完。
+
+Attach PDF, DOCX, HTML, Markdown or common text files in the chat composer, or link Zotero PDFs. Uploaded files are limited to 20 MB and the first 60,000 extracted characters; DOCX includes body text only, excluding images, comments, headers and footers. Convert legacy DOC files first. Use linked Zotero PDFs for full long-document reading. Readable text is cached locally. Short documents fit directly into context; longer documents use chunked summaries and relevant source passages within model limits, potentially producing multiple billed requests. Check progress, missing-page warnings and page references against the original. Scanned pages require user-enabled OCR; extraction or cache warnings must not be interpreted as complete reading.
+
+### 全文提取与恢复 / Extraction and recovery
+
+原文提取工具栏可为本次提取选择「不使用 OCR / 使用 OCR」；OCR 需先配置就绪。首次全文翻译会提示积分消耗与稳定性，取消不会发起提取或翻译请求；确认后在当前 profile 记住选择。可优先选中需要精读的段落翻译。
+
+Choose Without OCR or Use OCR in the source-extraction toolbar for that extraction; OCR must be configured and ready. The first full translation asks you to acknowledge cost and stability considerations. Canceling starts no extraction or translation request; acceptance is remembered in the current profile. Prefer selection translation for passages needing close reading.
+
+参考文献列表分别显示「原文引用」和「检索结果」，独立年份行保留在所属引用中。优先使用精确匹配；没有精确匹配时选用首条有效候选并标记「已选首条」，这不代表已准确匹配。核对题名、作者与年份后再勾选导入；编辑原文会清除旧候选，需要重新核验。
+
+References show Original citation and Search result separately, retaining standalone year lines within their citation. Exact matches take priority; otherwise the first valid candidate is labeled First result selected, which does not establish an exact match. Review title, authors and year before selecting and importing. Editing a citation clears the old candidate and requires verification again.
+
+全文 Markdown、全文翻译和参考文献提取默认使用文字层。需要识别扫描页时在「设置 → OCR配置」启用全文 OCR 增强并准备依赖与模型；OCR 失败时尝试文字层，并保留无文字页提示。翻译和分析仍需对应 AI 或传统翻译服务。侧栏异常可重试；仍无法恢复时，从 Zotero 工具菜单或「帮助 → 错误诊断」导出本机诊断。
+
+Full Markdown, full translation and reference extraction use the text layer by default. Enable full-document OCR in OCR configuration and prepare dependencies/models for scanned pages. OCR failures fall back to the text layer with warnings for unreadable pages. Translation and analysis still require their configured service. Retry a failed sidebar; if it remains unavailable, export local diagnostics from Zotero's Tools menu or Help → Error diagnostics.
+
+### 文献分类预览 / Classification preview
+
+![分类预览](images/guide-classification-050.png)
+
+图示来自 0.5.0 候选包、Windows 11 / Zotero 10.0.3 的隔离 profile，文献与服务结果为合成数据。Screenshot from the 0.5.0 candidate on Windows 11 / Zotero 10.0.3 with synthetic data and mocked responses.
+

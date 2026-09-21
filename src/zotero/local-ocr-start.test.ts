@@ -3,7 +3,87 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { DocumentJobs } from './document-jobs'
 import { DocumentStore } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, ensureLocalOCR, installLocalOCR, removeLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection, readOCRDocument, prepareLocalOCRModels, observeOCRProgress } from './local-ocr'
+import { checkLocalOCR, ensureLocalOCR, installLocalOCR, removeLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection, readOCRDocument, prepareLocalOCRModels, observeOCRProgress, startLocalOCR } from './local-ocr'
+
+it('prepares bundled resources without AbortSignal.timeout', async () => {
+  const f = coldProfile(); f.finish()
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => { throw new TypeError('Unavailable') })
+  await installLocalOCR(f.host)
+  expect(f.network).toHaveBeenCalledTimes(5)
+  vi.restoreAllMocks(); f.jobs.dispose()
+})
+
+it('bounds a silent service startup and releases it for a retry', async () => {
+  vi.useFakeTimers()
+  const f = coldProfile(), kill = vi.fn(); f.finish()
+  await installLocalOCR(f.host)
+  f.files.set('/profile/jadense-ocr/v1/.venv/Scripts/python.exe', 'python')
+  f.spawn.mockResolvedValue({ stdin: { write: async () => {} }, stdout: { readString: () => new Promise(() => {}) }, kill } as never)
+  const pending = expect(startLocalOCR(f.host)).rejects.toMatchObject({ code: 'OCR_SERVICE_TIMEOUT' })
+  await vi.advanceTimersByTimeAsync(60001); await pending
+  expect(kill).toHaveBeenCalledOnce()
+  expect((f.host as unknown as { __jadenseOCR?: unknown }).__jadenseOCR).toBeUndefined()
+  f.jobs.dispose()
+})
+
+it('cancels one waiting caller without terminating shared startup', async () => {
+  const f = coldProfile(), controller = new AbortController()
+  Object.assign(f.host, { __jadenseOCR: new Promise(() => {}) })
+  const reading = expect(readOCRDocument(f.host, 1, controller.signal, vi.fn())).rejects.toMatchObject({ name: 'AbortError' })
+  await Promise.resolve(); controller.abort(); await reading
+  expect((f.host as unknown as { __jadenseOCR?: unknown }).__jadenseOCR).toBeDefined()
+  f.jobs.dispose()
+})
+
+it('bounds a hung status request even if fetch ignores cancellation', async () => {
+  vi.useFakeTimers()
+  const f = coldProfile()
+  Object.assign(f.host, { __jadenseOCR: Promise.resolve({ url: 'http://127.0.0.1:1234', token: 'test' }) })
+  const original = f.network.getMockImplementation()!
+  f.network.mockImplementation((url, init) => init?.method === 'POST' || init?.method === 'DELETE' ? original(url, init) : new Promise(() => {}))
+  const reading = expect(readOCRDocument(f.host, 1, new AbortController().signal, vi.fn())).rejects.toMatchObject({ code: 'OCR_REQUEST_TIMEOUT' })
+  await vi.advanceTimersByTimeAsync(30001); await reading
+  expect(f.network.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true)
+  f.jobs.dispose()
+})
+
+it('cancels promptly during submission and cleans its late acknowledgement without resubmitting', async () => {
+  const f = coldProfile(), controller = new AbortController()
+  Object.assign(f.host, { __jadenseOCR: Promise.resolve({ url: 'http://127.0.0.1:1234', token: 'test' }) })
+  let acknowledge!: (response: Response) => void
+  const original = f.network.getMockImplementation()!
+  f.network.mockImplementation((url, init) => init?.method === 'POST' ? new Promise(resolve => { acknowledge = resolve }) : original(url, init))
+  const reading = expect(readOCRDocument(f.host, 1, controller.signal, vi.fn())).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(acknowledge).toBeDefined()); controller.abort(); await reading
+  acknowledge(Response.json({ id: 'late-job' }))
+  await vi.waitFor(() => expect(f.network.mock.calls.some(([url, init]) => url.endsWith('/jobs/late-job') && init?.method === 'DELETE')).toBe(true))
+  expect(f.network.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  f.jobs.dispose()
+})
+
+it('bounds an uncertain submission without automatically resubmitting', async () => {
+  vi.useFakeTimers()
+  const f = coldProfile()
+  Object.assign(f.host, { __jadenseOCR: Promise.resolve({ url: 'http://127.0.0.1:1234', token: 'test' }) })
+  f.network.mockImplementation(() => new Promise(() => {}))
+  const reading = expect(readOCRDocument(f.host, 1, new AbortController().signal, vi.fn())).rejects.toMatchObject({ code: 'OCR_SUBMISSION_TIMEOUT' })
+  await vi.advanceTimersByTimeAsync(120001); await reading
+  expect(f.network).toHaveBeenCalledOnce()
+  f.jobs.dispose()
+})
+
+it('warns on five minutes without page progress while keeping the task cancellable', async () => {
+  vi.useFakeTimers()
+  const f = coldProfile(), controller = new AbortController(), progress = vi.fn()
+  Object.assign(f.host, { __jadenseOCR: Promise.resolve({ url: 'http://127.0.0.1:1234', token: 'test' }) })
+  f.network.mockImplementation(async (_url, init) => Response.json(init?.method === 'POST' ? { id: 'slow' } : { state: 'running', page: 1, total: 300 }))
+  const reading = expect(readOCRDocument(f.host, 1, controller.signal, progress)).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.advanceTimersByTimeAsync(300001)
+  expect(progress.mock.lastCall?.[0]).toMatch(/5 分钟|5 minutes/)
+  controller.abort(); await reading
+  expect(f.network.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true)
+  f.jobs.dispose()
+})
 
 it('prepares full-document models independently of optional selection models', async () => {
   const f = coldProfile()
@@ -160,6 +240,7 @@ function coldProfile() {
   })
   const prefs = new Map<string, unknown>([['extensions.jadenseInZotero.translationInterface', '{"kind":"machine","service":"google"}']])
   const host = { getMainWindow: () => ({ navigator: { platform: 'Win32' }, fetch: network }), Items: { get: () => ({ id: 1, libraryID: 1, key: 'PDF1', getField: () => 'Paper', isPDFAttachment: () => true, getFilePathAsync: async () => '/paper.pdf' }) }, Prefs: { get: (key: string) => prefs.get(key), set: (key: string, value: unknown) => prefs.set(key, value) } } as unknown as ZoteroLike
+  Object.assign(host, { Reader: { _readers: [{ itemID: 1, _internalReader: { _primaryView: { _iframeWindow: { PDFViewerApplication: { pdfDocument: { numPages: 1 } } }, _ensureBasicPageData: async () => {}, _pdfPages: { 0: { chars: [{ c: 'Traditional text remains available.', rect: [0, 0, 100, 10] }] } } } } }] } })
   const translate = vi.fn(async () => new Response('<div class="result-container">译文</div>'))
   const jobs = new DocumentJobs(host, translate, new DocumentStore())
   return { host, files, remove, installer, jobs, spawn, translate, network, finish: (exitCode = 0) => finish({ exitCode }), retry: () => { installation = new Promise(resolve => { finish = resolve }) } }
@@ -226,24 +307,24 @@ it('does not remove any files when the local service cannot stop', async () => {
   f.jobs.dispose()
 })
 
-it.each(['translation', 'extraction', 'references'] as const)('%s rejects a cold profile without installing', async kind => {
+it.each(['translation', 'extraction', 'references'] as const)('%s uses a cold profile without installing OCR', async kind => {
   const f = coldProfile()
   f.finish()
   try {
-    await expect(f.jobs.start(kind, 1)).rejects.toThrow(/OCR/u)
-    expect(f.jobs.list()).toHaveLength(0)
-    expect(f.translate).not.toHaveBeenCalled()
-    expect(f.spawn.mock.calls.every(([options]) => options.arguments.includes('-CheckOnly'))).toBe(true)
+    const task = await f.jobs.start(kind, 1); await f.jobs.idle()
+    expect(task.status).not.toBe('error')
+    expect(f.spawn).not.toHaveBeenCalled()
+    if (kind !== 'translation') expect(f.translate).not.toHaveBeenCalled()
   } finally { f.jobs.dispose() }
 })
 
-it('does not start a task while manual installation is running', async () => {
+it('extracts text while optional OCR installation is running', async () => {
   const f = coldProfile()
   try {
     const manual = installLocalOCR(f.host)
-    await expect(f.jobs.start('extraction', 1)).rejects.toThrow(/正在准备|being prepared/u)
+    expect((await f.jobs.start('extraction', 1)).status).toBe('complete')
     await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce()); f.finish(); await manual
-    expect(f.translate).not.toHaveBeenCalled(); expect(f.jobs.list()).toHaveLength(0)
+    expect(f.translate).not.toHaveBeenCalled(); expect(f.jobs.list()).toHaveLength(1)
   } finally { f.jobs.dispose() }
 })
 

@@ -10,7 +10,7 @@ import {
 } from "./runtime"
 import type { BootstrapPluginContext } from "./native-preferences"
 import { formatJadenseSyncResult } from "./sync-result"
-import { mountNativeReaderSidebar, removeNativeReaderSidebar, removeReaderSidebars } from "./reader-sidebar"
+import { renderNativeReaderSidebar, removeNativeReaderSidebar, removeReaderSidebars } from "./reader-sidebar"
 
 export const JADENSE_SYNC_PANEL_ID = "jadense-in-zotero-sync-panel"
 
@@ -464,7 +464,8 @@ export function registerSyncPanel(
     },
     onDestroy: ({ body }) => { panelThemes.get(body)?.(); panelThemes.delete(body); removeNativeReaderSidebar(body) },
     onRender: ({ doc, body, tabType }) => {
-      if (tabType && tabType !== "library" && mountNativeReaderSidebar(body, zotero, callbacks.openTranslationHistory)) {
+      if (tabType !== "library" && (tabType || (body.closest("item-details") as HTMLElement & { tabID?: string } | null)?.tabID)) {
+        renderNativeReaderSidebar(body, zotero, callbacks.openTranslationHistory)
         panelThemes.get(body)?.(); panelThemes.delete(body); return
       }
       removeNativeReaderSidebar(body)

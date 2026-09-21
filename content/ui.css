@@ -233,7 +233,7 @@
 .jdx-document-results>.jdx-notice[data-kind=running]{color:var(--jdx-green-deep);border-inline-start-color:var(--jdx-green)}
 .jdx-document-results>.jdx-notice[data-kind=complete]{border-inline-start-color:var(--jdx-green)}
 .jdx-result-content{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;padding:12px;background:var(--jdx-background);overflow-wrap:anywhere}
-.jdx-result-content.jdx-translation-reader{padding:0}.jdx-document-results .jdx-reading-block{max-width:72ch;font-size:14px;line-height:1.85}
+.jdx-result-content.jdx-translation-reader{padding:0;font-size:calc(14px * var(--jdx-font-scale,1))}.jdx-document-results .jdx-reading-block{max-width:72ch;font-size:inherit;line-height:1.85}
 .jdx-document-results img{max-width:100%;height:auto;border-radius:4px}.jdx-document-results table{display:block;overflow-x:auto}
 .jdx-result-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:220px;max-width:40ch;margin:auto;padding:32px 16px;text-align:center;color:var(--jdx-muted);line-height:1.8}
 .jdx-result-empty::before{content:'';width:26px;height:32px;border:1.5px solid var(--jdx-line-strong);border-radius:4px;background:linear-gradient(var(--jdx-line),var(--jdx-line)) 6px 10px/13px 1px no-repeat,linear-gradient(var(--jdx-line),var(--jdx-line)) 6px 17px/10px 1px no-repeat;margin-bottom:6px}
@@ -243,7 +243,7 @@
 .jdx-selection-toggle::after{content:'';position:absolute;inset-inline-end:10px;top:22px;width:6px;height:6px;border-inline-end:1.5px solid var(--jdx-muted);border-bottom:1.5px solid var(--jdx-muted);transform:rotate(-45deg)}
 .jdx-selection-toggle[aria-expanded=true]::after{transform:rotate(45deg)}.jdx-selection-toggle time{color:var(--jdx-muted);font-size:11px}
 .jdx-selection-preview{line-height:1.65;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.jdx-selection-content{padding:0 8px 18px;font-size:14px;line-height:1.8}.jdx-selection-content h4{margin:18px 0 8px;font-size:11px;font-weight:600;color:var(--jdx-muted)}.jdx-selection-content>.jdx-button{margin-top:12px}
+.jdx-selection-content{padding:0 8px 18px;font-size:calc(14px * var(--jdx-font-scale,1));line-height:1.8}.jdx-selection-content h4{margin:18px 0 8px;font-size:11px;font-weight:600;color:var(--jdx-muted)}.jdx-selection-content>.jdx-button{margin-top:12px}
 .jdx-literature-workspace{width:100%;margin:0}.jdx-literature-search{position:relative;width:100%;max-width:420px}
 .jdx-literature-search::before{content:'';position:absolute;top:11px;left:12px;width:10px;height:10px;border:1.5px solid var(--jdx-muted);border-radius:50%;pointer-events:none}
 .jdx-literature-search::after{content:'';position:absolute;top:22px;left:23px;width:5px;height:1.5px;background:var(--jdx-muted);transform:rotate(45deg);pointer-events:none}
@@ -269,7 +269,7 @@
 .jdx-literature-event-preview{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--jdx-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.jdx-literature-event-preview:empty{display:none}
 .jdx-document-results .jdx-analysis-detail{padding:0}.jdx-document-results .jdx-detail-tabs{position:static;display:flex;overflow-x:auto}.jdx-document-results .jdx-detail-tabs button{flex:0 0 auto;min-width:max-content;padding:8px 10px}
 .jdx-document-results .jdx-detail-panel{min-width:0}.jdx-document-results .jdx-analysis-summary,.jdx-document-results .jdx-analysis-notes-text{height:auto;overflow:visible}.jdx-document-results .jdx-analysis-detail .jdx-reading-body{padding:16px 0;user-select:text}.jdx-document-results .jdx-note-entry{padding:12px 0;border-bottom:1px solid var(--jdx-line)}
-.jdx-reader-workspace .jdx-result-content{padding:20px 16px}.jdx-reader-workspace .jdx-result-content.jdx-translation-reader{padding:0}
+.jdx-reader-workspace .jdx-result-content{padding:20px 16px}.jdx-reader-workspace .jdx-result-content.jdx-translation-reader{padding:0;font-size:calc(14px * var(--jdx-font-scale,1))}
 @media(max-width:800px){.jdx-literature-heading{font-size:19px}.jdx-literature-workspace .jdx-analysis-record{grid-template-columns:minmax(0,1fr);gap:8px;padding-inline:4px}.jdx-literature-event{padding-inline:4px}}
 /* 任务状态不依赖系统 progress/提示框；文案与状态色共同表达，不覆盖正文。 */
 .jdx-reading-progress>span{display:block;height:100%;background:var(--jdx-green,#16cf8c);transition:width .2s ease}

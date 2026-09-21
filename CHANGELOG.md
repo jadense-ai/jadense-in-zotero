@@ -1,5 +1,83 @@
 # 更新说明 / Changelog
 
+## 0.5.0 — 发布候选 / Release candidate
+
+## 本次更新
+
+v0.5.0 相对 v0.4.10，新增文献分类和对话文件附件，让长 PDF 问答能按模型容量准备正文，并把全文任务的 OCR 改为按需使用。参考文献的原文、检索候选和选择状态也更清楚，便于导入前核对。
+
+### 1. 独立文献分类窗口：先预览，再应用
+
+- 在 Zotero 文献列表选择条目，右键「文献分类…」打开独立窗口，不必先打开对话工作台。
+- 从当前文库选择候选分类目录，生成推荐后逐项核对，再应用到资料库；生成推荐本身不会修改条目，支持撤销本次归类。
+- 分类独立使用 TypeSafe 的 Jev 服务，只发送所选文献的标题、摘要、标签和候选目录信息，不发送 PDF。需单独配置 TypeSafe API Key，不跟随对话模型或攻玉连接。
+- 请求失败会停止后续请求，已完成的预览仍可查看；应用前会重新检查条目与目录状态，避免把过期预览写入资料库。
+
+### 2. 对话可附文件：从论文扩展到研究材料
+
+- 可在对话中添加 PDF、Word DOCX、HTML、Markdown 和常用文本文件，包括 CSV、TSV、JSON、BibTeX、TeX、XML、YAML、RIS；PNG/JPEG 图片入口继续可用。
+- 文字在本机提取，附件信息与提取文字随本地对话保存，后续问题可继续使用相应上下文。
+- 单个上传文件最大 **20 MB**，最多保留前 **60,000 字符**，超出或无可提取文字会提示。DOCX 只提取正文，不含嵌入图片、批注、页眉页脚；旧 `.doc` 请先另存为 `.docx`。
+- 上传文件与关联 Zotero PDF 是两个入口。需要完整长文阅读时，请关联 Zotero PDF；上传附件仍受上述提取上限约束。
+
+### 3. 关联长 PDF：分层阅读与页码来源
+
+- 关联 Zotero PDF 后，在本机缓存可提取正文；短文直接准备上下文，长文按模型容量分块概括，并根据问题召回相关原文。
+- 显示阅读进度、缺页提示与页码来源；追问可复用已保存的正文和概括，避免每次从头准备。
+- 模型窗口、历史消息与图片共同影响本次可用上下文。分块概括和回答可能产生多次模型请求及费用，不等于一次请求读取全部原文。
+- 扫描页无文字层时仍需 OCR；缺页、提取或缓存问题会提示。模型回答和页码引用仍应回到原文核对。
+
+### 4. 全文任务默认文字层，OCR 按需开启
+
+- 全文 Markdown、全文翻译和参考文献提取默认读取 PDF 文字层，不再要求先安装 Python、OCR 依赖和模型。
+- 原文提取工具栏可为本次提取选择「不使用 OCR / 使用 OCR」；OCR 需先配置就绪。扫描文献可在「设置 → OCR配置」启用全文 OCR 增强。
+- OCR 失败时尝试文字层，并保留不可读页提示；完善准备等待、取消与重试处理，避免准备状态妨碍普通阅读。
+- 首次全文翻译增加积分消耗与稳定性提示，取消发生在提取和翻译请求之前；确认记录保存在当前 profile。建议先选中需要精读的段落翻译。
+
+### 5. 参考文献更容易核对
+
+- 修复独立年份行、跨行年份被误拆成新引用或序号的问题。
+- 将「原文引用」和「检索结果」分开展示，选择框放在行首；缩短长作者列表的显示，导入使用的完整元数据仍保留。
+- 优先采用精确匹配；无精确匹配时选用首条有效检索候选并显示「已选首条」。**这不是准确匹配的保证**，请核对题名、作者和年份后再导入。
+- 编辑原始引用会清除旧候选，重新核验后再导入；导入仍需用户主动操作。
+
+### 6. 阅读侧栏与本机诊断
+
+- 改进侧栏首次加载、失效后的恢复、成果读取重试，以及阅读器重开时的初始化。
+- 扩充本机生命周期与 OCR 诊断信息，便于区分界面挂载、资料读取和依赖准备问题；可从工具菜单或「帮助 → 错误诊断」查看、导出。
+- 诊断保存在本机，导出后请检查内容再主动分享；没有自动上传诊断。
+
+## 操作与配置
+
+1. **分类**：在工作台「设置 → 功能配置」保存 TypeSafe API Key，再从 Zotero 文献右键菜单进入「文献分类…」，选择候选目录、生成预览、核对并应用。测试密钥会发送示例请求，可能消耗服务额度。
+2. **文件问答**：在对话输入区添加文件；长论文优先使用「关联文件」选择 Zotero PDF。检查提取范围与缺页提示后提问。
+3. **OCR**：普通文字层任务可直接开始。只有需要识别扫描页时才准备 OCR 依赖和模型，首次安装需要联网和数 GB 磁盘空间。
+4. **AI 服务**：对话、解析和翻译继续使用各自配置的攻玉或 BYOK 服务；分类密钥独立配置。本地保存历史不代表离线 AI，准备好的上下文会发送到所选服务。
+
+详细步骤见[使用指南](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/usage-guide.md#unreleased-050)及[本机 OCR 指南](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/local-ocr.md)。
+
+## 升级与兼容
+
+- 从 GitHub 0.4.0–0.4.10 使用相同 `.cn` 插件身份安装升级，保留现有设置与本地历史；建议安装后重启 Zotero。旧译文与已经拆分的参考文献不会自动重新生成，需要时主动重新提取或翻译。
+- 旧 `.com` 身份安装应先禁用旧插件，再手动安装本包，不要同时启用两个身份。
+- Manifest 声明支持 **Zotero 8.0–10.0.***；PDF 图片自动识别仍需 Zotero 10.0.1+ 的兼容阅读器。声明范围不等于各版本均已实测。
+- 此次发布仅更新 GitHub Release，不推进官网更新清单；若 Zotero 自动更新没有出现本版，请手动安装 XPI。
+- 继续遵守项目非商业使用许可证；模型、分类与翻译费用按所选服务规则计算。
+
+## English
+
+Compared with v0.4.10, v0.5.0 adds a standalone paper-classification window, document attachments in Chat, layered reading of linked long PDFs and optional OCR for full-document tasks.
+
+- **Classify papers with a preview:** select Zotero items, open Paper classification from the context menu, choose candidate collections, review recommendations and apply. Undo is available. Configure a separate TypeSafe API key in Settings → Feature configuration. Classification uses Jev and sends titles, abstracts, tags and candidate collections, not PDFs. Key testing and recommendations may incur service charges.
+- **Attach research files:** PDF, DOCX, HTML, Markdown and common text formats are supported. Uploaded files are limited to 20 MB and the first 60,000 extracted characters. DOCX extracts body text only; convert legacy DOC files first. Extracted text is stored locally with the conversation and used as model context.
+- **Read linked long PDFs:** link a Zotero PDF to cache its extractable text, prepare chunked summaries within model limits and retrieve relevant source passages for questions. Progress, missing-page notices and page references help you check coverage. Follow-ups reuse saved text and summaries. This differs from uploaded files, whose extraction limits remain in place. Long-document preparation can require multiple billed requests; verify answers against the original.
+- **Use OCR when needed:** full Markdown, translation and reference extraction default to the PDF text layer without Python. Choose configured OCR in the extraction toolbar or enable it in OCR settings for scanned pages. Failed OCR falls back to the text layer with unreadable-page warnings. The first full translation asks you to acknowledge cost and stability considerations; canceling starts no request.
+- **Review reference candidates clearly:** standalone year lines remain with their citation. Original citations and search results are labeled separately. Exact matches take priority; otherwise “First result selected” identifies the fallback candidate and does not guarantee a correct match. Review before importing. Editing the citation clears its previous candidate.
+- **Recover reading sessions:** improve sidebar initialization/recovery, saved-result retries, OCR cancellation/waiting and local diagnostics. Diagnostics are not automatically uploaded.
+
+Upgrade over GitHub 0.4.0–0.4.10 using the same `.cn` plugin ID; existing settings and local history remain. Restart Zotero after installation. Existing translations and reference extractions are not regenerated automatically. Disable the legacy `.com` add-on before installing this identity. The manifest supports Zotero 8.0–10.0.*; automatic figure detection requires a compatible Zotero 10.0.1+ reader. GitHub publishing does not update the website's automatic-update channel. Local storage does not mean offline AI: selected context is sent to the configured service. The non-commercial license remains in effect.
+
+
 ## 0.4.10 — 2026-09-19
 
 ### 简体中文

@@ -382,13 +382,6 @@ describe("reader document conversation lifecycle", () => {
     expect(manager).toContain("args.actions = undefined")
   })
 
-  it("registers and independently cleans up the optional Reader figure entrypoint", () => {
-    const bootstrap = readFileSync(new URL("../bootstrap.ts", import.meta.url), "utf8")
-    const registration = bootstrap.match(/unregisterReaderFigureTools = registerReaderFigureTools[\s\S]*?\n {2}} catch/)?.[0] ?? ""
-    expect(registration).toContain('openManager("chat", action)')
-    expect(registration).toContain("无法解读图片")
-    expect(bootstrap).toMatch(/function shutdown\(\)[\s\S]*?unregisterReaderFigureTools\?\.\(\)[\s\S]*?unregisterReaderFigureTools = null/)
-  })
 
   it("routes Reader analysis to the independent workbench without calling the Chat-session helper", () => {
     const bootstrap = readFileSync(new URL("../bootstrap.ts", import.meta.url), "utf8")

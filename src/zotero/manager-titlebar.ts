@@ -11,16 +11,16 @@ type NativeWindow = Window & {
   ChromeUtils?: { importESModule(url: string): { Services: { appinfo: { OS: string; version: string }; sysinfo: { getProperty(name: string): unknown } } } }
 }
 
-/** 仅在已验收的精确宿主启用，不持久化用户偏好。 */
-export function supportsIntegratedTitlebar(os: string, version: string, build: string) {
-  return os === "WINNT" && version === "10.0.2" && build === "26200"
+/** Windows 使用一体化标题栏；补丁版本和系统 build 不改变界面，窗口能力在挂载时检查。 */
+export function supportsIntegratedTitlebar(os: string, _version?: string, _build?: string) {
+  return os === "WINNT"
 }
 
 export function wireManagerTitlebar(document: Document) {
   const win = document.defaultView as unknown as NativeWindow
   try {
     const services = win.Services ?? win.ChromeUtils?.importESModule("resource://gre/modules/Services.sys.mjs").Services
-    if (!services || !supportsIntegratedTitlebar(services.appinfo.OS, services.appinfo.version, String(services.sysinfo.getProperty("build")))) return
+    if (!services || !supportsIntegratedTitlebar(services.appinfo.OS)) return
     if (![win.minimize, win.maximize, win.restore].every(method => typeof method === "function")) return
     const root = document.documentElement
     const controls = document.getElementById("jadense-window-controls")!

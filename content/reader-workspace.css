@@ -57,8 +57,17 @@
 
 .jdx-reader-workspace { font:calc(13px * var(--jdx-font-scale,1))/1.45 system-ui,sans-serif; background:var(--jdx-sidebar); color:var(--jdx-text); max-width:100%; min-height:0; }
 .jdx-reader-workspace * { box-sizing:border-box; }
+/* XUL 宿主中的 auto 不保证可选；正文及内联后代统一显式启用原生划词。 */
+.jdx-reader-workspace,
+.jdx-reader-workspace * { -moz-user-select:text; user-select:text; }
+/* 操作控件仍按点击/拖拽交互，输入框和普通链接保留文本选择。 */
+.jdx-reader-workspace :is(button,select,[role="button"],[role="tab"],[role="menuitem"],[role="separator"],input[type="checkbox"],input[type="radio"]),
+.jdx-reader-workspace :is(button,select,[role="button"],[role="tab"],[role="menuitem"],[role="separator"]) * { -moz-user-select:none; user-select:none; }
 .jdx-reader-workspace [hidden] { display:none!important; }
 .jdx-reader-workspace :is(button,input,textarea) { font:inherit; }
+/* 搜索控件覆盖宿主原生输入样式，文字与占位提示随侧栏主题切换。 */
+.jdx-reader-workspace .jdx-reference-search>.jdx-search { appearance:none; margin:0; background:var(--jdx-surface) !important; color:var(--jdx-text) !important; }
+.jdx-reader-workspace .jdx-reference-search>.jdx-search::placeholder { color:var(--jdx-muted) !important; opacity:1; }
 .jdx-reader-workspace :focus-visible { outline:2px solid var(--jdx-green); outline-offset:-2px; }
 .jdx-reader-workspace .jdx-reader-workspace-header { display:grid; grid-template-columns:32px minmax(0,1fr) 32px; gap:4px; min-height:40px; height:40px; padding:4px 8px; }
 .jdx-reader-header-left,.jdx-reader-header-right { display:flex; align-items:center; min-width:0; }

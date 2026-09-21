@@ -23,7 +23,7 @@ const url = await new Promise((resolve, reject) => {
   child.once('exit', code => reject(new Error(`OCR exited ${code}`)))
 })
 child.stderr.on('data', data => process.stderr.write(data))
-const headers = { Authorization: `Bearer ${token}` }
+const headers = { Authorization: `Bearer ${token}`, 'X-Jadense-OCR-Model-Source': process.env.JADENSE_OCR_MODEL_SOURCE || 'default' }
 try {
   assert.equal((await fetch(`${url}/health`)).status, 403)
   assert.equal((await fetch(`${url}/health`, { headers: { ...headers, Origin: 'https://untrusted.invalid' } })).status, 403)

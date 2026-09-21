@@ -19,6 +19,7 @@ export type UiPreferenceHost = {
 export const DISPLAY_LANGUAGE_PREF = "extensions.jadenseInZotero.displayLanguage"
 export const THEME_PREF = "extensions.jadenseInZotero.theme"
 export const FONT_SIZE_PREF = "extensions.jadenseInZotero.fontSize"
+export const FONT_SCALE_PREF = "extensions.jadenseInZotero.fontScale"
 export const TRANSLATION_STYLE_PREF = "extensions.jadenseInZotero.translationWindowStyle"
 export const TRANSLATION_OPACITY_PREF = "extensions.jadenseInZotero.translationWindowOpacity"
 export function readFontSize(zotero: UiPreferenceHost | null): number {
@@ -28,6 +29,18 @@ export function readFontSize(zotero: UiPreferenceHost | null): number {
 export function saveFontSize(zotero: UiPreferenceHost | null, value: unknown) {
   const number = Number(value)
   return save(zotero, FONT_SIZE_PREF, String(Number.isFinite(number) ? Math.min(24, Math.max(12, Math.round(number))) : 13))
+}
+/** 百分比偏好优先；旧 px 设置按原 13px 基准兼容读取，不改写旧数据。 */
+export function readFontScale(zotero: UiPreferenceHost | null): number {
+  const value = preference(zotero, FONT_SCALE_PREF)
+  return value === undefined || value === null ? Math.round(readFontSize(zotero) / 13 * 100) : normalizeFontScale(value)
+}
+function normalizeFontScale(value: unknown): number {
+  const number = typeof value === "number" || (typeof value === "string" && value.trim()) ? Number(value) : NaN
+  return Number.isFinite(number) ? Math.min(200, Math.max(80, Math.round(number))) : 100
+}
+export function saveFontScale(zotero: UiPreferenceHost | null, value: unknown): boolean {
+  return save(zotero, FONT_SCALE_PREF, String(normalizeFontScale(value)))
 }
 export function readTranslationStyle(zotero: UiPreferenceHost | null) { return preference(zotero, TRANSLATION_STYLE_PREF) === "glass" ? "glass" : "default" }
 export function saveTranslationStyle(zotero: UiPreferenceHost | null, value: unknown) { return save(zotero, TRANSLATION_STYLE_PREF, value === "glass" ? "glass" : "default") }
@@ -125,7 +138,7 @@ export function observeTheme(zotero: UiPreferenceHost | null, root: HTMLElement,
     const dark = theme === "dark" || (theme === "system" && (hostTheme === 0 || (hostTheme !== 1 && systemDark)))
     root.dataset.theme = dark ? "dark" : "light"
     root.style.colorScheme = dark ? "dark" : "light"
-    root.style.setProperty?.("--jdx-font-scale", String(readFontSize(zotero) / 13))
+    root.style.setProperty?.("--jdx-font-scale", String(readFontScale(zotero) / 100))
     root.dataset.windowStyle = readTranslationStyle(zotero)
     root.style.setProperty?.("--jdx-window-opacity", `${readTranslationOpacity(zotero)}%`)
     root.style.setProperty?.("--jdx-translation-opacity", String(readTranslationOpacity(zotero) / 100))
@@ -136,7 +149,7 @@ export function observeTheme(zotero: UiPreferenceHost | null, root: HTMLElement,
   const ids: unknown[] = []
   const prefs = zotero?.Prefs
   if (prefs?.registerObserver && prefs.unregisterObserver) {
-    for (const key of [THEME_PREF, HOST_THEME_PREF, FONT_SIZE_PREF, TRANSLATION_STYLE_PREF, TRANSLATION_OPACITY_PREF]) {
+    for (const key of [THEME_PREF, HOST_THEME_PREF, FONT_SIZE_PREF, FONT_SCALE_PREF, TRANSLATION_STYLE_PREF, TRANSLATION_OPACITY_PREF]) {
       try { ids.push(prefs.registerObserver(key, update, true)) } catch { /* 可选监听不影响当前主题。 */ }
     }
   }
@@ -170,23 +183,23 @@ export function wireReadingPreferences(host: UiPreferenceHost | null, container:
   status.setAttribute("role", "status")
   const savedStatus = (saved: boolean) => { status.textContent = saved ? "" : uiText("设置未能保存，请重试。", "Could not save settings. Please try again.") }
   const fontControls = element("div"), stepper = element("div"), unit = element("span")
-  fontControls.className = "jdx-reading-font-controls"; stepper.className = "jdx-reading-stepper"; unit.textContent = "px"
+  fontControls.className = "jdx-reading-font-controls"; stepper.className = "jdx-reading-stepper"; unit.textContent = "%"
   const size = element("input")
-  size.type = "number"; size.min = "12"; size.max = "24"; size.step = "1"; size.value = String(readFontSize(host))
+  size.type = "number"; size.min = "80"; size.max = "200"; size.step = "1"; size.value = String(readFontScale(host))
   size.setAttribute("data-jdx-font-size", "")
   size.setAttribute("aria-label", uiText("界面字号", "Interface font size"))
-  const update = (value: unknown) => { savedStatus(saveFontSize(host, value)); sync() }
+  const update = (value: unknown) => { savedStatus(saveFontScale(host, value)); sync() }
   const fontButtons: HTMLButtonElement[] = []
   for (const [text, value] of [["−", -1], ["+", 1], [uiText("恢复默认", "Reset"), 0]] as const) {
     const button = element("button")
     button.type = "button"; button.textContent = text
     button.setAttribute("aria-label", value === 0 ? text : value > 0 ? uiText("增大字号", "Increase font size") : uiText("减小字号", "Decrease font size"))
-    button.addEventListener("click", () => update(value === 0 ? 13 : readFontSize(host) + value))
+    button.addEventListener("click", () => update(value === 0 ? 100 : readFontScale(host) + value * 10))
     fontButtons.push(button)
   }
   stepper.append(fontButtons[0], size, unit, fontButtons[1]); fontControls.append(stepper, fontButtons[2])
   size.addEventListener("change", () => update(size.value))
-  row(uiText("界面字号", "Interface font size"), uiText("调整插件文字大小，立即生效。", "Adjust text throughout the plugin. Changes apply immediately."), fontControls)
+  row(uiText("界面字号", "Interface font size"), uiText("100% 为默认大小，按比例调整界面与 Markdown 内容，立即生效。", "100% is the default. Scale the interface and Markdown content proportionally. Changes apply immediately."), fontControls)
   const styleHost = element("div")
   styleHost.id = "jdx-reading-translation-style"; styleHost.setAttribute("data-jdx-translation-style", "")
   const select = createJdxSelect(styleHost, { ariaLabel: uiText("翻译浮窗样式", "Translation window style") })
@@ -204,13 +217,13 @@ export function wireReadingPreferences(host: UiPreferenceHost | null, container:
   const target = container.querySelector<HTMLElement>(".jdx-manager-settings-card") ?? container
   target.insertBefore(root, target.querySelector<HTMLElement>("[role=status]"))
   function sync() {
-    const value = readFontSize(host)
-    size.value = String(value); fontButtons[0].disabled = value <= 12; fontButtons[1].disabled = value >= 24; fontButtons[2].disabled = value === 13
+    const value = readFontScale(host)
+    size.value = String(value); fontButtons[0].disabled = value <= 80; fontButtons[1].disabled = value >= 200; fontButtons[2].disabled = value === 100
     select.setValue(readTranslationStyle(host)); syncTranslationOpacityControl(host, opacity)
   }
   sync()
   const observers: unknown[] = []
-  for (const key of [FONT_SIZE_PREF, TRANSLATION_STYLE_PREF, TRANSLATION_OPACITY_PREF]) {
+  for (const key of [FONT_SIZE_PREF, FONT_SCALE_PREF, TRANSLATION_STYLE_PREF, TRANSLATION_OPACITY_PREF]) {
     try { observers.push(host?.Prefs?.registerObserver?.(key, sync, true)) } catch { /* 首次渲染仍有效。 */ }
   }
   let stopped = false

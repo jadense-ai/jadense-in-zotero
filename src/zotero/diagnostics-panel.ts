@@ -1,4 +1,4 @@
-/** 隐藏诊断工作台：仅显示收集器的安全投影，通过本机文件选择器导出。 */
+/** 帮助菜单诊断工作台：仅显示收集器的安全投影，通过本机文件选择器导出。 */
 import { diagnostics, type DiagnosticRecord } from './diagnostics'
 import { copyTextToClipboard } from './connection-display'
 import type { ZoteroLike } from './runtime'
@@ -30,7 +30,7 @@ export function wireDiagnosticsPanel(doc: Document, host: ZoteroLike | null, nav
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) => { const node = doc.createElement(tag); if (text) node.textContent = text; return node }
   const button = (text: string, action: () => void) => { const node = el('button',text); node.type = 'button'; node.addEventListener('click',action); return node }
   const entry = button(uiText('错误诊断','Error diagnostics'), () => { menu.hidden = true; navigate(); render(); heading.focus() })
-  entry.id = 'jadense-help-diagnostics'; entry.setAttribute('role','menuitem'); entry.hidden = !store.enabled; menu.append(entry)
+  entry.id = 'jadense-help-diagnostics'; entry.setAttribute('role','menuitem'); menu.append(entry)
   const panel = el('section'); panel.id = 'jadense-manager-section-diagnostics'; panel.className = 'jdx-manager-section jdx-diagnostics'; panel.hidden = true
   const heading = el('h2',uiText('错误诊断','Error diagnostics')); heading.tabIndex = -1
   const notice = el('p',uiText('仅保存在本机，最多保留 7 天 / 500 条 / 2 MiB。异常退出可能丢失尚未写盘的末尾事件。','Stored locally, up to 7 days / 500 records / 2 MiB. Abrupt shutdown may lose unflushed events.'))
@@ -53,11 +53,10 @@ export function wireDiagnosticsPanel(doc: Document, host: ZoteroLike | null, nav
   }
   const actions = el('div'); actions.className = 'jdx-diagnostic-controls'
   const copy = button(uiText('复制本条','Copy record'), () => { const record = filtered.find(r => r.id === selected); if (record) void copyTextToClipboard(host,store.export([record])).then(ok => { status.textContent = ok ? uiText('已复制。','Copied.') : uiText('复制失败。','Copy failed.') }) })
-  actions.append(copy,button(uiText('导出筛选结果','Export filtered'),() => { void exportRows(false) }),button(uiText('导出全部','Export all'),() => { void exportRows(true) }),button(uiText('清空记录','Clear records'),() => { void store.clear().then(() => { selected = ''; render(); status.textContent = uiText('记录已清空。','Records cleared.') }) }),button(uiText('退出开发者模式','Exit developer mode'),() => { store.setEnabled(false); panel.hidden = true; leave() }))
+  actions.append(copy,button(uiText('导出筛选结果','Export filtered'),() => { void exportRows(false) }),button(uiText('导出全部','Export all'),() => { void exportRows(true) }),button(uiText('清空记录','Clear records'),() => { void store.clear().then(() => { selected = ''; render(); status.textContent = uiText('记录已清空。','Records cleared.') }) }),button(uiText('返回对话','Back to chat'),() => { panel.hidden = true; leave() }))
   raw.append(detail); panel.append(heading,notice,controls,summary,actions,status,list,facts,raw); parent.append(panel)
   const style = el('style'); style.textContent = '.jdx-diagnostics{padding:20px;overflow:auto;min-width:0}.jdx-diagnostic-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.jdx-diagnostic-controls input,.jdx-diagnostic-controls select{max-width:100%;min-width:100px;padding:6px;border-radius:5px}.jdx-diagnostic-controls button{padding:6px 10px;border-radius:5px}.jdx-diagnostic-facts{margin:16px 0;overflow-wrap:anywhere}.jdx-diagnostic-facts ol{padding-inline-start:22px}.jdx-diagnostic-facts li{margin:5px 0;font-size:12px}.jdx-diagnostic-list{display:grid;gap:4px;max-height:240px;overflow:auto}.jdx-diagnostic-list button{text-align:start;overflow-wrap:anywhere}.jdx-diagnostic-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:12px}.jdx-diagnostic-list button[aria-pressed=true]{outline:1px solid #16cf8c}'; doc.head.append(style)
   function render() {
-    entry.hidden = !store.enabled
     if (panel.hidden) return
     const rows = store.list()
     for (const value of new Set(rows.map(r => r.context.feature).filter(Boolean))) if (!Array.from(feature.options).some(o => o.value === value)) { const option = el('option',value); option.value = value; feature.append(option) }

@@ -6,9 +6,11 @@ import { uiText } from "./ui-preferences"
  */
 import { MAX_CHAT_SOURCES, normalizeChatSources, type ChatSource } from "@/chat/research-context"
 import type { ZoteroLike } from "./runtime"
+import { chatDocuments, type DocumentProgress } from './chat-documents'
 
 export { createQuoteSource } from "@/chat/research-context"
 
+/** @deprecated 仅保留旧导出兼容；关联对话已经逐页读取全文，不使用此上限。 */
 export const MAX_PDF_SOURCE_PAGES = 80
 
 export type ResearchZotero = Omit<ZoteroLike, "Items" | "getActiveZoteroPane"> & {
@@ -139,8 +141,8 @@ async function parentItem(zotero: ResearchZotero, item: LocalItem) {
   return parent && parent.libraryID === item.libraryID && !isAttachment(parent) ? parent : null
 }
 
-/** 使用 Zotero 9 原生提取 API；PDF 不降级到可能触发无界全文提取的 attachmentText。 */
-async function attachmentSource(zotero: ResearchZotero, item: LocalItem, includeText = true): Promise<ChatSource | null> {
+/** PDF 逐页进入独立全文缓存；其它文本附件沿用宿主提取，不读取 PDF attachmentText。 */
+async function attachmentSource(zotero: ResearchZotero, item: LocalItem, includeText = true, signal?: AbortSignal, progress?: DocumentProgress): Promise<ChatSource | null> {
   const reference = metadataSource(item)
   if (!reference) return null
   const parent = await parentItem(zotero, item)
@@ -163,20 +165,7 @@ async function attachmentSource(zotero: ResearchZotero, item: LocalItem, include
   try {
     if (isPDF(item)) {
       source.contentType = "application/pdf"
-      // 官方 9.0.5：PDFWorker.getFullText(itemID, maxPages) -> { text, extractedPages, totalPages }。
-      // https://github.com/zotero/zotero/blob/9.0.5/chrome/content/zotero/xpcom/pdfWorker/manager.js
-      if (zotero.PDFWorker?.getFullText) {
-        const result = itemRecord(await zotero.PDFWorker.getFullText(source.itemID, MAX_PDF_SOURCE_PAGES))
-        source.text = typeof result?.text === "string" ? result.text.trim() : ""
-        const extractedPages = result?.extractedPages
-        const totalPages = result?.totalPages
-        source.warning = positiveID(extractedPages) && positiveID(totalPages)
-          ? uiText(`PDF 已提取 ${extractedPages} / ${totalPages} 页的可读文字${extractedPages < totalPages ? "；其余页面未提供" : ""}。`, `Extracted readable text from ${extractedPages} of ${totalPages} PDF pages.${extractedPages < totalPages ? " Other pages were not supplied." : ""}`)
-          : uiText(`PDF 提取范围最多为前 ${MAX_PDF_SOURCE_PAGES} 页；未取得完整页数信息。`, `PDF extraction covers at most the first ${MAX_PDF_SOURCE_PAGES} pages; the total page count is unavailable.`)
-        if (!source.text) source.warning += uiText(" 未找到可提取文字，可能是扫描件；仅保留来源引用。", " No extractable text was found. This may be a scan; only the source reference is retained.")
-      } else {
-        source.warning = uiText("当前 Zotero 未提供 PDF 文本提取接口；仅保留来源引用。", "PDF text extraction is unavailable in this Zotero version; only the source reference is retained.")
-      }
+      return normalizeChatSources([(await chatDocuments(zotero).ensure(zotero, source, signal, progress, true)).source])[0] ?? null
     } else if (contentType(item).startsWith("text/") || contentType(item) === "application/xhtml+xml"
       || contentType(item) === "application/epub+zip") {
       // attachmentText 是 Promise getter，不读取/保存文件路径，也不自行抓取附件 URL。
@@ -189,6 +178,7 @@ async function attachmentSource(zotero: ResearchZotero, item: LocalItem, include
       source.warning = uiText("此附件暂不支持文本提取；仅保留来源引用。", "Text extraction is unavailable for this attachment; only the source reference is retained.")
     }
   } catch {
+    signal?.throwIfAborted()
     // 原生错误可能含文件路径；不持久化或发送错误原文。
     source.warning = uiText("附件文字提取失败，可能未下载、加密或不可读；仅保留来源引用。", "Attachment text extraction failed. The file may be missing, encrypted, or unreadable; only the source reference is retained.")
   }
@@ -199,16 +189,16 @@ async function attachmentSource(zotero: ResearchZotero, item: LocalItem, include
 export async function collectSourceForItem(
   zotero: ResearchZotero,
   itemID: number,
-  options: { includeText?: boolean } = {},
+  options: { includeText?: boolean; signal?: AbortSignal; progress?: DocumentProgress } = {},
 ): Promise<ChatSource | null> {
   const item = await localItem(zotero, itemID)
-  return item ? isAttachment(item) ? attachmentSource(zotero, item, options.includeText !== false) : metadataSource(item) : null
+  return item ? isAttachment(item) ? attachmentSource(zotero, item, options.includeText !== false, options.signal, options.progress) : metadataSource(item) : null
 }
 
 /** 显式 ID 优先（包括空数组）；未指定 ID 时才读取 Zotero 当前选择。 */
 export async function collectChatSources(
   zotero: ResearchZotero,
-  input: { mode: "items" | "files" | "auto"; itemIDs?: number[] },
+  input: { mode: "items" | "files" | "auto"; itemIDs?: number[]; signal?: AbortSignal; progress?: DocumentProgress },
 ): Promise<ChatSource[]> {
   let selected: unknown[]
   if (input.itemIDs !== undefined) {
@@ -232,10 +222,11 @@ export async function collectChatSources(
   const collectAttachment = async (item: LocalItem) => {
     if (!positiveID(item.id)) return null
     // 同时选择父条目和附件、或拖入重复 ID 时，原生解析只执行一次。
-    if (!files.has(item.id)) files.set(item.id, await attachmentSource(zotero, item))
+    if (!files.has(item.id)) files.set(item.id, await attachmentSource(zotero, item, true, input.signal, input.progress))
     return files.get(item.id) ?? null
   }
   for (const selectedItem of selected) {
+    input.signal?.throwIfAborted()
     try {
       const item = typeof selectedItem === "number" ? await localItem(zotero, selectedItem) : availableItem(selectedItem)
       if (!item) continue
@@ -273,6 +264,7 @@ export async function collectChatSources(
       }
     } catch {
       // 单条目的可选元数据/附件不可用，不影响其余明确选择的来源。
+      input.signal?.throwIfAborted()
     }
     if (sources.length > MAX_CHAT_SOURCES) break
   }
