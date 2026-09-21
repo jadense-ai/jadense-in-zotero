@@ -7,12 +7,13 @@ vi.mock('@/chat/translation-queue', async importOriginal => ({ ...await importOr
 // 本文件验证文档调度；全文翻译经过普通 temporary chat 客户端，参考文献 AI 的可靠传输单独测试。
 vi.mock('@/chat/reliable-temporary-chat', async () => ({ ReliableTemporaryChatClient: (await import('@/chat/temporary-chat')).TemporaryChatClient }))
 vi.mock('@/chat/reliable-byok-chat', async () => ({ ReliableByokChatClient: (await import('@/chat/byok-chat')).ByokChatClient }))
-import { extractReferences, applyReferenceSuggestion, metadataMatches, parseReferenceFields } from "@/chat/reference-list"
+import { extractReferences, applyReferenceSuggestion, metadataMatches, parseReferenceFields, stripReferenceLabel } from "@/chat/reference-list"
 import { DocumentJobs, acceptTranslations, splitTranslationText, estimateTokens } from "./document-jobs"
 import { DocumentStore, type TaskIO, type TranslationPage } from "./document-store"
 import { readTextDocument, textPage, orderColumnLines, navigateDocument, isLiveDocumentReader, type PdfTextDocument, type PdfLine } from "./pdf-document"
 import { importReference, ReferenceVerifier } from "./reference-verification"
 import { referenceRow } from "./document-ui"
+import { referenceMetadataText } from "./reference-workspace"
 import { FONT_SIZE_PREF, readFontSize, saveFontSize, readTranslationStyle, saveTranslationStyle } from "./ui-preferences"
 import type { ZoteroLike } from "./runtime"
 
@@ -273,6 +274,28 @@ describe("complete PDF and reference evidence", () => {
     expect(refs).toHaveLength(2); expect(refs[1].fields.doi).toBe("10.1234/second")
     expect(refs[1].raw).not.toContain("Appendix")
   })
+  it.each(["(2007).", "2007).", "2007.", "(2007)", "2007", "(2007a)."])("keeps a wrapped terminal year %s in its citation across pages", year => {
+    const text = "Diddams, S. A., Hollberg, L. & Mbele, V. Molecular fingerprinting with the resolved modes of a femtosecond laser frequency comb. Nature 445, 627–630"
+    for (const prefix of ["12. ", ""]) {
+      const source = document([["References", prefix + text], [year, "13. Mandon, J., Guelachvili, G. & Picqué, N. Fourier transform spectroscopy with a laser frequency comb. Nat. Photon. 3, 99–102 (2009)."]])
+      const refs = extractReferences(source)
+      expect(refs).toHaveLength(2)
+      expect(refs[0].raw).toBe(`${text} ${year}`)
+      expect(refs[0].fields.year).toBe("2007")
+      expect(refs[0].label).toBe(prefix ? "12" : undefined)
+      expect(refs[1].label).toBe("13")
+      expect(refs[1].uncertain).toBe(false)
+      expect(refs.flatMap(row => row.lines)).toEqual(source.pages.flatMap(page => page.lines).slice(1))
+    }
+    expect(stripReferenceLabel(year)).toBe(year)
+    expect(parseReferenceFields(year).year).toBe("2007")
+  })
+  it("preserves real four-digit reference labels and standalone short labels", () => {
+    const source = document([["References", "[2007] Smith, J. (2020). First paper.", "(2008) Jones, K. (2021). Second paper.", "2009. Brown, A. (2022). Third paper."]])
+    expect(extractReferences(source).map(row => row.label)).toEqual(["2007", "2008", "2009"])
+    const refs = extractReferences(document([["References", "(12)", "Smith, J. (2020). First paper.", "(13)", "Jones, K. (2021). Second paper."]]))
+    expect(refs.map(row => row.label)).toEqual(["12", "13"])
+  })
   it("rejects AI omissions, overlapping lines and invented fields without losing the source", () => {
     const original = extractReferences(document([["References", "[1] Uncertain text", "continued unknown citation"]]))[0]
     expect(applyReferenceSuggestion(original, { references: [{ startLine: 0, endLine: 0 }] })).toEqual([original])
@@ -353,6 +376,76 @@ describe("complete PDF and reference evidence", () => {
 })
 
 describe("non-AI verification and static rows", () => {
+  it("bounds displayed author names without truncating stored metadata", () => {
+    const metadata = { title: "Result title", authors: Array.from({ length: 100 }, (_, i) => `${i} ${"Long author name ".repeat(12)}`), year: "1970", doi: "10.1234/result" }
+    const original = structuredClone(metadata)
+    const parts = referenceMetadataText(metadata).split(" · ")
+    expect(Array.from(parts[1])).toHaveLength(81)
+    expect(parts[1].endsWith("…")).toBe(true)
+    expect(parts.at(-1)).toBe(metadata.doi)
+    expect(metadata).toEqual(original)
+    expect(referenceMetadataText({ ...metadata, authors: ["A", "B", "C", "D"] })).toContain("A; B; C…")
+    expect(referenceMetadataText({ ...metadata, authors: [] })).not.toContain("…")
+  })
+  it("retains the source when the query has no results", async () => {
+    const entry = extractReferences(document())[0], raw = entry.raw
+    delete entry.fields.doi
+    await new ReferenceVerifier({}, vi.fn(async () => Response.json({ message: { items: [] } }))).verify(entry)
+    expect(entry.verification).toBe("unverified")
+    expect(entry.verified).toBeUndefined()
+    expect(entry.raw).toBe(raw)
+  })
+  it("persists and imports the first search result when no title or DOI matches", async () => {
+    const entry = extractReferences(document())[0], original = structuredClone(entry)
+    delete entry.fields.doi
+    await new ReferenceVerifier({}, vi.fn(async () => Response.json({ message: { items: [
+      null, { title: ["Search first result"], DOI: "10.1234/first" }, { title: ["Search second result"], DOI: "10.1234/second" },
+    ] } }))).verify(entry)
+    expect(entry.verification).toBe("verified")
+    expect(entry.selectionMethod).toBe("first-result")
+    expect(entry.verified?.doi).toBe("10.1234/first")
+    expect(entry.raw).toBe(original.raw)
+    expect(entry.fields.title).toBe(original.fields.title)
+    const memory = memoryStore(), id = "00000000-0000-4000-8000-000000000001"
+    await memory.store.saveReferences(id, [entry])
+    const [restored] = await memory.reload().references(id)
+    expect(restored.selectionMethod).toBe("first-result")
+    const nodes: Array<{ textContent: string }> = []
+    const doc = { createElementNS: () => { const node = { textContent: "", dataset: {}, append() {}, insertBefore() {}, setAttribute() {}, addEventListener() {} }; nodes.push(node); return node } }
+    referenceRow(doc as never, restored, vi.fn(), vi.fn(), vi.fn(), vi.fn())
+    expect(nodes.some(node => /First result selected|已选首条/u.test(node.textContent))).toBe(true)
+    expect(nodes.some(node => /Original citation|原文引用/u.test(node.textContent))).toBe(true)
+    expect(nodes.some(node => /Search result|检索结果/u.test(node.textContent))).toBe(true)
+    expect(nodes.some(node => /Verified|已核验/u.test(node.textContent))).toBe(false)
+    const saved = new Map<string, string>(), save = vi.fn(async () => {})
+    const native = { Libraries: { get: () => ({ editable: true }) }, Search: class { libraryID = 1; addCondition() {} async search() { return [] } }, Item: class { id = 8; key = "FIRST008"; libraryID = 1; setField(key: string, value: string) { saved.set(key, value) } setCreators() {} saveTx = save } }
+    await expect(importReference({ ...native, Libraries: { get: () => ({ editable: false }) } }, restored, 1)).rejects.toThrow()
+    await expect(importReference(native, { ...restored, importUncertain: true }, 1)).rejects.toThrow()
+    expect(save).not.toHaveBeenCalled()
+    await importReference(native, restored, 1)
+    expect(saved.get("DOI")).toBe("10.1234/first")
+    expect(save).toHaveBeenCalledOnce()
+    restored.verification = "pending"
+    await new ReferenceVerifier({}, vi.fn(async () => Response.json({ message: { items: [] } }))).verify(restored)
+    expect(restored.selectionMethod).toBeUndefined()
+    expect(restored.verified).toBeUndefined()
+  })
+  it("selects the first exact match in query order when multiple publications match", async () => {
+    const entry = extractReferences(document())[0]
+    delete entry.fields.doi
+    const title = entry.fields.title
+    const fetchImpl = vi.fn(async () => Response.json({ message: { items: [
+      { title: ["Unrelated paper"], DOI: "10.1234/unrelated" },
+      { title: [title], DOI: "10.1234/first", author: [{ family: "First" }] },
+      { title: [title], DOI: "10.1234/second" },
+      { title: [title], DOI: "10.1234/first", author: [{ family: "Later duplicate" }] },
+    ] } }))
+    await new ReferenceVerifier({}, fetchImpl).verify(entry)
+    expect(entry.verification).toBe("verified")
+    expect(entry.verified).toMatchObject({ doi: "10.1234/first", authors: ["First"] })
+    expect(entry.reason).toBeUndefined()
+    expect(metadataMatches(entry.fields, entry.verified!)).toBe(true)
+  })
   it("queries title without DOI, authors, year or Zotero translators and imports a DOI-less result", async () => {
     const entry = extractReferences(document())[0]
     entry.fields = { title: 'A book without DOI', authors: [], year: '' }
@@ -432,7 +525,7 @@ describe("non-AI verification and static rows", () => {
     entry.verification = "pending"; translate.mockClear()
     fetchImpl.mockImplementation(async () => new Response(JSON.stringify({ message: { items: [candidate, { ...candidate, DOI: "10.1234/another" }] } })))
     await new ReferenceVerifier({ Translate: { Search } }, fetchImpl).verify(entry)
-    expect(entry.verification).toBe("unverified"); expect(translate).not.toHaveBeenCalled()
+    expect(entry.verification).toBe("verified"); expect(entry.verified?.doi).toBe("10.1234/found"); expect(translate).not.toHaveBeenCalled()
   })
   it("never retries an uncertain native write and rejects read-only or foreign collection targets", async () => {
     const entry = extractReferences(document())[0]; entry.verification = "verified"; entry.verified = entry.fields; entry.importUncertain = true
@@ -475,9 +568,12 @@ describe("document jobs, durability and appearance", () => {
     const fixture = host([["References", citation, "[2] Jones, K. (2021). Another study. Journal."]]), fetchImpl = vi.fn(), { store } = memoryStore()
     const jobs = new DocumentJobs(fixture.zotero, fetchImpl, store), task = await jobs.start("references", 11); await jobs.idle()
     const before = await store.references(task.id), sourceLines = before[0].lines, secondID = before[1].id
+    before[0].selectionMethod = "first-result"; before[0].verified = { title: "Previous selection", authors: [], year: "" }
+    await store.saveReferences(task.id, before)
     expect(await jobs.updateReference(task.id, before[0].id, "Edited, J. (2024). Edited scientific evidence. Journal.")).toBe(true)
     const edited = (await store.references(task.id))[0]
     expect(edited).toMatchObject({ raw: "Edited, J. (2024). Edited scientific evidence. Journal.", verification: "unverified", edited: true })
+    expect(edited.selectionMethod).toBeUndefined(); expect(edited.verified).toBeUndefined()
     expect(edited.fields).toMatchObject({ title: "Edited scientific evidence", year: "2024" }); expect(edited.lines).toEqual(sourceLines)
     expect(await jobs.deleteReference(task.id, secondID)).toBe(true)
     expect(await store.references(task.id)).toHaveLength(1); expect(task.total).toBe(1); jobs.dispose()

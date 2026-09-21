@@ -1,3 +1,6 @@
+import { checkLocalOCR } from './local-ocr'
+import { documentOCREnabled } from './document-extraction'
+import { confirmFirstFullTranslation } from './translation-warning'
 import { analysisRuntime } from './analysis-runtime'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { renderDocumentIssueActions, openDocumentSettings } from './document-notices'
@@ -47,7 +50,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   toolbar.append(versionHost); root.append(toolbar, message, issueActions, body, status)
   if (mode === 'source') {
     const tip = notice(doc)
-    tip.append(doc.createTextNode(uiText('默认使用传统文字层提取。若效果不佳，可安装配置 OCR，并在设置中开启增强。', 'Text-layer extraction is the default. If results are poor, install and configure OCR, then enable enhancement in settings.')),
+    tip.append(doc.createTextNode(uiText('默认使用文字层提取，也可在右侧选择使用已配置的 OCR。', 'Use the text layer by default, or select configured OCR on the right.')),
       action(doc, uiText('前往 OCR 配置', 'Open OCR configuration'), () => { openDocumentSettings(host, 'ocr') }))
     root.insertBefore(tip, body)
   }
@@ -58,6 +61,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   let analysisRun: AnalysisRunView | undefined
   let selectedLanguages: TranslationLanguages | undefined
   let startingTranslation = false
+  let useOCR = false
   const rows = () => jobs.list(mode === 'source' ? 'extraction' : 'translation').filter(task => sameAttachment(task.source, source))
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined
   status.classList.add('jdx-result-toast')
@@ -90,7 +94,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     if (active) return
     active = new AbortController(); extract.disabled = true; cancel.hidden = false; status.textContent = ''; message.dataset.kind = 'running'
     try {
-      const task = await jobs.start('extraction', source.itemID, fresh, { signal: active.signal, onProgress: text => { if (!disposed) message.textContent = text } })
+      const task = await jobs.start('extraction', source.itemID, fresh, { signal: active.signal, useOCR, onProgress: text => { if (!disposed) message.textContent = text } })
       selected = task.id; signature = ''; await refresh(); if (task.status === 'complete') feedback(uiText('原文提取完成', 'Source extracted'))
     } catch (error) { report(error) }
     finally { active = undefined; if (!disposed) { extract.disabled = false; cancel.hidden = true } }
@@ -99,7 +103,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   const cancel = action(doc, uiText('停止提取', 'Stop extraction'), () => { active?.abort(); const running = rows().find(task => task.status === 'running'); if (running) jobs.pause(running.id) }); cancel.hidden = true
   extract.classList.add('jdx-result-extract')
   const translate = action(doc, uiText('全文翻译', 'Translate full text'), () => {
-    if (startingTranslation) return
+    if (startingTranslation || !confirmFirstFullTranslation(host)) return
     const extractionID = mode === 'source' ? selected : jobs.list('extraction').find(task => sameAttachment(task.source, source) && ['complete', 'partial'].includes(task.status))?.id
     startingTranslation = true; translate.disabled = true; message.textContent = ''; message.dataset.kind = 'neutral'
     void jobs.start('translation', source.itemID, true, { extractionID, languages: selectedLanguages, onProgress: text => { if (!disposed) { message.textContent = text; message.dataset.kind = 'running' } } }).then(task => {
@@ -111,11 +115,28 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   })
   translate.classList.add('jdx-button-primary')
   if (mode === 'source') {
-    toolbar.append(extract, cancel, action(doc, uiText('复制 Markdown', 'Copy Markdown'), () => {
+    toolbar.append(cancel, action(doc, uiText('复制 Markdown', 'Copy Markdown'), () => {
       if (selected) void jobs.store.extraction(selected).then(value => copyTextToClipboard(host, value?.markdown || '')).then(ok => { feedback(ok ? uiText('已复制', 'Copied') : uiText('复制失败', 'Copy failed')) }).catch(report)
-    }), translate)
+    }))
+    extract.classList.add('jdx-button-primary')
+    const ocrHost = element(doc, 'div', 'jdx-result-language')
+    const ocr = createJdxSelect(ocrHost, { compact: true, portal: true, ariaLabel: uiText('提取方式', 'Extraction method'), popupWidth: 220 })
+    const capsule = element(doc, 'div', 'jdx-translation-capsule')
+    capsule.setAttribute('role', 'group'); capsule.setAttribute('aria-label', uiText('提取原文', 'Extract source'))
+    capsule.append(ocrHost, extract); toolbar.append(capsule)
+    const setOCRAvailable = (ready: boolean) => {
+      if (!ready) useOCR = false
+      ocr.setOptions([
+        { value: 'text', label: uiText('不使用 OCR', 'Without OCR') },
+        { value: 'ocr', label: uiText('使用 OCR', 'Use OCR'), disabled: !ready, description: ready ? undefined : uiText('OCR 未配置，请先在设置中启用', 'OCR is not configured. Enable it in settings first.') },
+      ], useOCR ? 'ocr' : 'text')
+    }
+    setOCRAvailable(false)
+    void checkLocalOCR(host).then(value => { if (!disposed) { useOCR = Boolean(value.ready && value.modelsReady && documentOCREnabled(host)); setOCRAvailable(Boolean(value.ready && value.modelsReady)) } }).catch(() => {})
+    ocr.onChange(value => { useOCR = value === 'ocr' })
+    cleanups.push(() => ocr.destroy())
   }
-  if (mode === 'translation' || mode === 'source') {
+  if (mode === 'translation') {
     if (mode === 'translation') toolbar.append(translate)
     const languageHost = element(doc, 'div', 'jdx-result-language')
     const language = createJdxSelect(languageHost, { compact: true, portal: true, ariaLabel: uiText('目标语言', 'Target language'), popupWidth: 220 })
@@ -127,7 +148,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     language.onChange(value => { selectedLanguages = { sourceLanguage: selectedLanguages?.sourceLanguage || 'en', targetLanguage: value }; void writeArticleTranslationLanguages(host, source.itemID, selectedLanguages).catch(report) })
     cleanups.push(() => language.destroy())
   }
-  actionIcon(extract, 'extract'); actionIcon(cancel, 'stop')
+  actionIcon(cancel, 'stop')
   const copy = Array.from(toolbar.children).find(child => child.textContent === uiText('复制 Markdown', 'Copy Markdown')) as HTMLButtonElement | undefined
   if (mode === 'source' && copy) actionIcon(copy, 'copy')
   const analysisOptions: AnalysisOptions = options.analysis ?? {
@@ -154,7 +175,6 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       if (mode === 'source') {
         const running = rows().find(row => row.status === 'running')
         extract.textContent = rows().length ? uiText('重新提取', 'Extract again') : uiText('提取原文', 'Extract source')
-        actionIcon(extract, rows().length ? 'refresh' : 'extract')
         extract.disabled = Boolean(active || running); cancel.hidden = !active && !running
         translate.disabled = startingTranslation || !task || !['complete', 'partial'].includes(task.status)
         message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task?.warnings.length ? task.warnings.join('\n') : task && task.status !== 'complete' ? resultStatus(task.status) : '')

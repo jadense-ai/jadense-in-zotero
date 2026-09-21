@@ -32,6 +32,12 @@ describe("reading UI controls", () => {
     expect(view).toContain("searchBar.append(tools, search, filters)")
     expect(view).not.toContain("root.append(head, tools,")
   })
+  it("places reference selection before the number outside the action toolbar", () => {
+    const view = read("./reference-workspace.ts")
+    expect(view).toContain('element(doc, "label", "jdx-reference-select")')
+    expect(view).toContain("insertBefore(checkbox, view.number)")
+    expect(view).not.toContain("view.controls.append(checkbox")
+  })
 
   it("exposes persisted reference edit and delete controls", () => {
     const view = read("./reference-workspace.ts")

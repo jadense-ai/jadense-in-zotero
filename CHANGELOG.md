@@ -4,6 +4,8 @@
 
 ### 简体中文
 
+- 修复参考文献独立年份行的拆分；无精确匹配时标记「已选首条」，区分原文引用与检索结果，导入前仍需用户核对。
+- 首次全文翻译增加费用与稳定性确认，建议按需使用选文翻译。
 - 新增独立文献分类窗口：选择候选目录、核对推荐后归类，支持撤销；需单独配置 TypeSafe API Key，不跟随对话模型。
 - 对话支持文件附件与长 PDF 分层阅读，保留正文缓存、阅读进度和页码来源；扫描缺页仍需 OCR，生成概括与回答可能产生多次模型请求。
 - 全文 Markdown、翻译和参考文献提取默认使用 PDF 文字层；OCR 按需启用，失败时尝试文字层并提示缺页。
@@ -12,6 +14,8 @@
 
 ### English
 
+- Keep standalone year lines with their reference. When no exact match is found, label the first candidate “First result selected”; distinguish original citations from search results and review before importing.
+- Confirm cost and stability considerations before the first full translation; use selection translation for passages that need close reading.
 - Add a standalone paper-classification window with candidate collections, recommendation review, apply and undo. Configure a separate TypeSafe API key; classification does not use the Chat model.
 - Support chat file attachments and layered reading of long PDFs with cached text, reading progress and page references. Scanned pages still need OCR; summaries and answers may require multiple model requests.
 - Use the PDF text layer by default for full Markdown, translation and reference extraction. OCR is optional, with text-layer fallback and missing-page warnings.

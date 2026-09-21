@@ -177,7 +177,7 @@ export class DocumentJobs {
     }
   }
   /** 明确翻译操作缺少原文时静默提取；浏览仍只恢复历史，指定版本绝不替换。 */
-  async start(kind: DocumentTask["kind"], itemID: number, fresh = false, options: { signal?: AbortSignal; onProgress?: (text: string) => void; extractionID?: string; languages?: TranslationLanguages } = {}): Promise<DocumentTask> {
+  async start(kind: DocumentTask["kind"], itemID: number, fresh = false, options: { signal?: AbortSignal; onProgress?: (text: string) => void; extractionID?: string; languages?: TranslationLanguages; useOCR?: boolean } = {}): Promise<DocumentTask> {
     await this.ready
     checkCancelled(options.signal)
     checkCancelled(options.signal)
@@ -225,7 +225,7 @@ export class DocumentJobs {
         task = { version: 1, id: crypto.randomUUID(), kind, source: { ...source, ...(literature ? { literature, title: literature.title } : {}) }, createdAt: new Date().toISOString(), status: 'running', totalPages: 0, completed: 0, total: 0, models: [], warnings: [] }
         this.tasks.set(task.id, task); this.controllers.set(task.id, controller); await this.save(task)
         const report = (text: string) => { this.activity = text; this.phases.set(task!.id, text); options.onProgress?.(text); this.emit() }
-        const raw = await waitForDocumentRead(readDocument(this.host, itemID, controller.signal, report), controller.signal)
+        const raw = await waitForDocumentRead(readDocument(this.host, itemID, controller.signal, report, options.useOCR), controller.signal)
         checkCancelled(controller.signal)
         task.source = { ...raw.source, ...(literature ? { literature } : {}) }
         task.totalPages = raw.pages.length; task.warnings = raw.pages.flatMap(page => page.warning ? [page.warning] : [])
@@ -584,7 +584,7 @@ export class DocumentJobs {
     if (!entry) return false
     entry.raw = value; entry.fields = parseReferenceFields(value); entry.edited = true
     entry.uncertain = !entry.fields.title || !entry.fields.authors.length || !entry.fields.year; entry.verification = "unverified"
-    delete entry.reason; delete entry.verified; delete entry.imported; delete entry.importUncertain
+    delete entry.reason; delete entry.verified; delete entry.selectionMethod; delete entry.imported; delete entry.importUncertain
     const saved = await this.store.saveReferences(id, entries); task.storageWarning ||= !saved; await this.save(task); return saved
   }
   async deleteReference(id: string, referenceID: string) {

@@ -1,3 +1,4 @@
+import { confirmFirstFullTranslation } from './translation-warning'
 import { openDocumentSettings } from './document-notices'
 import { createJdxSelect } from "./ui/select"
 /** 连续译文阅读器：Reader 原生侧栏、停靠栏和 Manager 历史共用；不拥有模型请求生命周期。 */
@@ -161,6 +162,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const notice = (message: string, error = false) => { if (!error) { feedback(message); return }; lastNotice = message; state.textContent = message; state.title = message; state.dataset.error = String(error) }
   const restart = action(doc, uiText("重新翻译", "Translate again"), () => {
     closeMenus(); const task = jobs.get(taskID); if (!task) return
+    if (!confirmFirstFullTranslation(host)) return
     restart.disabled = true
     void jobs.start("translation", task.source.itemID, true, { extractionID: task.extractionID }).then(next => options.onReplace?.(next.id)).catch(error => notice(String(error), true)).finally(() => { restart.disabled = false })
   })

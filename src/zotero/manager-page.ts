@@ -1,4 +1,4 @@
-import { analysisRuntime, confirmFirstAnalysis } from './analysis-runtime'
+import { analysisRuntime } from './analysis-runtime'
 import { diagnostics, markDiagnosticAbort } from "./diagnostics"
 import { wireDiagnosticsPanel } from "./diagnostics-panel"
 import { wireSelectionSettings } from './selection-settings'
@@ -2020,7 +2020,7 @@ async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, op
 
 /** 独立解析不写 Chat；先备份可读笔记，再独立写入可验证的原生批注。 */
 async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemID: number) {
-  if (chatBusy || window.closed || !confirmFirstAnalysis(zotero, window)) return
+  if (chatBusy || window.closed) return
   setActiveSection(elements, "analysis")
   const operation = new AbortController()
   activeChatAbort = operation; activeOperation = "analysis"; preparingAnalysisItemID = itemID

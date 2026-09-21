@@ -1,6 +1,6 @@
 import { renderDocumentIssueActions } from './document-notices'
 /** 单篇参考文献视图：订阅指定任务，保留阅读/筛选/勾选；模型与原生写入只经过 DocumentJobs。 */
-import type { ReferenceEntry } from "@/chat/reference-list"
+import type { ReferenceEntry, ReferenceMetadata } from "@/chat/reference-list"
 import { referenceAIEnabled } from './reference-ai-settings'
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
@@ -13,6 +13,23 @@ import { createJdxSelect } from "./ui/select"
 
 export type ReferencePreparation = { running: boolean; message?: string; error?: string }
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
+/** 只裁剪展示投影：最多三位作者、80 个 Unicode 字符；绝不修改用于保存/导入的完整元数据。 */
+export function referenceMetadataText(metadata: ReferenceMetadata) {
+  const names = Array.from(metadata.authors.slice(0, 3).join("; "))
+  const authors = names.slice(0, 80).join("") + (names.length > 80 || metadata.authors.length > 3 ? "…" : "")
+  return [metadata.title, authors, metadata.year, metadata.publicationTitle, metadata.doi].filter(Boolean).join(" · ")
+}
+
+/** 原文与检索候选用显式标签区分；两种引用视图共用，避免后续再次混成同级无标签正文。 */
+function referenceContent(doc: Document) {
+  const body = element(doc, "div", "jdx-reference-body")
+  const raw = element(doc, "p", "jdx-reference-raw")
+  const result = element(doc, "div", "jdx-reference-result")
+  const metadata = element(doc, "p", "jdx-reference-result-text")
+  result.append(element(doc, "span", "jdx-reference-label", uiText("检索结果", "Search result")), metadata)
+  body.append(element(doc, "span", "jdx-reference-label", uiText("原文引用", "Original citation")), raw, result)
+  return { body, raw, result, metadata }
+}
 export const canImportReference = (entry: ReferenceEntry) => entry.verification === "verified" && Boolean(entry.verified?.title) && !entry.imported && !entry.importUncertain
 /** 只使用原文规则字段或本机查询结果构造链接；AI 不提供 URL 或交互权限。 */
 export function referenceURL(entry: ReferenceEntry) {
@@ -28,21 +45,28 @@ export function filterReferences(entries: ReferenceEntry[], query: string, filte
 }
 function entryState(entry: ReferenceEntry) {
   return entry.imported ? uiText("已导入 / 已存在", "Imported / in library") : entry.importUncertain ? uiText("写入未确认", "Write unconfirmed")
-    : entry.verification === "verified" ? uiText("已核验", "Verified") : entry.verification === "pending" ? uiText("待核验", "Pending") : uiText("未验证", "Unverified")
+    : entry.verification === "verified" ? entry.selectionMethod === "first-result" ? uiText("已选首条", "First result selected") : uiText("已核验", "Verified") : entry.verification === "pending" ? uiText("待核验", "Pending") : uiText("未验证", "Unverified")
 }
 
-/** 原文定位和主动搜索独立于核验；只有原生写入需要匹配证据。 */
+/** 原文定位和主动搜索独立于解析；核验结果或明确的首条候选均支持用户主动导入。 */
 export function referenceRow(doc: Document, entry: ReferenceEntry, onImport: () => unknown, onLocate: () => unknown, onURL: (url: string) => unknown, onSelect: (checked: boolean) => void) {
   const row = element(doc, "article", "jdx-reference-row"); row.dataset.verification = entry.verification; row.dataset.referenceId = entry.id
-  row.append(element(doc, "p", "jdx-reference-raw", entry.raw), element(doc, "p", "jdx-reference-state", [entryState(entry), entry.reason].filter(Boolean).join(" · ")))
-  row.append(action(doc, uiText("定位原文", "Locate original"), () => { void onLocate() }), action(doc, uiText("搜索文献", "Search publication"), () => { void onURL(referenceSearchURL(entry)) }))
-  if (referenceURL(entry)) row.append(action(doc, uiText("原文链接", "Publication link"), () => { void onURL(referenceURL(entry)) }))
+  const { body, raw, result, metadata } = referenceContent(doc)
+  raw.textContent = entry.raw; result.hidden = !entry.verified
+  metadata.textContent = entry.verified ? referenceMetadataText(entry.verified) : ""
+  metadata.title = metadata.textContent
+  const selection = element(doc, "label", "jdx-reference-select")
+  const number = element(doc, "span", "jdx-reference-number", entry.label || String(entry.order + 1))
+  selection.append(number); row.append(selection, body)
+  body.append(element(doc, "p", "jdx-reference-state", [entryState(entry), entry.reason].filter(Boolean).join(" · ")))
+  body.append(action(doc, uiText("定位原文", "Locate original"), () => { void onLocate() }), action(doc, uiText("搜索文献", "Search publication"), () => { void onURL(referenceSearchURL(entry)) }))
+  if (referenceURL(entry)) body.append(action(doc, uiText("原文链接", "Publication link"), () => { void onURL(referenceURL(entry)) }))
   if (entry.verification !== "verified" || !entry.verified?.title) return row
   const checkbox = element(doc, "input"); checkbox.type = "checkbox"; checkbox.disabled = !canImportReference(entry)
   checkbox.setAttribute("aria-label", uiText(`选择引用 ${entry.label || entry.order + 1}`, `Select reference ${entry.label || entry.order + 1}`))
   checkbox.addEventListener("change", () => onSelect(checkbox.checked))
   const save = action(doc, uiText("导入 Zotero", "Import to Zotero"), () => { void onImport() }); save.disabled = !canImportReference(entry)
-  row.append(checkbox, save)
+  selection.insertBefore(checkbox, number); body.append(save)
   return row
 }
 
@@ -66,7 +90,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   const search = element(doc, "input", "jdx-search"); search.type = "search"; search.placeholder = uiText("搜索标题、作者或 DOI", "Search title, author or DOI"); search.setAttribute("aria-label", search.placeholder)
   const filters = element(doc, "div"); filters.id = `${prefix}-filter`
   const filter = createJdxSelect(filters, { ariaLabel: uiText("核验状态", "Verification status") })
-  filter.setOptions([['all', uiText("全部参考文献", "All references")], ['verified', uiText("已核验", "Verified")], ['unverified', uiText("未验证", "Unverified")], ['pending', uiText("待核验", "Pending")], ['imported', uiText("已导入 / 已存在", "Imported / in library")]].map(([value, label]) => ({ value, label })), "all")
+  filter.setOptions([['all', uiText("全部参考文献", "All references")], ['verified', uiText("已核验 / 已选首条", "Verified / first result selected")], ['unverified', uiText("未验证", "Unverified")], ['pending', uiText("待核验", "Pending")], ['imported', uiText("已导入 / 已存在", "Imported / in library")]].map(([value, label]) => ({ value, label })), "all")
   const list = element(doc, "div", "jdx-reference-list"), empty = element(doc, "div", "jdx-result-empty")
   const importBar = element(doc, "div", "jdx-reference-import")
   const allLabel = element(doc, "label", "jdx-check"), all = element(doc, "input"), selectionText = element(doc, "span")
@@ -82,7 +106,7 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
   let task: DocumentTask | undefined, preparation: ReferencePreparation | undefined, entries: ReferenceEntry[] = [], importing = false, mutating = false, disposed = false, generation = 0
   let extracting: AbortController | undefined
   const selected = new Set<string>()
-  type Row = { root: HTMLElement; raw: HTMLElement; metadata: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; publication?: HTMLButtonElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; edit?: HTMLButtonElement; remove?: HTMLButtonElement; entry: ReferenceEntry }
+  type Row = { root: HTMLElement; raw: HTMLElement; result: HTMLElement; metadata: HTMLElement; state: HTMLElement; reason: HTMLElement; number: HTMLElement; controls: HTMLElement; publication?: HTMLButtonElement; checkbox?: HTMLInputElement; save?: HTMLButtonElement; edit?: HTMLButtonElement; remove?: HTMLButtonElement; entry: ReferenceEntry }
   const rows = new Map<string, Row>()
   const operate = (callback: (id: string) => void) => { if (task && !importing) { feedback.textContent = ""; callback(task.id) } }
   const extract = action(doc, uiText("提取参考文献", "Extract references"), () => {
@@ -172,7 +196,9 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
     const visibleIDs = new Set(visible.map(entry => entry.id)), importable = visible.filter(canImportReference)
     const validIDs = new Set(entries.filter(canImportReference).map(entry => entry.id))
     for (const id of selected) if (!validIDs.has(id)) selected.delete(id)
-    count.textContent = uiText(`${entries.length} 条 · ${entries.filter(entry => entry.verification === "verified").length} 已核验`, `${entries.length} references · ${entries.filter(entry => entry.verification === "verified").length} verified`)
+    const verified = entries.filter(entry => entry.verification === "verified" && entry.selectionMethod !== "first-result").length
+    const firstResults = entries.filter(entry => entry.verification === "verified" && entry.selectionMethod === "first-result").length
+    count.textContent = uiText(`${entries.length} 条 · ${verified} 已核验${firstResults ? ` · ${firstResults} 已选首条` : ""}`, `${entries.length} references · ${verified} verified${firstResults ? ` · ${firstResults} first result selected` : ""}`)
     selectionText.textContent = selected.size ? uiText(`已选择 ${selected.size} 条`, `${selected.size} selected`) : uiText("全选可导入", "Select importable")
     all.checked = importable.length > 0 && importable.every(entry => selected.has(entry.id)); all.indeterminate = !all.checked && importable.some(entry => selected.has(entry.id)); all.disabled = !importable.length || busy || blocksImport
     importButton.disabled = !selected.size || !library.getValue() || busy || blocksImport
@@ -183,11 +209,11 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
       let row = rows.get(entry.id)
       if (!row) {
         const container = element(doc, "article", "jdx-reference-row"), number = element(doc, "span", "jdx-reference-number")
-        const body = element(doc, "div", "jdx-reference-body"), raw = element(doc, "p", "jdx-reference-raw"), meta = element(doc, "div", "jdx-reference-meta")
-        const metadata = element(doc, "p", "jdx-reference-raw")
+        const selection = element(doc, "label", "jdx-reference-select")
+        const { body, raw, result, metadata } = referenceContent(doc), meta = element(doc, "div", "jdx-reference-meta")
         const state = badge(doc, ""), reason = element(doc, "span", "jdx-reference-reason"), controls = element(doc, "div", "jdx-reference-actions")
-        meta.append(state, reason); body.append(raw, metadata, meta, controls); container.append(number, body); container.dataset.referenceId = entry.id
-        const view = { root: container, raw, metadata, state, reason, number, controls, entry } as Row
+        meta.append(state, reason); body.append(meta, controls); selection.append(number); container.append(selection, body); container.dataset.referenceId = entry.id
+        const view = { root: container, raw, result, metadata, state, reason, number, controls, entry } as Row
         const edit = action(doc, uiText("编辑参考文献", "Edit reference"), () => { void editReference(view) })
         const remove = action(doc, uiText("删除参考文献", "Delete reference"), () => { void deleteReference(view) })
         actionIcon(edit, "edit"); actionIcon(remove, "delete")
@@ -195,8 +221,9 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
       }
       row.entry = entry; row.root.hidden = !visibleIDs.has(entry.id); row.root.dataset.verification = entry.verification
       if (row.raw.textContent !== entry.raw) row.raw.textContent = entry.raw
-      row.metadata.textContent = entry.verified ? [entry.verified.title, entry.verified.authors.join("; "), entry.verified.year, entry.verified.publicationTitle, entry.verified.doi].filter(Boolean).join(" · ") : ""
-      row.metadata.hidden = !entry.verified
+      row.metadata.textContent = entry.verified ? referenceMetadataText(entry.verified) : ""
+      row.metadata.title = row.metadata.textContent
+      row.result.hidden = !entry.verified
       row.number.textContent = entry.label || String(entry.order + 1); row.state.textContent = entryState(entry); row.state.dataset.state = entry.verification === "verified" ? "success" : "neutral"
       row.reason.textContent = [entry.edited ? uiText("已手动编辑，请重新核验", "Manually edited; verify again") : "", entry.uncertain ? uiText("识别待定，原文保留", "Uncertain extraction; original retained") : "", entry.reason].filter(Boolean).join(" · ")
       if (!row.checkbox) {
@@ -213,10 +240,12 @@ export function mountReferenceDetails(root: HTMLElement, host: ZoteroLike, sourc
         })
         const save = action(doc, uiText("导入", "Import"), () => { void importSelected([view.entry.id]) })
         actionIcon(locate, "locate"); actionIcon(search, "search"); actionIcon(publication, "open")
-        view.controls.append(checkbox, locate, search, publication, save); view.checkbox = checkbox; view.save = save; view.publication = publication
+        // 选择框属于行首序号区域，不能再次混入操作栏；点击序号同样可以勾选该引用。
+        view.number.parentElement!.insertBefore(checkbox, view.number)
+        view.controls.append(locate, search, publication, save); view.checkbox = checkbox; view.save = save; view.publication = publication
       }
       if (row.checkbox) {
-        row.checkbox.hidden = entry.verification !== "verified"; row.save!.hidden = entry.verification !== "verified"
+        row.save!.hidden = entry.verification !== "verified"
         row.publication!.hidden = !referenceURL(entry)
         row.checkbox.checked = selected.has(entry.id); row.checkbox.disabled = busy || blocksImport || !canImportReference(entry)
         // 未确认写入仅允许显式核对文库；执行层先查 DOI，找不到时仍禁止再次写入。

@@ -7,9 +7,9 @@ import { uiText } from './ui-preferences'
 export const DOCUMENT_OCR_PREF = 'extensions.jadenseInZotero.documentOCR'
 export function documentOCREnabled(host: ZoteroLike) { return host.Prefs?.get(DOCUMENT_OCR_PREF, true) === true }
 
-export async function readDocument(host: ZoteroLike, itemID: number, signal: AbortSignal, progress: (text: string) => void = () => {}) {
+export async function readDocument(host: ZoteroLike, itemID: number, signal: AbortSignal, progress: (text: string) => void = () => {}, useOCR = documentOCREnabled(host)) {
   let warning = ''
-  if (documentOCREnabled(host)) {
+  if (useOCR) {
     try {
       await waitForOCR(ensureLocalOCR(host), signal); checkCancelled(signal)
       return await readOCRDocument(host, itemID, signal, progress)

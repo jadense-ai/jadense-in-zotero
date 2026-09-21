@@ -5,13 +5,21 @@ export type ReferenceMetadata = { title: string; authors: string[]; year: string
 export type ReferenceEntry = {
   id: string; order: number; label?: string; raw: string; lines: PdfLine[]; fields: ReferenceMetadata
   uncertain: boolean; edited?: boolean; verification: "pending" | "unverified" | "verified"; reason?: string; verified?: ReferenceMetadata
+  // 已解析状态兼容旧存储；首条搜索候选需单独标记，展示和导入不能把它误称为精确核验。
+  selectionMethod?: "first-result"
   imported?: { libraryID: number; itemKey: string; itemID: number }; importUncertain?: boolean
 }
 
 const heading = /^\s*(?:\d+[.\s]*)?(?:references|bibliography|literature cited|works cited|参考文献|參考文獻|引用文献)\s*[:：]?\s*$/iu
 const endHeading = /^(?:appendix(?:\s+[a-z\d]+)?|appendices|supplementary (?:material|information)|acknowledg(?:e)?ments|附录|附錄|致谢)\s*[:：]?$/iu
 const numbered = /^\s*(?:[[(](\d{1,4})[\])]|(\d{1,4})[.)、])\s*/u
+// PDF/OCR 可能把句末年份单独换行，甚至把左括号留在上一行。
+// 这种行属于上一条引用，不能成为序号、悬挂缩进分界或被清理掉；带正文的四位数序号仍保留。
+const terminalYear = /^\s*\(?(?:18|19|20)\d{2}[a-z]?\)?[.,;]?\s*$/iu
 const authorYear = /^[\p{L}][\p{L}'’\- ]{1,45},?\s+(?:[A-Z][., ]+|[\p{L}]+[, &]).*?(?:\(?\b(?:19|20)\d{2}[a-z]?\)?)/u
+
+/** 所有序号读取和移除共用此判断，避免切分时保留年份、保存/重读时又误删。 */
+function referenceNumber(value: string) { return terminalYear.test(value) ? null : value.match(numbered) }
 
 export function normalizeDoi(value: string) {
   let doi = value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").replace(/^doi\s*:\s*/i, "").replace(/[.,;]+$/u, "").toLowerCase()
@@ -24,10 +32,13 @@ export function normalizeReferenceText(value: string) {
   return value.normalize("NFKC").replace(/\u00ad\s*\n\s*/gu, "").replace(/([\p{Ll}])[-‐]\s*\n\s*(?=[\p{Ll}])/gu, "$1")
     .replace(/(10\.\d{4,9}\/\S*)\s*\n\s*([\w./();:-]+)/gu, "$1$2").replace(/\s+/gu, " ").trim()
 }
-export function stripReferenceLabel(value: string) { return normalizeReferenceText(value).replace(numbered, "").trim() }
+export function stripReferenceLabel(value: string) {
+  const text = normalizeReferenceText(value)
+  return text.slice(referenceNumber(text)?.[0].length ?? 0).trim()
+}
 
 export function parseReferenceFields(raw: string): ReferenceMetadata {
-  const joined = normalizeReferenceText(raw).replace(numbered, "")
+  const joined = stripReferenceLabel(raw)
   const doi = joined.match(/\b10\.\d{4,9}\/[^\s<>"]+/iu)?.[0]
   const yearMatch = joined.match(/\b((?:18|19|20)\d{2})[a-z]?\b/u)
   const year = yearMatch?.[1] ?? ""
@@ -58,7 +69,7 @@ export function parseReferenceFields(raw: string): ReferenceMetadata {
 
 function entry(lines: PdfLine[], order: number, knownBoundary: boolean): ReferenceEntry {
   const source = normalizeReferenceText(lines.map(line => line.text).join("\n"))
-  const match = source.match(numbered)
+  const match = referenceNumber(source)
   const raw = stripReferenceLabel(source)
   const fields = parseReferenceFields(raw)
   return { id: `ref-${lines[0].id}`, order, ...(match ? { label: match[1] || match[2] } : {}), raw, lines, fields,
@@ -75,7 +86,7 @@ export function extractReferences(document: PdfTextDocument): ReferenceEntry[] {
   let first = lines.findIndex(line => heading.test(line.text))
   if (first >= 0) first++
   else {
-    const numberedStarts = lines.map((line, i) => numbered.test(line.text) ? i : -1).filter(i => i >= 0)
+    const numberedStarts = lines.map((line, i) => referenceNumber(line.text) ? i : -1).filter(i => i >= 0)
     const authorStarts = lines.map((line, i) => authorYear.test(line.text) ? i : -1).filter(i => i >= 0)
     first = numberedStarts.length >= 3 ? numberedStarts[0] : authorStarts.length >= 2 ? authorStarts[0] : -1
   }
@@ -84,15 +95,15 @@ export function extractReferences(document: PdfTextDocument): ReferenceEntry[] {
   let group: PdfLine[] = [], boundaryKnown = false
   const flush = () => { if (group.length) result.push(entry(group, result.length, boundaryKnown)); group = [] }
   let previousNumber: number | undefined
-  const numberedList = numbered.test(lines[first]?.text || "")
+  const numberedList = Boolean(referenceNumber(lines[first]?.text || ""))
   for (const line of lines.slice(first)) {
     if (endHeading.test(line.text.trim())) break
     if (heading.test(line.text) || (line.text.trim() === line.pageLabel && line.rects[0]?.[3] < 35)) continue
-    const number = line.text.match(numbered)
+    const number = referenceNumber(line.text)
     const n = number ? Number(number[1] || number[2]) : undefined
     const starts = Boolean(number || !numberedList && authorYear.test(line.text))
     // 悬挂缩进：上一段结束，下一行回到条目左缘，且有作者/年份证据。
-    const hanging = !numberedList && !number && group.at(-1)?.paragraphEnd && /\b(?:18|19|20)\d{2}\b/u.test(line.text)
+    const hanging = !numberedList && !number && !terminalYear.test(line.text) && group.at(-1)?.paragraphEnd && /\b(?:18|19|20)\d{2}\b/u.test(line.text)
       && Boolean(line.rects[0] && group[0]?.rects[0] && line.rects[0][0] <= group[0].rects[0][0] + 3)
     if ((starts || hanging) && group.length) flush()
     if (!group.length) {

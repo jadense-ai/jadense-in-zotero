@@ -280,6 +280,14 @@ Attach files in the chat composer or link Zotero PDFs. Readable text is cached l
 
 ### 全文提取与恢复 / Extraction and recovery
 
+原文提取工具栏可为本次提取选择「不使用 OCR / 使用 OCR」；OCR 需先配置就绪。首次全文翻译会提示积分消耗与稳定性，取消不会发起提取或翻译请求；确认后在当前 profile 记住选择。可优先选中需要精读的段落翻译。
+
+Choose Without OCR or Use OCR in the source-extraction toolbar for that extraction; OCR must be configured and ready. The first full translation asks you to acknowledge cost and stability considerations. Canceling starts no extraction or translation request; acceptance is remembered in the current profile. Prefer selection translation for passages needing close reading.
+
+参考文献列表分别显示「原文引用」和「检索结果」，独立年份行保留在所属引用中。优先使用精确匹配；没有精确匹配时选用首条有效候选并标记「已选首条」，这不代表已准确匹配。核对题名、作者与年份后再勾选导入；编辑原文会清除旧候选，需要重新核验。
+
+References show Original citation and Search result separately, retaining standalone year lines within their citation. Exact matches take priority; otherwise the first valid candidate is labeled First result selected, which does not establish an exact match. Review title, authors and year before selecting and importing. Editing a citation clears the old candidate and requires verification again.
+
 全文 Markdown、全文翻译和参考文献提取默认使用文字层。需要识别扫描页时在「设置 → OCR配置」启用全文 OCR 增强并准备依赖与模型；OCR 失败时尝试文字层，并保留无文字页提示。翻译和分析仍需对应 AI 或传统翻译服务。侧栏异常可重试；仍无法恢复时，从 Zotero 工具菜单或「帮助 → 错误诊断」导出本机诊断。
 
 Full Markdown, full translation and reference extraction use the text layer by default. Enable full-document OCR in OCR configuration and prepare dependencies/models for scanned pages. OCR failures fall back to the text layer with warnings for unreadable pages. Translation and analysis still require their configured service. Retry a failed sidebar; if it remains unavailable, export local diagnostics from Zotero's Tools menu or Help → Error diagnostics.

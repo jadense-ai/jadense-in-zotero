@@ -9,18 +9,6 @@ import { uiText } from './ui-preferences'
 import { markDiagnosticAbort } from './diagnostics'
 import { FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
 
-export const ANALYSIS_WARNING_PREF = 'extensions.jadenseInZotero.analysisWarningAcknowledged'
-
-/** 所有解析入口共用首次告知，取消发生在文本读取、参考文献任务和 AI 请求之前。 */
-export function confirmFirstAnalysis(host: ZoteroLike, win = host.getMainWindow?.()) {
-  if (host.Prefs?.get(ANALYSIS_WARNING_PREF, true) !== true) {
-    const accepted = win?.confirm(uiText('不推荐使用全文解析\n\n全文解析可能消耗较多积分，结果与稳定性也会受到文献长度和模型影响。建议阅读文献后自行判断需要精读的内容，使用选中翻译，这样更经济、更稳定。\n\n仍要继续全文解析吗？', 'Full document analysis is not recommended\n\nIt can use more credits, and results and stability depend on document length and the model. Read the paper, decide which passages need close reading, and use selection translation for a more economical and stable workflow.\n\nContinue with full document analysis?'))
-    if (!accepted) return false
-    host.Prefs?.set?.(ANALYSIS_WARNING_PREF, true, true)
-  }
-  return true
-}
-
 export class AnalysisRuntime {
   private runs = new Map<number, AnalysisRunView>()
   private controllers = new Map<number, AbortController>()
@@ -50,7 +38,6 @@ export class AnalysisRuntime {
   /** 同一附件的重复点击只复用运行；不同 PDF 状态互不覆盖。 */
   async start(itemID: number) {
     if (this.controllers.has(itemID)) return
-    if (!confirmFirstAnalysis(this.host)) return
     const controller = new AbortController(), signal = controller.signal
     this.controllers.set(itemID, controller)
     const view: AnalysisRunView = { source: { itemID, libraryID: -1, itemKey: '', title: 'PDF', authors: [] }, busy: true, createdAt: new Date().toISOString(), message: uiText('正在准备文献解析…', 'Preparing analysis…') }

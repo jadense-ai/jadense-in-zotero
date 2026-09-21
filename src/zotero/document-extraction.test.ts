@@ -46,3 +46,12 @@ it('uses checked OCR text and real page coordinates for analysis when enabled', 
   expect(ensureLocalOCR).toHaveBeenCalledOnce(); expect(pdf.getPage).not.toHaveBeenCalled()
   expect(result.passages[0]).toMatchObject({ text: 'OCR extracted a scanned passage.', position: { pageIndex: 0, rects: [[10, 20, 100, 40]] } })
 })
+
+it.each([true, false])('uses the per-extraction OCR choice (%s) instead of the global preference', async useOCR => {
+  const { host, pdf } = fixture(!useOCR)
+  vi.mocked(readOCRDocument).mockResolvedValue({ source: { itemID: 1, libraryID: 1, itemKey: 'PDF1', title: 'Paper' }, pages: [] })
+  await readDocument(host, 1, new AbortController().signal, undefined, useOCR)
+  expect(ensureLocalOCR).toHaveBeenCalledTimes(useOCR ? 1 : 0)
+  expect(readOCRDocument).toHaveBeenCalledTimes(useOCR ? 1 : 0)
+  expect(pdf.getPage).toHaveBeenCalledTimes(useOCR ? 0 : 1)
+})

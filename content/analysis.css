@@ -64,14 +64,23 @@
 .jdx-reference-search { display:grid; grid-template-columns:auto minmax(80px,1fr) minmax(110px,150px); align-items:center; gap:8px; flex:none; overflow-x:auto; padding:2px 2px 12px; border-bottom:1px solid var(--jdx-line); }
 .jdx-reference-search>.jdx-search { width:100%; height:34px; min-height:34px; background:var(--jdx-surface); color:var(--jdx-text); border-color:var(--jdx-line-strong); }
 .jdx-reference-search>.jdx-search::placeholder { color:var(--jdx-muted); opacity:1; }
-.jdx-reference-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:12px; padding:20px 0; border-bottom:1px solid var(--jdx-line); }
-.jdx-reference-number { color:var(--jdx-placeholder); font-size:calc(12px * var(--jdx-font-scale,1)); font-variant-numeric:tabular-nums; padding-top:3px; }
+.jdx-reference-row { display:grid; grid-template-columns:56px minmax(0,1fr); gap:10px; padding:20px 0; border-bottom:1px solid var(--jdx-line); }
+/* 选择框固定在序号左侧，与操作栏分离；label 扩大点击范围并保留原生键盘行为。 */
+.jdx-reference-select { display:flex; align-items:center; gap:7px; align-self:start; min-height:22px; cursor:pointer; }
+.jdx-reference-select input[type=checkbox] { appearance:auto!important; flex:0 0 16px; width:16px; height:16px; margin:0; accent-color:var(--jdx-green); cursor:pointer; }
+.jdx-reference-select input:disabled { cursor:default; }
+.jdx-reference-select input:focus-visible { outline:2px solid var(--jdx-green); outline-offset:3px; }
+.jdx-reference-number { color:var(--jdx-placeholder); font-size:calc(12px * var(--jdx-font-scale,1)); font-variant-numeric:tabular-nums; }
 .jdx-reference-body { min-width:0; }
 .jdx-reference-raw { margin:0 0 9px; font-size:calc(13px * var(--jdx-font-scale,1)); line-height:1.85; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; }
+.jdx-reference-label { display:block; margin-bottom:3px; color:var(--jdx-muted); font-size:calc(11px * var(--jdx-font-scale,1)); font-weight:600; }
+.jdx-reference-result { margin:0 0 10px; padding-left:10px; border-left:2px solid var(--jdx-line); }
+.jdx-reference-result[hidden] { display:none; }
+/* 检索摘要最多三行；作者另有字符上限，完整字段仅保存在数据层用于导入。原文引用不裁剪。 */
+.jdx-reference-result-text { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; margin:0; color:var(--jdx-muted); font-size:calc(12px * var(--jdx-font-scale,1)); line-height:1.7; overflow-wrap:anywhere; user-select:text; }
 .jdx-reference-meta { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 14px; }
 .jdx-reference-reason { color:var(--jdx-muted); font-size:calc(11px * var(--jdx-font-scale,1)); line-height:1.6; overflow-wrap:anywhere; }
-.jdx-reference-actions { display:flex; align-items:center; flex-wrap:wrap; gap:4px; margin:9px 0 -4px -8px; font-size:calc(11px * var(--jdx-font-scale,1)); }
-.jdx-reference-actions input { accent-color:var(--jdx-green); width:15px; height:15px; margin:0 8px; }
+.jdx-reference-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:10px 0 0; font-size:calc(11px * var(--jdx-font-scale,1)); }
 .jdx-reference-actions[hidden] { display:none; }
 .jdx-reference-list { flex:1 1 auto; min-height:0; overflow:auto; }
 .jdx-reference-import { flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:14px 0 4px; border-top:1px solid var(--jdx-line); background:var(--jdx-background); font-size:calc(12px * var(--jdx-font-scale,1)); }
