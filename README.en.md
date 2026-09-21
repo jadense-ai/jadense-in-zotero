@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**Unreleased source (0.5.0):** adds a standalone paper-classification window, chat file attachments and layered reading for long PDFs. Full-document tasks use the text layer by default with optional OCR, alongside sidebar recovery, diagnostics and reference-year parsing improvements. References without an exact match are labeled “First result selected”; review before importing. The first full translation asks you to confirm cost and stability considerations. This source update does not publish a new official installer. See [setup and limitations](docs/usage-guide.md#unreleased-050). Installation instructions below describe the released version; text-layer tasks in 0.5.0 do not require OCR.
+**v0.5.0 release candidate:** standalone paper classification, chat file attachments, layered reading of long PDFs and optional OCR, with sidebar recovery and clearer reference candidates. Official assets will be published after validation; v0.4.10 remains the current download. See [0.5.0 setup and limitations](docs/usage-guide.md#unreleased-050).
 
 <!-- release-summary:start -->
 ## Recent releases
@@ -52,7 +52,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 - **Host application**: [Zotero Desktop 8.0–10.0.*](https://www.zotero.org/download/). Automatic figure detection additionally requires a compatible PDF reader in Zotero 10.0.1 or later.
 - **AI access**: to use AI features, configure one AI service. Use [BYOK](docs/usage-guide.md#byok-provider) with a provider API key, base URL, and model ID—no Jadense account required—or [connect Jadense](docs/usage-guide.md#connect) with a Jadense account and plugin token. Model usage follows the billing and access rules of the selected provider or Jadense account.
-- **Local OCR**: chat and default selection translation do not require Python; optional selection OCR and [full translation and full Markdown extraction](docs/local-ocr.md) require a local OCR runtime, Python dependencies, and models. The first setup needs network access and several GB of disk space.
+- **Local OCR**: chat and default selection translation do not require Python; full Markdown, translation and reference extraction use the PDF text layer by default without Python; [optional OCR](docs/local-ocr.md) for scanned pages requires a local runtime, Python dependencies and models. The first setup needs network access and several GB of disk space.
 - **Optional Zotero Connector**: Zotero Connector is not a dependency of this plugin. It only collects papers from the browser; whether it is installed does not affect reading local papers and PDFs in Zotero.
 
 ### Current installation methods
@@ -62,7 +62,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.4.10.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.4.10/jadense-in-zotero-v0.4.10.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.5.0/jadense-in-zotero-v0.5.0.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -71,7 +71,7 @@ All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's *
 
 ## OCR dependency installation
 
-Full Markdown, full translation and reference extraction require local OCR; ordinary chat and default selection translation do not need Python. Open **Settings → OCR configuration → Enable local OCR**, wait for **Ready**, or inspect the logs and choose **Continue setup** after a failure. First setup downloads Python, dependencies and models and needs several GB of disk space. Preinstalled Python and CUDA are not required.
+In 0.5.0, full Markdown, translation and reference extraction use the text layer by default; OCR is optional for scanned pages; ordinary chat and default selection translation do not need Python. Open **Settings → OCR configuration → Enable local OCR**, wait for **Ready**, or inspect the logs and choose **Continue setup** after a failure. First setup downloads Python, dependencies and models and needs several GB of disk space. Preinstalled Python and CUDA are not required.
 
 The **[detailed OCR installation guide (Chinese)](docs/local-ocr.md)** covers [settings](docs/local-ocr.md#settings), separate manual steps for [Windows](docs/local-ocr.md#windows), [Linux](docs/local-ocr.md#linux) and [macOS](docs/local-ocr.md#macos), [model verification](docs/local-ocr.md#models), and [repair/reinstallation](docs/local-ocr.md#repair). It explains v0.4.10 controls and differences from older versions.
 
@@ -99,7 +99,7 @@ The **[detailed OCR installation guide (Chinese)](docs/local-ocr.md)** covers [s
 
 ## How to use this plugin
 
-**Install → configure one AI connection → select a model → open a PDF.** Chat and default selection translation do not require Python. Prepare OCR dependencies and models under **Settings → OCR configuration** before full-document tasks; first setup needs several GB of disk space. See [OCR setup and troubleshooting (Chinese)](docs/local-ocr.md). BYOK requires access to your configured model API.
+**Install → configure one AI connection → select a model → open a PDF.** Chat and default selection translation do not require Python. For scanned pages, optionally prepare OCR dependencies and models under **Settings → OCR configuration**; first setup needs several GB of disk space. See [OCR setup and troubleshooting (Chinese)](docs/local-ocr.md). BYOK requires access to your configured model API.
 
 The [illustrated guide (Chinese)](docs/usage-guide.md) walks through provider, model, token and reader settings.
 
@@ -190,7 +190,7 @@ Select text and click **AI translation (智能翻译)** in the selection popup, 
 
 ### [Translate a whole PDF and check the original passages](docs/usage-guide.md#full-translation)
 
-Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Choose AI or Bing/Google in Settings → Feature settings → Translation. Full translation first uses local OCR, including scanned pages, then sends recognized text to the selected translation service. It does not export a bilingual PDF with the original layout.
+Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Choose AI or Bing/Google in Settings → Feature settings → Translation. Full translation uses the PDF text layer by default, with optional OCR for scanned pages, then sends extracted text to the selected translation service. The first full translation asks you to confirm cost and stability considerations; canceling sends no request. It does not export a bilingual PDF with the original layout.
 
 ### [Follow the evidence through references](docs/usage-guide.md#references)
 
@@ -274,7 +274,7 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-Install 0.4.10 over GitHub 0.4.0–0.4.9. The same `.cn` plugin ID preserves settings and local history. Existing translations are not regenerated automatically.
+Once v0.5.0 is published, install it over GitHub 0.4.0–0.4.10. The same `.cn` plugin ID preserves settings and local history. Existing translations are not regenerated automatically.
 
 If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install the latest published XPI**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 

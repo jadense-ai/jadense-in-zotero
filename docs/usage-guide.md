@@ -262,9 +262,9 @@ Settings → OCR configuration shows setup stages, download size and elapsed tim
 
 <a id="unreleased-050"></a>
 
-## 0.5.0 未发布：文献分类、长文阅读与可选 OCR / Unreleased features
+## 0.5.0 发布候选：文献分类、长文阅读与可选 OCR / Release candidate
 
-本节适用于 0.5.0 源码，不表示已有新正式安装包。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
+本节适用于 0.5.0 发布候选，正式安装包将在验收后公开。前面的 0.4.x 全文任务准备步骤仍适用于对应旧版。
 
 ### 文献分类 / Paper classification
 
@@ -274,9 +274,9 @@ Select papers in Zotero and choose Paper classification from the context menu. S
 
 ### 文件与长 PDF / Files and long PDFs
 
-在对话输入区添加文件或关联 Zotero PDF。可读正文缓存在本机；短文直接进入上下文，长文按模型容量分块概括并召回相关原文，可能产生多次模型请求及相应费用。查看阅读进度、缺页提示与回答页码来源，并对照原文核查。扫描缺页需用户主动准备 OCR；缓存或提取失败会提示，不代表全文已读完。
+在对话输入区添加 PDF、DOCX、HTML、Markdown 或常用文本文件，或关联 Zotero PDF。上传文件每个最大 20 MB、最多提取前 60,000 字符；DOCX 仅提取正文，不含图片、批注与页眉页脚，旧 DOC 需先转换。完整长 PDF 阅读请使用关联 Zotero PDF 的入口。可读正文缓存在本机；短文直接进入上下文，长文按模型容量分块概括并召回相关原文，可能产生多次模型请求及相应费用。查看阅读进度、缺页提示与回答页码来源，并对照原文核查。扫描缺页需用户主动准备 OCR；缓存或提取失败会提示，不代表全文已读完。
 
-Attach files in the chat composer or link Zotero PDFs. Readable text is cached locally. Short documents fit directly into context; longer documents use chunked summaries and relevant source passages within model limits, potentially producing multiple billed requests. Check progress, missing-page warnings and page references against the original. Scanned pages require user-enabled OCR; extraction or cache warnings must not be interpreted as complete reading.
+Attach PDF, DOCX, HTML, Markdown or common text files in the chat composer, or link Zotero PDFs. Uploaded files are limited to 20 MB and the first 60,000 extracted characters; DOCX includes body text only, excluding images, comments, headers and footers. Convert legacy DOC files first. Use linked Zotero PDFs for full long-document reading. Readable text is cached locally. Short documents fit directly into context; longer documents use chunked summaries and relevant source passages within model limits, potentially producing multiple billed requests. Check progress, missing-page warnings and page references against the original. Scanned pages require user-enabled OCR; extraction or cache warnings must not be interpreted as complete reading.
 
 ### 全文提取与恢复 / Extraction and recovery
 
