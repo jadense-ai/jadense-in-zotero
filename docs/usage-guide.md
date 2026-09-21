@@ -291,3 +291,10 @@ References show Original citation and Search result separately, retaining standa
 全文 Markdown、全文翻译和参考文献提取默认使用文字层。需要识别扫描页时在「设置 → OCR配置」启用全文 OCR 增强并准备依赖与模型；OCR 失败时尝试文字层，并保留无文字页提示。翻译和分析仍需对应 AI 或传统翻译服务。侧栏异常可重试；仍无法恢复时，从 Zotero 工具菜单或「帮助 → 错误诊断」导出本机诊断。
 
 Full Markdown, full translation and reference extraction use the text layer by default. Enable full-document OCR in OCR configuration and prepare dependencies/models for scanned pages. OCR failures fall back to the text layer with warnings for unreadable pages. Translation and analysis still require their configured service. Retry a failed sidebar; if it remains unavailable, export local diagnostics from Zotero's Tools menu or Help → Error diagnostics.
+
+### 文献分类预览 / Classification preview
+
+![分类预览](images/guide-classification-050.png)
+
+图示来自 0.5.0 候选包、Windows 11 / Zotero 10.0.3 的隔离 profile，文献与服务结果为合成数据。Screenshot from the 0.5.0 candidate on Windows 11 / Zotero 10.0.3 with synthetic data and mocked responses.
+
