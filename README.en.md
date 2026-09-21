@@ -194,7 +194,7 @@ Choose **Full translation** from the reading actions to read paragraph translati
 
 ### [Follow the evidence through references](docs/usage-guide.md#references)
 
-**Analyze** also extracts the current PDF's references. Under **Literature analysis → Paper details → References (文献解析 → 论文详情 → 参考文献)**, inspect the source, verify DOIs, and select verified entries to import into Zotero. Original order, numbering, duplicates, and unconfirmed text are retained. Import deduplicates by DOI within the same library and saves metadata and links without downloading PDFs.
+**Analyze** also extracts the current PDF's references. Under **Literature analysis → Paper details → References (文献解析 → 论文详情 → 参考文献)**, inspect the source, verify DOIs, and select reviewed candidates to import into Zotero. “First result selected” identifies a fallback without an exact match and needs careful review. Original order, numbering, duplicates, and unconfirmed text are retained. Import deduplicates by DOI within the same library and saves metadata and links without downloading PDFs.
 
 When reader space is limited, Ask, Analyze, Quote, and Full translation appear under the **•••** reading actions menu. Click the Jadense icon to open the workbench directly.
 
@@ -257,7 +257,7 @@ The following describes data handling in the **Zotero plugin**.
 | --- | --- |
 | Saving settings, conversations, image attachments, translation history, and analysis history | Your local Zotero profile. API keys and Jadense tokens are also stored there; do not share the profile publicly. |
 | BYOK model requests | Directly from the plugin to the selected provider, including the text, paper context, and images needed for the request. The API key authenticates with that provider. |
-| Reference recognition, verification, and import | Uncertain fragments may be sent to the selected analysis model; Zotero lookup and Crossref verify DOI and bibliographic information. Selected verified metadata is imported into your local library. |
+| Reference recognition, verification, and import | Uncertain fragments may be sent to the selected analysis model; Zotero lookup and Crossref verify DOI and bibliographic information. Exact matches or labeled first-result candidates are imported only after your review and explicit action. |
 | Jadense AI features | Jadense receives temporary requests and their required context, authenticated with the plugin token. It also receives the plugin version and feature type for troubleshooting. The server handles processing, billing, and operational records under its own rules. |
 | Literature upload | The metadata of papers you explicitly upload, plus local PDFs only when you choose to include them. |
 | Plugin updates | Zotero requests the update manifest and installation package from the Jadense website. |
