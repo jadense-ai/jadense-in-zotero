@@ -61,7 +61,7 @@ export async function translateReaderSelection(input: {
   ).catch(() => null)
   const title = source?.parentItem?.title ?? source?.title
   const citation = source?.citation
-  const config = readTranslationInterface(input.zotero)
+  const config = readTranslationInterface(input.zotero, 'selection')
   const model = config.kind === 'ai' ? featureModelState(input.zotero, 'translation') : null
   if (model && !model.ready) throw new Error(model.issue)
   if (!source || source.kind !== "file" || source.itemID !== input.action.itemID) {

@@ -1,3 +1,4 @@
+import { migrateTranslationConfiguration } from './zotero/translation-config-migration'
 import { lifecycleTrace } from './zotero/lifecycle-diagnostics'
 import { selectedClassificationIDs } from './zotero/classification'
 import { openClassificationWindow, closeClassificationWindow } from './zotero/classification-window'
@@ -367,6 +368,7 @@ async function startup(data: BootstrapData = {}) {
     registeredChromeContent = registerChromeContent(pluginContext.rootURI)
     if (!registeredChromeContent) throw Object.assign(new Error('Chrome content unavailable'), { code: 'CHROME_UNAVAILABLE' })
   })
+  migrateTranslationConfiguration(Zotero)
   await step('locale', () => { initializeUiLocale(Zotero); loadLocalizationIntoOpenWindows() })
   await step('menus', () => { registerMenus(); if (!registeredMenuIDs.length) throw new Error('Menus unavailable') })
   await step('preferences', async () => {

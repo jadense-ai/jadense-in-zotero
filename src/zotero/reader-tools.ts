@@ -411,7 +411,7 @@ export async function readPdfForAnalysis(
     const document = await readDocument(zotero as unknown as ZoteroLike, itemID, signal ?? new AbortController().signal)
     const candidates: PdfAnalysisPassage[] = document.pages.flatMap(page => page.paragraphs.flatMap((paragraph, index) => {
       const rects = paragraph.rects.filter(validRect)
-      if (!paragraph.text.trim() || !rects.length) return []
+      if (!paragraph.text.trim()) return []
       return [{ id: paragraph.id, text: paragraph.text, pageIndex: page.pageIndex, pageLabel: page.pageLabel,
         position: { pageIndex: page.pageIndex, rects }, sortIndex: `${String(page.pageIndex).padStart(5, '0')}|${String(index).padStart(6, '0')}|00000` }]
     }))
@@ -861,21 +861,21 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-translation-panel] .jadense-translation-text * {-moz-user-select:text;user-select:text;}
 .jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--jdx-reader-surface,rgba(17,21,16,.04));}
 .jadense-translation-result[data-error="true"] {color:var(--jdx-reader-error,#b42318);}
-.jadense-translation-result[data-error="false"] {white-space:normal;}
-.jadense-translation-result[data-error="false"] > :first-child {margin-top:0;}
-.jadense-translation-result[data-error="false"] > :last-child {margin-bottom:0;}
-.jadense-translation-result p,.jadense-translation-result ul,.jadense-translation-result ol,.jadense-translation-result blockquote,.jadense-translation-result pre,.jadense-translation-result table {margin:0 0 10px;}
-.jadense-translation-result ul,.jadense-translation-result ol {padding-inline-start:22px;}
-.jadense-translation-result blockquote {border-inline-start:3px solid var(--jdx-reader-border,rgba(17,21,16,.2));padding-inline-start:10px;color:var(--jdx-reader-muted,currentColor);}
-.jadense-translation-result code {border-radius:3px;padding:1px 4px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;}
-.jadense-translation-result pre {max-width:100%;overflow:auto;border-radius:5px;padding:9px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));}
-.jadense-translation-result pre code {padding:0;background:transparent;white-space:pre;}
-.jadense-translation-result table {display:block;max-width:100%;overflow:auto;border-collapse:collapse;}
-.jadense-translation-result th,.jadense-translation-result td {border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));padding:4px 6px;text-align:start;}
-.jadense-translation-result a {color:inherit;text-decoration:underline;text-underline-offset:2px;}
-.jadense-translation-result .katex {font-size:1.04em;}
-.jadense-translation-result .katex-display {display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;padding-block:2px;}
-.jadense-translation-result .jdx-math-error {color:var(--jdx-reader-error,#b42318);}
+.jadense-translation-markdown:not([data-error="true"]) {white-space:normal;}
+.jadense-translation-markdown:not([data-error="true"]) > :first-child {margin-top:0;}
+.jadense-translation-markdown:not([data-error="true"]) > :last-child {margin-bottom:0;}
+.jadense-translation-markdown p,.jadense-translation-markdown ul,.jadense-translation-markdown ol,.jadense-translation-markdown blockquote,.jadense-translation-markdown pre,.jadense-translation-markdown table {margin:0 0 10px;}
+.jadense-translation-markdown ul,.jadense-translation-markdown ol {padding-inline-start:22px;}
+.jadense-translation-markdown blockquote {border-inline-start:3px solid var(--jdx-reader-border,rgba(17,21,16,.2));padding-inline-start:10px;color:var(--jdx-reader-muted,currentColor);}
+.jadense-translation-markdown code {border-radius:3px;padding:1px 4px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;}
+.jadense-translation-markdown pre {max-width:100%;overflow:auto;border-radius:5px;padding:9px;background:var(--jdx-reader-hover,rgba(17,21,16,.07));}
+.jadense-translation-markdown pre code {padding:0;background:transparent;white-space:pre;}
+.jadense-translation-markdown table {display:block;max-width:100%;overflow:auto;border-collapse:collapse;}
+.jadense-translation-markdown th,.jadense-translation-markdown td {border:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));padding:4px 6px;text-align:start;}
+.jadense-translation-markdown a {color:inherit;text-decoration:underline;text-underline-offset:2px;}
+.jadense-translation-markdown .katex {font-size:1.04em;}
+.jadense-translation-markdown .katex-display {display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;padding-block:2px;}
+.jadense-translation-markdown .jdx-math-error {color:var(--jdx-reader-error,#b42318);}
 .jadense-translation-actions {display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:9px 12px;border-top:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
 .jadense-translation-languages {display:inline-flex;align-items:center;gap:4px;min-width:0;}
 [data-jadense-reader-tools] .jadense-translation-languages {margin-inline-start:4px;padding-inline-start:5px;border-inline-start:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
@@ -1095,13 +1095,13 @@ export function registerReaderTools(
     const sourceLabel = doc.createElement("p")
     sourceLabel.className = "jadense-translation-label"
     sourceLabel.textContent = uiText("原文", "Original")
-    const sourceText = doc.createElement("p")
-    sourceText.className = "jadense-translation-text"
+    const sourceText = doc.createElement("div")
+    sourceText.className = "jadense-translation-text jadense-translation-markdown"
     const resultLabel = doc.createElement("p")
     resultLabel.className = "jadense-translation-label"
     resultLabel.textContent = uiText("译文", "Translation")
     const resultText = doc.createElement("div")
-    resultText.className = "jadense-translation-text jadense-translation-result"
+    resultText.className = "jadense-translation-text jadense-translation-result jadense-translation-markdown"
     resultText.setAttribute("aria-live", "polite")
     translationContent.append(sourceLabel, sourceText, resultLabel, resultText)
     const translationActions = doc.createElement("footer")
@@ -1139,8 +1139,8 @@ export function registerReaderTools(
     let translationMarkdown = ""
     let translationSelection: ReaderToolbarAction | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
-    const renderTranslationMarkdown = (text: string) => {
-      try { updateChatMarkdown(resultText, text) } catch { resultText.textContent = text }
+    const renderTranslationMarkdown = (text: string, target = resultText) => {
+      try { updateChatMarkdown(target, text) } catch { target.textContent = text }
     }
     const hide = () => {
       if (timer !== undefined) clearTimeout(timer)
@@ -1216,7 +1216,7 @@ export function registerReaderTools(
       beginTranslation: (selection: ReaderToolbarAction) => {
         translationRequestID += 1
         translationSelection = selection
-        sourceText.textContent = selection.text ?? ""
+        renderTranslationMarkdown(selection.text ?? "", sourceText)
         sentenceLanguages.set(selection.languages ?? DEFAULT_TRANSLATION_LANGUAGES)
         sentenceLanguages.disable(true)
         retranslate.disabled = true
@@ -1239,7 +1239,7 @@ export function registerReaderTools(
       setTranslationSource: (requestID: number, selection: ReaderToolbarAction) => {
         if (requestID !== translationRequestID || translationPanel.hidden) return false
         translationSelection = selection
-        sourceText.textContent = selection.text ?? ''
+        renderTranslationMarkdown(selection.text ?? '', sourceText)
         return true
       },
       updateTranslation: (requestID: number, text: string) => {

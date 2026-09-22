@@ -24,7 +24,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
-**v0.5.0 已发布：**新增独立文献分类、对话文件附件、关联长 PDF 分层阅读和可选 OCR，并改进参考文献候选展示与侧栏恢复。详见[完整更新说明](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0)和[操作与限制](docs/usage-guide.md#unreleased-050)。
+**v0.5.1 发布候选：**云 OCR 可选引擎、选文与全文翻译独立配置，并统一工作台和原生设置布局。 [配置 / Setup](docs/usage-guide.md#settings-051)
 
 <!-- release-summary:start -->
 ## 最近版本
@@ -62,7 +62,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.5.0.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.5.0/jadense-in-zotero-v0.5.0.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.5.1/jadense-in-zotero-v0.5.1.xpi` | 适合开发和审计；仅需本仓库与所列构建依赖 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 

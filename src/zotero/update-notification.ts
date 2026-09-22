@@ -59,8 +59,9 @@ export function showUpdateDialog(document: Document, host: UpdateHost, release: 
   dialog.id = 'jadense-update-dialog'
   dialog.setAttribute('aria-labelledby', 'jadense-update-title')
   dialog.setAttribute('aria-describedby', 'jadense-update-description')
+  // Reader 全局 margin:0 会覆盖 dialog 原生居中，必须在自有容器恢复自动外边距。
   const style = element('style', `
-    #jadense-update-dialog { box-sizing:border-box; color:light-dark(#111510,#f1f5ef); background:light-dark(#fff,#111611); border:1px solid #80808030; border-radius:16px; padding:28px; width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; box-shadow:0 20px 64px #0003; font:14px/1.65 system-ui; }
+    #jadense-update-dialog { box-sizing:border-box; margin:auto; color:light-dark(#111510,#f1f5ef); background:light-dark(#fff,#111611); border:1px solid #80808030; border-radius:16px; padding:28px; width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; box-shadow:0 20px 64px #0003; font:14px/1.65 system-ui; }
     #jadense-update-dialog::backdrop { background:#0005; }
     #jadense-update-dialog .eyebrow { color:light-dark(#08784f,#16d78f); font-size:12px; font-weight:600; margin:0 0 8px; }
     #jadense-update-dialog h2 { font-size:22px; line-height:1.35; margin:0 0 12px; }

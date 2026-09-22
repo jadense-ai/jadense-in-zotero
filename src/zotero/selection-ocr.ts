@@ -1,5 +1,6 @@
 /** 选文可选增强边界：原文与范围由 Reader 同步捕获，失败只影响 OCR，不阻断引用或翻译。 */
-import { readOCRSelection, readSelectionOCR, type OCRSelectionRegion } from './local-ocr'
+import { readSelectionOCR, type OCRSelectionRegion } from './local-ocr'
+import { readEngineSelection } from './cloud-ocr'
 import type { ZoteroLike } from './runtime'
 import { checkCancelled } from './pdf-document'
 import { uiText } from './ui-preferences'
@@ -15,12 +16,12 @@ export async function enhanceSelection<T extends { itemID: number; text?: string
   }
   try {
     progress(uiText('正在 OCR 提取选文与公式…', 'Extracting selected text and formulas with OCR…'))
-    const text = await readOCRSelection(host, selection.itemID, regions, signal, progress)
+    const text = await readEngineSelection(host, selection.itemID, regions, signal, progress)
     checkCancelled(signal)
     return { ...selection, text }
   } catch {
     checkCancelled(signal)
-    warning(uiText('选文 OCR 未完成，已使用原选文。请在设置 → OCR配置中检查依赖及模型下载源。', 'Selection OCR did not complete. Using the original selection. Check dependencies and model source in Settings → OCR configuration.'))
+    warning(uiText('选文 OCR 未完成，已使用原选文。请在设置 → OCR配置中检查所选引擎。', 'Selection OCR did not complete. Using the original selection. Check the selected engine in Settings → OCR configuration.'))
     return selection
   }
 }

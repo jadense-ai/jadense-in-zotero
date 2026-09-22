@@ -455,36 +455,86 @@
               <div id="jadense-general-status" class="jdx-manager-inline-status" role="status"></div>
             </div>
           </section>
-          <section id="jadense-settings-panel-features" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
-            <p class="jdx-manager-settings-note" data-ui-en="Translation, analysis and image interpretation follow the Chat model by default. Configure AI through Connect Jadense or BYOK. Translation services and Jev classification are configured independently.">翻译、文献解析和图片解读默认跟随当前对话模型。可在「连接攻玉」或「BYOK」配置 AI；翻译接口和 Jev 文献分类独立配置。</p>
-            <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p data-ui-en="Everyday questions and paper discussions. Shared with the model selector in the Chat input.">日常问答与文献对话；与对话输入栏的模型选择保持一致。</p></div>
-              <div><div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label"></div><p id="jadense-feature-chat-model-status" class="jdx-manager-inline-status" role="status"></p></div>
-            </div>
-            <div class="jdx-feature-model-row jdx-feature-model-follow-row">
-              <div><h3 id="jadense-auto-follow-chat-model-label" data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</h3><p data-ui-en="When enabled, translation, analysis and image interpretation use the Chat model. Turn it off to configure them separately. Translation services and Jev classification are independent.">开启后，翻译、文献解析和图片解读使用当前对话模型；关闭后可分别配置。翻译接口和 Jev 文献分类不受此开关影响。</p></div>
-              <label class="jdx-manager-checkbox"><input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" /><span data-ui-en="Enabled">启用</span></label>
-            </div>
-            <div id="jadense-feature-model-status" class="jdx-manager-inline-status" role="status"></div>
-            <section class="jdx-feature-group" data-feature-group="translation">
-              <h3 data-ui-en="Translation">翻译</h3>
-            <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-translation-label" data-ui-en="Live translation">实时翻译</h3><p data-ui-en="Translate selected text and full PDFs. Full translation uses the paper's language settings.">用于 PDF 选文与全文翻译；全文沿用文章语言设置。</p></div>
-              <div><div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label"></div><p id="jadense-feature-translation-model-status" class="jdx-manager-inline-status" role="status"></p></div>
-            </div>
+          <section id="jadense-settings-panel-features" class="jdx-manager-settings-card" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
+            <section class="jdx-settings-task" data-settings-task="chat">
+              <h3 data-ui-en="Paper chat and model defaults">文献对话与模型默认值</h3>
+              <div class="jdx-feature-model-row">
+                <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Reuses saved document extraction; linking papers does not start OCR.">可复用已有全文提取成果；关联文献不会自动启动 OCR。</p></div>
+                <div>
+                  <div id="jadense-feature-chat-model" aria-labelledby="jadense-feature-chat-label">
+                  </div>
+                  <p id="jadense-feature-chat-model-status" role="status">
+                  </p>
+                </div>
+              </div>
+              <div class="jdx-feature-model-row"><div><label class="jdx-manager-checkbox jdx-pref-checkbox">
+                <input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" />
+                <span data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</span>
+              </label><p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="When enabled, both AI translation modes, analysis and image interpretation follow Chat. Translation services and Jev remain independent.">开启后，两种 AI 翻译、文献解析和图片解读跟随对话模型；翻译接口与 Jev 分类独立配置。</p></div><div></div></div>
+              <div id="jadense-feature-model-status" role="status">
+              </div>
             </section>
-            <div data-selection-settings-host=""></div>
-            <section class="jdx-feature-group" data-feature-group="analysis">
-            <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3><p data-ui-en="Summaries, analysis notes, source annotations, and local fallback for uncertain references. Reference verification never uses AI.">生成总结、解析笔记与原文批注，并为不确定引用提供局部识别兜底；参考文献核验不使用 AI。</p></div>
-              <div><div id="jadense-feature-analysis-model" aria-labelledby="jadense-feature-analysis-label"></div><p id="jadense-feature-analysis-model-status" class="jdx-manager-inline-status" role="status"></p></div>
-            </div>
+            <section class="jdx-settings-task" data-settings-task="selection">
+              <h3 data-ui-en="Selected text and images">选文与图片</h3>
+              <div data-selection-settings-host="">
+              </div>
+              <section data-translation-scope="selection">
+                <div class="jdx-feature-model-row">
+                  <div><h3 id="jadense-feature-translation-label" data-ui-en="AI model">AI 模型</h3></div>
+                  <div>
+                    <div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label">
+                    </div>
+                    <p id="jadense-feature-translation-model-status" role="status">
+                    </p>
+                    <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
+                  </div>
+                </div>
+              </section>
+              <div class="jdx-feature-model-row">
+                <div><h3 id="jadense-feature-figure-label" data-ui-en="Image interpretation">图片解读</h3></div>
+                <div>
+                  <div id="jadense-feature-figure-model" aria-labelledby="jadense-feature-figure-label">
+                  </div>
+                  <p id="jadense-feature-figure-model-status" role="status">
+                  </p>
+                  <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
+                </div>
+              </div>
             </section>
-            <section class="jdx-feature-group" data-feature-group="figure">
-            <div class="jdx-feature-model-row">
-              <div><h3 id="jadense-feature-figure-label" data-ui-en="Image interpretation">图片解读</h3><p data-ui-en="Automatic detection, manual capture, and image follow-ups. Choose a model that accepts images.">自动识图、手动截图及其后续带图追问，请选择支持图片的模型。</p></div>
-              <div><div id="jadense-feature-figure-model" aria-labelledby="jadense-feature-figure-label"></div><p id="jadense-feature-figure-model-status" class="jdx-manager-inline-status" role="status"></p></div>
-            </div>
+            <section class="jdx-settings-task" data-settings-task="document">
+              <h3 data-ui-en="Document reading and processing">文献阅读与处理</h3>
+              <div data-document-ocr-host="">
+              </div>
+              <section data-translation-scope="document">
+                <div class="jdx-feature-model-row">
+                  <div><h3 id="jadense-feature-fullTranslation-label" data-ui-en="AI model">AI 模型</h3></div>
+                  <div>
+                    <div id="jadense-feature-fullTranslation-model" aria-labelledby="jadense-feature-fullTranslation-label">
+                    </div>
+                    <p id="jadense-feature-fullTranslation-model-status" role="status">
+                    </p>
+                    <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
+                  </div>
+                </div>
+              </section>
+              <p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Translates saved Markdown using each paper’s language settings.">翻译已保存的原文 Markdown，语言沿用每篇文献的设置。</p>
+              <section data-feature-group="analysis">
+                <div class="jdx-feature-model-row">
+                  <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3></div>
+                  <div>
+                    <div id="jadense-feature-analysis-model" aria-labelledby="jadense-feature-analysis-label">
+                    </div>
+                    <p id="jadense-feature-analysis-model-status" role="status">
+                    </p>
+                    <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
+                  </div>
+                </div>
+              </section>
+            </section>
+            <section class="jdx-settings-task" data-settings-task="organization">
+              <h3 data-ui-en="Library organization">文献整理</h3>
+              <div data-classification-settings-host="">
+              </div>
             </section>
           </section>
           <section id="jadense-settings-panel-ocr" role="tabpanel" aria-labelledby="jadense-settings-tab-ocr" hidden="hidden"><div class="jdx-manager-settings-card" data-ocr-settings=""></div></section>
@@ -593,62 +643,81 @@
           </div>
           </section>
           <section id="jadense-settings-panel-shortcuts" class="jdx-shortcut-settings" role="tabpanel" aria-labelledby="jadense-settings-tab-shortcuts" hidden="hidden">
-            <p class="jdx-manager-settings-note" id="jadense-shortcut-help" data-ui-en="Click a shortcut field, press a new key combination, then click Save. Shortcuts apply in the PDF reader.">点击快捷键输入框并按下新组合键，再点击「保存」。快捷键在 PDF 阅读器中生效。</p>
-            <div class="jdx-shortcut-row">
-              <label class="jdx-manager-field" for="jadense-shortcut-capture-input">
-                <span data-ui-en="PDF capture shortcut">PDF截图快捷键</span>
-                <small id="jadense-shortcut-capture-help" data-ui-en="Drag to select an image region, then choose how to interpret it.">拖动框选图片范围，确认后选择解读方式。</small>
-                <input id="jadense-shortcut-capture-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-capture-help jadense-shortcut-help" />
-              </label>
-              <div class="jdx-manager-actions">
-                <button id="jadense-shortcut-capture-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
-                <button id="jadense-shortcut-capture-reset" type="button" data-ui-en="Restore default">恢复默认</button>
-                <button id="jadense-shortcut-capture-disable" type="button" data-ui-en="Disable">停用</button>
+            <div class="jdx-manager-settings-card jdx-settings-list">
+              <p class="jdx-manager-settings-note" id="jadense-shortcut-help" data-ui-en="Click a shortcut field, press a new key combination, then click Save. Shortcuts apply in the PDF reader.">点击快捷键输入框并按下新组合键，再点击「保存」。快捷键在 PDF 阅读器中生效。</p>
+              <div class="jdx-shortcut-row jdx-feature-model-row">
+                <div>
+                  <h3><label for="jadense-shortcut-capture-input" data-ui-en="PDF capture shortcut">PDF截图快捷键</label></h3>
+                  <p id="jadense-shortcut-capture-help" data-ui-en="Drag to select an image region, then choose how to interpret it.">拖动框选图片范围，确认后选择解读方式。</p>
+                </div>
+                <div class="jdx-settings-controls jdx-manager-field">
+                  <input id="jadense-shortcut-capture-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-capture-help jadense-shortcut-help" />
+                  <div class="jdx-manager-actions">
+                    <button id="jadense-shortcut-capture-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
+                    <button id="jadense-shortcut-capture-reset" type="button" data-ui-en="Restore default">恢复默认</button>
+                    <button id="jadense-shortcut-capture-disable" type="button" data-ui-en="Disable">停用</button>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="jdx-shortcut-row">
-              <label class="jdx-manager-field" for="jadense-shortcut-translate-input">
-                <span data-ui-en="Translation shortcut">翻译快捷键</span>
-                <small id="jadense-shortcut-translate-help" data-ui-en="Select PDF text, then press the shortcut to open the translation panel.">选中 PDF 文字后，按快捷键打开翻译浮窗。</small>
-                <input id="jadense-shortcut-translate-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-translate-help jadense-shortcut-help" />
-              </label>
-              <div class="jdx-manager-actions">
-                <button id="jadense-shortcut-translate-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
-                <button id="jadense-shortcut-translate-reset" type="button" data-ui-en="Restore default">恢复默认</button>
-                <button id="jadense-shortcut-translate-disable" type="button" data-ui-en="Disable">停用</button>
+              <div class="jdx-shortcut-row jdx-feature-model-row">
+                <div>
+                  <h3><label for="jadense-shortcut-translate-input" data-ui-en="Translation shortcut">翻译快捷键</label></h3>
+                  <p id="jadense-shortcut-translate-help" data-ui-en="Select PDF text, then press the shortcut to open the translation panel.">选中 PDF 文字后，按快捷键打开翻译浮窗。</p>
+                </div>
+                <div class="jdx-settings-controls jdx-manager-field">
+                  <input id="jadense-shortcut-translate-input" type="text" readonly="readonly" autocomplete="off" aria-describedby="jadense-shortcut-translate-help jadense-shortcut-help" />
+                  <div class="jdx-manager-actions">
+                    <button id="jadense-shortcut-translate-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
+                    <button id="jadense-shortcut-translate-reset" type="button" data-ui-en="Restore default">恢复默认</button>
+                    <button id="jadense-shortcut-translate-disable" type="button" data-ui-en="Disable">停用</button>
+                  </div>
+                </div>
               </div>
+              <div id="jadense-shortcut-status" class="jdx-manager-inline-status" role="status"></div>
             </div>
-            <div id="jadense-shortcut-status" class="jdx-manager-inline-status" role="status"></div>
           </section>
           <section id="jadense-settings-panel-connection" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-settings-tab-connection" hidden="hidden">
-            <section class="jdx-manager-settings-card jdx-connection-config-card" data-connection-section="configuration">
-              <div class="jdx-manager-settings-card-header">
-                <h3 data-ui-en="Jadense token">攻玉令牌</h3>
-                <p data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
-              </div>
-              <div class="jdx-manager-form">
-                <div id="jadense-manager-token-display" class="jdx-manager-token-row">
-                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
-                  <code id="jadense-manager-token-mask" class="jdx-manager-token-mask"></code>
-                  <span class="jdx-manager-token-actions">
-                    <button id="jadense-manager-token-copy" type="button" data-ui-en="Copy">复制</button>
-                    <button id="jadense-manager-token-edit" type="button" data-ui-en="Edit">编辑</button>
-                  </span>
+            <section class="jdx-manager-settings-card jdx-connection-config-card jdx-settings-list" data-connection-section="configuration">
+              <div class="jdx-feature-model-row">
+                <div>
+                  <h3><label id="jadense-manager-token-label" for="jadense-manager-token-input" data-ui-en="Jadense token">攻玉令牌</label></h3>
+                  <p id="jadense-manager-token-help" data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
                 </div>
-                <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
-                  <span class="jdx-manager-field-label" data-ui-en="Jadense token">攻玉令牌</span>
-                  <input id="jadense-manager-token-input" type="password" autocomplete="off" placeholder="粘贴新的攻玉令牌" data-ui-en-placeholder="Paste a new Jadense token" />
-                  <span class="jdx-manager-token-actions">
-                    <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
-                    <button id="jadense-manager-token-cancel" type="button" data-ui-en="Cancel">取消</button>
-                  </span>
+                <div class="jdx-settings-controls">
+                  <div id="jadense-manager-token-display" class="jdx-manager-token-row" role="group" aria-labelledby="jadense-manager-token-label">
+                    <code id="jadense-manager-token-mask" class="jdx-manager-token-mask" aria-describedby="jadense-manager-token-help"></code>
+                    <span class="jdx-manager-token-actions jdx-manager-actions">
+                      <button id="jadense-manager-token-copy" type="button" data-ui-en="Copy">复制</button>
+                      <button id="jadense-manager-token-edit" type="button" data-ui-en="Edit">编辑</button>
+                    </span>
+                  </div>
+                  <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
+                    <input id="jadense-manager-token-input" type="password" autocomplete="off" aria-describedby="jadense-manager-token-help" placeholder="粘贴新的攻玉令牌" data-ui-en-placeholder="Paste a new Jadense token" />
+                    <span class="jdx-manager-token-actions jdx-manager-actions">
+                      <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
+                      <button id="jadense-manager-token-cancel" type="button" data-ui-en="Cancel">取消</button>
+                    </span>
+                  </div>
+                  <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
                 </div>
               </div>
-              <p class="jdx-manager-settings-note" data-ui-en="Need a token? Click Generate / update token to open Settings → Integrations on the Jadense website. Create a Zotero token and paste it above. A complete token should include Chat, account, points, and upload permissions; missing permissions affect the corresponding features.">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
-              <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
-              <div class="jdx-manager-actions jdx-manager-actions-end">
-                <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>
-                <button id="jadense-manager-disconnect" type="button" class="jdx-manager-danger" data-ui-en="Disconnect">断开连接</button>
+              <div class="jdx-feature-model-row">
+                <div>
+                  <h3 data-ui-en="Token access and permissions">令牌获取与权限</h3>
+                  <p class="jdx-manager-settings-note" data-ui-en="Need a token? Click Generate / update token to open Settings → Integrations on the Jadense website. Create a Zotero token and paste it above. A complete token should include Chat, account, points, and upload permissions; missing permissions affect the corresponding features.">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
+                </div>
+                <div class="jdx-manager-actions">
+                  <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>
+                </div>
+              </div>
+              <div class="jdx-feature-model-row">
+                <div>
+                  <h3 data-ui-en="Connection management">连接管理</h3>
+                  <p data-ui-en="Disconnecting removes the saved token from this computer. Local conversations and documents are kept.">断开连接将清除本机保存的令牌，保留本地对话与文献。</p>
+                </div>
+                <div class="jdx-manager-actions">
+                  <button id="jadense-manager-disconnect" type="button" class="jdx-manager-danger" data-ui-en="Disconnect">断开连接</button>
+                </div>
               </div>
             </section>
           </section>

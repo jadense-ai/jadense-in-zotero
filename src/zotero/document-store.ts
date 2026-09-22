@@ -14,7 +14,7 @@ export type DocumentTask = {
   chunkVersion?: number
   extractionID?: string
 }
-export type ExtractedDocument = { version: 1; markdown: string; pages: DocumentPage[]; assets: string[] }
+export type ExtractedDocument = { version: 1; markdown: string; pages: DocumentPage[]; assets: string[]; ocr?: import('./pdf-document').PdfTextDocument['ocr'] }
 export type TranslationPage = DocumentPage & { translations: Record<string, string>; pieces: Array<{ id: string; paragraphID: string; text: string }> }
 export type TaskIO = {
   makeDirectory(path: string, options: { ignoreExisting: boolean }): Promise<unknown>

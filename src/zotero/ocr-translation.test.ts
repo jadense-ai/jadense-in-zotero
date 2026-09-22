@@ -339,3 +339,46 @@ it('pauses when the active credential changes and retains a visible reason', asy
   expect(task.status).toBe('paused'); expect(task.issue?.code).toBe('CONFIG_CHANGED'); expect(fetch).toHaveBeenCalledOnce()
   jobs.dispose()
 })
+
+
+it('keeps a running full translation when selection settings change, but pauses for its own effective model', async () => {
+  const { host, prefs } = fixture(['Full source text.'])
+  prefs.set('extensions.jadenseInZotero.autoFollowChatModel', false)
+  prefs.set('extensions.jadenseInZotero.fullTranslationModel', JSON.stringify({ route: 'jadense', selection: { kind: 'model', modelId: 'full-model' } }))
+  const callbacks = new Map<string, () => void>()
+  host.Prefs!.registerObserver = (key, callback) => { callbacks.set(key, callback); return key }
+  const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+    prefs.set('extensions.jadenseInZotero.selectionTranslationInterface', JSON.stringify({ kind: 'machine', service: 'google' }))
+    callbacks.get('extensions.jadenseInZotero.selectionTranslationInterface')?.()
+    prefs.set('extensions.jadenseInZotero.selectionTranslationModel', JSON.stringify({ route: 'byok', modelId: 'selection-model' }))
+    callbacks.get('extensions.jadenseInZotero.selectionTranslationModel')?.()
+    expect(init?.signal?.aborted).toBe(false)
+    prefs.set('extensions.jadenseInZotero.chatModel', JSON.stringify({ route: 'byok', modelId: 'unrelated-chat' }))
+    callbacks.get('extensions.jadenseInZotero.chatModel')?.()
+    expect(init?.signal?.aborted).toBe(false)
+    prefs.set('extensions.jadenseInZotero.fullTranslationModel', JSON.stringify({ route: 'jadense', selection: { kind: 'model', modelId: 'changed-full' } }))
+    callbacks.get('extensions.jadenseInZotero.fullTranslationModel')?.()
+    expect(init?.signal?.aborted).toBe(true)
+    throw new DOMException('Stopped', 'AbortError')
+  })
+  const jobs = new DocumentJobs(host, fetch, new DocumentStore())
+  await jobs.start('extraction', 1)
+  const task = await jobs.start('translation', 1)
+  await jobs.idle()
+  expect(fetch).toHaveBeenCalledOnce()
+  expect(task.status).toBe('paused')
+  expect(task.completed).toBe(0)
+  jobs.dispose()
+})
+
+
+it('subscribes to global full-service preferences and namespaced model preferences', () => {
+  const { host } = fixture()
+  const observe = vi.fn(() => 'observer')
+  host.Prefs!.registerObserver = observe
+  const jobs = new DocumentJobs(host, vi.fn(), new DocumentStore())
+  expect(observe).toHaveBeenCalledWith('extensions.jadenseInZotero.fullTranslationInterface', expect.any(Function), true)
+  expect(observe).toHaveBeenCalledWith('extensions.jadenseInZotero.fullTranslationModel', expect.any(Function), false)
+  expect(observe).not.toHaveBeenCalledWith('extensions.jadenseInZotero.selectionTranslationInterface', expect.any(Function), true)
+  jobs.dispose()
+})

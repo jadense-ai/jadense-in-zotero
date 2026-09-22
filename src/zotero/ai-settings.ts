@@ -30,17 +30,19 @@ export type FeatureModelSelection =
 
 export type PaperAnalysisModelSelection = FeatureModelSelection
 
-export const AI_FEATURES = ["chat", "translation", "analysis", "figure"] as const
+export const AI_FEATURES = ["chat", "translation", "fullTranslation", "analysis", "figure"] as const
 export type AiFeature = typeof AI_FEATURES[number]
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   get chat() { return uiText("AI 对话", "AI Chat") },
-  get translation() { return uiText("实时翻译", "Real-time translation") },
+  get translation() { return uiText("选文翻译", "Selection translation") },
+  get fullTranslation() { return uiText("全文翻译", "Full translation") },
   get analysis() { return uiText("文献解析", "Literature analysis") },
   get figure() { return uiText("图片解读", "Image interpretation") },
 }
 export const FEATURE_MODEL_PREF_KEYS: Record<AiFeature, string> = {
   chat: "extensions.jadenseInZotero.chatModel",
-  translation: "extensions.jadenseInZotero.translationModel",
+  translation: "extensions.jadenseInZotero.selectionTranslationModel",
+  fullTranslation: "extensions.jadenseInZotero.fullTranslationModel",
   analysis: PAPER_ANALYSIS_MODEL_PREF_KEY,
   figure: "extensions.jadenseInZotero.figureModel",
 }
@@ -249,7 +251,7 @@ export function jadenseChatSelectionFromKey(value: string): JadenseChatSelection
   return DEFAULT_JADENSE_MODEL
 }
 
-function normalizeFeatureModelSelection(value: unknown): FeatureModelSelection | null {
+export function normalizeFeatureModelSelection(value: unknown): FeatureModelSelection | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const row = value as Record<string, unknown>
   if (row.route === "jadense") {
@@ -261,8 +263,10 @@ function normalizeFeatureModelSelection(value: unknown): FeatureModelSelection |
   return row.route === "byok" ? { route: "byok", modelId: text(row.modelId) } : null
 }
 
+export const LEGACY_TRANSLATION_MODEL_PREF = "extensions.jadenseInZotero.translationModel"
+
 function storedFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature) {
-  try { return normalizeFeatureModelSelection(JSON.parse(prefString(zotero, FEATURE_MODEL_PREF_KEYS[feature]))) }
+  try { return normalizeFeatureModelSelection(JSON.parse(prefString(zotero, FEATURE_MODEL_PREF_KEYS[feature]) || ((feature === "translation" || feature === "fullTranslation") ? prefString(zotero, LEGACY_TRANSLATION_MODEL_PREF) : ""))) }
   catch { return null }
 }
 

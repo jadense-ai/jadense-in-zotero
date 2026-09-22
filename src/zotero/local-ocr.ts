@@ -52,7 +52,7 @@ async function traceOCR<T>(host: ZoteroLike, operation: string, run: () => Promi
   finally { stop(); trace.end(outcome) }
 }
 
-const OCR_READY_PREF = 'extensions.jadenseInZotero.ocrReady'
+export const OCR_READY_PREF = 'extensions.jadenseInZotero.ocrReady'
 export type OCRProgress = { stage: string; file?: string; completed?: number; total?: number; speed?: number; unit?: string }
 /** 多个设置窗口订阅同一准备进程，重新打开也能看到当前阶段。 */
 export function observeOCRProgress(host: ZoteroLike, listener: (value: OCRProgress) => void) {
@@ -78,7 +78,7 @@ function saveOCRReady(host: ZoteroLike, value: OCREnvironment) {
   }
   return value
 }
-function cachedOCR(host: ZoteroLike): OCREnvironment | undefined {
+export function cachedOCR(host: ZoteroLike): OCREnvironment | undefined {
   try {
     const saved = JSON.parse(String(host.Prefs?.get(OCR_READY_PREF, true) || 'null'))
     if (saved?.root === platform().PathUtils.profileDir && saved.value?.ready === true && saved.value.modelsReady === true) return saved.value

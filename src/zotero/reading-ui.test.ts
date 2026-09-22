@@ -6,6 +6,15 @@ import { describe, expect, it } from "vitest"
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
 
 describe("reading UI controls", () => {
+  it("renders selection source Markdown on initial display, OCR replacement and history", () => {
+    const reader = read('./reader-tools.ts')
+    expect(reader).toContain('renderTranslationMarkdown(selection.text ?? "", sourceText)')
+    expect(reader).toContain("renderTranslationMarkdown(selection.text ?? '', sourceText)")
+    expect(reader).not.toContain('sourceText.textContent = selection.text')
+    expect(reader).toContain('sourceText.className = "jadense-translation-text jadense-translation-markdown"')
+    expect(read('./document-ui.ts')).toContain('updateChatMarkdown(original, record.source.text)')
+  })
+
   it("does not add bulk-copy controls to analysis summary or notes", () => {
     const view = read("./analysis-workspace.ts")
 

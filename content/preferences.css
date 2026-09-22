@@ -706,3 +706,14 @@
   #jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar { border-right: 0; border-bottom: 1px solid var(--jdx-pref-line); padding: 0 0 10px; }
   #jadense-in-zotero-preferences-pane .jdx-pref-provider-list { max-height: 150px; }
 }
+
+/* 功能用途仍在同一张原生设置卡内，字段复用常规页的纵向排列。 */
+#jadense-in-zotero-preferences-pane .jdx-settings-task { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--jdx-pref-line-subtle); }
+#jadense-in-zotero-preferences-pane .jdx-settings-task h3 { margin: 0; font-size: inherit; font-weight: 500; }
+#jadense-in-zotero-preferences-pane .jdx-settings-task > h3 { font-weight: 650; }
+#jadense-in-zotero-preferences-pane .jdx-settings-task .jdx-feature-model-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-block: 8px; }
+#jadense-in-zotero-preferences-pane .jdx-settings-task .jdx-translation-interface { padding: 0; }
+#jadense-in-zotero-preferences-pane .jdx-ocr-summary { font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); }
+#jadense-in-zotero-preferences-pane .jdx-classification-settings { display: grid; gap: 10px; }
+#jadense-in-zotero-preferences-pane .jdx-classification-settings p { margin: 0; font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); line-height: 1.5; }
+#jadense-in-zotero-preferences-pane .jdx-classification-actions { display: flex; flex-wrap: wrap; gap: 8px; }

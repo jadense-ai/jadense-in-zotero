@@ -1,4 +1,4 @@
-import { checkLocalOCR } from './local-ocr'
+import { checkOCREngine } from './cloud-ocr'
 import { documentOCREnabled } from './document-extraction'
 import { confirmFirstFullTranslation } from './translation-warning'
 import { analysisRuntime } from './analysis-runtime'
@@ -132,7 +132,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       ], useOCR ? 'ocr' : 'text')
     }
     setOCRAvailable(false)
-    void checkLocalOCR(host).then(value => { if (!disposed) { useOCR = Boolean(value.ready && value.modelsReady && documentOCREnabled(host)); setOCRAvailable(Boolean(value.ready && value.modelsReady)) } }).catch(() => {})
+    void checkOCREngine(host).then(() => { if (!disposed) { useOCR = documentOCREnabled(host); setOCRAvailable(true) } }).catch(() => {})
     ocr.onChange(value => { useOCR = value === 'ocr' })
     cleanups.push(() => ocr.destroy())
   }

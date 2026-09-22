@@ -395,7 +395,7 @@ textarea {
   align-items: start;
 }
 
-/* 连接攻玉的 tab 面板纵向堆叠卡片；配置卡内容较少，限制宽度避免表单被拉宽。 */
+/* 连接页沿用设置页全宽容器，字段宽度由共用设置行控制。 */
 .jdx-connection-panel {
   display: grid;
   gap: 14px;
@@ -404,10 +404,6 @@ textarea {
 
 .jdx-connection-panel[hidden] {
   display: none;
-}
-
-.jdx-connection-config-card {
-  max-width: 720px;
 }
 
 .jdx-manager-upload-selection {
@@ -1368,15 +1364,9 @@ textarea {
 .jdx-analysis-notes > summary { cursor: pointer; font-size: calc(13px * var(--jdx-font-scale,1)); color: var(--jdx-text); }
 .jdx-analysis-copy { margin: 12px 0 8px; padding: 5px 9px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-surface); color: var(--jdx-text); cursor: pointer; }
 .jdx-analysis-notes-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: calc(13px * var(--jdx-font-scale,1)); line-height: 1.8; user-select: text; }
-/* 快捷键以原生只读输入框录制，窄窗口保留标签、说明与独立保存按钮。 */
-.jdx-shortcut-settings { max-width: 680px; }
+/* 快捷键复用常规设置行；输入与操作始终位于同一个控件列。 */
 .jdx-shortcut-settings[hidden] { display: none; }
-.jdx-shortcut-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--jdx-line); }
-.jdx-shortcut-row .jdx-manager-field { margin: 0; }
-.jdx-shortcut-row .jdx-manager-field small { color: var(--jdx-muted); font-size: calc(11px * var(--jdx-font-scale,1)); line-height: 1.6; }
-.jdx-shortcut-row input { max-width: 300px; cursor: pointer; }
-.jdx-shortcut-row input:focus { cursor: text; }
-@media (max-width: 900px) { .jdx-shortcut-row { grid-template-columns: 1fr; gap: 10px; } }
+.jdx-shortcut-row input { cursor: pointer; font-family: ui-monospace, monospace; }
 .jdx-analysis-run { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 8px 10px; border: 1px solid var(--jdx-line); border-radius: 6px; background: var(--jdx-surface-sunken); }
 .jdx-analysis-run .jdx-manager-inline-status { flex: 1 1 auto; min-width: 0; }
 .jdx-analysis-run button { flex: 0 0 auto; min-height: 28px; border: 1px solid var(--jdx-line); border-radius: 6px; padding: 4px 9px; color: var(--jdx-text); background: var(--jdx-surface); cursor: pointer; }
@@ -1406,27 +1396,42 @@ textarea {
 .jdx-feature-model-row > div { min-width: 0; }
 @media (max-width: 820px) { .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
 
-.jdx-feature-model-row .jdx-manager-inline-status { min-height: 0; margin-top: 8px; color: var(--jdx-red); }
+/* 设置列表：只保留一层容器，沿用常规页行间距、40% 控件列与宿主按钮。 */
+.jdx-manager-settings-card.jdx-settings-list { gap: 0; padding-block: 0; }
+.jdx-settings-list > .jdx-manager-settings-note { padding: 16px 0; border-bottom: 1px solid var(--jdx-line); }
+.jdx-settings-list > .jdx-feature-model-row:last-child,
+.jdx-settings-list > .jdx-feature-model-row:has(+ .jdx-manager-inline-status) { border-bottom: 0; }
+.jdx-settings-controls { display: grid; gap: 10px; min-width: 0; font-weight: 400; }
+.jdx-settings-controls .jdx-manager-actions { margin: 0; gap: 8px; }
+.jdx-settings-list .jdx-manager-inline-status { min-height: 0; margin: 0; overflow-wrap: anywhere; }
+.jdx-settings-list > .jdx-manager-inline-status:not(:empty) { margin-bottom: 16px; }
+.jdx-settings-list .jdx-manager-inline-status:empty { display: none; }
+.jdx-settings-list .jdx-manager-token-row { display: grid; gap: 10px; min-width: 0; }
+.jdx-settings-list .jdx-manager-token-row[hidden] { display: none; }
+.jdx-settings-list .jdx-manager-token-row input,
+.jdx-settings-list .jdx-manager-token-mask { box-sizing: border-box; width: 100%; min-width: 0; min-height: 34px; }
+.jdx-settings-list .jdx-manager-token-mask { display: flex; align-items: center; border: 1px solid var(--jdx-line); }
+.jdx-settings-list .jdx-manager-token-actions { flex-wrap: wrap; }
+.jdx-settings-list .jdx-manager-token-actions button { min-height: 34px; padding: 6px 12px; font-size: inherit; }
+
+.jdx-feature-model-row .jdx-manager-inline-status { min-height: 0; margin-top: 8px; }
+.jdx-feature-model-row .jdx-manager-inline-status:not([data-kind]) { color: var(--jdx-red); }
 .jdx-feature-model-row .jdx-manager-inline-status:empty { display: none; }
 
 /* 功能配置只由容器控制间距，避免标题/段落默认 margin 与 grid gap 叠加。 */
-#jadense-settings-panel-features { --jdx-feature-gap: 12px; }
-#jadense-settings-panel-features .jdx-feature-group {
-  display: grid; gap: var(--jdx-feature-gap); min-width: 0;
-  margin: 14px 0 0; padding: 14px;
-  border: 1px solid var(--jdx-line); border-radius: 8px; background: transparent;
-}
-#jadense-settings-panel-features h3 { margin: 0; font-size: calc(14px * var(--jdx-font-scale,1)); line-height: 1.5; }
-#jadense-settings-panel-features p { margin: 0; }
-#jadense-settings-panel-features .jdx-feature-model-row { padding: 12px 0; gap: 12px 20px; }
-#jadense-settings-panel-features .jdx-feature-model-row h3 + p { margin-top: 4px; }
-#jadense-settings-panel-features .jdx-feature-group .jdx-feature-model-row { padding: 0; border: 0; }
-#jadense-settings-panel-features .jdx-reference-ai-setting { padding: 12px 0 0; gap: 6px 8px; }
-#jadense-settings-panel-features [role="status"]:empty { display: none; }
-#jadense-settings-panel-features .jdx-translation-interface { margin: 0; padding: 0; }
-#jadense-settings-panel-features [data-selection-settings] { gap: 8px; }
-#jadense-settings-panel-features [data-selection-settings] > h3 { margin-bottom: 4px; }
-#jadense-settings-panel-features [data-selection-settings] > label { margin-top: 4px; }
+/* 功能配置复用常规设置的容器和行，仅增加任务标题。 */
+#jadense-settings-panel-features { gap: 0; padding-block: 0; }
+#jadense-settings-panel-features[hidden] { display: none; }
+#jadense-settings-panel-features .jdx-settings-task > h3 { margin: 0; padding-top: 24px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); font-weight: 600; }
+#jadense-settings-panel-features .jdx-translation-interface { padding: 0; }
+#jadense-feature-model-status { margin-block: 8px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
+#jadense-settings-panel-features .jdx-ocr-summary { color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
+#jadense-settings-panel-features .jdx-manager-checkbox { font-weight: 600; margin-bottom: 6px; }
+#jadense-settings-panel-features .jdx-reference-ai-setting { border-top: 0; border-bottom: 1px solid var(--jdx-line); }
+#jadense-settings-panel-features .jdx-classification-settings { grid-template-columns: minmax(0, 1fr); padding-block: 20px; }
+#jadense-settings-panel-features .jdx-classification-settings .jdx-manager-field { max-width: 680px; }
+#jadense-settings-panel-features .jdx-classification-settings .jdx-manager-field p { font-weight: 400; }
+#jadense-settings-panel-features .jdx-classification-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* 阅读外观与语言/主题同属常规设置，延用同一行宽、分隔线和下拉组件。 */
 #jadense-settings-panel-general .jdx-manager-settings-card { gap: 0; padding-block: 0; }

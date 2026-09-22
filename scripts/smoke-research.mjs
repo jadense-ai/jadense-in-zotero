@@ -1,3 +1,4 @@
+import { verifyFeatureSettings, verifyFeatureSettingsRestart } from './smoke-feature-settings.mjs'
 import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
 import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
@@ -7,6 +8,7 @@ import { verifyChatFiles } from './smoke-chat-files.mjs'
 import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-long-pdf.mjs'
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
 import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
+import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -604,6 +606,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    if (config.featureSettingsResume) {
+      verifyFeatureSettingsRestart({ Zotero, assert, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.longPdfResume) {
       await stage('long-pdf-cold-restart')
       await verifyLongPdfRestart({ Zotero, config, assert, report })
@@ -945,6 +951,16 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           }, 'independent classification window')
         },
       })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.featureSettingsOnly) {
+      await stage('feature-settings')
+      await verifyFeatureSettings({ Zotero, assert, waitFor, screenshot, report, findManager, findWindowContaining, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.cloudOCROnly) {
+      await stage('cloud-ocr')
+      await verifyCloudOCR({ Zotero, reader, assert, waitFor, screenshot, report, findManager })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.longPdfOnly) {
@@ -2963,6 +2979,9 @@ async function writeCompanion(extensionsDir, config) {
     verifyLongPdfRestart.toString(),
     verifyMachineTranslation.toString(),
     verifyOCRTranslation.toString(),
+    verifyCloudOCR.toString(),
+    verifyFeatureSettings.toString(),
+    verifyFeatureSettingsRestart.toString(),
     verifyLiteratureWorkspace.toString(),
     verifyAnalysisDetails.toString(),
     verifyTranslationSidebar.toString(),
@@ -3072,7 +3091,7 @@ async function main() {
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
       sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'),
       classificationOnly: argv.includes('--classification-only'),
-      chatFilesOnly: argv.includes('--chat-files-only'),
+      chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'),
       analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
@@ -3124,6 +3143,22 @@ async function main() {
       if (restored?.state !== 'passed') throw new Error('Long PDF cold restart timed out')
       if (stub.requests.filter(row => row.kind === 'long-pdf-summary').length !== summariesBefore) throw new Error('Cold restart unnecessarily regenerated document summaries')
       report.checks.push(...restored.checks, 'native-cold-restart-summary-reuse')
+    }
+    if (argv.includes('--feature-settings-only')) {
+      await stopIsolatedProcess(child, profileDir)
+      const savedReport = path.join(smokeRoot, 'settings-restart-report.json')
+      await writeCompanion(extensionsDir, { ...companionConfig, featureSettingsResume: true, reportPath: savedReport })
+      child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
+      const deadline = Date.now() + 60000
+      let restored
+      while (Date.now() < deadline) {
+        restored = await readFile(savedReport, 'utf8').then(JSON.parse).catch(() => undefined)
+        if (restored?.state === 'failed') throw new Error(restored.error)
+        if (restored?.state === 'passed') break
+        await delay(250)
+      }
+      if (restored?.state !== 'passed') throw new Error('Settings cold restart timed out')
+      report.checks.push(...restored.checks)
     }
     if (argv.includes("--document-restart")) {
       const requestsBefore = stub.requests.filter(row => row.kind === "full-translation").length
