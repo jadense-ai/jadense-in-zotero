@@ -24,16 +24,16 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.5.1 release candidate:** Optional cloud OCR, separate selection and full-document translation settings, and consistent workbench/native preferences. [配置 / Setup](docs/usage-guide.md#settings-051)
+**v0.5.1 released:** Optional cloud OCR, separate selection and full-document translation settings, and consistent workbench/native preferences. [配置 / Setup](docs/usage-guide.md#settings-051)
 
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1) — Optional cloud OCR, independent translation settings and clearer preferences.
 - [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0) — Add paper classification, file attachments and long-PDF reading; make OCR optional and clarify reference candidates.
 - [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10) — Show OCR setup progress, improve timeout/cache recovery, add removal/reinstallation and platform installation guides.
 - [v0.4.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.9) — Improve full-translation completion, recovery and error notices; unify OCR setup, add ModelScope and local diagnostics.
 - [v0.4.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.8) — Add optional selection OCR and improve text extraction and reading controls.
-- [v0.4.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.7) — Fix overlapping workbench pages.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
@@ -60,7 +60,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.5.0.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0), with metadata and SHA-256 checksums |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.5.1.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
 | Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.5.1/jadense-in-zotero-v0.5.1.xpi` | For development and auditing; only this repository and the listed build dependencies are needed |
 
@@ -190,7 +190,7 @@ Select text and click **AI translation (智能翻译)** in the selection popup, 
 
 ### [Translate a whole PDF and check the original passages](docs/usage-guide.md#full-translation)
 
-Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Choose AI or Bing/Google in Settings → Feature settings → Translation. Full translation uses the PDF text layer by default, with optional OCR for scanned pages, then sends extracted text to the selected translation service. The first full translation asks you to confirm cost and stability considerations; canceling sends no request. It does not export a bilingual PDF with the original layout.
+Choose **Full translation** from the reading actions to read paragraph translations and navigate to their source. Translations now form a continuous document in the reader sidebar, with a table of contents, independent typography, and restored reading position. Reading mode keeps browsing separate from source navigation; Locate mode links paragraphs to the PDF. Hiding the sidebar keeps the task running; after interruption or restart, manually resume from translation history without losing completed parts. Choose AI or Bing/Google in Settings → Feature settings → Full translation. Full translation uses the PDF text layer by default, with optional OCR for scanned pages, then sends extracted text to the selected translation service. The first full translation asks you to confirm cost and stability considerations; canceling sends no request. It does not export a bilingual PDF with the original layout.
 
 ### [Follow the evidence through references](docs/usage-guide.md#references)
 
@@ -256,6 +256,7 @@ The following describes data handling in the **Zotero plugin**.
 | Operation | Where the data goes |
 | --- | --- |
 | Saving settings, conversations, image attachments, translation history, and analysis history | Your local Zotero profile. API keys and Jadense tokens are also stored there; do not share the profile publicly. |
+| Cloud OCR | After upload/billing confirmation, relevant PDFs or page images go directly to the selected service. Keys use Zotero’s login manager, with a session-only fallback if persistence is unavailable. |
 | BYOK model requests | Directly from the plugin to the selected provider, including the text, paper context, and images needed for the request. The API key authenticates with that provider. |
 | Reference recognition, verification, and import | Uncertain fragments may be sent to the selected analysis model; Zotero lookup and Crossref verify DOI and bibliographic information. Exact matches or labeled first-result candidates are imported only after your review and explicit action. |
 | Jadense AI features | Jadense receives temporary requests and their required context, authenticated with the plugin token. It also receives the plugin version and feature type for troubleshooting. The server handles processing, billing, and operational records under its own rules. |
