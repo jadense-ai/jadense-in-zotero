@@ -47,6 +47,14 @@ it('uses checked OCR text and real page coordinates for analysis when enabled', 
   expect(result.passages[0]).toMatchObject({ text: 'OCR extracted a scanned passage.', position: { pageIndex: 0, rects: [[10, 20, 100, 40]] } })
 })
 
+it('keeps cloud OCR passages without invented highlight coordinates', async () => {
+  const { host } = fixture(true)
+  vi.mocked(readOCRDocument).mockResolvedValue({ source: { itemID: 1, libraryID: 1, itemKey: 'PDF1', title: 'Paper' }, pages: [{ pageIndex: 0, pageLabel: '1', lines: [], paragraphs: [{ id: 'cloud-0', text: 'Cloud OCR passage without coordinates', pageIndex: 0, pageLabel: '1', rects: [], lineIDs: [] }] }] })
+  const result = await readPdfForAnalysis(host, 1)
+  expect(result.passages[0].text).toContain('Cloud OCR')
+  expect(result.passages[0].position.rects).toEqual([])
+})
+
 it.each([true, false])('uses the per-extraction OCR choice (%s) instead of the global preference', async useOCR => {
   const { host, pdf } = fixture(!useOCR)
   vi.mocked(readOCRDocument).mockResolvedValue({ source: { itemID: 1, libraryID: 1, itemKey: 'PDF1', title: 'Paper' }, pages: [] })

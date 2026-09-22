@@ -1,8 +1,6 @@
+import { wireFeatureSettings } from './feature-settings'
 import { diagnostics } from "./diagnostics"
-import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
-import { wireReferenceAISetting } from './reference-ai-settings'
-import { wireTranslationInterface } from './translation-interface'
 /** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import {
@@ -27,7 +25,7 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import {
-  AI_FEATURES,
+  AI_FEATURES, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY,
   effectiveFeatureModelSelection,
   readAutoFollowChatModel,
   featureModelSelectionKey,
@@ -162,7 +160,7 @@ function element<T extends HTMLElement>(id: string) {
 
 function readElements(): PreferenceElements {
   const strings = selectPreferencesStrings(getUiLocale())
-  const labels = { chat: strings.featureChatLabel, translation: strings.featureTranslationLabel, analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
+  const labels = { chat: strings.featureChatLabel, translation: uiText("选文翻译", "Selection translation"), fullTranslation: uiText("全文翻译", "Full translation"), analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
     featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), {
       showSelectedIcon: true,
@@ -439,6 +437,7 @@ let featureCatalogGeneration = 0
 
 function renderFeatureModels(elements: PreferenceElements) {
   const autoFollow = readAutoFollowChatModel(Zotero)
+  for (const note of Array.from(document.querySelectorAll<HTMLElement>("[data-model-follow]"))) note.hidden = !autoFollow
   elements.autoFollowChatModel.checked = autoFollow
   for (const feature of AI_FEATURES) {
     const selection = effectiveFeatureModelSelection(Zotero, feature)
@@ -583,27 +582,29 @@ export function initJadensePreferencesPage() {
   root.setAttribute("lang", getUiLocale())
   const strings = selectPreferencesStrings(getUiLocale())
   applyStrings(root, strings)
+  if (!getUiLocale().toLowerCase().startsWith("zh")) for (const node of Array.from(root.querySelectorAll<HTMLElement>("[data-ui-en]"))) node.textContent = node.dataset.uiEn || node.textContent
   const language = createJdxSelect(element("jadense-in-zotero-display-language"), { ariaLabel: strings.displayLanguageLabel })
   const languageOptions = [{ value: "system", label: strings.followZotero }, { value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }]
   const stopLanguage = observeDisplayLanguage(Zotero, value => language.setOptions(languageOptions, value))
   const theme = createJdxSelect(element("jadense-in-zotero-theme"), { ariaLabel: strings.themeLabel })
   const themeOptions = [{ value: "system", label: strings.followZotero }, { value: "light", label: strings.lightTheme }, { value: "dark", label: strings.darkTheme }]
   const generalStatus = element("jadense-in-zotero-general-status")
-  const stopReferenceAI = wireReferenceAISetting(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
-  const stopTranslationInterface = wireTranslationInterface(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
-  const stopSelectionSettings = wireSelectionSettings(Zotero, root.querySelector<HTMLElement>('[data-settings-section="features"]'))
-  window.addEventListener("unload", stopSelectionSettings, { once: true })
   const stopOCR = wireOCRSettings(Zotero, root.querySelector<HTMLElement>('[data-settings-section="ocr"]'))
+  const featuresRoot = root.querySelector<HTMLElement>('[data-settings-section="features"]')!
+  const ocrRoot = root.querySelector<HTMLElement>('[data-settings-section="ocr"]')!
+  const stopFeatures = wireFeatureSettings(Zotero, featuresRoot, ocrRoot, ocr => { (ocr ? ocrRoot : featuresRoot).scrollIntoView({ block: 'start' }) })
   const stopReading = wireReadingPreferences(Zotero, root.querySelector<HTMLElement>('[data-settings-section="general"]')!)
   const stopTheme = observeTheme(Zotero, root, () => theme.setOptions(themeOptions, readTheme(Zotero)))
   // Zotero 卸载 pane 时也会移除根节点，不让跨窗口主题 observer 引用旧 UI。
+  let stopModels = () => {}
   let removalObserver: MutationObserver | null = null
   const cleanup = () => {
     stopTheme()
     stopReading()
     stopOCR()
-      stopReferenceAI()
-      stopTranslationInterface()
+    stopFeatures()
+    stopModels()
+    language.destroy(); theme.destroy()
     stopLanguage()
     removalObserver?.disconnect()
     root.ownerDocument.defaultView?.removeEventListener("unload", cleanup)
@@ -625,6 +626,11 @@ export function initJadensePreferencesPage() {
   })
 
   const elements = readElements()
+  const modelObservers: unknown[] = []
+  for (const key of [...Object.values(FEATURE_MODEL_PREF_KEYS), AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, 'extensions.jadenseInZotero.byokConfig']) {
+    try { const id = Zotero.Prefs?.registerObserver?.(key, () => renderFeatureModels(elements)); if (id !== undefined) modelObservers.push(id) } catch { /* 可选跨窗显示。 */ }
+  }
+  stopModels = () => { modelObservers.forEach(id => Zotero.Prefs?.unregisterObserver?.(id)); Object.values(elements.featureModels).forEach(select => select.destroy()) }
   renderHelpSteps(elements, strings)
   renderTokenDisplay(elements, strings)
   void refreshFeatureModelCatalog(elements)
@@ -711,7 +717,10 @@ export function initJadensePreferencesPage() {
     }
   })
   elements.autoFollowChatModel.addEventListener("change", () => {
-    saveAutoFollowChatModel(Zotero, elements.autoFollowChatModel.checked)
+    try { saveAutoFollowChatModel(Zotero, elements.autoFollowChatModel.checked) } catch {
+      renderFeatureModels(elements)
+      setStatus(elements.featureModelStatus, strings.preferenceSaveFailed, "error"); return
+    }
     renderFeatureModels(elements)
     setStatus(elements.featureModelStatus, elements.autoFollowChatModel.checked
       ? strings.autoFollowChatModelEnabled

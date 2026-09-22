@@ -13,7 +13,7 @@ export function translationCapacity(host: ZoteroLike) {
   let local: { contextWindow?: number; maxOutputTokens?: number } = {}
   try { local = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* 可选容量降级。 */ }
   const valid = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value >= 1024 ? Math.floor(value) : fallback
-  const selection = featureModelState(host, 'translation').selection
+  const selection = featureModelState(host, 'fullTranslation').selection
   const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : undefined
   const contextWindow = valid(model?.contextWindow, valid(local.contextWindow, 16384))
   const maxOutputTokens = valid(model?.maxOutputTokens, valid(local.maxOutputTokens, 8192))

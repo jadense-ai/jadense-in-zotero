@@ -4,6 +4,68 @@ This document defines the current design of the Zotero XPI: the independent Mana
 
 ## Design Direction
 
+### 设置页面 UI 规范
+
+本节是新增、修改设置页的默认依据；适用于工作台「常规、功能配置、OCR配置、快捷键设置、连接攻玉、BYOK」及原生偏好中的对应功能。先复用现有控件与布局，再为特定任务增加最少的结构。设置页用于配置，不使用营销式标题、装饰图标、彩色背景块或多层卡片。视觉实现归属 `content/manager.css`、`content/preferences.css`、`content/ui.css` 与 `content/status.css`；行为契约见仓库 `docs/spec/extensions/jadense-in-zotero/runtime.md`。
+
+#### 页面结构与对齐
+
+- 工作台沿用「设置标题与一句说明 → 一级页签 → 当前页内容」。已有页签不改名、不重排；新增选项优先放入所属页，不为单个功能增加一级页签。页签保留 `tablist/tab/tabpanel`、选中态、方向键与 Home/End 导航。
+- 普通设置采用一层 `jdx-manager-settings-card`。列表型卡片同时使用 `jdx-settings-list`：占满当前内容宽度，左右内边距 14px、纵向间距由设置行负责；不另设 680/720px 的整页限宽，不在卡片内再次套带背景的卡片。
+- 每个可独立理解的配置项使用 `jdx-feature-model-row`。左列为标题、用途和必要边界，右列为实际控件；共用 `minmax(0, 1fr) minmax(220px, 40%)`，列间距 20px、行上下内边距 20px，以细线分隔，末行不留分隔线。不要为了标题长度单独改变某页列宽。
+- 右列有输入和多项操作时，使用 `jdx-settings-controls` 纵向排列，间距 10px；按钮进入 `jdx-manager-actions`，间距 8px、允许换行、从左侧连续排列。按钮与所属输入属于同一个控件列，不把按钮放成第三列或推到卡片另一角。
+- 宽度不超过 820px 时复用设置行的单列规则，标签说明在上、控件在下，间距 12px。所有 grid/flex 子项允许收缩（`min-width: 0`），字段占满控件列，按钮可换行；不能靠横向滚动、裁切按钮或缩小字号解决表单溢出。
+- 原生偏好使用宿主的 `jdx-pref-card` / `jdx-pref-field` 纵向字段结构，复用 `jdx-pref-card-note` 与动作样式。保持相同的信息顺序与行为，不直接套工作台侧栏、40% 列宽或工作台 CSS。
+
+#### 字体、颜色与控件
+
+| 元素 | 默认规则 |
+| --- | --- |
+| 设置项标题 | `h3`，14px × `--jdx-font-scale`，沿用宿主标题字重；标签与输入通过 `for/id` 或 `aria-labelledby` 关联 |
+| 用途与帮助 | 12px × 字号比例、1.6 行高、`--jdx-muted`；紧随对应标题或输入，不重复字段名，不把整段说明加粗 |
+| 分组标题 | 仅当多个配置属于同一任务时使用；不新增背景、阴影或独立卡片 |
+| 输入与选择 | 默认最小高度 34px、6px 圆角，主题表面和细边框；下拉复用 `createJdxSelect`，不得依赖系统 select 外观 |
+| 普通操作 | 复用宿主按钮；每个独立保存区域最多一个主按钮，未改动/无法执行时禁用；恢复默认、取消、停用用次级样式 |
+| 危险操作 | 使用现有危险按钮样式，与普通操作分行，说明清除和保留范围；不得为视觉改版新增业务确认或阻断 |
+| 颜色与焦点 | 仅使用 `--jdx-*` / `--jdx-pref-*` 主题 token；绿色仅用于主操作、选中与状态信号；保留可见键盘焦点，深色模式不硬编码白底黑字 |
+
+文案采用现有中英文机制（Manager 的 `data-ui-en`、原生偏好的 i18n key 或动态 `uiText`）。新增帮助同步两种语言；不翻译模型 ID、密钥、用户输入。英文按钮、150% 字号也必须能换行且可操作。
+
+#### 状态与交互
+
+- 每个操作只在就近的一个区域显示反馈，复用 `role="status"` 和 `status.css` 的 `data-kind`；空状态不占位，成功、等待和错误不混用颜色。不要让通用设置行样式覆盖状态组件的语义颜色。
+- 进入页面、切换页签、调整主题和字号只恢复/展示设置，不隐式保存、发起收费请求或创建任务。沿用所属功能既有的自动保存或显式保存契约，不混用两种反馈。
+- 密钥/令牌显示态只展示掩码，编辑态用有名称的 password 输入；说明本地保存及用途，保存、取消紧随字段，状态放在同列。不得因为改版更换凭证存储、权限、连接验证或复制行为。
+- 快捷键：一个动作一行，左侧动作名称与适用范围，右侧录制输入及保存、恢复默认、停用。录制后明确提示保存生效，Esc 取消录制、Tab 可离开；恢复和停用沿用需要保存的草稿语义，保留重复组合键校验。
+- 连接攻玉：按「攻玉令牌 → 令牌获取与权限 → 连接管理」排列。令牌标题只出现一次；显示/编辑互斥，复制/编辑与保存/取消各自成组；生成令牌按钮随获取说明排列，断开连接独立成行。
+- OCR 状态机、BYOK 提供商/模型主从布局、文献分类的单列密钥表单是现有任务特例，沿用各自下文契约。特例只调整任务结构，不另创字体、按钮、状态和主题体系。OCR 页面用顶部页签切换，不增加「返回功能配置」。
+
+#### 新页面最小骨架
+
+在现有 tabpanel 中使用以下结构，沿用既有公共 ID 和行为绑定；示例仅说明布局，不要求另建组件层：
+
+```html
+<div class="jdx-manager-settings-card jdx-settings-list">
+  <div class="jdx-feature-model-row">
+    <div>
+      <h3><label for="existing-setting-input" data-ui-en="Setting name">设置名称</label></h3>
+      <p id="existing-setting-help" data-ui-en="Explain the effect.">说明此项的作用。</p>
+    </div>
+    <div class="jdx-settings-controls jdx-manager-field">
+      <input id="existing-setting-input" aria-describedby="existing-setting-help" />
+      <div class="jdx-manager-actions"><!-- 复用当前功能的操作按钮 --></div>
+      <div class="jdx-manager-inline-status" role="status"></div>
+    </div>
+  </div>
+</div>
+```
+
+#### 验收与维护
+
+改动设置页至少核对：中英文、浅深色、1100px 与 720px 外窗、150% 字号；无横向溢出、隐藏面板不占位、Tab 顺序和焦点可见；空/已配置/编辑/取消、未保存/成功/错误/禁用状态。只改外观也要验证原有保存、恢复和跨重启读取不变。凭证使用隔离 profile 的合成值，不访问真实账号。
+
+开发时可用 `node scripts/preview-research.mjs 4317` 查看已构建页面；最终用 `node scripts/smoke-research.mjs '<Zotero executable>' --feature-settings-only --documents-only --screenshots --keep-temp` 检查真实 Gecko 布局和交互，英文加 `--appearance-language en-US`。调整共用规则后同步本节和最接近的运行时规范；新增任务特例需写清适用范围及原因，不能只加页面特有覆盖样式。
+
 ### 状态、反馈与信息层级
 
 - 一个功能区域按「标题与用途 → 当前状态及解释 → 当前可用操作 → 配置 → 帮助 / 排障」组织。状态、进度和错误在同一个固定区域替换，不在按钮前后各加一段提示。一个区域只保留一个主操作；就绪后仅移除准备主按钮，保留可见的「重新检查 / 修复识别组件」次级操作，不能把所有手动兜底入口折叠或隐藏。
@@ -134,7 +196,7 @@ Disable only the upload action that is missing a usable token, target folder, or
 
 ### Settings Section
 
-Manager Settings uses accessible `常规 / 功能配置 / OCR配置 / 快捷键设置 / 连接攻玉 / BYOK` tabs in that order, opening `常规` by default. General owns `显示语言` (`跟随 Zotero / 简体中文 / English`), `主题设置` (`跟随 Zotero / 浅色 / 深色`), interface font size, translation window style, and background transparency. Keep all controls in the same settings card, aligned as labeled rows with help text; use a grouped font stepper/reset, the existing style select, and a 0–100% transparency slider with its current value. Language changes save for the next Zotero restart, with an explicit restart hint; theme changes apply immediately across open plugin surfaces. The feature tab lists `AI 对话`, then `自动跟随当前对话模型`, followed by `实时翻译 / 文献解析 / 图片解读`. The toggle defaults on, keeps the AI Chat selector editable, and disables the other three searchable Jadense/BYOK selectors; turning it off enables independent editing while preserving saved choices. Use the same compact, searchable, icon-bearing model selector as the Chat composer. OCR配置 automatically reads readiness on opening/refocus. Its single primary action, 启用本机 OCR / 继续准备, installs components, prepares models and verifies recognition; hide it once ready. Reuse valid receipts and recover old cached models offline automatically. Group download source with its purpose, place tips in a lightbulb section, and keep Check again and Repair recognition components visible as secondary actions inside the status panel, and collapse only uv details, runtime parameters and logs under 环境与故障排查. Optional selection formula models load on first use and do not block full-document setup. Full Markdown, full translation (including saved Markdown), and references require readiness before executing; a missing prerequisite shows a toast with a direct OCR settings action. Tasks never implicitly install models. Reuse settings cards, compact buttons, theme colors, and inline status; wrap long paths and errors within the panel. Shortcut recording/save/disable/reset, Jadense token configuration, and BYOK editing remain in their own tabs. Account, folder, PDF, and upload controls belong to `攻玉学术`.
+Manager Settings uses accessible `常规 / 功能配置 / OCR配置 / 快捷键设置 / 连接攻玉 / BYOK` tabs in that order, opening `常规` by default. General owns `显示语言` (`跟随 Zotero / 简体中文 / English`), `主题设置` (`跟随 Zotero / 浅色 / 深色`), interface font size, translation window style, and background transparency. Keep all controls in the same settings card, aligned as labeled rows with help text; use a grouped font stepper/reset, the existing style select, and a 0–100% transparency slider with its current value. Language changes save for the next Zotero restart, with an explicit restart hint; theme changes apply immediately across open plugin surfaces. The feature tab groups tasks as `文献对话与模型默认值 / 选文与图片 / 文献阅读与处理 / 文献整理`. Selection and full translation have independent service/model choices. The global follow toggle defaults on, keeps the AI Chat selector editable, and disables the other four searchable Jadense/BYOK selectors; turning it off enables independent editing while preserving saved choices. Use the same compact, searchable, icon-bearing model selector as the Chat composer. OCR配置 automatically reads readiness on opening/refocus. Its single primary action, 启用本机 OCR / 继续准备, installs components, prepares models and verifies recognition; hide it once ready. Reuse valid receipts and recover old cached models offline automatically. Group download source with its purpose, place tips in a lightbulb section, and keep Check again and Repair recognition components visible as secondary actions inside the status panel, and collapse download-source controls, uv details, runtime parameters and logs under 环境与故障排查. Optional selection formula models load on first use and do not block full-document setup. OCR is optional: document and selection enhancement switches belong to their task groups. Enabling document enhancement checks the selected engine; unavailable OCR falls back to the text layer. Saved Markdown translation does not require OCR. Tasks never implicitly install models. Reuse settings cards, compact buttons, theme colors, and inline status; wrap long paths and errors within the panel. Shortcut recording/save/disable/reset, Jadense token configuration, and BYOK editing remain in their own tabs. Account, folder, PDF, and upload controls belong to `攻玉学术`.
 
 The composer always exposes both model sources and is the authoritative current Chat model when automatic following is enabled. With following disabled, it edits the Chat selection for text and uploaded images, and the image-interpretation selection when the latest image came from the Reader, so subsequent image questions remain consistent. Settings → Feature settings owns the analysis choice, which is disabled while following is enabled. Empty/offline model catalogs cannot prevent selecting configured BYOK models. Keep saved unavailable choices visible, with a local actionable error for that feature. BYOK surfaces use the community-standard field terms `Provider / Model id / API base url / API key`; preserve actual protocol and model proper names.
 
@@ -279,9 +341,11 @@ Original extraction is a model-independent action. Full translation is available
 
 ### 功能配置分区
 
-工作台功能配置的 AI 对话、自动跟随当前对话模型与整体状态位于一级区域；翻译、选中文本、文献解析、图片解读分别使用轻量分组。参考文献 AI 开关归属文献解析，恢复请求保留页面级入口。标题和段落显式清除默认 margin，以 8–12px 组内间距和 14px 组间距组织内容；空状态不占空间。宽屏标签与控件左右排列，窄屏自然堆叠，不使用大标题留白或嵌套卡片。
+工作台和原生偏好均按「文献对话与模型默认值 → 选文与图片 → 文献阅读与处理 → 文献整理」纵向分组，不增加一级页签。选文翻译与全文翻译分别选择 AI / Bing / Google 及 AI 模型；传统模式隐藏模型行但保留功能标题。全局跟随开启时显示实际模型并禁用独立选择，翻译服务不受影响；关闭后恢复已保存的独立模型。容量参数仅位于全文 AI 翻译的折叠高级设置。参考文献 AI 开关紧邻解析模型，说明复用该模型且核验不使用 AI。恢复请求保持页面级入口。工作台功能页复用常规页的 `jdx-manager-settings-card` 和 `jdx-feature-model-row`：同一容器、40% 控件列、设置行间距与分隔线，窄屏堆叠；任务标题只作分组，不重定义控件外观。原生偏好沿用 `jdx-pref-card` / `jdx-pref-field` 的纵向字段样式。两处均不嵌套卡片，说明随对应字段排列，按钮复用宿主统一样式。
 
-文献分类使用独立的 Jev 分组：TypeSafe 掩码密钥、保存/清除、测试密钥和官方获取链接，不跟随对话模型。文献条目右键「文献分类…」打开独立原生窗口，不伴随工作台出现；密钥配置仍在工作台功能配置中，缺少密钥且点击生成时弹出引导，用户点击前往配置后跳转。先选择已有收藏夹再预览确认；目录使用文件夹图标与独立的 `父目录 › 子目录` 段，末级加重，不能把真实名称里的斜杠解释成层级。候选列表可搜索；预览清楚区分原分类、推荐分类和将移除的分类。未匹配不勾选、不写入；默认保留原收藏夹，移除必须明确选择且限候选范围。元数据传输和额度说明留在密钥配置中。窄窗允许表格横向滚动，操作按钮换行，采用选择分类、核对预览、完成三步；第一步仅生成，第二步返回上一步与确认归类，完成页显示结果。关闭使用原生窗口标题栏按钮；不提供常驻配置密钥、撤销或重选按钮。搜索、全选和清空在足够宽时同排。
+全文与选文 OCR 开关分别位于对应任务组，两处显示同一引擎的只读状态摘要和「配置 OCR」按钮。摘要只复用缓存、订阅及当前设置页状态，不额外触发检查或识别；未知显示尚未检查。云端保存与识别测试状态分开，仅对已保存且与测试一致的配置显示测试通过。跳转始终留在当前宿主，通过顶部页签切换，不再提供「返回功能配置」。OCR 页只管理引擎与组件，下载源收进排障区；已就绪的重新检查和修复继续可见。
+
+文献分类设置使用单列纵向表单：功能说明、密钥输入、操作按钮及费用说明依次排列，宽屏也不拆为左右两列；密钥表单最大宽度沿用 680px。文献分类使用独立的 Jev 分组：TypeSafe 掩码密钥、保存/清除、测试密钥和官方获取链接，不跟随对话模型。文献条目右键「文献分类…」打开独立原生窗口，不伴随工作台出现；密钥配置在工作台和原生偏好的功能配置中，缺少密钥且点击生成时弹出引导，用户点击前往配置后跳转。先选择已有收藏夹再预览确认；目录使用文件夹图标与独立的 `父目录 › 子目录` 段，末级加重，不能把真实名称里的斜杠解释成层级。候选列表可搜索；预览清楚区分原分类、推荐分类和将移除的分类。未匹配不勾选、不写入；默认保留原收藏夹，移除必须明确选择且限候选范围。元数据传输和额度说明留在密钥配置中。窄窗允许表格横向滚动，操作按钮换行，采用选择分类、核对预览、完成三步；第一步仅生成，第二步返回上一步与确认归类，完成页显示结果。关闭使用原生窗口标题栏按钮；不提供常驻配置密钥、撤销或重选按钮。搜索、全选和清空在足够宽时同排。
 
 
 Full-document errors must be visible once when they occur and remain readable in the task. Points, authentication, rate limits, OCR readiness and incomplete output have actionable messages. Provide account/settings links, manual retry, and a copyable diagnostic ID; do not expose provider response bodies. Explicit user pause is not a failure. Image alt text changes do not invalidate an otherwise identical local resource reference.

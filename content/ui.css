@@ -315,6 +315,10 @@
 
 /* OCR 配置沿用设置页控件，长路径与安装错误在面板内换行。 */
 .jdx-ocr-settings{min-width:0}
+.jdx-cloud-ocr-field{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;gap:12px;margin:12px 0}
+.jdx-cloud-ocr-field input{box-sizing:border-box;min-width:0;width:100%;height:34px;padding:6px 10px;color:var(--jdx-text);background:var(--jdx-bg);border:1px solid var(--jdx-line);border-radius:6px;font:inherit}
+.jdx-cloud-ocr-consent{display:flex;align-items:flex-start;gap:6px;line-height:1.6}
+@media(max-width:600px){.jdx-cloud-ocr-field{grid-template-columns:1fr;gap:4px}}
 .jdx-ocr-settings .jdx-ocr-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--jdx-line)}
 .jdx-ocr-settings h4{font-size:13px;margin:0 0 8px}
 .jdx-ocr-settings .jdx-ocr-tip{margin-top:20px;padding:14px 16px;background:var(--jdx-sidebar);border-radius:8px}

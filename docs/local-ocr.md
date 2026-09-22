@@ -378,3 +378,7 @@ node scripts/smoke-local-ocr.mjs content/ocr/.venv/Scripts/python.exe content/oc
 Linux/macOS 将 Python 路径改为 `content/ocr/.venv/bin/python`。原生检查遵循[贡献指南](../CONTRIBUTING.md#开发与本机验证)，使用隔离 profile，不使用真实资料库。
 
 历史 Windows 原生一键安装与流式阅读已有实测；0.4.10 标签原包通过 Windows 11 / Zotero 10.0.3 三次冷启动、后台解析专项及从 0.4.9 升级，详见 [Release 验收范围](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10)；单元/静态/构建检查通过，**不代表重新完成首次全量下载、macOS/Linux 安装或真实翻译服务验收**。合成复杂 PDF 回归不能替代真实论文对照。
+
+## 0.5.1 云 OCR 与用途开关
+
+OCR 用途开关现位于功能配置，引擎和凭证仍在 OCR 配置。无需本机 Python 的云 OCR、上传确认、费用和排障见[配置指南](usage-guide.md#settings-051)。本页的依赖安装步骤仅适用于本机 OCR。

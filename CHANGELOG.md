@@ -1,5 +1,16 @@
 # 更新说明 / Changelog
 
+## 0.5.1 — 发布候选 / Release candidate
+
+- 新增可选云 OCR：MinerU、智谱 GLM-OCR、硅基流动、阿里百炼和 OpenAI 兼容服务；使用前配置密钥、模型和 HTTPS 地址，并确认文档上传及费用。普通文字层提取仍无需 OCR。
+- 选文翻译和全文翻译独立配置；旧设置自动迁移，不覆盖已有独立设置。工作台与 Zotero 原生设置按任务分组，OCR 用途与引擎配置分开。
+- 改进 Markdown、提取结果和更新弹窗显示。
+- Optional cloud OCR supports MinerU, GLM-OCR, SiliconFlow, Alibaba Bailian and OpenAI-compatible services. Configure credentials/model/HTTPS endpoint and confirm upload and billing before use; ordinary text-layer extraction needs no OCR.
+- Selection and full-document translation have separate settings. Existing settings migrate without overwriting independent preferences; workbench and native preferences group controls by task.
+- Improve Markdown, extraction results and update-dialog presentation.
+- 从 0.5.0 安装升级后重启；已有成果不会自动重算。Restart after upgrading from 0.5.0; existing results are not regenerated.
+- [操作与配置 / Setup](docs/usage-guide.md#settings-051)。真实云服务、OCR 准确率、其他系统及 Zotero 8/9 尚未实测 / Live providers, OCR accuracy, other operating systems and Zotero 8/9 are not validated.
+
 ## 0.5.0 — 2026-09-21
 
 ## 本次更新

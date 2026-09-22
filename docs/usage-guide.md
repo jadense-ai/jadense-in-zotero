@@ -301,3 +301,24 @@ Full Markdown, full translation and reference extraction use the text layer by d
 ![关联长 PDF 的阅读范围与页码 / Linked-PDF coverage and pages](images/guide-long-pdf-050.png)
 
 长 PDF 图示同样使用合成 81 页 PDF 和模拟模型，不代表真实模型推理效果。The long-PDF screenshot uses an 81-page synthetic PDF and a mocked model.
+
+<a id="settings-051"></a>
+
+## 0.5.1 功能配置与云 OCR / Feature settings and cloud OCR
+
+在工作台或 Zotero 原生设置打开「功能配置」，分别设置选文翻译和全文翻译的服务、模型及语言。旧翻译设置自动作为迁移来源，不覆盖已保存的独立设置；如启用了跟随对话模型，先检查该选项。OCR 用途开关与引擎配置分开，点击用途旁的配置入口可跳到 OCR 配置并返回。现有译文不会自动更新，需要时重新翻译。
+
+在「OCR配置」选择本机 OCR，或 MinerU、智谱 GLM-OCR、硅基流动、阿里百炼、OpenAI compatible。云服务填写 API Key、模型和 HTTPS 接口地址，确认文档上传及费用后「保存并使用」；「测试识别」发送内置示例图片，可能产生费用。更换地址需重新确认；不要把令牌放在 URL 中。凭证通过 Zotero 登录管理器保存，无法持久化时仅在当前会话使用，重启后需重新填写。
+
+全文提取 OCR 增强默认关闭，普通任务读取文字层；扫描页需要可用 OCR。全文任务和选文 OCR 按各自用途开关使用所选引擎。云 OCR 会把相应 PDF 或页面图片发到所选第三方，受其隐私、限额和计费规则约束；本机 OCR 需另行准备 Python 依赖及模型。云识别失败后先检查密钥、模型、额度和网络，再主动重试；文字层回退不保证扫描页可读。已有成果和缓存不会因为切换引擎自动重算。
+
+Open **Feature settings** in either the workbench or Zotero preferences to configure selection and full-document translation independently. Legacy settings migrate without overwriting saved independent preferences; check the follow-chat-model option if enabled. OCR usage switches link to the separate engine settings.
+
+In **OCR settings**, choose local OCR or one of the cloud services above. Set the API key, model and HTTPS endpoint, confirm document upload and billing, then **Save and use**. **Test OCR** sends a built-in sample image and may incur charges. Changing endpoint requires confirmation again. Keys use Zotero's login manager; if persistence is unavailable, re-enter the session-only key after restart.
+
+Text-layer extraction remains the default. Enable OCR only for the desired use; cloud OCR uploads the relevant PDF/page images to the selected provider. Review its privacy, quotas and billing. On failure, check credentials, model, quota and network before retrying. Text-layer fallback cannot make scanned pages readable. Existing results are not regenerated when changing engines. Live providers and recognition accuracy have not been validated in this release.
+
+设置示意（Windows / Zotero 10.0.3，合成数据）：
+
+![文献功能配置](images/guide-settings-051.png)
+![OCR 引擎配置](images/guide-ocr-051.png)

@@ -1,14 +1,12 @@
+import { wireFeatureSettings } from './feature-settings'
 import { analysisRuntime } from './analysis-runtime'
 import { diagnostics, markDiagnosticAbort } from "./diagnostics"
 import { wireDiagnosticsPanel } from "./diagnostics-panel"
-import { wireSelectionSettings } from './selection-settings'
 import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
 import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtime"
 import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
 import { wireTemporaryRecovery } from './temporary-recovery-panel'
-import { wireReferenceAISetting } from './reference-ai-settings'
-import { wireTranslationInterface } from './translation-interface'
 /**
  * Jadense Zotero 主工作台页面。
  * 上游由 bootstrap 打开独立 chrome 窗口，下游连接本地对话存储、Zotero 选择与攻玉扩展 API。
@@ -99,7 +97,6 @@ import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-an
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
-import { mountClassificationSettings } from './classification-ui'
 import {} from "./document-ui"
 import { type AnalysisRunView } from "./analysis-workspace"
 import { mountLiteratureWorkspace } from "./literature-workspace"
@@ -1399,6 +1396,7 @@ function renderFeatureModelSelect(select: JdxSelect, zotero: ZoteroLike, feature
 
 function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
   const autoFollow = readAutoFollowChatModel(zotero)
+  for (const note of Array.from(document.querySelectorAll<HTMLElement>("[data-model-follow]"))) note.hidden = !autoFollow
   elements.autoFollowChatModel.checked = autoFollow
   renderFeatureModelSelect(elements.chatModelSelect, zotero, activeChatFeature(zotero))
   for (const feature of AI_FEATURES) {
@@ -2722,12 +2720,16 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
       renderChat(elements, zotero)
       setStatus(elements.featureModelStatus, uiText(`${AI_FEATURE_LABELS[feature]}模型已保存。`, `${AI_FEATURE_LABELS[feature]} model saved.`), "success")
     } catch (error) {
+      renderJadenseChatModel(elements, zotero)
       setStatus(elements.featureModelStatus, error instanceof Error ? error.message : uiText("模型选择保存失败。", "Unable to save the model choice."), "error")
     }
   }
   for (const feature of AI_FEATURES) elements.featureModelSelects[feature].onChange(value => selectFeatureModel(feature, value))
   elements.autoFollowChatModel.addEventListener("change", () => {
-    saveAutoFollowChatModel(zotero, elements.autoFollowChatModel.checked)
+    try { saveAutoFollowChatModel(zotero, elements.autoFollowChatModel.checked) } catch {
+      renderJadenseChatModel(elements, zotero)
+      setStatus(elements.featureModelStatus, uiText("设置保存失败，请重试。", "Could not save settings. Retry."), "error"); return
+    }
     renderJadenseChatModel(elements, zotero)
     renderChat(elements, zotero)
     setStatus(elements.featureModelStatus, elements.autoFollowChatModel.checked
@@ -3118,8 +3120,6 @@ export function initJadenseManagerPage() {
   syncChatDockOffset(elements.chatDock)
   wireConnectionTabs(elements, zotero)
   wireSettingsTabs(elements, zotero, section === "settings-ocr" ? "ocr" : section === "settings-connection" ? "connection" : section === "settings-features" ? "features" : "general")
-  const stopClassificationSettings = zotero ? mountClassificationSettings(document, zotero) : () => {}
-  window.addEventListener('unload', stopClassificationSettings, { once: true })
   wireStarInvitation(document, zotero)
   wireManagerQuickStart(document, zotero, () => {
     elements.navSettings.click()
@@ -3152,14 +3152,10 @@ export function initJadenseManagerPage() {
   })
   const stopRecovery = wireTemporaryRecovery(zotero, document.getElementById("jadense-settings-panel-features"), window.fetch.bind(window))
   window.addEventListener('unload', stopRecovery, { once: true })
-  const stopReferenceAI = wireReferenceAISetting(zotero, elements.settingsPanelFeatures.querySelector('[data-feature-group="analysis"]'))
-  window.addEventListener('unload', stopReferenceAI, { once: true })
-  const stopSelectionSettings = wireSelectionSettings(zotero, elements.settingsPanelFeatures.querySelector('[data-selection-settings-host]'))
-  window.addEventListener("unload", stopSelectionSettings, { once: true })
   const stopOCR = wireOCRSettings(zotero, elements.settingsPanelOcr.querySelector<HTMLElement>('[data-ocr-settings]'))
   window.addEventListener("unload", stopOCR, { once: true })
-  const stopTranslationInterface = wireTranslationInterface(zotero, document.getElementById("jadense-settings-panel-features"))
-  window.addEventListener('unload', stopTranslationInterface, { once: true })
+  const stopFeatures = wireFeatureSettings(zotero, elements.settingsPanelFeatures, elements.settingsPanelOcr, ocr => { (ocr ? elements.settingsTabOcr : elements.settingsTabFeatures).click() })
+  window.addEventListener("unload", stopFeatures, { once: true })
   const stopReadingPreferences = wireReadingPreferences(zotero, document.getElementById("jadense-settings-panel-general")!)
   window.addEventListener("unload", stopReadingPreferences, { once: true })
   const stopObservingAppearance = wireManagerAppearance(elements, zotero, document.documentElement)

@@ -13,8 +13,7 @@ export function wireSelectionSettings(host: ZoteroLike | null, root: HTMLElement
     node.textContent = text
     return node
   }
-  const body = make('div'); body.className = 'jdx-manager-settings-card jdx-feature-group'; body.dataset.selectionSettings = ''
-  const title = make('h3', uiText('选中文本', 'Selected text'))
+  const body = make('div'); body.className = 'jdx-selection-settings'; body.dataset.selectionSettings = ''
   const behaviorRoot = make('div')
   const behavior = createJdxSelect(behaviorRoot, { ariaLabel: uiText('选中文本后', 'After selecting text'), popupWidth: 300 })
   const syncBehavior = () => behavior.setOptions([
@@ -25,14 +24,15 @@ export function wireSelectionSettings(host: ZoteroLike | null, root: HTMLElement
   behavior.onChange(value => {
     saveSelectionPreferences(host, { behavior: value === 'translate' || value === 'quote' ? value : 'wait' })
     syncBehavior()
+    status.textContent = readSelectionPreferences(host).behavior === value ? '' : uiText('设置保存失败，请重试。', 'Could not save settings. Retry.')
   })
   const label = make('label'); label.className = 'jdx-manager-checkbox jdx-pref-checkbox'
   const selection = make('input'); selection.type = 'checkbox'; selection.dataset.ocrSetting = 'selection'
   const selectionTitle = uiText('OCR增强选中文本内容提取', 'Enhance selected text extraction with OCR')
   selection.setAttribute('aria-label', selectionTitle)
   label.append(selection, make('span', selectionTitle))
-  const help = make('p', uiText('默认使用 PDF 文本层。开启后，引用或翻译选文前在本机识别文本和公式；首次使用会下载模型，识别失败时提示并使用原选文。', 'Uses the PDF text layer by default. When enabled, recognizes text and formulas locally before quoting or translating; first use downloads models. On failure, shows a notice and uses the original selection.'))
-  help.className = 'jdx-manager-settings-note jdx-pref-note'
+  const help = make('p', uiText('默认使用 PDF 文本层。开启后，引用或翻译选文前使用 OCR 配置中选择的引擎识别文本和公式；云端仅接收选区图片。识别失败时提示并使用原选文。', 'Uses the PDF text layer by default. When enabled, uses the configured OCR engine before quoting or translating; cloud services receive selected image regions only. On failure, shows a notice and uses the original selection.'))
+  help.className = 'jdx-manager-settings-note jdx-pref-card-note'
   const status = make('p'); status.setAttribute('role', 'status')
   const syncSelection = () => { selection.checked = readSelectionOCR(host) }
   selection.addEventListener('change', () => {
@@ -41,8 +41,13 @@ export function wireSelectionSettings(host: ZoteroLike | null, root: HTMLElement
     syncSelection()
   })
   const behaviorRow = make('div'); behaviorRow.className = 'jdx-feature-model-row'
-  behaviorRow.append(make('p', uiText('选中文本后', 'After selecting text')), behaviorRoot)
-  body.append(title, behaviorRow, label, help, status)
+  const behaviorLabel = make('div'); behaviorLabel.append(make('h3', uiText('选中文本后', 'After selecting text')))
+  behaviorRow.append(behaviorLabel, behaviorRoot)
+  const ocrRow = make('div'); ocrRow.className = 'jdx-feature-model-row'
+  const description = make('div'); description.append(label, help, status)
+  const controls = make('div'); controls.dataset.ocrSummaryHost = ''
+  ocrRow.append(description, controls)
+  body.append(behaviorRow, ocrRow)
   root.append(body)
   syncBehavior(); syncSelection()
   const observers: unknown[] = []

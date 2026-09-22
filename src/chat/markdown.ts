@@ -36,15 +36,17 @@ markdown.inline.ruler.before("escape", "math_inline", (state, silent) => {
   if (!dollar && !paren) return false
   const openingLength = paren ? 2 : 1
   const close = paren ? "\\)" : "$"
-  if (/\s/.test(state.src[start + openingLength] ?? "")) return false
   let cursor = start + openingLength
   while ((cursor = state.src.indexOf(close, cursor)) >= 0) {
     if (escapedAt(state.src, cursor)) { cursor += close.length; continue }
-    if (cursor === start + openingLength || /\s/.test(state.src[cursor - 1])) { cursor += close.length; continue }
-    if (dollar && /\d/.test(state.src[cursor + 1] ?? "")) { cursor += 1; continue }
+    const content = state.src.slice(start + openingLength, cursor).trim()
+    if (!content) return false
+    // OCR 会在公式分隔符内添加空格；货币的下一笔金额不是公式闭合符。
+    if (dollar && (/^\d/.test(state.src.slice(cursor + 1))
+      || /^\d[\d.,]*\s+[a-z]/iu.test(content) && /^\s+\d/.test(state.src.slice(cursor + 1)))) return false
     if (!silent) {
       const token = state.push("math_inline", "math", 0)
-      token.content = state.src.slice(start + openingLength, cursor)
+      token.content = content
     }
     state.pos = cursor + close.length
     return true

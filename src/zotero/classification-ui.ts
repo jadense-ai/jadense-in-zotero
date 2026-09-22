@@ -188,7 +188,7 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
 }
 
 /** 密钥配置只挂载到功能配置页，不创建分类界面。 */
-export function mountClassificationSettings(doc: Document, host: ZoteroLike) {
+export function mountClassificationSettings(doc: Document, host: ZoteroLike, root = doc.querySelector<HTMLElement>('[data-classification-settings-host]')) {
   const make = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = '') => {
     const node = doc.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElementTagNameMap[K]
     node.textContent = text; node.className = className; return node
@@ -196,7 +196,7 @@ export function mountClassificationSettings(doc: Document, host: ZoteroLike) {
   const button = (text: string, action: () => void) => {
     const node = make('button', text); node.type = 'button'; node.addEventListener('click', action); return node
   }
-  const settings = make('section', '', 'jdx-feature-group jdx-classification-settings')
+  const settings = make('section', '', 'jdx-feature-model-row jdx-classification-settings')
   settings.dataset.featureGroup = 'classification'
   const title = make('h3', uiText('文献分类', 'Literature classification'))
   const note = make('p', uiText('独立使用 Jev，不跟随对话模型。选中文献后右键打开文献分类。仅将标题、摘要、标签及候选目录发送到 TypeSafe，不发送 PDF。', 'Uses Jev independently of the Chat model. Right-click selected papers to classify them. Only titles, abstracts, tags and candidate folders are sent to TypeSafe, never PDFs.'))
@@ -223,9 +223,13 @@ export function mountClassificationSettings(doc: Document, host: ZoteroLike) {
     if (launcher.launchURL) launcher.launchURL(TYPESAFE_KEYS_URL)
     else doc.defaultView?.open(TYPESAFE_KEYS_URL, '_blank', 'noopener,noreferrer')
   })
-  const settingActions = make('div', '', 'jdx-classification-actions'); settingActions.append(save, test, getKey)
-  settings.append(title, note, keyLabel, key, settingActions, make('p', uiText('密钥仅保存在本机 Zotero 配置。测试会向 TypeSafe 发送一次固定示例请求，可能消耗额度。', 'The key stays in your local Zotero profile. Testing sends one fixed example to TypeSafe and may use credits.')), settingStatus)
-  doc.getElementById('jadense-settings-panel-features')?.append(settings)
+  const settingActions = make('div', '', 'jdx-manager-actions jdx-classification-actions'); settingActions.append(save, test, getKey)
+  const description = make('div'); description.append(title, note)
+  const controls = make('div', '', 'jdx-manager-field jdx-pref-field')
+  controls.append(keyLabel, key, settingActions, make('p', uiText('密钥仅保存在本机 Zotero 配置。测试会向 TypeSafe 发送一次固定示例请求，可能消耗额度。', 'The key stays in your local Zotero profile. Testing sends one fixed example to TypeSafe and may use credits.')), settingStatus)
+  settings.append(description, controls)
+  root?.append(settings)
 
-  return () => { testAbort?.abort(); settings.remove() }
+  const observer = host.Prefs?.registerObserver?.(TYPESAFE_KEY_PREF, () => { key.value = readTypesafeKey(host) }, true)
+  return () => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); testAbort?.abort(); key.value = ''; settings.remove() }
 }

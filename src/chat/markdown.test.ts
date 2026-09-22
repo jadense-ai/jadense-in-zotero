@@ -3,6 +3,23 @@ import { describe, expect, it } from "vitest"
 import { renderChatMarkdown } from "./markdown"
 
 describe("chat Markdown", () => {
+  it("renders OCR-spaced DCS citations and inline formulas", () => {
+    const citations = ['1-3', '3,4', '5-14', '15,16', '16', '17', '18', '19']
+    const html = renderChatMarkdown(citations.map(value => `spectra $ ^{${value}} $ .`).join(' '))
+    expect(html.match(/<math /g)).toHaveLength(citations.length)
+    expect(html).not.toContain('$')
+    expect(renderChatMarkdown('Energy $ E = mc^2 $ and \\( x_i \\).')).toContain('<msup>')
+    expect(renderChatMarkdown('$ x $ 2 samples')).toContain('<math')
+    expect(renderChatMarkdown('streaming $ ^{1-3}')).not.toContain('<math')
+    expect(renderChatMarkdown('streaming $ ^{1-3} $')).toContain('<math')
+  })
+
+  it("keeps currency, escaped dollars, code and incomplete formulas readable", () => {
+    for (const text of ['Costs $5 and $10.', 'Costs $ 5 and $ 10.', '`$ ^{1-3} $`', '```latex\n$ ^{1-3} $\n```', '\\$ ^{1-3} \\$', 'unfinished $ ^{1-3}']) {
+      expect(renderChatMarkdown(text)).not.toContain('<math')
+    }
+  })
+
   it("renders reading structure, nested lists, quotes, code and tables for either message role", () => {
     const html = renderChatMarkdown([
       "# 文献阅读", "", "**论点**与*证据*，~~旧结论~~。", "", "> 引用原文", "",

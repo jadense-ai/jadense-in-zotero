@@ -1,7 +1,8 @@
 /** 全文提取策略：传统文字层默认可用，OCR 只由设置启用，失败不阻断传统提取。 */
 import type { ZoteroLike } from './runtime'
 import { checkCancelled, readTextDocument, type DocumentHost } from './pdf-document'
-import { ensureLocalOCR, readOCRDocument, waitForOCR } from './local-ocr'
+import { readEngineDocument } from './cloud-ocr'
+import { CloudOCRError } from './cloud-ocr-client'
 import { uiText } from './ui-preferences'
 
 export const DOCUMENT_OCR_PREF = 'extensions.jadenseInZotero.documentOCR'
@@ -11,11 +12,11 @@ export async function readDocument(host: ZoteroLike, itemID: number, signal: Abo
   let warning = ''
   if (useOCR) {
     try {
-      await waitForOCR(ensureLocalOCR(host), signal); checkCancelled(signal)
-      return await readOCRDocument(host, itemID, signal, progress)
-    } catch {
+      return await readEngineDocument(host, itemID, signal, progress)
+    } catch (error) {
       checkCancelled(signal)
       warning = uiText('OCR 增强不可用，已使用传统文字层提取。可前往 OCR 配置重新检查。', 'OCR enhancement is unavailable; extracted the text layer instead. Check OCR configuration.')
+      if (error instanceof CloudOCRError) warning += ` (${error.code})`
       progress(warning)
     }
   }
