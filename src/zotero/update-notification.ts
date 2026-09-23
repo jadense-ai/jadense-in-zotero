@@ -1,6 +1,6 @@
 /** 工作台和 Reader 的可选更新提示；共享宿主状态去重，任何失败均不阻塞阅读。 */
-import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, openHelpLink } from './manager-help'
-import { observeTheme, uiText, type UiPreferenceHost } from './ui-preferences'
+import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, openHelpLink, visibleReleaseNotes } from './manager-help'
+import { getUiLocale, observeTheme, uiText, type UiPreferenceHost } from './ui-preferences'
 
 type Release = Awaited<ReturnType<typeof checkLatestRelease>>
 type UpdateHost = UiPreferenceHost & {
@@ -68,6 +68,10 @@ export function showUpdateDialog(document: Document, host: UpdateHost, release: 
     #jadense-update-dialog p { margin:0 0 16px; }
     #jadense-update-dialog .versions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:light-dark(#f2f5ef,#1a241d); border-radius:8px; padding:14px 16px; margin:20px 0; }
     #jadense-update-dialog .versions span { overflow-wrap:anywhere; }
+    #jadense-update-dialog .notes { margin:0 0 20px; padding:14px 16px; background:light-dark(#f2f5ef,#1a241d); border-radius:8px; max-height:min(38vh,280px); overflow:auto; overflow-wrap:anywhere; }
+    #jadense-update-dialog .notes h3 { margin:0 0 8px; font-size:14px; }
+    #jadense-update-dialog .notes ul { margin:0; padding-inline-start:20px; }
+    #jadense-update-dialog .notes li + li { margin-top:8px; }
     #jadense-update-dialog footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
     #jadense-update-dialog button { appearance:none; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:auto; min-height:36px; margin:0; padding:8px 14px; border:1px solid #80808040; border-radius:8px; color:inherit; background:transparent; font:inherit; line-height:1.4; cursor:pointer; }
     #jadense-update-dialog button.primary { background:#16d78f; color:#111510; border-color:transparent; font-weight:600; }
@@ -77,9 +81,19 @@ export function showUpdateDialog(document: Document, host: UpdateHost, release: 
   `)
   const eyebrow = element('p', 'Jadense in Zotero'); eyebrow.className = 'eyebrow'
   const title = element('h2', uiText('新版本已就绪', 'A new version is ready')); title.id = 'jadense-update-title'
-  const description = element('p', uiText('发现新的正式版本。前往 GitHub 查看更新内容并下载升级。', 'A new stable release is available. Visit GitHub to see what’s new and download the update.')); description.id = 'jadense-update-description'
+  const visible = visibleReleaseNotes(release.notes)
+  const description = element('p', visible.items.length
+    ? uiText('最新正式版包含以下更新。', 'The latest stable release includes these changes.')
+    : uiText('发现新的正式版本。前往 GitHub 查看更新内容并下载升级。', 'A new stable release is available. Visit GitHub to see what’s new and download the update.')); description.id = 'jadense-update-description'
   const versions = element('div'); versions.className = 'versions'
   versions.append(element('span', uiText(`当前 ${release.current}`, `Current ${release.current}`)), element('span', '→'), element('strong', `v${release.latest}`))
+  const notes = element('section'); notes.className = 'notes'
+  if (visible.items.length) {
+    notes.append(element('h3', uiText('本次更新', 'What’s new') + (getUiLocale() === 'en-US' && visible.language === 'zh-CN' ? ' (中文)' : '')))
+    const list = element('ul')
+    for (const item of visible.items) list.append(element('li', item))
+    notes.append(list)
+  }
   const status = element('p'); status.setAttribute('role', 'status')
   const actions = element('footer')
   const later = element('button', uiText('稍后再说', 'Not now')); later.type = 'button'; later.autofocus = true
@@ -90,7 +104,9 @@ export function showUpdateDialog(document: Document, host: UpdateHost, release: 
     catch { status.textContent = uiText('无法打开浏览器，请重试。', 'Could not open your browser. Please retry.') }
   })
   actions.append(later, upgrade)
-  dialog.append(style, eyebrow, title, description, versions, status, actions)
+  dialog.append(style, eyebrow, title, description, versions)
+  if (visible.items.length) dialog.append(notes)
+  dialog.append(status, actions)
   let stopTheme: (() => void) | undefined
   const cleanup = () => { stopTheme?.(); dialog.remove(); document.defaultView?.removeEventListener('unload', cleanup) }
   dialog.addEventListener('close', cleanup, { once: true })

@@ -1,6 +1,6 @@
 /* global ChromeUtils, Components */
 /** 隔离 XPI 的侧栏恢复验收；只在合成 profile 注入宿主/运行时故障，不派发生成。 */
-export async function verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID, stage }) {
+export async function verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID, stage, hostCollapseOnly = false }) {
   const main = Zotero.getMainWindow(), doc = main.document
   const sessions = () => JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.localChatState') || '{}').sessions ?? []
   const before = sessions().length, tasks = Zotero.__jadenseDocumentJobs.list().length
@@ -16,6 +16,21 @@ export async function verifySidebarRecovery({ Zotero, reader, assert, waitFor, s
   native.click()
   let root = await waitFor(() => visible(rootFor(reader)) && rootFor(reader), 'visible native sidebar')
   assert(root.querySelector('textarea'), 'Sidebar has no composer')
+  if (hostCollapseOnly) {
+    await Zotero.Promise.delay(600)
+    await stage('sidebar-host-collapse')
+    const contextPane = doc.getElementById('zotero-context-pane')
+    assert(contextPane, 'Reader context pane is missing')
+    main.ZoteroContextPane.collapsed = true
+    await waitFor(() => contextPane.getAttribute('collapsed') === 'true'
+      && !currentDetail.hasAttribute('data-jdx-reading-active')
+      && !visible(rootFor(reader)), 'plugin sidebar follows host collapse')
+    assert(!rootFor(reader).classList.contains('jdx-reader-dock'), 'Host collapse opened the fallback dock')
+    buttonFor(reader).click()
+    root = await waitFor(() => visible(rootFor(reader)) && rootFor(reader), 'sidebar reopens explicitly')
+    report.checks.push('native-host-collapse-hides-plugin-sidebar', 'explicit-sidebar-reopen')
+    return
+  }
   // 在真实 XUL 宿主里检查普通正文与内联子元素，避免仅测独立 HTML 页漏掉宿主选择限制。
   const selectionProbe = doc.createElementNS('http://www.w3.org/1999/xhtml', 'p')
   selectionProbe.style.cssText = 'position:fixed;top:100px;left:100px;z-index:100000;background:white;color:black;font:16px monospace;padding:8px'

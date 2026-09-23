@@ -1,5 +1,13 @@
 # 更新说明 / Changelog
 
+## 0.6.2 — 待发布 / Pending release
+
+- 自动更新提示和手动检查更新窗口显示 GitHub 最新正式版的更新要点；Release 正文从本版起使用固定的中英文 Markdown 栏目，旧版说明仍可回退读取。更新内容获取失败时仍可查看版本和下载入口。
+- 「对照翻译」归入统一阅读操作，窄窗口下进入「•••」菜单；运行时图标显示进度，阅读器侧栏遵循 Zotero 原生侧栏的收起与重新展开状态。
+- 不新增设置或数据迁移；继续使用现有 PDF 排版引擎，Windows x64 离线引擎包仍见 v0.6.0 附件。GitHub 发布不会自动更新官网安装清单。
+- The automatic update prompt and manual update check show highlights from the latest GitHub Release. Release bodies use fixed bilingual Markdown sections from this version onward, with a fallback for older notes.
+- Parallel translation joins the reading actions menu when space is tight; the running icon shows progress, and the plugin sidebar follows Zotero's native pane state. Existing settings and the v0.6.0 layout-engine bundle remain compatible.
+
 ## 0.6.1 — 2026-09-23
 
 - 移除设置 → 功能配置底部的“查看待恢复 AI 请求”按钮及专用结果面板，清理关联样式；任务与聊天内部的恢复机制不变。

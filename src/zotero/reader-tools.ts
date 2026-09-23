@@ -826,14 +826,16 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 }
 :is([data-jadense-reader-tools], .jadense-reader-actions) svg {width:16px;height:16px;flex:none;pointer-events:none;}
 [data-jadense-reader-tools] .jadense-reader-brand svg {width:20px;height:20px;}
-[data-jadense-reader-tools] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:180px;max-width:32vw;position:relative;gap:6px;overflow:hidden;}
-[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"]::after {content:"";position:absolute;bottom:0;left:4px;width:28%;height:2px;background:#16cf8c;animation:jdx-analysis-progress 2s ease-in-out infinite;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:180px;max-width:32vw;gap:6px;overflow:hidden;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {transform-box:fill-box;transform-origin:center;animation:jdx-analysis-logo-spin 1.4s linear infinite;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="complete"] {color:var(--jdx-reader-text,CanvasText);box-shadow:inset 0 -2px #16cf8c;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="error"] {box-shadow:inset 0 -2px #c37d0d;}
+[data-jadense-reader-tools][data-compact="true"] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:28px;max-width:none;padding:0;gap:0;overflow:visible;}
+[data-jadense-reader-tools][data-compact="true"] .jadense-reader-runtime-label {display:none;}
 [data-jadense-reader-tools] .jadense-reader-runtime-stop[hidden] {display:none!important;}
 .jadense-reader-runtime-label {overflow:hidden;text-overflow:ellipsis;}
-@keyframes jdx-analysis-progress {0%,100% {transform:translateX(0)} 50% {transform:translateX(230%)}}
-@media(prefers-reduced-motion:reduce) {[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"]::after {animation:none;width:calc(100% - 8px);}}
+@keyframes jdx-analysis-logo-spin {to {transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce) {[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {animation:none;}}
 [data-jadense-reader-tools="renderTextSelectionPopup"] {
   display:flex;flex-wrap:wrap;width:100%;max-width:100%;min-width:0;
   margin-top:4px;padding:3px;background:var(--jdx-reader-surface,transparent);
@@ -1508,21 +1510,6 @@ export function registerReaderTools(
           }
         })
         group.append(brand, stop)
-        // PDF 阅读模式入口常驻；仅缩短标签，不随其他阅读操作收进菜单。
-        const pdfButtons = event.doc.createElement('span')
-        pdfButtons.className = 'jadense-pdf-mode-buttons'
-        const pdfStyle = event.doc.createElement('style')
-        pdfStyle.textContent = '.jadense-pdf-mode-buttons{display:inline-flex;gap:2px}.jadense-pdf-mode-buttons button{display:inline-flex;align-items:center;gap:3px;min-width:28px;min-height:28px;padding:3px;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}.jadense-pdf-mode-buttons button:hover{background:#8882}.jadense-pdf-mode-buttons button:focus-visible{outline:2px solid #16d78f}@media(max-width:1400px){.jadense-pdf-mode-buttons .jdx-pdf-label{display:none}}'
-        pdfButtons.append(pdfStyle)
-        for (const [mode, label, symbol] of [['compare', uiText('对照翻译', 'Bilingual PDF'), '◫']] as const) {
-          const button = event.doc.createElement('button'), text = event.doc.createElement('span')
-          button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.dataset.jadensePdfMode = mode
-          const icon = event.doc.createElement('span'); icon.textContent = symbol; icon.setAttribute('aria-hidden', 'true')
-          text.className = 'jdx-pdf-label'; text.textContent = label; button.append(icon, text)
-          button.addEventListener('click', () => { void openPDFTranslation(zotero as unknown as ZoteroLike, event.reader as unknown as Parameters<typeof openPDFTranslation>[1], mode).catch(error => feedback.show(button, error instanceof Error ? error.message : String(error))) })
-          pdfButtons.append(button)
-        }
-        group.append(pdfButtons)
       }
       const actionList = type === "renderToolbar" ? event.doc.createElement("span") : group
       if (actionList !== group) {
@@ -1578,6 +1565,23 @@ export function registerReaderTools(
             .catch(() => {
               if (active && documents.has(event.doc)) feedback.show(anchor, uiText("操作未完成，请稍后重试，或打开 Jadense 对话查看。", "The action did not complete. Try again or open Jadense Chat for details."))
             })
+        })
+        actionList.append(button)
+      }
+      if (type === 'renderToolbar') {
+        const label = uiText('对照翻译', 'Bilingual PDF')
+        const button = event.doc.createElement('button'), icon = event.doc.createElement('span'), caption = event.doc.createElement('span')
+        button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.dataset.jadensePdfMode = 'compare'
+        icon.textContent = '◫'; icon.setAttribute('aria-hidden', 'true')
+        caption.className = 'jadense-reader-label'; caption.textContent = label
+        button.append(icon, caption)
+        button.addEventListener('click', () => {
+          if (!active) return
+          toolbarMenus.get(group)?.close()
+          const anchor = group.getAttribute('data-compact') === 'true'
+            ? group.querySelector<HTMLButtonElement>('.jadense-reader-actions-toggle') || button : button
+          void openPDFTranslation(zotero as unknown as ZoteroLike, event.reader as unknown as Parameters<typeof openPDFTranslation>[1], 'compare')
+            .catch(error => feedback.show(anchor, error instanceof Error ? error.message : String(error)))
         })
         actionList.append(button)
       }

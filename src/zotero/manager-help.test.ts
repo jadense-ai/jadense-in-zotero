@@ -1,6 +1,6 @@
 /** 帮助更新边界测试：真实版本委托 Gecko，网络失败不进入业务流程。 */
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, JADENSE_WORKBENCH_URL, LATEST_RELEASE_API, openHelpLink, releaseSummary, REPOSITORY_URL } from "./manager-help"
+import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, JADENSE_WORKBENCH_URL, LATEST_RELEASE_API, openHelpLink, releaseNotes, releaseSummary, REPOSITORY_URL, visibleReleaseNotes } from "./manager-help"
 import { supportsIntegratedTitlebar } from "./manager-titlebar"
 
 afterEach(() => vi.useRealTimers())
@@ -28,6 +28,20 @@ describe("manual release checks", () => {
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...stable, assets: [], future: true }) })
     expect((await checkLatestRelease("0.4.4", () => -1, request)).state).toBe("available")
     expect(request).toHaveBeenCalledWith(LATEST_RELEASE_API, expect.objectContaining({ credentials: "omit", signal: expect.any(AbortSignal) }))
+  })
+  it("reads the latest release's bilingual summary from the same response", () => {
+    const body = `## 本次更新\n\n- **新增** [对照翻译](https://example.invalid) 与导出。\n- 修复更新弹窗。\n\n## What's new\n\n- Add parallel translation and export.\n\n## 操作与配置\n- 不应进入摘要。`
+    const result = releaseSummary({ ...stable, body }, "0.4.9", () => -1)
+    expect(result.notes).toEqual({ zhCN: ["新增 对照翻译 与导出。", "修复更新弹窗。"], enUS: ["Add parallel translation and export."] })
+    expect(visibleReleaseNotes(result.notes, "en-US")).toEqual({ items: ["Add parallel translation and export."], language: "en-US" })
+  })
+  it("supports existing release prose and keeps missing or unsafe notes optional", () => {
+    const body = `## 本次更新\n\n本版修复 **设置**。\n\n## 操作与配置\n不会显示。\n\nEnglish: This patch fixes settings.`
+    expect(releaseNotes(body)).toEqual({ zhCN: ["本版修复 设置。"], enUS: ["This patch fixes settings."] })
+    expect(releaseSummary({ ...stable, body: { unexpected: true } }, "0.4.9", () => -1).state).toBe("available")
+    expect(releaseNotes("## 本次更新\n- <img src=x onerror=alert(1)>文本").zhCN).toEqual(["文本"])
+    expect(visibleReleaseNotes({ zhCN: ["中文摘要"], enUS: [] }, "en-US")).toEqual({ items: ["中文摘要"], language: "zh-CN" })
+    expect(releaseNotes(`## 本次更新\n摘要前言。\n- 第一项更新。\n- 第二项更新。`).zhCN).toEqual(["第一项更新。", "第二项更新。"])
   })
   it.each([403, 404, 429, 500])("contains HTTP %s", async status => {
     await expect(checkLatestRelease("0.4.4", () => 0, vi.fn().mockResolvedValue({ ok: false, status }))).rejects.toThrow(`GitHub ${status}`)

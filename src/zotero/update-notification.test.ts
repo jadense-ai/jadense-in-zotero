@@ -16,7 +16,7 @@ function fixture() {
 
 it('coalesces simultaneous entries and caches a successful check', async () => {
   const { document, host } = fixture()
-  vi.mocked(checkLatestRelease).mockResolvedValue({ current: '0.4.7', latest: '0.4.7', state: 'latest', url: '' })
+  vi.mocked(checkLatestRelease).mockResolvedValue({ current: '0.4.7', latest: '0.4.7', state: 'latest', url: '', notes: { zhCN: [], enUS: [] } })
   await Promise.all([silentlyCheckForUpdates(document, host, 'id'), silentlyCheckForUpdates(document, host, 'id')])
   await silentlyCheckForUpdates(document, host, 'id')
   expect(checkLatestRelease).toHaveBeenCalledTimes(1)
@@ -37,7 +37,7 @@ it('contains failure without listeners or UI, and retries after a minute', async
 
 it('defers an available release in an inactive window, and never repeats a shown version', async () => {
   const { document, host, win } = fixture()
-  vi.mocked(checkLatestRelease).mockResolvedValue({ current: '0.4.7', latest: '0.4.8', state: 'available', url: '' })
+  vi.mocked(checkLatestRelease).mockResolvedValue({ current: '0.4.7', latest: '0.4.8', state: 'available', url: '', notes: { zhCN: ['修复更新弹窗。'], enUS: ['Improve the update dialog.'] } })
   await silentlyCheckForUpdates(document, host, 'id')
   expect(win.addEventListener).toHaveBeenCalledWith('focus', expect.any(Function))
   const state = (host as Parameters<typeof silentlyCheckForUpdates>[1]).__jadenseReleaseCheck!

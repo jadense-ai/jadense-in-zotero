@@ -27,7 +27,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **v0.6.1 已发布：**移除功能配置页的“查看待恢复 AI 请求”按钮，保留已有设置和任务恢复逻辑。[更新与升级指引](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1)
 
-**0.6.1 发布准备：**移除功能配置底部的“查看待恢复 AI 请求”按钮及专用面板，保留任务内部恢复逻辑。候选安装包为 `jadense-in-zotero-v0.6.1.xpi`；当前公开版仍为 0.6.0。
+**v0.6.2 发布准备：**更新弹窗可直接查看最新版更新要点；对照翻译入口归入阅读操作，阅读侧栏与 Zotero 原生收起状态保持一致。候选安装包为 `jadense-in-zotero-v0.6.2.xpi`；发布前请继续下载最新正式版 v0.6.1。
 
 <!-- release-summary:start -->
 ## 最近版本
@@ -118,7 +118,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.6.1.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.1/jadense-in-zotero-v0.6.1.xpi` | 构建当前源码；仅需本仓库与所列构建依赖 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | 构建当前候选源码；仅需本仓库与所列构建依赖 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
@@ -269,7 +269,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 ### [遇到难懂的段落，就地翻译](docs/usage-guide.md#selection-translation)
 
-选中文本后点击选区弹出栏的「智能翻译」，或按 `Ctrl+Alt+T`（macOS：`⌘+Alt+T`），在阅读器浮窗中查看译文。支持 32 种语言选项，可临时调整当前选文的翻译方向；已有文章语言偏好继续生效。顶部工具条的「对照翻译」进入 PDF 排版翻译，侧栏「全文翻译」用于段落译文；选文翻译使用选区入口或快捷键。
+选中文本后点击选区弹出栏的「智能翻译」，或按 `Ctrl+Alt+T`（macOS：`⌘+Alt+T`），在阅读器浮窗中查看译文。支持 32 种语言选项，可临时调整当前选文的翻译方向；已有文章语言偏好继续生效。阅读操作中的「对照翻译」进入 PDF 排版翻译，侧栏「全文翻译」用于段落译文；选文翻译使用选区入口或快捷键。
 
 ### [翻译整篇 PDF，随时回到原文核对](docs/usage-guide.md#full-translation)
 
@@ -285,7 +285,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 「解析」同时提取当前 PDF 的参考文献，在「文献解析 → 论文详情 → 参考文献」核对来源、验证 DOI，再选择核对后的候选导入 Zotero；「已选首条」表示无精确匹配时的首条候选，须特别核查。原始顺序、编号与重复项保留，无法确认的内容继续展示；导入按同库 DOI 去重，仅保存元数据与链接，不自动下载 PDF。
 
-阅读器空间不足时，提问、解析和引用收在「•••」阅读操作菜单内，对照翻译保留独立入口；点击 Jadense 图标直接打开工作台。
+阅读器空间不足时，提问、解析、引用和对照翻译收在「•••」阅读操作菜单内；点击 Jadense 图标直接打开工作台。若收起 Zotero 原生侧栏，插件侧栏也会收起；需要时可再次点击阅读操作打开插件侧栏。
 
 ### [看图表时，把论文背景一起带入问题](docs/usage-guide.md#figures)
 

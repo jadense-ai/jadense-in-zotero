@@ -599,9 +599,16 @@ describe("native reader toolbars", () => {
     const menu = doc.body.children.find(node => node.attributes.has("data-jadense-action-menu"))!
     expect(menu.attributes.get("role")).toBe("menu")
     expect(actionButtons(menu).map(node => node.attributes.get("data-jadense-action"))).toEqual(["attach", "analyze", "quote"])
+    const pdfMode = descendants(menu).find(node => node.dataset.jadensePdfMode === 'compare')!
+    expect(pdfMode.attributes.get('aria-label')).toBe('对照翻译')
+    const readerStyle = doc.head.children.find(node => node.attributes.has('data-jadense-reader-style'))!.textContent
+    expect(readerStyle).toContain('[data-jadense-reader-tools][data-compact="true"] .jadense-reader-runtime-label {display:none;}')
+    expect(readerStyle).toContain('.jadense-reader-brand[data-runtime="running"] svg {transform-box:fill-box;transform-origin:center;animation:jdx-analysis-logo-spin')
+    expect(readerStyle).not.toContain('.jadense-reader-brand[data-runtime="running"]::after')
+    expect(readerStyle).toContain('@media(prefers-reduced-motion:reduce) {[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {animation:none;}}')
     expect(doc.activeElement).toBe(actionButtons(menu)[0])
     menu.handlers.get("keydown")!({ key: "End", preventDefault: vi.fn() })
-    expect(doc.activeElement).toBe(actionButtons(menu).at(-1))
+    expect(doc.activeElement).toBe(pdfMode)
     doc.handlers.get("keydown")!({ key: "Escape" })
     expect(toggle.attributes.get("aria-expanded")).toBe("false")
     expect(doc.activeElement).toBe(toggle)

@@ -21,13 +21,15 @@ try {
         await page.setContent(`<html data-color-scheme="${theme}"><head><style>${host === 'reader' ? readerCSS : ''}</style></head><body></body></html>`)
         await page.addScriptTag({ content: bundle.outputFiles[0].text })
         await page.evaluate(theme => {
-          window.UpdateNotification.showUpdateDialog(document, { Prefs: { get: key => key.endsWith('.theme') ? theme : undefined }, launchURL: () => {} }, { current: '0.4.10', latest: '0.5.0', state: 'available', url: 'https://example.invalid' })
+          window.UpdateNotification.showUpdateDialog(document, { Prefs: { get: key => key.endsWith('.theme') ? theme : undefined }, launchURL: () => {} }, { current: '0.4.10', latest: '0.5.0', state: 'available', url: 'https://example.invalid', notes: { zhCN: ['新增 PDF 对照阅读与译文导出，保留原文版面并支持逐步查看。', '支持部分成果阅读和仅补译未完成段落。', '优化翻译请求与窄窗口布局。', '设置页改进模型选择、字号与外置依赖配置。'], enUS: ['Add side-by-side PDF reading and translated export.'] } })
         }, theme)
         const bounds = await page.locator('#jadense-update-dialog').boundingBox()
         const delta = { x: bounds.x + bounds.width / 2 - viewport.width / 2, y: bounds.y + bounds.height / 2 - viewport.height / 2 }
         console.log(JSON.stringify({ host, theme, viewport, bounds, delta }))
         assert(Math.abs(delta.x) <= 1 && Math.abs(delta.y) <= 1, `${host} dialog is not centered`)
         assert(bounds.x >= 15 && bounds.y >= 15 && bounds.width <= viewport.width - 30 && bounds.height <= viewport.height - 30, 'Dialog exceeds viewport')
+        assert(await page.locator('#jadense-update-dialog .notes li').count() === 4, 'Latest release highlights are missing')
+        assert(await page.locator('#jadense-update-dialog footer button').count() === 2, 'Update actions are not reachable')
         if (process.env.UPDATE_SCREENSHOT && host === 'reader' && theme === 'light' && viewport.width === 1000) await page.screenshot({ path: process.env.UPDATE_SCREENSHOT })
         await page.keyboard.press('Escape')
         await page.locator('#jadense-update-dialog').waitFor({ state: 'detached' })

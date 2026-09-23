@@ -890,8 +890,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           assert(group && toggle && page && total, "Reader lacks the plugin toggle or native page controls")
           const groupBounds = group.getBoundingClientRect(), pageBounds = page.getBoundingClientRect(), totalBounds = total.getBoundingClientRect()
           ;(report.compactToolbarBounds ??= []).push({ requestedWidth: width, actualOuterWidth: main.outerWidth, viewport: win.innerWidth, plugin: groupBounds.toJSON(), page: pageBounds.toJSON(), total: totalBounds.toJSON() })
-          const comparisonWidth = group.querySelector('[data-jadense-pdf-mode="compare"]')?.getBoundingClientRect().width ?? 0
-          assert(groupBounds.width < 100 + comparisonWidth && toggle.getBoundingClientRect().width > 0, "Compact actions still consume the permanent toolbar")
+          assert(groupBounds.width < 100 && toggle.getBoundingClientRect().width > 0, "Compact actions still consume the permanent toolbar")
           assert(pageBounds.width >= 50 && pageBounds.right <= win.innerWidth
             && doc.elementFromPoint(pageBounds.left + pageBounds.width / 2, pageBounds.top + pageBounds.height / 2) === page,
           "Reading actions squeeze or cover the native page-number input at " + width)
@@ -905,7 +904,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           const menuBounds = menu.getBoundingClientRect()
           assert(menuBounds.left >= 0 && menuBounds.right <= win.innerWidth + 1 && menuBounds.top >= 0
             && menuBounds.bottom <= win.innerHeight + 1 && actions.every(button => button.getBoundingClientRect().height >= 24), "Compact action menu is clipped or compressed")
-          assert(group.querySelector('[data-jadense-pdf-mode="compare"]')?.getBoundingClientRect().width > 0, "PDF translation entry is missing")
+          assert(menu.querySelector('[data-jadense-pdf-mode="compare"]')?.getBoundingClientRect().height >= 24
+            && !group.querySelector('[data-jadense-pdf-mode="compare"]'), "PDF translation entry did not move into the compact menu")
           await screenshot("reader-actions-" + width)
           menu.dispatchEvent(new win.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Escape", bubbles: true, cancelable: true }, win)))
           assert(toggle.getAttribute("aria-expanded") === "false" && !doc.querySelector("[data-jadense-action-menu]"), "Escape did not close compact actions")
@@ -918,7 +918,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       }
     }
     if (config.sidebarRecoveryOnly) {
-      await verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID: config.pluginID, stage })
+      await verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID: config.pluginID, stage, hostCollapseOnly: config.sidebarHostCollapseOnly })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.machineOnly) {
@@ -1016,7 +1016,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       readerDoc.querySelector(".jadense-reader-brand").click()
       manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), "unified Manager")
       const doc = manager.document, element = id => doc.getElementById("jadense-" + id)
-      element("quick-start-close")?.click()
+      const quickStart = element("quick-start-dialog")
+      await waitFor(() => quickStart.open || Zotero.Prefs.get("extensions.jadenseInZotero.quickStartShown") === true, "quick-start dialog before shell checks")
+      if (quickStart.open) element("quick-start-close")?.click()
+      await waitFor(() => !quickStart.open, "quick-start dismissal before shell checks")
       report.shellHost = { os: Services.appinfo.OS, version: Services.appinfo.version, build: Services.sysinfo.getProperty("build"), dpi: manager.devicePixelRatio, customtitlebar: doc.documentElement.getAttribute("customtitlebar") }
       report.shellHost.capabilities = [typeof manager.ChromeUtils, typeof manager.Services, typeof manager.minimize, typeof manager.maximize, typeof manager.restore]
       await persist()
@@ -1036,7 +1039,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         element("help-toggle").click()
         await waitFor(() => !element("help-menu").hidden && doc.activeElement === [...element("help-menu").querySelectorAll("button")].find(button => !button.hidden), "Help menu focus: " + doc.activeElement?.id + " hidden=" + element("help-menu").hidden)
         pressKey(manager, "End", {}, element("help-menu"))
-        assert(doc.activeElement === element("help-update"), "Help End navigation failed")
+        assert(doc.activeElement === [...element("help-menu").querySelectorAll("button")].filter(button => !button.hidden).at(-1), "Help End navigation failed: " + doc.activeElement?.id)
         pressKey(manager, "Escape", {}, element("help-menu"))
         assert(element("help-menu").hidden && doc.activeElement === element("help-toggle"), "Help Escape/focus failed")
         element("help-about").click()
@@ -1054,7 +1057,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
             updateRequests++
             if (mode === "failure") return { ok: false, status: 429 }
             const tag = mode === "latest" ? `v${installedVersion}` : mode === "ahead" ? "v0.0.1" : "v99.0.0"
-            return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, future: true }) }
+            return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, body: "## 本次更新\n\n- 修复更新弹窗。\n\n## What's new\n\n- Improve the update dialog.", future: true }) }
           }
           return fetchBefore.call(manager, url, options)
         }
@@ -1066,6 +1069,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
             await waitFor(() => !element("help-retry").disabled, "manual update " + state)
             const text = element("help-status").textContent
             assert(state === "available" ? /发现新版本|New version available/.test(text) : state === "latest" ? /已是最新|up to date/.test(text) : state === "ahead" ? /无需降级|No downgrade/.test(text) : /检查失败|Check failed/.test(text), "Incorrect update state " + text)
+            if (state !== "failure") assert(/修复更新弹窗|Improve the update dialog/.test(doc.querySelector(".jdx-help-release-notes")?.textContent ?? ""), "Latest release notes are missing")
+            else assert(doc.querySelector(".jdx-help-release-notes")?.hidden, "Stale release notes survived a failed retry")
           }
           mode = "latest"; element("help-retry").click()
           await waitFor(() => !element("help-retry").disabled, "update retry")
@@ -3120,7 +3125,7 @@ async function main() {
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
       translationFilesOnly: argv.includes('--translation-files-only'), pdfTranslationOnly: argv.includes('--pdf-translation-only'), pdfStatusOnly: argv.includes('--pdf-status-only'), pdfAI: argv.includes('--pdf-ai'), pdfPartial: argv.includes('--pdf-partial'), pdfViewerFixture: argValue(argv, '--pdf-viewer-fixture') ? path.resolve(argValue(argv, '--pdf-viewer-fixture')) : undefined, pdfEngineArchive: argValue(argv, '--pdf-engine-archive') ? path.resolve(argValue(argv, '--pdf-engine-archive')) : undefined, pdfEngineSettingsCheck: argv.includes('--pdf-engine-settings-check'), pdfEngineOnly: argv.includes('--pdf-engine-only'),
-      sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'),
+      sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'),
       classificationOnly: argv.includes('--classification-only'),
       chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'),
       analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),

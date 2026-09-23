@@ -1480,6 +1480,11 @@ textarea {
 .jdx-help-dialog p { line-height: 1.7; }
 .jdx-help-description p:first-child { margin-top: 12px; }
 .jdx-help-star { margin: 14px 0 0; padding: 10px 12px; border-inline-start: 2px solid var(--jdx-green); background: var(--jdx-press-bg); border-radius: 0 6px 6px 0; }
+.jdx-help-release-notes[hidden] { display: none; }
+.jdx-help-release-notes { max-height: min(34vh, 240px); overflow: auto; margin: 12px 0; padding: 12px 14px; background: var(--jdx-press-bg); border-radius: 8px; overflow-wrap: anywhere; }
+.jdx-help-release-notes h3 { margin: 0 0 6px; font-size: 14px; }
+.jdx-help-release-notes ul { margin: 0; padding-inline-start: 20px; line-height: 1.6; }
+.jdx-help-release-notes li + li { margin-top: 6px; }
 .jdx-help-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .jdx-help-actions button[hidden] { display: none; }
 .jdx-help-actions button:disabled { opacity: .5; cursor: default; }

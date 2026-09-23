@@ -26,6 +26,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.1 is released:** Removes the “Show pending AI requests” button from feature settings; existing settings and task recovery remain unchanged. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1)
 
+**v0.6.2 release candidate:** The update dialog shows the latest release highlights; Parallel translation joins the reading actions, and the plugin sidebar follows Zotero's native collapsed state. Candidate package: `jadense-in-zotero-v0.6.2.xpi`. Until publication, v0.6.1 remains the latest public release.
+
 <!-- release-summary:start -->
 ## Recent releases
 
@@ -111,7 +113,7 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.6.1.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.1/jadense-in-zotero-v0.6.1.xpi` | Builds the current source; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | Builds the current candidate source; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -247,7 +249,7 @@ Click **Ask (提问)** to start a conversation about the current paper. You can 
 
 ### [Translate difficult passages as you read](docs/usage-guide.md#selection-translation)
 
-Select text and click **AI translation (智能翻译)** in the selection popup, or press `Ctrl+Alt+T` (`⌘+Alt+T` on macOS), to view a translation in a floating reader panel. Choose from 32 language options for the current selection; existing per-paper language preferences remain effective. The toolbar's **Bilingual PDF (对照翻译)** opens layout translation; the sidebar's Full translation view provides paragraph translations. Use the selection popup or shortcut for selected text.
+Select text and click **AI translation (智能翻译)** in the selection popup, or press `Ctrl+Alt+T` (`⌘+Alt+T` on macOS), to view a translation in a floating reader panel. Choose from 32 language options for the current selection; existing per-paper language preferences remain effective. **Parallel translation (对照翻译)** in the reading actions opens layout translation; the sidebar's Full translation view provides paragraph translations. Use the selection popup or shortcut for selected text.
 
 ### [Translate a whole PDF and check the original passages](docs/usage-guide.md#full-translation)
 
@@ -263,7 +265,7 @@ Open **Parallel translation** from PDF reading actions to read original and tran
 
 **Analyze** also extracts the current PDF's references. Under **Literature analysis → Paper details → References (文献解析 → 论文详情 → 参考文献)**, inspect the source, verify DOIs, and select reviewed candidates to import into Zotero. “First result selected” identifies a fallback without an exact match and needs careful review. Original order, numbering, duplicates, and unconfirmed text are retained. Import deduplicates by DOI within the same library and saves metadata and links without downloading PDFs.
 
-When reader space is limited, Ask, Analyze and Quote appear under the **•••** reading actions menu; Bilingual PDF keeps its own entry. Click the Jadense icon to open the workbench directly.
+When reader space is limited, Ask, Analyze, Quote and Parallel translation appear under the **•••** reading actions menu. Click the Jadense icon to open the workbench directly. Collapsing Zotero's native context pane also closes the plugin sidebar; use a reading action to open it again.
 
 ### [Interpret figures with the paper's context](docs/usage-guide.md#figures)
 

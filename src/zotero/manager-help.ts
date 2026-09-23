@@ -1,10 +1,53 @@
 /** 工作台帮助与手动 Release 检查；仅显示信息，不参与业务请求或自动更新渠道。 */
-import { uiText } from "./ui-preferences"
+import { getUiLocale, uiText, type UiLocale } from "./ui-preferences"
 
 export const REPOSITORY_URL = "https://github.com/jadense-ai/jadense-in-zotero"
 export const RELEASES_URL = `${REPOSITORY_URL}/releases`
 export const LATEST_RELEASE_API = "https://api.github.com/repos/jadense-ai/jadense-in-zotero/releases/latest"
 export const JADENSE_WORKBENCH_URL = "https://jadense.cn/app"
+
+type ReleaseNotes = { zhCN: string[]; enUS: string[] }
+const EMPTY_NOTES: ReleaseNotes = { zhCN: [], enUS: [] }
+
+/** GitHub Release 正文即按标签归档的更新记录；只摘取面向用户的摘要，不渲染远端 Markdown。 */
+export function releaseNotes(body: unknown): ReleaseNotes {
+  if (typeof body !== "string") return EMPTY_NOTES
+  const source = body.slice(0, 64_000).replace(/\r\n?/g, "\n")
+  const lines = source.split("\n")
+  const plain = (value: string) => value
+    .replace(/^[-*+]\s+|^\d+[.)]\s+/u, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+    .replace(/<[^>]*>/gu, "")
+    .replace(/[*_`]/gu, "")
+    .trim()
+  const compact = (values: string[]) => values.map(plain).filter(Boolean).slice(0, 4)
+    .map(value => value.length > 220 ? `${value.slice(0, 219).trimEnd()}…` : value)
+
+  const section = (heading: RegExp) => {
+    const start = lines.findIndex(line => heading.test(line.trim()))
+    if (start < 0) return []
+    const result: string[] = []
+    for (const line of lines.slice(start + 1)) {
+      if (/^##\s/u.test(line)) break
+      // 旧版正文中的三级标题属于详细说明；摘要只取其前面的短文案。
+      if (/^###\s/u.test(line)) break
+      const value = line.trim()
+      if (value) result.push(value)
+    }
+    const bullets = result.filter(line => /^[-*+]\s+/u.test(line))
+    return bullets.length ? bullets : result
+  }
+  const zhCN = compact(section(/^##\s*本次更新\s*$/u))
+  const enSection = compact(section(/^##\s*(?:What's new|What’s new)\s*$/iu))
+  const legacyEnglish = lines.find(line => /^English:\s*\S/iu.test(line.trim()))?.replace(/^English:\s*/iu, "")
+  return { zhCN, enUS: enSection.length ? enSection : compact(legacyEnglish ? [legacyEnglish] : []) }
+}
+
+/** 缺少译文时仍显示发布者写下的原文，并由调用方标明语言。 */
+export function visibleReleaseNotes(notes: ReleaseNotes = EMPTY_NOTES, locale: UiLocale = getUiLocale()) {
+  return locale === "en-US" && notes.enUS.length ? { items: notes.enUS, language: "en-US" as const }
+    : { items: notes.zhCN.length ? notes.zhCN : notes.enUS, language: notes.zhCN.length ? "zh-CN" as const : "en-US" as const }
+}
 
 type GeckoModules = {
   ChromeUtils?: { importESModule(url: string): Record<string, unknown> }
@@ -29,13 +72,13 @@ export function compareGeckoVersions(current: string, latest: string, platform: 
 
 /** 只选取正式版本标签；忽略附加字段，并从固定仓库构造浏览器入口。 */
 export function releaseSummary(payload: unknown, current: string, compare: (a: string, b: string) => number) {
-  const release = payload as { tag_name?: unknown; draft?: unknown; prerelease?: unknown } | null
+  const release = payload as { tag_name?: unknown; draft?: unknown; prerelease?: unknown; body?: unknown } | null
   if (!release || release.draft !== false || release.prerelease !== false || typeof release.tag_name !== "string") throw new Error("No stable release")
   const latest = release.tag_name.trim().replace(/^v/i, "")
   if (!/^\d+(?:\.\d+)*(?:[a-zA-Z][\w.+-]*)?$/.test(latest)) throw new Error("Unusable release version")
   const order = compare(current, latest)
   if (!Number.isFinite(order)) throw new Error("Unusable version comparison")
-  return { current, latest, state: order < 0 ? "available" : order > 0 ? "ahead" : "latest", url: `${RELEASES_URL}/tag/${encodeURIComponent(release.tag_name)}` } as const
+  return { current, latest, state: order < 0 ? "available" : order > 0 ? "ahead" : "latest", url: `${RELEASES_URL}/tag/${encodeURIComponent(release.tag_name)}`, notes: releaseNotes(release.body) } as const
 }
 
 /** 无凭证 GET；超时、限流和异常响应仅由帮助弹窗处理。 */
@@ -72,6 +115,10 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
   const description = get<HTMLElement>("help-description")
   const version = get<HTMLElement>("help-version")
   const status = get<HTMLElement>("help-status")
+  const notes = document.createElementNS("http://www.w3.org/1999/xhtml", "section")
+  notes.className = "jdx-help-release-notes"
+  notes.hidden = true
+  status.after(notes)
   const retry = get<HTMLButtonElement>("help-retry")
   const releaseButton = get<HTMLButtonElement>("help-release")
   const website = get<HTMLButtonElement>("help-website")
@@ -126,6 +173,8 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
     releaseButton.hidden = !update
     website.hidden = update
     version.textContent = ""
+    notes.hidden = true
+    notes.replaceChildren()
     if (!dialog.open) dialog.showModal()
     if (!update) void loadVersion().then(value => { version.textContent = uiText(`安装版本：${value}`, `Installed version: ${value}`) }).catch(() => { version.textContent = uiText("安装版本暂不可用", "Installed version unavailable") })
   }
@@ -144,6 +193,19 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
       releaseURL = result.url
       version.textContent = uiText(`当前版本：${current} · 最新正式版：${result.latest}`, `Current: ${current} · Latest stable: ${result.latest}`)
       status.textContent = result.state === "available" ? uiText("发现新版本", "New version available") : result.state === "ahead" ? uiText("本地版本高于最新正式版，无需降级。", "Your local version is newer than the latest stable release. No downgrade needed.") : uiText("已是最新版本", "You are up to date")
+      const visible = visibleReleaseNotes(result.notes)
+      if (visible.items.length) {
+        const heading = document.createElementNS("http://www.w3.org/1999/xhtml", "h3")
+        heading.textContent = uiText("最新版本更新内容", "What's new in the latest release") + (getUiLocale() === "en-US" && visible.language === "zh-CN" ? " (中文)" : "")
+        const list = document.createElementNS("http://www.w3.org/1999/xhtml", "ul")
+        for (const item of visible.items) {
+          const li = document.createElementNS("http://www.w3.org/1999/xhtml", "li")
+          li.textContent = item
+          list.append(li)
+        }
+        notes.replaceChildren(heading, list)
+        notes.hidden = false
+      }
     } catch {
       if (!operation.signal.aborted) status.textContent = uiText("检查失败：网络超时、请求受限或暂无可读取的正式版本。请重试或打开发布页。", "Check failed: the network timed out, requests are limited, or no readable stable release is available. Retry or open releases.")
     } finally { if (pending === operation) retry.disabled = false }
