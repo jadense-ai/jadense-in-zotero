@@ -346,6 +346,6 @@ Configure the translation service, model, target language and concise/full scope
 
 ![0.6.0 字号滑块](images/guide-general-060.png)
 
-## 0.6.1 设置界面调整（待发布）
+## 0.6.1 设置界面调整
 
 功能配置页移除“查看待恢复 AI 请求”按钮及其专用面板，无需替代配置。任务内部的错误恢复、部分译文和补译入口不变。升级保留已有设置和历史，已安装的版面解析引擎无需重装；离线安装继续使用 [v0.6.0 引擎 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)。
