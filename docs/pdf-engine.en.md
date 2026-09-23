@@ -1,4 +1,4 @@
-# PDF layout and translation engine setup (0.6.0 — unreleased)
+# PDF layout and translation engine setup (0.6.0)
 
 [README](../README.en.md) · [中文完整指南](pdf-engine.md)
 
@@ -6,17 +6,17 @@ The BabelDOC 0.6.4 engine parses PDF layouts and typesets translated PDFs. It is
 
 ## Automatic setup
 
-Open **Settings → External dependencies → PDF translation engine**, or follow the dependency link under **Feature settings → Full translation**. Choose **Prepare PDF translation engine** and wait for **PDF translation engine ready**. First use of parallel translation also prepares the engine.
+Open **Settings → External dependencies → Layout parsing engine**, or follow the dependency link under **Feature settings → Full translation**. Choose **Prepare PDF translation engine** and wait for **PDF translation engine ready**. First use of parallel translation also prepares the engine.
 
-In this source candidate, the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) is still `published: false`. Automatic setup therefore uses the bundled `install.ps1` / `install.sh`: reuse or download uv, install isolated Python 3.12 and locked dependencies, then fetch models and fonts. GitHub, Python distribution, PyPI and asset downloads must be reachable. No preinstalled Python or system Python changes are needed.
+In v0.6.0, the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) is still `published: false`. Automatic setup therefore uses the bundled `install.ps1` / `install.sh`: reuse or download uv, install isolated Python 3.12 and locked dependencies, then fetch models and fonts. GitHub, Python distribution, PyPI and asset downloads must be reachable. No preinstalled Python or system Python changes are needed.
 
-After a complete ZIP is publicly released, verified and enabled in the manifest, Windows x64 can download that fixed bundle with partial-download recovery, up to three attempts per source, SHA-256 verification and offline checks. The reserved URL is not an available download yet.
+After a complete ZIP is publicly released, verified and enabled in the manifest, Windows x64 can download that fixed bundle with partial-download recovery, up to three attempts per source, SHA-256 verification and offline checks. The complete bundle is available in v0.6.0 for manual import; automatic ZIP download remains disabled.
 
 The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the roughly 441 MiB archive, 940 MiB extracted runtime and replacement workspace.
 
 ## Manual download and offline import
 
-Once available in [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases), download `jadense-pdf-engine-0.6.4-1-windows-x64.zip` on a connected computer and transfer it. The attachment becomes available when v0.6.0 is published.
+From [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases), download `jadense-pdf-engine-0.6.4-1-windows-x64.zip` on a connected computer and transfer it. The attachment is available in v0.6.0.
 
 - Size: **462102143 bytes**.
 - SHA-256: `b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887`.

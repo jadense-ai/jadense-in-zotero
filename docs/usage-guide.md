@@ -2,7 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
-- [0.6.0 对照翻译与引擎配置（待发布）](#pdf-translation-060)
+- [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
 
 ## 目录
 
@@ -328,7 +328,7 @@ Text-layer extraction remains the default. Enable OCR only for the desired use; 
 
 <a id="pdf-translation-060"></a>
 
-## 0.6.0 对照翻译与引擎配置（待发布）
+## 0.6.0 对照翻译与引擎配置
 
 1. 在 **设置 → 功能配置 → 全文翻译** 选择服务、模型、目标语言及精简/完整范围。精简默认保留出版信息和参考文献，完整翻译所有可译文字；只影响新任务，阅读器可单次覆盖。
 2. 从该处的外置依赖链接进入 **外置依赖配置**，准备 PDF 翻译引擎。参见[自动安装、手动安装与库内备用源](pdf-engine.md)。OCR 与版面引擎分别准备，普通文字层提取不需要排版引擎。
@@ -339,3 +339,9 @@ Text-layer extraction remains the default. Enable OCR only for the desired use; 
 ### English
 
 Configure the translation service, model, target language and concise/full scope under **Settings → Feature settings → Full translation**. Follow the dependency link to prepare the [PDF engine](pdf-engine.en.md), then open **Parallel translation** from PDF reading actions. Read progressively completed output side by side, full-width or on another screen; toggle synchronized scrolling and save translated-only or bilingual PDFs. Partial results remain available, and **Translate remaining passages** reuses completed segments but may incur further translation charges. Scanned pages remain original. Review formulas, tables and layout against the source. Existing history is not automatically translated again; unfinished legacy tasks may restart using the new batching strategy with a visible notice.
+
+### 0.6.0 常规设置
+
+界面字号使用 80%–200% 滑块，拖动即时生效，可恢复 100%。下图为 Windows / Zotero 10.0.3 的 0.6.0 原生隔离验收，使用合成资料与服务。
+
+![0.6.0 字号滑块](images/guide-general-060.png)
