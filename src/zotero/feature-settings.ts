@@ -12,6 +12,8 @@ import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, ocrEngine } from './cloud-ocr-conf
 import { cachedOCR, OCR_READY_PREF, isLocalOCRPreparing, observeOCRProgress } from './local-ocr'
 import { migrateTranslationConfiguration } from './translation-config-migration'
 import { wirePDFTranslationSettings } from './pdf-translation-settings'
+import { createJdxSelect } from './custom-select'
+import { CHAT_DOCUMENT_MODE_PREF_KEY, readChatDocumentMode, saveChatDocumentMode } from './chat-document-policy'
 
 export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, ocrRoot: HTMLElement, show: (ocr: boolean) => void) {
   if (!host) return () => {}
@@ -29,6 +31,32 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     wireReferenceAISetting(host, root.querySelector('[data-feature-group="analysis"]')),
     mountClassificationSettings(doc, host, root.querySelector<HTMLElement>('[data-classification-settings-host]')),
   ]
+  const chatTask = root.querySelector<HTMLElement>('[data-settings-task="chat"]')
+  if (chatTask) {
+    const row = make('div'); row.className = 'jdx-feature-model-row'
+    const description = make('div'), title = make('h3', uiText('关联 PDF 长文处理', 'Linked PDF long text'))
+    const control = make('div'), selectHost = make('div')
+    selectHost.dataset.chatDocumentMode = 'chat'
+    const note = make('p', uiText('默认按本轮容量截取原文；图片解读也沿用此设置。分批概括全文会增加等待时间和模型请求，只在关联 PDF 超出容量时运行。', 'By default, source text is cut to fit this request; image interpretation uses the same setting. Summarizing the full PDF adds model requests and waiting time, and runs only when linked PDF text exceeds capacity.'))
+    note.className = 'jdx-manager-settings-note jdx-pref-card-note'
+    const status = make('p'); status.setAttribute('role', 'status')
+    description.append(title); control.append(selectHost, note, status); row.append(description, control); chatTask.append(row)
+    const select = createJdxSelect(selectHost, { ariaLabel: title.textContent || '' })
+    const options = [
+      { value: 'truncate', label: uiText('按容量截取（默认）', 'Cut to fit (default)') },
+      { value: 'summarize', label: uiText('分批概括全文', 'Summarize the full text in batches') },
+    ]
+    const sync = () => select.setOptions(options, readChatDocumentMode(host))
+    select.onChange(value => {
+      try { saveChatDocumentMode(host, value === 'summarize' ? 'summarize' : 'truncate'); status.textContent = uiText('已保存，下次发送生效。', 'Saved for the next request.') }
+      catch { status.textContent = uiText('设置保存失败，请重试。', 'Could not save the setting. Retry.') }
+      sync()
+    })
+    sync()
+    let observer: unknown
+    try { observer = host.Prefs?.registerObserver?.(CHAT_DOCUMENT_MODE_PREF_KEY, sync, true) } catch { /* 设置页仍可手动保存。 */ }
+    stops.push(() => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); select.destroy(); row.remove() })
+  }
   const section = root.querySelector<HTMLElement>('[data-document-ocr-host]')!
   const label = make('label'), enabled = make('input'); enabled.type = 'checkbox'; enabled.dataset.ocrSetting = 'document'
   label.className = 'jdx-manager-checkbox jdx-pref-checkbox'

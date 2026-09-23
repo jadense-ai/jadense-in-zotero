@@ -6,7 +6,7 @@ import { saveByokModel, saveByokProvider, saveFeatureModelSelection } from './ai
 import type { ZoteroLike } from './runtime'
 
 afterEach(() => vi.unstubAllGlobals())
-function harness() {
+function harness(idleTimeoutMs?: number) {
   const files = new Map<string, string>()
   vi.stubGlobal('PathUtils', { profileDir: '/synthetic', join: (...parts: string[]) => parts.join('/'), filename: (path: string) => path.split('/').at(-1) })
   vi.stubGlobal('IOUtils', { makeDirectory: async () => {}, getChildren: async (path: string) => [...files.keys()].filter(key => key.startsWith(path + '/')), readUTF8: async (path: string) => files.get(path), writeUTF8: async (path: string, text: string) => { files.set(path, text) } })
@@ -19,7 +19,7 @@ function harness() {
     return { itemID: 2, _internalReader: { _primaryView: { _pdfPages: { 0: { chars: [{ c: value.text, paragraphBreakAfter: true }] } }, _iframeWindow: { PDFViewerApplication: { pdfDocument: { numPages: 1 } } } } } }
   } } } as unknown as ZoteroLike
   const fetch = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response('data: {"choices":[{"delta":{"content":"Answer"}}]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }))
-  const runtime = new ChatRuntime(host, fetch)
+  const runtime = new ChatRuntime(host, fetch, idleTimeoutMs)
   saveByokProvider(host, { id: 'provider', name: 'Synthetic', protocol: 'openai-chat-completions', baseUrl: 'http://localhost:12345/v1', apiKey: 'synthetic' })
   saveByokModel(host, { id: 'model', providerId: 'provider', name: 'Synthetic', model: 'synthetic-model', contextWindow: 10000, maxOutputTokens: 1000 })
   saveFeatureModelSelection(host, 'chat', { route: 'byok', modelId: 'model' })
@@ -121,6 +121,28 @@ describe('shared Reader Chat lifecycle', () => {
     release({ text: 'Late result', extractedPages: 1, totalPages: 1 }); await Promise.resolve()
     expect(accepted).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled()
     expect(readLocalChatState(runtime.preferences).sessions[0]).toMatchObject({ sources: [], messages: [] })
+  })
+  it('releases the generating state when a provider ignores request cancellation', async () => {
+    const { runtime, fetch } = harness()
+    fetch.mockImplementationOnce(() => new Promise(() => {}))
+    const session = createLocalChatSession(runtime.preferences)
+    const sending = runtime.send({ sessionID: session.id, prompt: 'Question' })
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    runtime.stop()
+    const result = await Promise.race([sending, new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 100))])
+    expect(result).not.toBe('hung')
+    expect(runtime.busy).toBe(false)
+    expect(readLocalChatState(runtime.preferences).sessions[0].messages.at(-1)?.text).toBe('已停止生成。')
+  })
+  it('ends an idle provider request without automatically sending it again', async () => {
+    const { runtime, fetch } = harness(20)
+    fetch.mockImplementationOnce(() => new Promise(() => {}))
+    const session = createLocalChatSession(runtime.preferences)
+    await runtime.send({ sessionID: session.id, prompt: 'Question' })
+    expect(runtime.busy).toBe(false)
+    expect(runtime.statusKind).toBe('error')
+    expect(runtime.status).toContain('没有返回新内容')
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
   it('an unavailable attachment leaves an existing session unchanged', async () => {
     const { runtime, get, fetch } = harness()
