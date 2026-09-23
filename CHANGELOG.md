@@ -1,5 +1,14 @@
 # 更新说明 / Changelog
 
+## 0.6.3 — 2026-09-24
+
+- 关联 PDF 超出模型上下文时，AI 对话和图片解读默认选取问题相关的原文片段，不再自动发起多轮全文概括；新建图片对话本身不会整理全文。
+- 如需分批概括全文，可在「设置 → 功能配置 → AI 对话 → 关联 PDF 长文处理」明确开启；图片解读沿用同一设置。开启后按模型输入容量尽量填满每批，减少不必要的整理请求及等待。
+- AI 请求长时间没有输出时会结束等待并提示；停止请求后界面及时解除加载。长文结果仍需对照 PDF 原文核查，真实 Provider 的速度和质量取决于服务端。
+- Linked PDFs that exceed the model context now use question-relevant source passages by default in chat and figure interpretation, without automatic full-document summaries. Starting a figure conversation alone does not summarize the PDF.
+- Opt in to full-document batch summaries under Settings → Feature settings → AI chat → Linked PDF long text. Figure interpretation shares this setting; enabled batches fill the model input budget more efficiently.
+- Requests with no output for an extended period end with a visible notice, and stopping a request clears the loading state. Check answers against the PDF; provider latency and quality vary.
+
 ## 0.6.2 — 2026-09-24
 
 - 自动更新提示和手动检查更新窗口显示 GitHub 最新正式版的更新要点；Release 正文从本版起使用固定的中英文 Markdown 栏目，旧版说明仍可回退读取。更新内容获取失败时仍可查看版本和下载入口。

@@ -31,22 +31,29 @@ describe('long PDF context', () => {
     expect(result.context).toContain('TAIL_UNIQUE_FACT = 7391')
     expect(result.reading.sources[0].pages).toContainEqual({ pageIndex: count - 1, pageLabel: String(count) })
     expect(documentTokenCost(result.context)).toBeLessThanOrEqual(f.input.budget)
+    expect(f.generate).not.toHaveBeenCalled()
     const before = f.generate.mock.calls.length
     await buildLongDocumentContext(f.input)
     expect(f.generate).toHaveBeenCalledTimes(before)
   })
   it('processes every chunk including the appendix for a comprehensive question', async () => {
     const f = fixture(81)
+    f.input.mode = 'summarize'
     f.input.question = '请全面审查研究方法及附录中的限制'
     const result = await buildLongDocumentContext(f.input)
     const prompts = f.generate.mock.calls.map(row => row[0])
-    for (const chunk of documentChunks([f.document], [1])) expect(prompts.some(prompt => prompt.includes(JSON.stringify(chunk.text)))).toBe(true)
+    const batches = documentChunks([f.document], [1], f.input.budget, false)
+    for (const chunk of batches) expect(prompts.some(prompt => prompt.includes(JSON.stringify(chunk.text)))).toBe(true)
+    expect(batches.length).toBeLessThan(documentChunks([f.document], [1], 2000).length)
+    expect(prompts.filter(prompt => prompt.includes('请用不超过 300 字'))).toHaveLength(batches.length)
     expect(prompts.some(prompt => prompt.includes('TAIL_UNIQUE_FACT'))).toBe(true)
     expect(result.reading.notice).toContain('全部可读正文已分段整理')
     expect(documentTokenCost(result.context)).toBeLessThanOrEqual(f.input.budget)
   })
   it('contains optional generation failure and keeps tail-page raw evidence without claiming full coverage', async () => {
     const f = fixture(81)
+    f.input.mode = 'summarize'
+    f.input.question = '请全面总结第 81 页的 TAIL_UNIQUE_FACT'
     f.generate.mockRejectedValueOnce(new Error('network uncertain'))
     const first = await buildLongDocumentContext(f.input)
     expect(first.context).toContain('7391')
@@ -61,8 +68,32 @@ describe('long PDF context', () => {
     const chunks = documentChunks([f.document], [1], 1000)
     expect(chunks.map(chunk => chunk.text.replace(/^\[第 .*?\]\n/u, '')).join('')).toBe(text)
   })
+  it('fills summary batches across headings instead of creating one request per section', () => {
+    const f = fixture(26)
+    for (const page of f.document.pages) page.paragraphs[0].heading = true
+    const separated = documentChunks([f.document], [1], 7000)
+    const packed = documentChunks([f.document], [1], 7000, false)
+    expect(packed.length).toBeLessThan(separated.length)
+    expect(packed.slice(0, -1).every(chunk => documentTokenCost(chunk.text) > 7000 * .65)).toBe(true)
+  })
+  it('packs multiple summaries into each merge request while keeping the final overview small', async () => {
+    const f = fixture(300)
+    f.input.mode = 'summarize'
+    f.input.question = '请全面总结这篇长文'
+    f.generate.mockImplementation(async () => 'Method, evidence, and limitations. '.repeat(28))
+    const result = await buildLongDocumentContext(f.input)
+    const prompts = f.generate.mock.calls.map(row => row[0])
+    const firstPass = prompts.filter(prompt => prompt.includes('请用不超过 300 字'))
+    const merges = prompts.filter(prompt => prompt.includes('将以下全部分段概括合并'))
+    expect(merges.length).toBeGreaterThan(0)
+    expect(merges.length).toBeLessThan(firstPass.length)
+    expect(result.reading.notice).toContain('全部可读正文已分段整理')
+    expect(documentTokenCost(result.context)).toBeLessThanOrEqual(f.input.budget)
+  })
   it('stops serial generation on cancellation and retains completed summaries', async () => {
     const f = fixture(81), controller = new AbortController()
+    f.input.mode = 'summarize'
+    f.input.question = '请全面总结这篇文献'
     f.input.signal = controller.signal
     f.generate.mockImplementationOnce(async () => 'first completed')
     f.generate.mockImplementationOnce(async () => { controller.abort(); return 'late result' })
@@ -72,6 +103,8 @@ describe('long PDF context', () => {
   })
   it('uses a new identity only after a definite rejection on a later user attempt', async () => {
     const f = fixture(26)
+    f.input.mode = 'summarize'
+    f.input.question = '请全面总结这篇文献'
     f.generate.mockRejectedValueOnce(new ByokResponseError(429, 'rate limited'))
     await buildLongDocumentContext(f.input)
     const rejectedID = f.generate.mock.calls[0][1]
@@ -84,6 +117,8 @@ describe('long PDF context', () => {
   })
   it('retains execution identities even if the optional document cache is rebuilt', async () => {
     const f = fixture(26)
+    f.input.mode = 'summarize'
+    f.input.question = '请全面总结这篇文献'
     await buildLongDocumentContext(f.input)
     const [, firstRequest, firstConversation] = f.generate.mock.calls[0]
     f.document.state.summaries = {}; f.document.state.id = crypto.randomUUID()

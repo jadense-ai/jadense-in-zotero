@@ -26,6 +26,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.2 is released:** The update dialog shows the latest release highlights; Parallel translation joins the reading actions, and the plugin sidebar follows Zotero's native collapsed state. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2)
 
+**v0.6.3 is pending release:** Long linked PDFs use question-relevant source passages by default instead of automatic batch summaries. Opt in to full-document summaries under Settings → Feature settings → AI chat; figure interpretation shares this setting.
+
 <!-- release-summary:start -->
 ## Recent releases
 
@@ -261,7 +263,7 @@ When reader space is limited, Ask, Analyze, Quote and Parallel translation appea
 
 ### [Interpret figures with the paper's context](docs/usage-guide.md#figures)
 
-Click an automatically detected image, or press `Ctrl+Alt+S` (`⌘+Alt+S` on macOS) to select a PDF region, then start a new conversation or add it to the current one. A new figure conversation includes the current paper and extractable PDF text, helping you ask questions such as “What conclusion does this comparison support?” You can also upload, paste, or drag PNG/JPEG images into a conversation. Images are saved locally with the conversation so you can view them and follow up after reopening it.
+Click an automatically detected image, or press `Ctrl+Alt+S` (`⌘+Alt+S` on macOS) to select a PDF region, then start a new conversation or add it to the current one. A new figure conversation links the current paper and extractable PDF text; when the text exceeds the model context, only question-relevant source passages are sent by default, without extra full-document summaries. You can also upload, paste, or drag PNG/JPEG images into a conversation. Images are saved locally with the conversation so you can view them and follow up after reopening it.
 
 Figure interpretation requires a model that accepts images. Automatic detection requires a compatible PDF reader in Zotero 10.0.1 or later. When an image is not detected, you can select a region manually in a PDF reader that supports native cropping. Both capture and translation shortcuts can be customized in Settings.
 

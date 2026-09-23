@@ -48,6 +48,30 @@ function interruptible<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
+/** 网络或流长时间没有新输出时释放界面；迟到结果仍由可靠请求日志认领，不自动重发。 */
+async function boundedChatRequest<T>(parent: AbortSignal, send: (signal: AbortSignal, activity: () => void) => Promise<T>, idleMs: number): Promise<T> {
+  const controller = new AbortController()
+  let timedOut = false, finished = false, timer: ReturnType<typeof setTimeout> | undefined
+  const cancel = () => controller.abort()
+  const activity = () => {
+    if (finished || controller.signal.aborted) return
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => { timedOut = true; markDiagnosticAbort(controller.signal, 'response_idle_timeout'); controller.abort() }, idleMs)
+  }
+  parent.addEventListener('abort', cancel, { once: true })
+  if (parent.aborted) cancel()
+  activity()
+  try { return await interruptible(Promise.resolve().then(() => { controller.signal.throwIfAborted(); return send(controller.signal, activity) }), controller.signal) }
+  catch (error) {
+    if (timedOut && !parent.aborted) throw new Error(uiText('AI 服务连续 3 分钟没有返回新内容，已结束等待；结果可能仍在服务端执行，不会自动重发。', 'The AI service returned no new content for 3 minutes. Waiting ended; the request may still be running and will not be resent automatically.'))
+    throw error
+  } finally {
+    finished = true
+    if (timer) clearTimeout(timer)
+    parent.removeEventListener('abort', cancel)
+  }
+}
+
 export function friendlyChatError(error: unknown) {
   const message = error instanceof Error ? error.message : uiText('对话生成失败，请稍后重试。', 'Chat failed. Please try again.')
   const subscription = jadenseModelSubscriptionErrorMessage(error)
@@ -71,7 +95,7 @@ export class ChatRuntime {
   private disposed = false
   private queued = false
   private activeFeature: 'chat' | 'figure' = 'chat'
-  constructor(readonly host: ZoteroLike, private fetchImpl: typeof fetch) {
+  constructor(readonly host: ZoteroLike, private fetchImpl: typeof fetch, private idleTimeoutMs = 180_000) {
     for (const key of [LOCAL_CHAT_PREF_KEY, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), 'extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig']) {
       try {
         const observer = host.Prefs?.registerObserver?.(key, () => {
@@ -188,18 +212,19 @@ export class ChatRuntime {
         imageCount: image ? 1 : 0, modelIdentity: JSON.stringify({ selection: ai.selection, config: ai.route === 'byok' ? ai.config : undefined, baseUrl: connection.baseUrl, token: ai.route === 'jadense' ? connection.token : undefined }),
         progress: text => { this.status = text; this.changed() },
         update: source => { signal.throwIfAborted(); refreshLocalChatSource(this.preferences, session.id, source) },
-        generate: (text, requestId, conversationId) => intermediateClient.send({ clientFeature: feature, taskId: conversationId,
-          operationId: requestId, clientRequestId: requestId, conversationId, messages: [{ id: requestId, role: 'user', text }], signal, requireComplete: true }),
+        generate: (text, requestId, conversationId) => boundedChatRequest(signal, (requestSignal, activity) => intermediateClient.send({ clientFeature: feature, taskId: conversationId,
+          operationId: requestId, clientRequestId: requestId, conversationId, messages: [{ id: requestId, role: 'user', text }], signal: requestSignal, requireComplete: true,
+          onTextDelta: activity }), this.idleTimeoutMs),
       }), signal)
       signal.throwIfAborted()
       if (request.reading) updateLocalChatMessage(this.preferences, session.id, assistantID, { reading: request.reading })
       this.status = uiText('正在生成…', 'Generating…'); this.changed()
-      const finalText = await client.send({
+      const finalText = await boundedChatRequest(signal, (requestSignal, activity) => client.send({
         clientFeature: feature, taskId: session.id, operationId: assistantID, clientRequestId: id('request'), conversationId: session.id,
         messages: request.messages,
-        sources: request.sources, ...(image ? { images: [image] } : {}), signal, requireComplete: prepared.requireComplete,
-        onTextDelta: (_delta, text) => { if (prepared.streamVisible !== false) { updateLocalChatMessage(this.preferences, session.id, assistantID, { text }); this.changed() } },
-      })
+        sources: request.sources, ...(image ? { images: [image] } : {}), signal: requestSignal, requireComplete: prepared.requireComplete,
+        onTextDelta: (_delta, text) => { activity(); if (!requestSignal.aborted && prepared.streamVisible !== false) { updateLocalChatMessage(this.preferences, session.id, assistantID, { text }); this.changed() } },
+      }), this.idleTimeoutMs)
       signal.throwIfAborted()
       const result = finalText && prepared.finish ? await prepared.finish(finalText, signal) : null
       updateLocalChatMessage(this.preferences, session.id, assistantID, { text: result?.text ?? (finalText || uiText('回答中没有可显示文本。', 'The answer contains no displayable text.')), status: finalText ? 'complete' : 'failed', ...(result?.research ? { research: result.research } : {}) })

@@ -7,6 +7,7 @@ import { featureModelState, readByokSettings, type AiFeature } from './ai-settin
 import type { ZoteroLike } from './runtime'
 import { requestHash } from '@/chat/temporary-request-store'
 import { validateDocument, type DocumentHost } from './pdf-document'
+import { readChatDocumentMode } from './chat-document-policy'
 
 export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature) {
   const ai = featureModelState(host, feature)
@@ -58,6 +59,8 @@ export async function prepareDocumentRequest(input: {
   const question = last.text
   const recent = messages.slice(0, -1).slice(-4).map(row => row.text).join('\n').slice(-3000)
   const result = await buildLongDocumentContext({ documents, sourceNumbers: numbers, question, recent, budget,
+    mode: readChatDocumentMode(input.host),
+    summaryInputBudget: Math.max(256, capacity.input - documentTokenCost(question) - 1024),
     modelKey: await requestHash(input.modelIdentity), signal: input.signal, progress: input.progress,
     save: document => cache.save(document.state),
     generate: async (prompt, requestId, conversationId) => {
