@@ -45,6 +45,54 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.4.8:** optional selection OCR and improved text extraction, with configurable selection actions, window positioning and OCR download sources. See [settings](docs/usage-guide.md#unreleased-settings).
 
+<a id="api-recommendation"></a>
+
+## API recommendation: Toodoo AI — capable models, affordable access
+
+**Read papers, translate passages, and explore ideas without stretching your budget.** [Toodoo AI](https://toodooai.com/) brings GPT and advanced Chinese models such as Zhipu GLM and Xiaomi MiMo together, so you can choose an AI assistant for your Zotero workflow.
+
+The platform positions its service around **low prices, genuine models, and reliable access**; see its listings for model and channel details. Price comparisons, per-request usage records, and setup support help you choose a model and understand your spending. Start with an affordable model for everyday translation and summaries, then try a more capable option when the task calls for it.
+
+### What is an API? No coding required
+
+Think of an **API** as a connection between Zotero and an AI service. When you ask a question or translate text, the plugin sends the content through that connection and displays the answer in your reading interface. An **API key** is your personal access pass: it identifies your account and lets the service charge your usage. Enter the service address, key, and model in the plugin—no programming needed.
+
+- **Less copying and pasting:** use supported translation and Q&A features while reading.
+- **Pay for what you use:** text models typically charge for input and output tokens, which are small pieces of text, not necessarily whole words or characters. Paper text, conversation history, and generated answers can all count toward usage.
+- **Choose by task and budget:** compare models without buying a separate monthly chat subscription for each one.
+- **Keep spending visible:** review individual request costs and set key budgets.
+
+### Current model offers
+
+**GPT from 98% off the platform base rate, plus 90% off MiMo through its promotional group.** The following snapshot was checked against effective platform prices and group multipliers on **2026-09-23**.
+
+| Model and API group | Current offer | Tasks to try |
+| --- | --- | --- |
+| GPT-6 Sol · GPT PLUS | **Pay 2% of the platform model base rate** (98% off) | English papers, complex questions, writing revision |
+| GPT-6 Sol · GPT PRO | **Pay 5.5% of the platform model base rate** (94.5% off) | GPT access through an eligible account group |
+| MiMo-V2.6-Flash / Pro, MiMo-V2.5 / Pro · 福利模型（不定期） | **Pay 10% of the platform model base rate** (90% off) | Everyday Q&A, reasoning, organizing paper content |
+| GLM-5.2 · 国产模型 | **30% off** the official reference price listed by the platform | Chinese Q&A, summaries, translation |
+| GLM-5.1 / GLM-5.3 · 国产模型 | **20% off** the listed official reference price | Choose by paper difficulty and output quality |
+| Qwen3.8-Flash · 国产模型 | **10% off** the listed official reference price | Everyday translation and text organization |
+| Kimi-K2.6 · 国产模型 | **20% off** the listed official reference price | Long-form reading and summaries |
+| DeepSeek-V4-Flash · 国产模型 | **20% off** the listed official reference price for the same time period, with lower night rates | Reasoning and paper analysis |
+
+For example, GPT-6 Sol in GPT PLUS, with input length up to 272,000 tokens, costs approximately **CNY 0.28 per million input tokens** and **CNY 1.40 per million output tokens**. MiMo-V2.6-Flash in the promotional group costs **CNY 0.10 input / CNY 0.20 output per million tokens**. “Per million” is a unit price, not a minimum purchase. Input is what you send; output is the model's reply, billed separately.
+
+- **Match the model and group:** the GLM, Qwen, Kimi, and DeepSeek offers above apply to the `bailian/` model aliases. GPT PLUS and GPT PRO are **API group names**, not ChatGPT Plus or Pro memberships.
+- **Check eligibility:** available groups and cumulative top-up requirements depend on your account; check after signing in. The MiMo group is an intermittent promotion. GPT and MiMo discounts are relative to platform base rates, not an independently verified comparison with every original vendor price.
+- **Check length and time tiers:** GPT has a separate long-context tier. The listed DeepSeek model's input/output rates from 22:00 to 08:00 the next day, Beijing time, are half its daytime rates. Cache and other charges follow model details; the table does not additionally apply top-up bonuses.
+
+**[Compare current prices →](https://toodooai.com/price-comparison)** · **[Browse all models →](https://toodooai.com/pricing)**. Live prices, availability, and promotion terms take precedence over this dated snapshot.
+
+### Prefer ChatGPT itself? Subscription purchasing assistance is also available
+
+Toodoo AI also offers **GPT membership subscription purchasing assistance** for users who prefer chatting in the ChatGPT website or app. Ask the platform about plans, prices, delivery, and support.
+
+Choose **API access** to connect models to Zotero; choose **membership subscription assistance** for ChatGPT's own website or app. These are billed separately: buying a membership does not automatically add API credit for the plugin.
+
+**[Visit Toodoo AI and choose your assistant →](https://toodooai.com/)**. Try a short, familiar paper passage first, then choose your model and budget. See the [setup documentation](https://toodooai.com/docs) or contact the website's QQ group **658248617** for help. API use sends selected content to the service for processing; keep your key private and out of public screenshots or group chats.
+
 <a id="requirements"></a>
 
 ## Start here: requirements, installation methods, and feature links
@@ -88,6 +136,7 @@ The **[detailed OCR installation guide (Chinese)](docs/local-ocr.md)** covers [s
 
 ## Contents
 
+- [API recommendation: Toodoo AI](#api-recommendation)
 - [Start here: requirements, installation methods, and feature links](#requirements)
 - [OCR dependency installation](#ocr-installation)
 - [PDF layout engine setup](#pdf-engine-installation)
