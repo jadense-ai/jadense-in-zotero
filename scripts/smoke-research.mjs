@@ -890,7 +890,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           assert(group && toggle && page && total, "Reader lacks the plugin toggle or native page controls")
           const groupBounds = group.getBoundingClientRect(), pageBounds = page.getBoundingClientRect(), totalBounds = total.getBoundingClientRect()
           ;(report.compactToolbarBounds ??= []).push({ requestedWidth: width, actualOuterWidth: main.outerWidth, viewport: win.innerWidth, plugin: groupBounds.toJSON(), page: pageBounds.toJSON(), total: totalBounds.toJSON() })
-          assert(groupBounds.width < 100 && toggle.getBoundingClientRect().width > 0, "Compact actions still consume the permanent toolbar")
+          const comparisonWidth = group.querySelector('[data-jadense-pdf-mode="compare"]')?.getBoundingClientRect().width ?? 0
+          assert(groupBounds.width < 100 + comparisonWidth && toggle.getBoundingClientRect().width > 0, "Compact actions still consume the permanent toolbar")
           assert(pageBounds.width >= 50 && pageBounds.right <= win.innerWidth
             && doc.elementFromPoint(pageBounds.left + pageBounds.width / 2, pageBounds.top + pageBounds.height / 2) === page,
           "Reading actions squeeze or cover the native page-number input at " + width)
@@ -900,11 +901,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
           toggle.click()
           const menu = await waitFor(() => doc.querySelector("[data-jadense-action-menu]"), "compact action menu")
           const actions = Array.from(menu.querySelectorAll("[data-jadense-action]"))
-          assert(menu.getAttribute("role") === "menu" && actions.map(button => button.dataset.jadenseAction).join(",") === "attach,analyze,quote,fullTranslate", "Compact menu changed the available reading actions")
+          assert(menu.getAttribute("role") === "menu" && actions.map(button => button.dataset.jadenseAction).join(",") === "attach,analyze,quote", "Compact menu changed the available reading actions")
           const menuBounds = menu.getBoundingClientRect()
           assert(menuBounds.left >= 0 && menuBounds.right <= win.innerWidth + 1 && menuBounds.top >= 0
             && menuBounds.bottom <= win.innerHeight + 1 && actions.every(button => button.getBoundingClientRect().height >= 24), "Compact action menu is clipped or compressed")
-          assert(actions.at(-1).textContent.trim() === (config.appearanceLanguage === 'en-US' ? 'Full translation' : '全文翻译'), "Compact menu full translation label changed")
+          assert(group.querySelector('[data-jadense-pdf-mode="compare"]')?.getBoundingClientRect().width > 0, "PDF translation entry is missing")
           await screenshot("reader-actions-" + width)
           menu.dispatchEvent(new win.KeyboardEvent("keydown", Components.utils.cloneInto({ key: "Escape", bubbles: true, cancelable: true }, win)))
           assert(toggle.getAttribute("aria-expanded") === "false" && !doc.querySelector("[data-jadense-action-menu]"), "Escape did not close compact actions")

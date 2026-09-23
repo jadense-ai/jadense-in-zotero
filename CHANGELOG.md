@@ -1,6 +1,6 @@
 # 更新说明 / Changelog
 
-## 0.6.0 — 待发布 / Unreleased
+## 0.6.0 — 2026-09-23
 
 ## 本次更新
 
@@ -48,7 +48,7 @@ GitHub v0.5.1 用户可直接覆盖安装；相同 `.cn` 插件身份保留设�
 
 普通问答、选文翻译及文字层 Markdown 提取不需要排版引擎；对照翻译需要它。**排版引擎与 OCR 独立**。
 
-**自动安装**：在「设置 → 外置依赖配置 → PDF 翻译引擎」点击「准备 PDF 翻译引擎」，等待“已就绪”。也可从「功能配置 → 全文翻译 → 外置依赖」跳转。此版本自动准备使用随插件的安装器，下载独立 Python 3.12、锁定依赖、模型和字体，无需预装 Python；需能访问相关下载站。
+**自动安装**：在「设置 → 外置依赖配置 → 版面解析引擎」点击「准备 PDF 翻译引擎」，等待“已就绪”。也可从「功能配置 → 全文翻译 → 外置依赖」跳转。此版本自动准备使用随插件的安装器，下载独立 Python 3.12、锁定依赖、模型和字体，无需预装 Python；需能访问相关下载站。
 
 **手动离线安装（Windows x64）**：下载本 Release 的 `jadense-pdf-engine-0.6.4-1-windows-x64.zip`，点击「导入离线包」选择 ZIP，无需解压、管理员权限或预装 Python/uv。可以在另一台电脑下载后复制过来。插件按固定 SHA-256 校验，在临时目录检测模型及 PDF 渲染，通过后替换引擎，保留任务成果及原 PDF。
 
@@ -60,7 +60,7 @@ GitHub v0.5.1 用户可直接覆盖安装；相同 `.cn` 插件身份保留设�
 
 检测不下载、不调用翻译服务；缺少模型或字体时使用「修复引擎」或重新导入匹配的离线包。不要关闭哈希校验或自行创建就绪标记。
 
-详细步骤：[中文安装指南](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.md) · [English setup](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.en.md) · [操作指南](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/usage-guide.md#pdf-translation-060)。
+详细步骤：[中文安装指南](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.md) · [English setup](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.en.md) · [操作指南](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/usage-guide.md#pdf-translation-060)。
 
 ### 4. 开始对照翻译
 
@@ -77,7 +77,12 @@ GitHub v0.5.1 用户可直接覆盖安装；相同 `.cn` 插件身份保留设�
 
 ## 验证与下载
 
-发布验收以 GitHub v0.6.0 Release 的最终记录为准；源码候选版不等于已发布安装包。
+- 使用标签 CI 原始 XPI，在 **Windows 11 build 26200 / Zotero 10.0.3** 验证三次冷启动、v0.5.1 原地升级、后台解析、中英文设置、窄窗与深浅色、150% 字号及重启保存。
+- PDF 专项通过真实离线引擎导入、离线健康检查、真实排版、逐步成果、模拟 AI 批处理与共享限流、部分失败后仅补缺、同步滚动、原位切换、多屏往返、缓存与冷重启复用。翻译服务为合成回复，不代表真实模型译质。文件选择器初始化和导出流程已验证，人工确认保存对话框未端到端点击。
+- 完整 PDF 专项首次在等待最新成果版本时超时，同一原包复验通过；原升级脚本的旧工具栏宽度/菜单断言已按新增入口修正，页码命中与遮挡检查保留。
+- 1002 项 TypeScript 测试、Python 测试 37 项通过（1 项需显式资产路径的端到端用例跳过）、lint、类型检查、构建及制品校验通过；[发布 PR #25](https://github.com/jadense-ai/jadense-in-zotero/pull/25)、main 与[标签 CI](https://github.com/jadense-ai/jadense-in-zotero/actions/runs/35823684830)通过。
+- XPI：4291117 字节；SHA-256：`e1ebc1b3b88cbef8f04c63ef37df2981e2f36444aa61abe933e658da15c9292d`。用附件 `SHA256SUMS` 核验 XPI；引擎 ZIP 使用同名 `.sha256` 文件。
+- 附件包括 XPI、元数据、XPI 校验和、Windows x64 完整引擎 ZIP 与校验和、排版适配器/安装器源码包。其他平台、Zotero 8/9、真实云 OCR 与付费 Provider 未在本次验收。
 
 ---
 
@@ -87,7 +92,7 @@ v0.6.0 adds layout-preserving parallel/in-place PDF translation, full-width and 
 
 Configure a provider under **Settings → BYOK**, or connect Jadense with a plugin token. Choose your translation service/model and scope under **Feature settings → Full translation**. Advanced request settings control concurrency (1–8), HTTP requests/minute and source tokens per PDF batch. Limits are shared by translation tools using the same service; Bing/Google remain serial. Retries may incur further charges.
 
-Prepare the layout engine under **External dependencies → PDF translation engine**. Automatic setup downloads isolated Python, locked dependencies, models and fonts. For Windows x64, import this release's complete engine ZIP without extracting it; preinstalled Python/uv and administrator access are not required. The full-bundle automatic-download switch is not enabled in this version. Repository-source manual installation still requires network downloads. See the [English installation guide](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.en.md).
+Prepare the layout engine under **External dependencies → Layout parsing engine**. Automatic setup downloads isolated Python, locked dependencies, models and fonts. For Windows x64, import this release's complete engine ZIP without extracting it; preinstalled Python/uv and administrator access are not required. The full-bundle automatic-download switch is not enabled in this version. Repository-source manual installation still requires network downloads. See the [English installation guide](https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.en.md).
 
 The interface font setting is now an 80%–200% slider with 1% steps and an instant reset to 100%. Upgrade from v0.5.1 by installing the XPI and restarting Zotero; settings/history are retained. Do not enable the old `.com` plugin alongside the current `.cn` identity. Website automatic updates are maintained separately.
 

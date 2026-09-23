@@ -1,4 +1,4 @@
-# PDF 版面解析与翻译引擎安装（0.6.0 待发布）
+# PDF 版面解析与翻译引擎安装（0.6.0）
 
 [返回 README](../README.md) · [English](pdf-engine.en.md) · [使用对照翻译](usage-guide.md#pdf-translation-060)
 
@@ -6,19 +6,19 @@
 
 ## 1. 从设置自动安装
 
-1. 打开工作台 **设置 → 外置依赖配置 → PDF 翻译引擎**；也可从 **功能配置 → 全文翻译 → 外置依赖** 跳转。
+1. 打开工作台 **设置 → 外置依赖配置 → 版面解析引擎**；也可从 **功能配置 → 全文翻译 → 外置依赖** 跳转。
 2. 点击 **准备 PDF 翻译引擎**，等待依赖、模型和字体准备完成。首次进入对照翻译也会准备引擎。
 3. 看到 **PDF 翻译引擎已就绪** 后开始翻译。已有安装可点击 **检测已安装引擎**，检测本身不下载、不调用翻译服务。
 
-**当前分发状态：**本次源码准备中，[包清单](../content/pdf-translation/bundles.json)的 Windows x64 完整包仍为 `published: false`，自动安装走库内 `install.ps1` / `install.sh`：复用可用的 uv 或下载 uv，在独立目录安装 Python 3.12、锁定依赖，再准备模型与字体。需要访问 GitHub、Python 下载源、PyPI 和模型资源站；不需要预装 Python，也不修改系统 Python。
+**当前分发状态：**v0.6.0 中，[包清单](../content/pdf-translation/bundles.json)的 Windows x64 完整包仍为 `published: false`，自动安装走库内 `install.ps1` / `install.sh`：复用可用的 uv 或下载 uv，在独立目录安装 Python 3.12、锁定依赖，再准备模型与字体。需要访问 GitHub、Python 下载源、PyPI 和模型资源站；不需要预装 Python，也不修改系统 Python。
 
-只有完整包正式公开、核验并启用清单后，Windows x64 自动安装才改为下载固定版本 ZIP。该流程支持分段续传、每个源最多三次尝试、SHA-256 校验、解压和离线检测；不支持续传的服务器会重新下载。当前不要把清单中的预留地址当作可用下载链接。
+只有完整包正式公开、核验并启用清单后，Windows x64 自动安装才改为下载固定版本 ZIP。该流程支持分段续传、每个源最多三次尝试、SHA-256 校验、解压和离线检测；不支持续传的服务器会重新下载。完整包已作为 v0.6.0 附件公开，可手动下载导入；本版本尚未启用 ZIP 自动下载。
 
 安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。完整包约 441 MiB，展开约 940 MiB；建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；附件随 v0.6.0 正式发布后可下载。
+自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；可从 [v0.6.0 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)下载。
 
 | 项目 | 固定值 |
 | --- | --- |
