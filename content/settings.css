@@ -48,7 +48,6 @@
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-settings-card, .jdx-pref-card):has(> .jdx-settings-layout) { padding: 0; gap: 0; }
 #jadense-manager-section-settings .jdx-manager-settings-card:has(> .jdx-settings-layout) > h3 { display: none; }
 #jadense-in-zotero-preferences-pane .jdx-pref-card:has(> .jdx-settings-layout) > h3 { margin: 0; padding: 12px; }
-:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout ~ .jdx-temporary-recovery { margin: 0; padding: 12px; }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory {
   display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 7px 0 0 7px; background: var(--settings-rail); min-width: 0;
 }
