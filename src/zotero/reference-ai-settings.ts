@@ -18,7 +18,7 @@ export function wireReferenceAISetting(host: ZoteroLike, root: HTMLElement | nul
   const help = doc.createElementNS('http://www.w3.org/1999/xhtml', 'p')
   help.textContent = uiText('默认关闭，开启后复用文献解析模型；核验不使用 AI。始终先在本机提取并按 DOI 或标题查询；开启后仅将仍未解决的待定片段发送给 AI，可能消耗积分，不影响已匹配文献的使用。', 'Off by default; uses the literature analysis model when enabled. Verification does not use AI. Extraction and DOI or title lookup run locally first. AI only receives unresolved fragments, may consume points, and does not gate matched publications.')
   const status = doc.createElementNS('http://www.w3.org/1999/xhtml', 'p'); status.setAttribute('role', 'status')
-  label.append(control, text, help, status); root.insertBefore(label, root.querySelector('.jdx-temporary-recovery'))
+  label.append(control, text, help, status); root.append(label)
   const sync = () => { control.checked = referenceAIEnabled(host) }
   control.addEventListener('change', () => { try { host.Prefs?.set(REFERENCE_AI_PREF, control.checked, true); status.textContent = '' } catch { status.textContent = uiText('设置保存失败，请重试。', 'Could not save settings. Retry.') } finally { sync() } })
   sync()

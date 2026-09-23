@@ -6,7 +6,6 @@ import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
 import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtime"
 import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
-import { wireTemporaryRecovery } from './temporary-recovery-panel'
 /**
  * Jadense Zotero 主工作台页面。
  * 上游由 bootstrap 打开独立 chrome 窗口，下游连接本地对话存储、Zotero 选择与攻玉扩展 API。
@@ -3150,8 +3149,6 @@ export function initJadenseManagerPage() {
   window.matchMedia?.("(max-width: 820px)").addEventListener("change", () => {
     if (zotero) applySidebarCollapsed(elements, readSidebarCollapsed(zotero))
   })
-  const stopRecovery = wireTemporaryRecovery(zotero, document.getElementById("jadense-settings-panel-features"), window.fetch.bind(window))
-  window.addEventListener('unload', stopRecovery, { once: true })
   const stopOCR = wireOCRSettings(zotero, elements.settingsPanelOcr.querySelector<HTMLElement>('[data-ocr-settings]'))
   window.addEventListener("unload", stopOCR, { once: true })
   const stopFeatures = wireFeatureSettings(zotero, elements.settingsPanelFeatures, elements.settingsPanelOcr, ocr => { (ocr ? elements.settingsTabOcr : elements.settingsTabFeatures).click() })
