@@ -1,5 +1,11 @@
 # 更新说明 / Changelog
 
+## 0.6.1 — 待发布 / Pending
+
+- 移除设置 → 功能配置底部的“查看待恢复 AI 请求”按钮及专用结果面板，清理关联样式；任务与聊天内部的恢复机制不变。
+- 不增加配置项或数据迁移；已有 AI 服务、字号、历史与版面解析引擎可继续使用。引擎离线包继续使用 v0.6.0 附件。
+- Remove the “Show pending AI requests” button and its dedicated panel from feature settings; task and chat recovery remain unchanged. Existing settings, history and the v0.6.0 layout-engine bundle remain compatible.
+
 ## 0.6.0 — 2026-09-23
 
 ## 本次更新
