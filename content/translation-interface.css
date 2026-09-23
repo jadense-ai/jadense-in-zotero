@@ -14,3 +14,11 @@
 .jdx-settings-task [data-translation-scope] > details summary { cursor: pointer; }
 .jdx-settings-task [data-translation-scope] > details label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-block: 8px; }
 .jdx-settings-task [data-translation-scope] > details input { width: 110px; max-width: 100%; box-sizing: border-box; }
+
+/* 外置依赖分别展示，仍沿用宿主设置行与主题。 */
+[data-external-dependency="layout"] { margin-top: 28px; padding-top: 24px; border-top: 2px solid var(--jdx-line, var(--jdx-pref-line-subtle)); }
+[data-translation-speed] { margin-block: 16px; }
+[data-translation-speed] summary { cursor: pointer; }
+[data-translation-speed] label { display: grid; gap: 8px; }
+[data-translation-speed] input { box-sizing: border-box; width: 100%; min-width: 0; }
+[data-speed-address] h3 { overflow-wrap: anywhere; }

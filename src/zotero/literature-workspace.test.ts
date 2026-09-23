@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { literaturePapers } from './analysis-workspace-model'
 import type { ZoteroLike } from './runtime'
+import type { PDFTranslationTask } from './pdf-translation-jobs'
 import type { DocumentTask } from './document-store'
 import type { TranslationRecord } from '@/chat/translation-history'
 import { readLiteratureIdentity } from './document-identity'
@@ -15,6 +16,18 @@ function fixtures() {
   return { host, tasks }
 }
 describe('literature result projection', () => {
+  it('includes PDF-only papers and preserves versions and attachment boundaries', () => {
+    const { host, tasks } = fixtures()
+    const pdf = (index: number, id: string): PDFTranslationTask => ({ id, version: 1, engine: 'old-engine', source: tasks[index].source, fingerprint: 'fingerprint', configuration: 'old-config', languages: { sourceLanguage: 'en', targetLanguage: 'zh-CN' }, status: 'complete', stage: 'complete', percent: 100, pages: 2, skipped: [] })
+    const records = [pdf(0, 'old'), pdf(0, 'new'), pdf(1, 'second-attachment'), pdf(3, 'different-library')]
+    const papers = literaturePapers(host, [], [], [], records)
+    expect(papers).toHaveLength(2)
+    const paper = papers.find(row => row.attachments.length === 2)!
+    expect(paper.results).toHaveLength(3)
+    expect(paper.results.every(row => row.mode === 'files')).toBe(true)
+    expect(paper.results[0].pdf).toBe(records[0])
+  })
+
   it('groups two PDFs by verified parent, separates same-title papers and libraries', () => {
     const { host, tasks } = fixtures(), papers = literaturePapers(host, [], tasks, [])
     expect(papers).toHaveLength(3); expect(papers.find(paper => paper.attachments.length === 2)?.results).toHaveLength(2)

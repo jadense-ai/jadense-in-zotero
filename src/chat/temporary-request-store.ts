@@ -3,6 +3,7 @@ import { uiText } from '@/zotero/ui-preferences'
 export type LocalTemporaryRequest = {
   id: string; account: string; fingerprint: string; body: Record<string, unknown>; createdAt: string
   status: 'pending' | 'completed' | 'failed'; text?: string; error?: string
+  resultState?: 'partial'
 }
 type IO = { makeDirectory(path: string, options: { ignoreExisting: boolean }): Promise<unknown>; writeUTF8(path: string, text: string, options: { tmpPath: string }): Promise<unknown>; readUTF8(path: string): Promise<string>; getChildren(path: string): Promise<string[]> }
 type Paths = { profileDir: string; join(...parts: string[]): string; filename(path: string): string }

@@ -45,6 +45,7 @@ import {
 import { registerReaderTools, type ReaderAction } from "@/zotero/reader-tools"
 import { registerReaderFigureTools } from "@/zotero/reader-figure-tools"
 import { documentJobs, stopDocumentJobs } from "@/zotero/document-jobs"
+import { pdfTranslationJobs, stopPDFTranslationJobs } from "@/zotero/pdf-translation-jobs"
 import { translateReaderSelection } from "@/zotero/reader-translation"
 import { formatJadenseSyncResult } from "@/zotero/sync-result"
 import {
@@ -343,10 +344,10 @@ async function startup(data: BootstrapData = {}) {
   if (!active()) return
   const windowRuntime = mainWindow() as unknown as Record<string, unknown> | null
   const backgroundRuntime = globalThis as unknown as Record<string, unknown>
-  if (windowRuntime) for (const name of ["AbortController", "AbortSignal", "DOMException", "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "crypto", "structuredClone", "setTimeout", "clearTimeout"]) {
+  if (windowRuntime) for (const name of ["AbortController", "AbortSignal", "DOMException", "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "crypto", "structuredClone", "setTimeout", "clearTimeout", "setInterval", "clearInterval"]) {
     if (backgroundRuntime[name] !== undefined) continue
     const value = windowRuntime[name]
-    backgroundRuntime[name] = typeof value === "function" && ["structuredClone", "setTimeout", "clearTimeout"].includes(name) ? value.bind(windowRuntime) : value
+    backgroundRuntime[name] = typeof value === "function" && ["structuredClone", "setTimeout", "clearTimeout", "setInterval", "clearInterval"].includes(name) ? value.bind(windowRuntime) : value
   }
 
   const collector = (() => { try { return diagnostics(Zotero) } catch { return undefined } })()
@@ -389,6 +390,9 @@ async function startup(data: BootstrapData = {}) {
     void jobs.ready.catch(error => { if (active()) { const failure = lifecycleTrace(Zotero, 'initialization', 'document_restore'); failure.fail(error, 'document_restore_failed'); failure.end('error') } })
   })
   await step('chat_runtime', () => { chatRuntime(Zotero) })
+  // 服务在插件后台 realm 创建；先在设置安装后关闭窗口，任务仍须可执行。
+  // 此处只创建队列，不下载、扫描用户文件或加载模型。
+  await step('pdf_runtime', () => { pdfTranslationJobs(Zotero) })
   await step('reader_tools', () => {
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
@@ -424,6 +428,7 @@ function shutdown() {
   const trace = lifecycleTrace(Zotero, 'initialization', 'shutdown')
   const cleanups: Array<[string, () => void]> = [
     ['analysis', () => stopAnalysisRuntime(Zotero)], ['chat', () => stopChatRuntime(Zotero)], ['documents', () => stopDocumentJobs(Zotero)],
+    ['pdf', () => stopPDFTranslationJobs(Zotero)],
     ['figures', () => { const remove = unregisterReaderFigureTools; unregisterReaderFigureTools = null; remove?.() }],
     ['reader', () => { const remove = unregisterReaderTools; unregisterReaderTools = null; remove?.() }],
     ['classification', () => closeClassificationWindow(Zotero)],

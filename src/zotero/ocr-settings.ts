@@ -1,3 +1,4 @@
+import { wireSettingsNavigation } from './settings-navigation'
 /** OCR 共用设置：自动读取本机状态，一个入口完成依赖和模型准备。 */
 import type { ZoteroLike } from './runtime'
 import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
@@ -5,6 +6,7 @@ import { createJdxSelect } from './custom-select'
 import { uiText } from './ui-preferences'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { wireCloudOCRSettings } from './cloud-ocr-settings'
+import { wirePDFEngineSettings } from './pdf-translation-settings'
 
 /** 卸载只停止 UI 更新，不取消其他窗口共享的准备任务。 */
 export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | null) {
@@ -15,9 +17,13 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     node.textContent = text
     return node
   }
-  const body = make('div'); body.className = 'jdx-ocr-settings'
+  const headingPage = make('h3', uiText('外置依赖配置', 'External dependencies'))
+  const body = make('div'); body.className = 'jdx-ocr-settings jdx-settings-task'; body.dataset.externalDependency = 'ocr'
+  const layout = make('section'); layout.className = 'jdx-settings-task'; layout.dataset.externalDependency = 'layout'
+  root.append(headingPage, layout)
+  const stopEngine = wirePDFEngineSettings(host, layout)
   const title = make('h3', uiText('OCR配置', 'OCR configuration'))
-  const note = make('p', uiText('将 PDF 中的文字、表格和版面转为可用内容，供全文 Markdown、全文翻译和参考文献解析使用。可选择本机或云端服务。', 'Extract text, tables and layout for Markdown, translation and references using a local or cloud engine.'))
+  const note = make('p', uiText('将 PDF 中的文字、表格和版面转为可用内容，供全文 Markdown、文献解析和参考文献提取使用。可选择本机或云端服务。', 'Extract text, tables and layout for Markdown, literature analysis and references using a local or cloud engine.'))
   const overview = make('section'); overview.className = 'jdx-ocr-section'
   const heading = make('h4', uiText('本机 OCR', 'Local OCR'))
   const panel = make('div'); panel.className = 'jdx-runtime-status'
@@ -72,7 +78,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   confirmation.append(removalTitle, scope, modelOption, modelHelp, confirmActions); removal.append(confirmation); details.append(removal)
   const cloudRoot = make('div')
   details.append(source)
-  body.append(title, note, cloudRoot, overview, tip, details); root.append(body)
+  body.append(title, note, cloudRoot, overview, tip, details); layout.before(body)
   let disposed = false, busy = false, retryRead = false
   // 单一状态出口：替换旧语义，保留可发现的手动兜底，不抑制进度播报。
   const showState = (kind: string, title: string, description: string) => {
@@ -221,5 +227,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     for (const node of [overview, source, tip, details]) node.hidden = engine !== 'local'
     if (engine === 'local') refresh()
   })
-  return () => { disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
+  const stopNavigation = wireSettingsNavigation(root, '[data-external-dependency]', 'ocr')
+  return () => {
+    stopNavigation(); stopEngine(); layout.remove(); headingPage.remove(); disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
 }

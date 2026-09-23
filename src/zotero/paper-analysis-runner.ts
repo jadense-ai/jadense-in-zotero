@@ -120,6 +120,7 @@ export async function runIndependentPaperAnalysis(input: {
   notify(input.onProgress, uiText("正在读取 PDF 原文与句子位置…", "Reading PDF text and sentence positions…"))
   const snapshot = await services.readPdf(input.zotero, input.itemID, {
     signal: input.signal,
+    onNotice: message => notify(input.onProgress, message),
     onProgress: ({ pagesRead, totalPages }) => notify(input.onProgress, uiText(`正在读取 PDF：${pagesRead} / ${totalPages} 页…`, `Reading PDF: ${pagesRead} / ${totalPages} pages…`)),
   })
   input.signal.throwIfAborted()
@@ -164,7 +165,7 @@ export async function runIndependentPaperAnalysis(input: {
       : uiText("AI 响应未完整结束；已保留收到的部分内容供核对，未写入 PDF 批注。", "The AI response was incomplete. Received content was retained for review; no PDF annotations were written.")
   }
   const analysis = parsePaperAnalysis(response, snapshot.passages)
-  const warnings = [...(generationWarning ? [generationWarning] : []), ...analysis.warnings]
+  const warnings = [...snapshot.coverage.warnings, ...(generationWarning ? [generationWarning] : []), ...analysis.warnings]
   if (analysis.skipped) warnings.push(uiText(`有 ${analysis.skipped} 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。`, `${analysis.skipped} entries were not used as PDF annotations. Recoverable notes were retained for review.`))
 
   const record: PaperAnalysisRecord = {

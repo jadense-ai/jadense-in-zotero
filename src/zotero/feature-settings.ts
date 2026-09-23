@@ -1,3 +1,4 @@
+import { selectSettingsGroup, wireSettingsNavigation } from './settings-navigation'
 /** 两个设置宿主共用用途控件；仅显式开启全文增强时检查引擎，状态摘要不发请求。 */
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
@@ -10,6 +11,7 @@ import { checkOCREngine } from './cloud-ocr'
 import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, ocrEngine } from './cloud-ocr-config'
 import { cachedOCR, OCR_READY_PREF, isLocalOCRPreparing, observeOCRProgress } from './local-ocr'
 import { migrateTranslationConfiguration } from './translation-config-migration'
+import { wirePDFTranslationSettings } from './pdf-translation-settings'
 
 export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, ocrRoot: HTMLElement, show: (ocr: boolean) => void) {
   if (!host) return () => {}
@@ -23,6 +25,7 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     wireSelectionSettings(host, root.querySelector('[data-selection-settings-host]')),
     wireTranslationInterface(host, root.querySelector('[data-translation-scope="selection"]'), 'selection'),
     wireTranslationInterface(host, root.querySelector('[data-translation-scope="document"]'), 'document'),
+    wirePDFTranslationSettings(host, root.querySelector('[data-translation-scope="document"]'), () => { show(true); selectSettingsGroup(ocrRoot, 'layout'); ocrRoot.querySelector<HTMLElement>('[data-pdf-engine-settings]')?.scrollIntoView?.({ block: 'start' }); ocrRoot.querySelector<HTMLElement>('[data-pdf-engine-settings] button')?.focus() }),
     wireReferenceAISetting(host, root.querySelector('[data-feature-group="analysis"]')),
     mountClassificationSettings(doc, host, root.querySelector<HTMLElement>('[data-classification-settings-host]')),
   ]
@@ -34,8 +37,8 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
   help.className = 'jdx-manager-settings-note jdx-pref-card-note'
   const status = make('p'); status.setAttribute('role', 'status')
   const ocrRow = make('div'); ocrRow.className = 'jdx-feature-model-row'
-  const description = make('div'); description.append(label, help, status)
-  const controls = make('div'); controls.dataset.ocrSummaryHost = ''
+  const description = make('div'); description.append(make('h3', uiText('内容提取', 'Content extraction')))
+  const controls = make('div'); controls.append(label, help, status); controls.dataset.ocrSummaryHost = ''
   ocrRow.append(description, controls); section.append(ocrRow)
   let disposed = false, generation = 0
   const syncEnabled = () => { enabled.checked = documentOCREnabled(host) }
@@ -58,7 +61,7 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     const row = make('div'); row.className = 'jdx-ocr-summary'
     const summary = make('span'); summary.setAttribute('role', 'status'); summaries.push(summary)
     const button = make('button', uiText('配置 OCR', 'Configure OCR')); button.type = 'button'; button.className = 'jdx-button'
-    button.addEventListener('click', () => { show(true); ocrRoot.scrollIntoView?.({ block: 'start' }); ocrRoot.querySelector<HTMLElement>('button, input, select')?.focus() })
+    button.addEventListener('click', () => { show(true); selectSettingsGroup(ocrRoot, 'ocr'); ocrRoot.scrollIntoView?.({ block: 'start' }); ocrRoot.querySelector<HTMLElement>('button, input, select')?.focus() })
     row.append(summary, button); (parent.querySelector('[data-ocr-summary-host]') || parent).append(row)
     stops.push(() => row.remove())
   }
@@ -80,6 +83,33 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
   const observer = Observer ? new Observer(syncSummary) : null
   observer?.observe(ocrRoot, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-ocr-state', 'data-ocr-summary-state', 'data-ocr-engine'] })
   stops.push(observeOCRProgress(host, syncSummary))
+  // 说明跟随所属控件，避免长说明撑宽标签列。
+  for (const row of Array.from(root.querySelectorAll<HTMLElement>('.jdx-feature-model-row'))) {
+    const [labelColumn, existingControl] = Array.from(row.children)
+    if (labelColumn?.tagName.toLowerCase() !== 'div' || !existingControl) continue
+    let controlColumn = existingControl
+    if (existingControl.tagName.toLowerCase() === 'label') {
+      controlColumn = make('div'); existingControl.replaceWith(controlColumn); controlColumn.append(existingControl)
+    }
+    for (const note of Array.from(labelColumn.querySelectorAll(':scope > p'))) controlColumn.append(note)
+  }
+  const follow = root.querySelector('[id$="auto-follow-chat-model"]')?.closest('label')
+  const followRow = follow?.closest('.jdx-feature-model-row')
+  if (follow && followRow?.firstElementChild === follow.parentElement) {
+    followRow.lastElementChild?.prepend(follow)
+    followRow.firstElementChild?.append(make('h3', uiText('模型跟随', 'Model defaults')))
+  }
+  const pdfScope = root.querySelector('[data-translation-scope="document"]')
+  const capacity = pdfScope?.querySelector(':scope > details')
+  if (capacity) pdfScope?.append(capacity)
+  for (const note of Array.from(root.querySelectorAll<HTMLElement>('[data-model-follow]'))) {
+    note.textContent = uiText('跟随当前对话模型。', 'Follows the current Chat model.')
+    const change = make('button', uiText('调整跟随规则', 'Change follow settings')); change.type = 'button'; change.className = 'jdx-settings-link'
+    change.addEventListener('click', () => { selectSettingsGroup(root, 'chat'); root.querySelector<HTMLElement>('[id$="auto-follow-chat-model"]')?.focus() })
+    note.append(doc.createTextNode(' '), change)
+    stops.push(() => change.remove())
+  }
+  stops.push(wireSettingsNavigation(root, '[data-settings-task]', 'chat'))
   syncEnabled(); syncSummary()
   return () => {
     disposed = true; generation++; observer?.disconnect()

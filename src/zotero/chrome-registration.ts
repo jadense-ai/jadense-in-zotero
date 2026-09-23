@@ -40,6 +40,8 @@ export function chromeContentUrl(resource: string) {
  */
 export const JADENSE_CHROME_ENTRIES = [
   ["content", JADENSE_CHROME_PACKAGE, "content/"],
+  // 仅无凭据的静态 PDF 阅读器可供 resource:// Reader 嵌入，不开放设置/运行时资源。
+  ['content', 'jadense-pdf-reader', 'content/pdfjs/', 'contentaccessible=yes'],
 ] as string[][]
 
 /**

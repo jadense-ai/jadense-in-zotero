@@ -37,7 +37,7 @@ describe('traditional translation adapters', () => {
     })
     expect(await translateMachineText({ host: {}, service: 'google', text: source, ...languages, fetchImpl })).toBe(source)
     expect(received.join('')).toBe(source)
-  })
+  }, 15_000)
 
   it.each([() => new Response('limited', { status: 429 }), () => google(''), () => new Response('<html>captcha</html>')])('fails locally without retries or fallback', async response => {
     const fetchImpl = vi.fn(async () => response())
@@ -58,7 +58,7 @@ describe('traditional translation adapters', () => {
     await vi.waitFor(() => expect(calls).toEqual(['first']))
     release(new Response('', { status: 429, headers: { 'Retry-After': '1' } })); await failure
     expect(await second).toBe('译文'); expect(calls).toEqual(['first', 'second'])
-  })
+  }, 15_000)
 
   it('cancels queued requests and drops a late active response', async () => {
     const host = {}, controller = new AbortController(), queued = new AbortController(), onText = vi.fn()

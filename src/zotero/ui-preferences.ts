@@ -182,22 +182,20 @@ export function wireReadingPreferences(host: UiPreferenceHost | null, container:
   status.className = "jdx-reading-preferences-status"
   status.setAttribute("role", "status")
   const savedStatus = (saved: boolean) => { status.textContent = saved ? "" : uiText("设置未能保存，请重试。", "Could not save settings. Please try again.") }
-  const fontControls = element("div"), stepper = element("div"), unit = element("span")
-  fontControls.className = "jdx-reading-font-controls"; stepper.className = "jdx-reading-stepper"; unit.textContent = "%"
+  const fontControls = element("div"), slider = element("div"), fontOutput = element("output")
+  fontControls.className = "jdx-reading-font-controls"; slider.className = "jdx-reading-opacity-controls jdx-reading-font-slider"
   const size = element("input")
-  size.type = "number"; size.min = "80"; size.max = "200"; size.step = "1"; size.value = String(readFontScale(host))
+  size.type = "range"; size.min = "80"; size.max = "200"; size.step = "1"; size.value = String(readFontScale(host))
   size.setAttribute("data-jdx-font-size", "")
   size.setAttribute("aria-label", uiText("界面字号", "Interface font size"))
   const update = (value: unknown) => { savedStatus(saveFontScale(host, value)); sync() }
-  const fontButtons: HTMLButtonElement[] = []
-  for (const [text, value] of [["−", -1], ["+", 1], [uiText("恢复默认", "Reset"), 0]] as const) {
-    const button = element("button")
-    button.type = "button"; button.textContent = text
-    button.setAttribute("aria-label", value === 0 ? text : value > 0 ? uiText("增大字号", "Increase font size") : uiText("减小字号", "Decrease font size"))
-    button.addEventListener("click", () => update(value === 0 ? 100 : readFontScale(host) + value * 10))
-    fontButtons.push(button)
-  }
-  stepper.append(fontButtons[0], size, unit, fontButtons[1]); fontControls.append(stepper, fontButtons[2])
+  size.id = "jdx-reading-font-scale"
+  fontOutput.setAttribute("for", size.id)
+  const reset = element("button")
+  reset.type = "button"; reset.textContent = uiText("恢复默认", "Reset")
+  reset.addEventListener("click", () => update(100))
+  slider.append(size, fontOutput); fontControls.append(slider, reset)
+  size.addEventListener("input", () => update(size.value))
   size.addEventListener("change", () => update(size.value))
   row(uiText("界面字号", "Interface font size"), uiText("100% 为默认大小，按比例调整界面与 Markdown 内容，立即生效。", "100% is the default. Scale the interface and Markdown content proportionally. Changes apply immediately."), fontControls)
   const styleHost = element("div")
@@ -218,7 +216,7 @@ export function wireReadingPreferences(host: UiPreferenceHost | null, container:
   target.insertBefore(root, target.querySelector<HTMLElement>("[role=status]"))
   function sync() {
     const value = readFontScale(host)
-    size.value = String(value); fontButtons[0].disabled = value <= 80; fontButtons[1].disabled = value >= 200; fontButtons[2].disabled = value === 100
+    size.value = String(value); fontOutput.textContent = `${value}%`; size.setAttribute("aria-valuetext", `${value}%`); reset.disabled = value === 100
     select.setValue(readTranslationStyle(host)); syncTranslationOpacityControl(host, opacity)
   }
   sync()

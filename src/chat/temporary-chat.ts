@@ -41,6 +41,8 @@ export type TemporaryChatSendInput = {
   sources?: readonly ChatSource[]
   images?: readonly ChatImageInput[]
   requireComplete?: boolean
+  /** PDF 批次身份含持久化重试代次，可复用同一操作的完整回执。 */
+  reuseCompletedOperation?: boolean
 }
 
 type StreamEvent = {
@@ -102,9 +104,9 @@ export async function consumeTemporaryChatStream(
     if (["abort", "error", "finish"].includes(String(event.type))) diagnostic?.event(String(event.type), { source: typeof event.finishReason === "string" ? event.finishReason : undefined })
     if (event.type === "abort") throw new Error(uiText("对话已中止，未写入 PDF 批注。", "Chat was stopped. No PDF annotations were written."))
     if (event.type === "error") {
-      throw new Error(typeof event.errorText === "string" && event.errorText.trim()
+      throw Object.assign(new Error(typeof event.errorText === "string" && event.errorText.trim()
         ? event.errorText.trim()
-        : uiText("攻玉对话生成失败，请稍后重试。", "Jadense chat generation failed. Please try again later."))
+        : uiText("攻玉对话生成失败，请稍后重试。", "Jadense chat generation failed. Please try again later.")), { code: 'STREAM_FAILED' })
     }
     if (event.type === "finish") {
       if (requireComplete && (event.finishReason === "error" || event.finishReason === "length")) {

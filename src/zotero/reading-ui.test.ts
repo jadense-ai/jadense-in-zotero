@@ -6,6 +6,17 @@ import { describe, expect, it } from "vitest"
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
 
 describe("reading UI controls", () => {
+  it("retires new full translations while retaining historical reading and resume", () => {
+    const results = read('./document-results.ts'), reader = read('./translation-reader.ts')
+    expect(results).not.toContain("jobs.start('translation'")
+    expect(reader).not.toContain('jobs.start("translation"')
+    expect(results).toContain('mountTranslationReader(body, host, selected')
+    expect(reader).toContain('jobs.resume(taskID)')
+    expect(reader).toContain('jobs.copy(taskID)')
+    expect(read('./document-ui.ts')).toContain('jobs.delete(id)')
+    expect(read('./reader-tools.ts')).toContain("uiText('对照翻译', 'Bilingual PDF')")
+  })
+
   it("renders selection source Markdown on initial display, OCR replacement and history", () => {
     const reader = read('./reader-tools.ts')
     expect(reader).toContain('renderTranslationMarkdown(selection.text ?? "", sourceText)')

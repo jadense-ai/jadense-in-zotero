@@ -1,6 +1,6 @@
 /** 插件本地诊断：共享宿主实例、字段投影和有界持久化；任何诊断失败不得改变业务执行。 */
 export type DiagnosticCategory = 'running' | 'success' | 'error' | 'cancelled' | 'business'
-export type DiagnosticEvent = { at: string; stage: string; code?: string; name?: string; source?: string; status?: number; stack?: string; elapsedMs?: number; exitCode?: number; width?: number; height?: number; visible?: boolean; page?: string }
+export type DiagnosticEvent = { at: string; stage: string; code?: string; name?: string; source?: string; status?: number; stack?: string; elapsedMs?: number; exitCode?: number; width?: number; height?: number; visible?: boolean; page?: string; translation?: Record<string, number> }
 export type DiagnosticRecord = {
   id: string; session: string; startedAt: string; endedAt?: string; category: DiagnosticCategory
   environment?: Record<string,string>; context: Record<string, string>; events: DiagnosticEvent[]; firstError?: DiagnosticEvent
@@ -22,6 +22,12 @@ function metrics(value: Partial<DiagnosticEvent>) {
   if (Number.isSafeInteger(value.exitCode)) result.exitCode = value.exitCode
   if (typeof value.visible === 'boolean') result.visible = value.visible
   if (['chat', 'source', 'translation', 'selection', 'summary', 'notes', 'references'].includes(value.page ?? '')) result.page = value.page
+  if (value.translation && typeof value.translation === 'object') {
+    const entries = ['missing', 'translated', 'failed', 'preserved', 'rawBlocks', 'organized', 'fragments', 'deduplicated', 'total', 'completed', 'batches', 'repairs', 'cacheHits', 'batchMin', 'batchMax', 'batchMean', 'batchRowsMean', 'batchFillMean', 'endSource', 'endOutput', 'endContext', 'endDocument', 'httpRequests', 'submissions', 'extraHttp', 'rateLimits', 'queueTimeMs', 'modelTimeMs', 'parseMs', 'layoutMs', 'translationMs']
+      .filter(key => typeof value.translation![key] === 'number' && Number.isFinite(value.translation![key]) && value.translation![key] >= 0)
+      .map(key => [key, value.translation![key]])
+    result.translation = Object.fromEntries(entries)
+  }
   return result
 }
 /** 不序列化异常 message/cause/body；外部可能在这些字段回显正文或凭据。 */

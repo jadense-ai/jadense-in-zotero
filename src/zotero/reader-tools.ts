@@ -1,7 +1,8 @@
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { analysisRuntime } from './analysis-runtime'
 import { documentOCREnabled, readDocument } from './document-extraction'
-import { readPDFTextPage, type TextLayerPDF } from './pdf-document'
+import { ocrEngine } from './cloud-ocr-config'
+import { readPDFTextPage, snapshotPDFChars, type TextLayerPDF } from './pdf-document'
 import { openAnalysisSidebar } from './reader-sidebar'
 import { markDiagnosticAbort } from "./diagnostics"
 import { silentlyCheckForUpdates } from './update-notification'
@@ -27,11 +28,13 @@ import {
 } from "@/chat/translation-languages"
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
 import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
-import { showFullTranslation, makeTranslationWindowInteractive, translationAppearanceControl, removeDocumentSurfaces } from "./document-ui"
+import { makeTranslationWindowInteractive, translationAppearanceControl, removeDocumentSurfaces } from "./document-ui"
 import type { ZoteroLike } from "./runtime"
 import { READER_UI_THEME_CSS } from "./reader-ui-theme"
 import { bindReaderActionMenu } from "./reader-toolbar-menu"
 import { readArticleTranslationLanguages } from "./translation-settings"
+import { openPDFTranslation, stopPDFTranslationReaders } from './pdf-translation-reader'
+import { stopPDFTranslationJobs } from './pdf-translation-jobs'
 
 type Rect = [number, number, number, number]
 type PdfPosition = { pageIndex: number; rects: Rect[] }
@@ -69,6 +72,7 @@ type ReaderPdfView = {
   _selectionRanges?: PdfSelectionRange[]
   _pdfPages?: Record<number, PdfPage>
   _iframeWindow?: {
+    JSON?: Pick<JSON, 'stringify'>
     document?: Document
     addEventListener?: Window["addEventListener"]
     removeEventListener?: Window["removeEventListener"]
@@ -400,14 +404,18 @@ function paperMetadata(item: PdfItem): PaperAnalysisMetadata {
 export async function readPdfForAnalysis(
   zotero: ZoteroReaderHost,
   itemID: number,
-  options: { signal?: AbortSignal; onProgress?: (progress: { pagesRead: number; totalPages: number }) => void } = {},
+  options: { signal?: AbortSignal; onProgress?: (progress: { pagesRead: number; totalPages: number }) => void; onNotice?: (message: string) => void } = {},
 ): Promise<PdfAnalysisSnapshot> {
   const { signal, onProgress } = options
   abortIfNeeded(signal)
   const item = await getPdfItem(zotero, itemID)
   let modificationTime: number | null | undefined
   try { modificationTime = await item.attachmentModificationTime } catch { /* 只使用实际可用的文件版本信息。 */ }
-  if (documentOCREnabled(zotero as unknown as ZoteroLike)) {
+  const warnings: string[] = []
+  const useOCR = documentOCREnabled(zotero as unknown as ZoteroLike)
+  // 纯文字 OCR 适配不提供定位能力，解析无需先上传整篇再丢弃结果。
+  const supportsLocations = ['local', 'mineru', 'glm'].includes(ocrEngine(zotero as unknown as ZoteroLike))
+  if (useOCR && supportsLocations) {
     const document = await readDocument(zotero as unknown as ZoteroLike, itemID, signal ?? new AbortController().signal)
     const candidates: PdfAnalysisPassage[] = document.pages.flatMap(page => page.paragraphs.flatMap((paragraph, index) => {
       const rects = paragraph.rects.filter(validRect)
@@ -415,13 +423,18 @@ export async function readPdfForAnalysis(
       return [{ id: paragraph.id, text: paragraph.text, pageIndex: page.pageIndex, pageLabel: page.pageLabel,
         position: { pageIndex: page.pageIndex, rects }, sortIndex: `${String(page.pageIndex).padStart(5, '0')}|${String(index).padStart(6, '0')}|00000` }]
     }))
-    if (candidates.length) {
+    if (candidates.some(passage => passage.position.rects.length)) {
       const passages = boundedPassages(candidates), metadata = paperMetadata(item)
       return { itemID: item.id, libraryID: item.libraryID, itemKey: item.key, title: metadata.title, metadata,
         ...(typeof document.source.modificationTime === 'number' ? { attachmentModificationTime: document.source.modificationTime } : {}), passages,
         coverage: { pagesRead: document.pages.length, totalPages: document.pages.length, pageNumbers: document.pages.map(page => page.pageIndex + 1),
           limited: passages.length < candidates.length || document.pages.some(page => Boolean(page.warning)), warnings: document.pages.flatMap(page => page.warning ? [page.warning] : []) } }
     }
+  }
+  if (useOCR) {
+    const warning = uiText('当前 OCR 未提供有效位置，全文解析已回退到传统文字提取；扫描页若无文字层则无法生成 PDF 批注。', 'The current OCR provides no usable positions. Analysis has fallen back to text-layer extraction; scanned pages without a text layer cannot produce PDF annotations.')
+    warnings.push(warning)
+    try { options.onNotice?.(warning) } catch { /* 提示失败不影响文字层回退。 */ }
   }
   let reader = zotero.Reader?._readers?.find((candidate) => candidate.itemID === itemID)
   if (!reader && zotero.Reader?.open) reader = await withAbort(zotero.Reader.open(itemID), signal)
@@ -437,7 +450,6 @@ export async function readPdfForAnalysis(
   let labels: string[] | null = null
   try { labels = pdf.getPageLabels ? await withAbort(pdf.getPageLabels(), signal) : null } catch { abortIfNeeded(signal) }
   const pageIndexes = sampleIndexes(pdf.numPages, Math.min(MAX_PAGES, pdf.numPages))
-  const warnings: string[] = []
   const pageNumbers: number[] = []
   const emptyPages: number[] = []
   const candidates: PdfAnalysisPassage[] = []
@@ -449,7 +461,7 @@ export async function readPdfForAnalysis(
       try { await withAbort(Promise.resolve(view._ensureBasicPageData?.(pageIndex)), signal); page = view._pdfPages?.[pageIndex] } catch { abortIfNeeded(signal) }
       if (!page?.chars?.length && (pdf as TextLayerPDF).getPage) page = await withAbort(readPDFTextPage(pdf as TextLayerPDF, pageIndex), signal)
       if (!Array.isArray(page?.chars)) throw new Error("missing text layer")
-      const passages = pagePassages(page, pageIndex, labels?.[pageIndex] || String(pageIndex + 1))
+      const passages = pagePassages({ chars: snapshotPDFChars(page.chars, view._iframeWindow), viewBox: page.viewBox }, pageIndex, labels?.[pageIndex] || String(pageIndex + 1))
       candidates.push(...passages)
       if (!passages.length) emptyPages.push(pageIndex + 1)
       pageNumbers.push(pageIndex + 1)
@@ -461,7 +473,7 @@ export async function readPdfForAnalysis(
   }
   abortIfNeeded(signal)
   if (!candidates.length) {
-    throw new Error(uiText("未找到可定位的 PDF 原句。扫描件请先完成 OCR；本次没有生成高亮或批注。", "No PDF passages with usable coordinates were found. Run OCR for scanned documents first. No highlights or annotations were created."))
+    throw new Error([...warnings, uiText("未找到可定位的 PDF 原句。扫描件请先完成 OCR；本次没有生成高亮或批注。", "No PDF passages with usable coordinates were found. Run OCR for scanned documents first. No highlights or annotations were created.")].join('\n'))
   }
   const passages = boundedPassages(candidates)
   const limited = passages.length < candidates.length || pageNumbers.length < pdf.numPages || emptyPages.length > 0
@@ -500,7 +512,7 @@ function existingIdentities(annotations: AnnotationItem[]): Set<string> {
   for (const annotation of annotations) {
     try {
       const tags = annotation.getTags?.().map((tag) => tag.tag) ?? []
-      if (!tags.includes(AI_TAG) || !annotation.annotationText) continue
+      if (!annotation.annotationText) continue
       const position = JSON.parse(annotation.annotationPosition || "{}") as { pageIndex?: number }
       if (!Number.isInteger(position.pageIndex)) continue
       for (const category of ANALYSIS_CATEGORIES) {
@@ -601,7 +613,7 @@ export async function saveAnalysisAnnotations(
           pageLabel: passage.pageLabel || String(passage.pageIndex + 1),
           sortIndex: passage.sortIndex,
           position: { pageIndex: passage.pageIndex, rects: passage.position.rects.map((rect) => [...rect]) },
-          tags: [{ name: AI_TAG }, { name: `${AI_TAG}/${category.id}` }, { name: category.label }],
+          tags: [{ name: `${AI_TAG}/${category.id}` }, { name: category.label }],
         })
         result.created++
       } catch {
@@ -1419,6 +1431,8 @@ export function registerReaderTools(
   }
   const cleanup = () => {
     active = false
+    stopPDFTranslationReaders()
+    stopPDFTranslationJobs(zotero as unknown as ZoteroLike)
     try { if (settingsObserver !== undefined) zotero.Prefs?.unregisterObserver?.(settingsObserver) } catch { /* 清理其他资源。 */ }
     for (const [type, handler] of handlers) {
       try { zotero.Reader?.unregisterEventListener?.(type, handler) } catch { /* 继续清理其他监听。 */ }
@@ -1439,7 +1453,6 @@ export function registerReaderTools(
     { kind: "analyze", label: uiText("解析文献", "Analyze document"), short: uiText("解析", "Analyze") },
     { kind: "translate", label: uiText("智能翻译", "AI translation"), short: uiText("翻译", "Translate") },
     { kind: "quote", label: uiText("引用选文", "Quote selection"), short: uiText("引用", "Quote") },
-    { kind: "fullTranslate", label: uiText("全文翻译", "Full translation"), short: uiText("全文翻译", "Full translation") },
   ] as const
   for (const type of ["renderToolbar", "renderTextSelectionPopup"] as const) {
     const handler: ReaderHandler = (event) => {
@@ -1495,6 +1508,21 @@ export function registerReaderTools(
           }
         })
         group.append(brand, stop)
+        // PDF 阅读模式入口常驻；仅缩短标签，不随其他阅读操作收进菜单。
+        const pdfButtons = event.doc.createElement('span')
+        pdfButtons.className = 'jadense-pdf-mode-buttons'
+        const pdfStyle = event.doc.createElement('style')
+        pdfStyle.textContent = '.jadense-pdf-mode-buttons{display:inline-flex;gap:2px}.jadense-pdf-mode-buttons button{display:inline-flex;align-items:center;gap:3px;min-width:28px;min-height:28px;padding:3px;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}.jadense-pdf-mode-buttons button:hover{background:#8882}.jadense-pdf-mode-buttons button:focus-visible{outline:2px solid #16d78f}@media(max-width:1400px){.jadense-pdf-mode-buttons .jdx-pdf-label{display:none}}'
+        pdfButtons.append(pdfStyle)
+        for (const [mode, label, symbol] of [['compare', uiText('对照翻译', 'Bilingual PDF'), '◫']] as const) {
+          const button = event.doc.createElement('button'), text = event.doc.createElement('span')
+          button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.dataset.jadensePdfMode = mode
+          const icon = event.doc.createElement('span'); icon.textContent = symbol; icon.setAttribute('aria-hidden', 'true')
+          text.className = 'jdx-pdf-label'; text.textContent = label; button.append(icon, text)
+          button.addEventListener('click', () => { void openPDFTranslation(zotero as unknown as ZoteroLike, event.reader as unknown as Parameters<typeof openPDFTranslation>[1], mode).catch(error => feedback.show(button, error instanceof Error ? error.message : String(error))) })
+          pdfButtons.append(button)
+        }
+        group.append(pdfButtons)
       }
       const actionList = type === "renderToolbar" ? event.doc.createElement("span") : group
       if (actionList !== group) {
@@ -1538,11 +1566,6 @@ export function registerReaderTools(
           if (selection.kind === 'attach') {
             void openChatSidebar(zotero as unknown as ZoteroLike, event.doc, selection.itemID, event.reader as unknown as import('./reader-sidebar').ReaderSidebarSource)
               .catch(error => feedback.show(anchor, error instanceof Error ? error.message : String(error)))
-            return
-          }
-          if (selection.kind === "fullTranslate") {
-            void showFullTranslation(zotero as unknown as ZoteroLike, event.doc, selection.itemID, taskID => { void onAction({ ...selection, taskID }) }, event.reader as unknown as import("./reader-sidebar").ReaderSidebarSource)
-              .catch(error => feedback.show(anchor, `${uiText("无法打开全文阅读侧栏。", "Could not open the reading sidebar.")} ${error instanceof Error ? error.message : String(error)}`))
             return
           }
           // 在原生点击同步阶段保留选区；让焦点变化或 popup 关闭发生后仍引用同一段文字。

@@ -23,6 +23,7 @@ import { uiText } from "./ui-preferences"
 import { recordStarInvitationUse } from "./star-invitation"
 import { readTranslationInterface } from './translation-interface'
 import { translateMachineText } from '@/chat/machine-translation'
+import { translationScheduler } from '@/chat/translation-queue'
 
 function createId(prefix: string) {
   const random = globalThis.crypto?.randomUUID?.()
@@ -79,15 +80,17 @@ export async function translateReaderSelection(input: {
       translatedText = await translateMachineText({ host: input.zotero, service: config.service, text: selectedText, ...languages, fetchImpl: input.fetchImpl, onText: input.onTextDelta })
     } else {
       const connection = readConnection(input.zotero)
+      translatedText = await translationScheduler(input.zotero).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: id, fetchImpl: input.fetchImpl }, async (network, signal) => {
       const client = model.route === "byok"
-        ? new ByokChatClient({ config: model.config!, fetchImpl: input.fetchImpl })
-        : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: input.fetchImpl })
-      translatedText = await client.send({
+        ? new ByokChatClient({ config: model.config!, fetchImpl: network })
+        : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network })
+      return client.send({
         clientFeature: "translation", clientOperation: "selection_translation",
         clientRequestId: createId("request"),
         conversationId: id,
         taskId: id,
         operationId: id,
+        signal,
         messages: [{
           id: createId("user"),
           role: "user",
@@ -100,6 +103,7 @@ export async function translateReaderSelection(input: {
           }),
         }],
         onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(accumulatedText),
+      })
       })
     }
   } catch (error) { diagnostics()?.record("reader-translation", "operation_error", error);

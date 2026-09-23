@@ -1422,7 +1422,8 @@ textarea {
 /* 功能配置复用常规设置的容器和行，仅增加任务标题。 */
 #jadense-settings-panel-features { gap: 0; padding-block: 0; }
 #jadense-settings-panel-features[hidden] { display: none; }
-#jadense-settings-panel-features .jdx-settings-task > h3 { margin: 0; padding-top: 24px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); font-weight: 600; }
+#jadense-settings-panel-features .jdx-settings-task + .jdx-settings-task { margin-top: 28px; border-top: 2px solid var(--jdx-line); padding-top: 24px; }
+#jadense-settings-panel-features .jdx-settings-task > h3 { margin: 0; padding-block: 8px; color: var(--jdx-text); font-size: calc(16px * var(--jdx-font-scale, 1)); font-weight: 650; }
 #jadense-settings-panel-features .jdx-translation-interface { padding: 0; }
 #jadense-feature-model-status { margin-block: 8px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
 #jadense-settings-panel-features .jdx-ocr-summary { color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
@@ -1442,11 +1443,6 @@ textarea {
 .jdx-reading-font-controls button { box-sizing: border-box; min-height: 34px; border: 1px solid var(--jdx-line-strong); border-radius: 6px; padding: 5px 10px; font: inherit; color: var(--jdx-text); background: var(--jdx-surface); cursor: pointer; }
 .jdx-reading-font-controls button:hover:not(:disabled) { background: var(--jdx-subtle); border-color: var(--jdx-hover-line); }
 .jdx-reading-font-controls button:disabled { opacity: .45; cursor: default; }
-.jdx-reading-stepper { display: inline-flex; min-width: 0; align-items: center; border: 1px solid var(--jdx-line-strong); border-radius: 6px; background: var(--jdx-surface); }
-.jdx-reading-stepper button { border: 0; border-radius: 5px; min-width: 32px; }
-.jdx-reading-stepper input { box-sizing: border-box; width: 3.3em; min-height: 34px; border: 0; padding: 4px 0; font: inherit; text-align: center; color: var(--jdx-text); background: transparent; appearance: textfield; }
-.jdx-reading-stepper input::-webkit-inner-spin-button { appearance: none; }
-.jdx-reading-stepper > span { padding-right: 9px; color: var(--jdx-muted); font-size: .85em; }
 .jdx-reading-opacity-controls { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .jdx-reading-opacity-controls input { flex: 1; min-width: 0; min-height: 34px; width: 100%; margin: 0; padding: 0; accent-color: var(--jdx-green-deep); cursor: pointer; }
 .jdx-reading-opacity-controls output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--jdx-muted); }
@@ -1523,3 +1519,5 @@ textarea {
 .jdx-titlebar #jadense-home { padding: 3px; }
 /* 翻译历史入口已并入文献解析；保留旧 DOM ID 供兼容路由使用。 */
 #jadense-manager-nav-translations { display: none !important; }
+
+.jdx-reading-font-slider { flex: 1 1 180px; max-width: 280px; }

@@ -227,6 +227,14 @@ describe("Zotero PDF analysis snapshot", () => {
 })
 
 describe("append-only native analysis annotations", () => {
+  it.each([false, true])('deduplicates category-tagged annotations with legacy marker %s', async legacy => {
+    const fixture = host(), snapshot = await readPdfForAnalysis(fixture.zotero, 11)
+    fixture.annotationItems.push({ annotationText: snapshot.passages[0].text, annotationPosition: JSON.stringify(snapshot.passages[0].position),
+      getTags: () => [...(legacy ? [{ tag: 'Jadense AI' }] : []), { tag: 'Jadense AI/claim' }] })
+    const result = await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)])
+    expect(result).toMatchObject({ created: 0, skipped: 1 })
+    expect(fixture.saveFromJSON).not.toHaveBeenCalled()
+  })
   it("writes only snapshot geometry and escapes model markup at the rich-text seam", async () => {
     const fixture = host()
     const snapshot = await readPdfForAnalysis(fixture.zotero, 11)
@@ -240,7 +248,7 @@ describe("append-only native analysis annotations", () => {
     expect(fixture.saveFromJSON).toHaveBeenCalledWith(fixture.item, expect.objectContaining({
       type: "highlight", text: snapshot.passages[0].text, position: snapshot.passages[0].position,
       comment: '【核心论点】\n&lt;img src=x onerror="attack()"&gt; &amp; evidence',
-      tags: [{ name: "Jadense AI" }, { name: "Jadense AI/claim" }, { name: "核心论点" }],
+      tags: [{ name: "Jadense AI/claim" }, { name: "核心论点" }],
     }))
     expect(fixture.saveFromJSON.mock.calls[0][1]).not.toHaveProperty("itemID")
     expect(fixture.saveFromJSON.mock.calls[0][1].key).not.toBe("OLDKEY01")
@@ -535,11 +543,12 @@ describe("native reader toolbars", () => {
     const append = vi.fn((node: ElementStub) => doc.body.append(node))
     register.mock.calls[0][1]({ reader: fixture.reader, doc, append })
     const toolbar = append.mock.calls[0][0]
+    expect(descendants(toolbar).filter(node => node.dataset.jadensePdfMode).map(node => node.dataset.jadensePdfMode)).toEqual(['compare'])
     const panel = doc.body.children.find(node => node.attributes.has("data-jadense-translation-panel"))!
     const notice = doc.body.children.find(node => node.attributes.has("data-jadense-reader-notice"))!
     const source = descendants(panel).find(node => node.attributes.get("aria-label") === "Selection source language")!
     expect(actionButtons(toolbar).map(node => node.attributes.get("aria-label"))).toEqual([
-      "Start a new AI chat about this document", "Analyze document", "Quote selection", "Full translation",
+      "Start a new AI chat about this document", "Analyze document", "Quote selection",
     ])
     expect(source.children.find(node => node.value === "en")?.textContent).toBe("English")
     expect(panel.attributes.get("aria-label")).toBe("AI translation result")
@@ -589,7 +598,7 @@ describe("native reader toolbars", () => {
     toggle.handlers.get("click")!()
     const menu = doc.body.children.find(node => node.attributes.has("data-jadense-action-menu"))!
     expect(menu.attributes.get("role")).toBe("menu")
-    expect(actionButtons(menu).map(node => node.attributes.get("data-jadense-action"))).toEqual(["attach", "analyze", "quote", "fullTranslate"])
+    expect(actionButtons(menu).map(node => node.attributes.get("data-jadense-action"))).toEqual(["attach", "analyze", "quote"])
     expect(doc.activeElement).toBe(actionButtons(menu)[0])
     menu.handlers.get("keydown")!({ key: "End", preventDefault: vi.fn() })
     expect(doc.activeElement).toBe(actionButtons(menu).at(-1))
@@ -739,7 +748,7 @@ describe("native reader toolbars", () => {
     try {
       expect(() => register.mock.calls[0][1]({ reader: fixture.reader, doc, append })).not.toThrow()
       expect(append).toHaveBeenCalledOnce()
-      expect(actionButtons(append.mock.calls[0][0])).toHaveLength(4)
+      expect(actionButtons(append.mock.calls[0][0])).toHaveLength(3)
       expect(doc.windowHandlers.has("keydown")).toBe(true)
       expect(disconnect).toHaveBeenCalledOnce()
     } finally { cleanup() }
@@ -1006,8 +1015,8 @@ describe("native reader toolbars", () => {
     expect(onOpenManager).toHaveBeenCalledWith()
     expect(onAction).not.toHaveBeenCalled()
     const buttons = actionButtons(toolbar)
-    expect(buttons.map((button) => button.attributes.get("aria-label"))).toEqual(["发起新对话，向 AI 提问（当前文献）", "解析文献", "引用选文", "全文翻译"])
-    expect(buttons.map((button) => button.children[1].textContent)).toEqual(["提问", "解析", "引用", "全文翻译"])
+    expect(buttons.map((button) => button.attributes.get("aria-label"))).toEqual(["发起新对话，向 AI 提问（当前文献）", "解析文献", "引用选文"])
+    expect(buttons.map((button) => button.children[1].textContent)).toEqual(["提问", "解析", "引用"])
     expect(descendants(toolbar).some(node => node.attributes.has("data-jadense-article-languages"))).toBe(false)
     expect(buttons[0].title).toBe("Jadense · 发起新对话，向 AI 提问（当前文献）")
     buttons[0].handlers.get("click")!()

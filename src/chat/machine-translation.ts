@@ -2,12 +2,11 @@
 import MarkdownIt from 'markdown-it'
 import type { TranslationLanguages } from './translation-languages'
 import { uiText } from '@/zotero/ui-preferences'
-import { queueTranslation, retryAt, TranslationRateLimitError } from './translation-queue'
+import { translationScheduler, retryAt, TranslationRateLimitError } from './translation-queue'
 
 export type TranslationService = 'bing' | 'google'
 export const TRANSLATION_LIMITS = { bing: 1000, google: 5000 } as const
 const entities = new MarkdownIt().utils
-type QueueHost = { __jadenseTranslationQueue?: Promise<unknown> }
 
 /** 优先在句界和空白处切分；按 UTF-16 长度保守限额，保证 Unicode 与源文均不丢失。 */
 export function splitMachineTranslationText(text: string, limit: number): string[] {
@@ -82,31 +81,24 @@ export async function translateMachineText(input: TranslationLanguages & {
   host: object; service: TranslationService; text: string; fetchImpl: typeof fetch; signal?: AbortSignal
   onText?: (text: string) => void
 }): Promise<string> {
-  const host = input.host as QueueHost
+  const host = input.host, taskID = crypto.randomUUID()
   let result = ''
   for (const text of splitMachineTranslationText(input.text, TRANSLATION_LIMITS[input.service])) {
     check(input.signal)
-    const operation = (host.__jadenseTranslationQueue ?? Promise.resolve()).catch(() => undefined).then(async () => {
+    const operation = Promise.resolve().then(async () => {
       check(input.signal)
       if (!text.trim()) return text
-      const controller = new AbortController()
-      const cancel = () => controller.abort()
-      input.signal?.addEventListener('abort', cancel, { once: true })
-      let timer: ReturnType<typeof setTimeout> | undefined
       try {
-        const translated = await queueTranslation(host, input.service, input.signal, () => {
-          timer = setTimeout(cancel, 30_000)
-          return abortable(translateChunk(input.service, text, input, input.fetchImpl, controller.signal), controller.signal)
+        const translated = await translationScheduler(host).run({ address: input.service, task: taskID, signal: input.signal, machine: true, fetchImpl: input.fetchImpl }, (network, signal) => {
+          return abortable(translateChunk(input.service, text, input, network, signal), signal)
         })
         // 接口常会去除空白；恢复片段边界，避免连续片段直接粘连。
         return (text.match(/^\s*/u)?.[0] ?? '') + translated.trim() + (text.match(/\s*$/u)?.[0] ?? '')
       } catch (error) {
         check(input.signal)
-        if (controller.signal.aborted) throw new Error(uiText('翻译请求超时，请稍后重试。', 'Translation timed out. Please try again later.'))
         throw error
-      } finally { clearTimeout(timer); input.signal?.removeEventListener('abort', cancel) }
+      }
     })
-    host.__jadenseTranslationQueue = operation.catch(() => undefined)
     result += await (input.signal ? abortable(operation, input.signal) : operation)
     check(input.signal)
     input.onText?.(result)

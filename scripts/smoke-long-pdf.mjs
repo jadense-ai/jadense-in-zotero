@@ -26,7 +26,16 @@ export async function verifyLongPdf({ Zotero, manager, config, assert, waitFor, 
   const attachment = await Zotero.Attachments.importFromFile({ file: config.longPdfPath, libraryID: Zotero.Libraries.userLibraryID, contentType: 'application/pdf' })
   const reader = await Zotero.Reader.open(attachment.id); await reader._initPromise
   const runtime = await waitFor(() => Zotero.__jadenseChatRuntime, 'shared chat runtime')
+  // 真实宿主比较旧后台纯文字接口与当前全页关联；模型尚未调用。
+  const workerStart = Date.now()
+  const workerText = await Zotero.PDFWorker.getFullText(attachment.id, 80)
+  const workerMs = Date.now() - workerStart
+  const nativeStart = Date.now()
+  for (let page = 0; page < 81; page++) await reader._internalReader._primaryView._ensureBasicPageData(page)
+  const nativePageDataMs = Date.now() - nativeStart
+  const extractionStart = Date.now()
   const sessionID = await runtime.create(attachment.id)
+  report.textExtractionPerformance = { pages: 81, workerPages: workerText.extractedPages, workerMs, nativePageDataMs, associationWithNativePagesReadyMs: Date.now() - extractionStart }
   const state = () => JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.localChatState'))
   const session = () => state().sessions.find(row => row.id === sessionID)
   assert(session().sources[0].document?.totalPages === 81 && !session().sources[0].text, 'Native association did not cache all 81 pages separately')
@@ -37,6 +46,29 @@ export async function verifyLongPdf({ Zotero, manager, config, assert, waitFor, 
   const root = PathUtils.join(Zotero.Profile.dir, 'jadense-chat-documents', session().sources[0].document.id)
   const tail = JSON.parse(await IOUtils.readUTF8(PathUtils.join(root, 'page-80.json')))
   assert(tail.paragraphs.some(row => row.text.includes('7391')), 'Native page 81 cache lost the unique fact')
+  // 保留真实提取、历史和原生写入，仅替换模型响应，验证标签及无坐标 OCR 回退。
+  const analysis = await waitFor(() => Zotero.__jadenseAnalysisRuntime, 'analysis runtime')
+  const analyze = () => analysis.run({ zotero: Zotero, itemID: attachment.id, signal: new manager.AbortController().signal, fetchImpl: manager.fetch.bind(manager), services: {
+    send: async request => {
+      const data = JSON.parse(request.messages[0].text.split('\n').at(-1))
+      return JSON.stringify({ summary: 'Synthetic analysis', annotations: [{ passageId: data.passages[0].id, category: 'claim', comment: 'Synthetic evidence note' }] })
+    },
+  } })
+  const traditional = await analyze()
+  assert(traditional.annotations.created === 1, 'Traditional extraction did not create a native annotation')
+  const annotation = attachment.getAnnotations().find(row => row.annotationComment?.includes('Synthetic evidence note'))
+  assert(annotation && !annotation.getTags().some(row => row.tag === 'Jadense AI') && annotation.getTags().some(row => row.tag === 'Jadense AI/claim'), 'Native category tags or standalone tag removal failed')
+  Zotero.Prefs.set('extensions.jadenseInZotero.documentOCR', true, true)
+  Zotero.Prefs.set('extensions.jadenseInZotero.ocrEngine', 'siliconflow', true)
+  try {
+    const fallback = await analyze()
+    assert(fallback.annotations.skipped === 1 && fallback.annotations.created === 0, 'Fallback lost annotation deduplication')
+    assert(fallback.record.warnings.some(row => /有效位置|usable positions/u.test(row)), 'OCR fallback warning was not retained')
+  } finally {
+    Zotero.Prefs.set('extensions.jadenseInZotero.documentOCR', false, true)
+    Zotero.Prefs.clear('extensions.jadenseInZotero.ocrEngine', true)
+  }
+  report.checks.push('native-analysis-category-tags', 'native-analysis-ocr-fallback-warning', 'native-analysis-category-deduplication')
   const send = async () => {
     await runtime.send({ sessionID, prompt: '第 81 页的 TAIL_UNIQUE_FACT 是多少？' })
     assert(session().messages.at(-1)?.text.includes('7391'), `Tail-page answer failed: ${runtime.status}`)

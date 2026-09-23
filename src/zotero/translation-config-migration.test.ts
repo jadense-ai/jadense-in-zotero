@@ -86,6 +86,7 @@ describe('translation configuration migration', () => {
     values.set('extensions.jadenseInZotero.byokConfig', JSON.stringify({ version: 2, activeProviderId: 'p', activeModelId: 'old', providers: [{ id: 'p', name: 'P', protocol: 'openai-chat-completions', baseUrl: 'https://test.invalid/v1', apiKey: 'synthetic' }], models: [{ id: 'old', providerId: 'p', name: 'Old', model: 'old', contextWindow: 8192, maxOutputTokens: 2048 }, { id: 'other', providerId: 'p', name: 'Other', model: 'other', contextWindow: 64000, maxOutputTokens: 16000 }] }))
     saveFeatureModelSelection(host, 'translation', oldModel)
     saveFeatureModelSelection(host, 'fullTranslation', otherModel)
-    expect(translationCapacity(host)).toMatchObject({ contextWindow: 64000, maxOutputTokens: 16000 })
+    expect(translationCapacity(host)).toMatchObject({ contextWindow: 64000 })
+    expect(translationCapacity(host)).not.toHaveProperty('maxOutputTokens')
   })
 })

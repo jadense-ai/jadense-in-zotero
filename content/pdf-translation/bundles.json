@@ -1,0 +1,12 @@
+{
+  "windows-x64": {
+    "published": false,
+    "version": "pdf-engine-0.6.4-1",
+    "engine": "babeldoc-0.6.4-v1",
+    "platform": "windows-x64",
+    "file": "jadense-pdf-engine-0.6.4-1-windows-x64.zip",
+    "size": 462102143,
+    "sha256": "b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887",
+    "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.0/jadense-pdf-engine-0.6.4-1-windows-x64.zip"]
+  }
+}
