@@ -24,28 +24,20 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.1 is released:** Removes the “Show pending AI requests” button from feature settings; existing settings and task recovery remain unchanged. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1)
-
-**v0.6.2 release candidate:** The update dialog shows the latest release highlights; Parallel translation joins the reading actions, and the plugin sidebar follows Zotero's native collapsed state. Candidate package: `jadense-in-zotero-v0.6.2.xpi`. Until publication, v0.6.1 remains the latest public release.
+**v0.6.2 is released:** The update dialog shows the latest release highlights; Parallel translation joins the reading actions, and the plugin sidebar follows Zotero's native collapsed state. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2)
 
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — Show release highlights in update dialogs, unify the Parallel translation entry, and improve sidebar collapse.
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — Remove the pending AI requests button from feature settings.
 - [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF parallel translation, partial output/retry, multi-screen reading, offline engine bundle and font-size slider.
 
 - [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1) — Optional cloud OCR, independent translation settings and clearer preferences.
 - [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0) — Add paper classification, file attachments and long-PDF reading; make OCR optional and clarify reference candidates.
-- [v0.4.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.4.10) — Show OCR setup progress, improve timeout/cache recovery, add removal/reinstallation and platform installation guides.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
-
-**v0.4.10:** local OCR gains stage/download progress, timeout and cache-recovery improvements, and dependency removal/reinstallation. See [v0.4.10 changes](CHANGELOG.md#0410--2026-09-19).
-
-**v0.4.9:** improve full-document streaming completion, progress recovery and error notices; unify OCR setup, reuse existing environments and models, and add ModelScope downloads and local diagnostics. See the [local OCR guide](docs/local-ocr.md) and [v0.4.9 instructions](docs/usage-guide.md#unreleased-049).
-
-**v0.4.8:** optional selection OCR and improved text extraction, with configurable selection actions, window positioning and OCR download sources. See [settings](docs/usage-guide.md#unreleased-settings).
 
 <a id="api-recommendation"></a>
 
@@ -111,9 +103,9 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.6.1.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1), with metadata and SHA-256 checksums |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.6.2.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | Builds the current candidate source; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | Builds the current source; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -172,7 +164,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### 1. Install and open the workbench
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.1**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.2**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 
@@ -336,7 +328,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.\***. Guide screenshots use the local 0.4.4 build on **Windows 11 / Zotero 10.0.2**, with synthetic data and mocked services. This screenshot run timed out at the wide-reader viewport check and is not a full smoke-test pass. Other platforms, Zotero 8/9 and real paid providers were not tested during this documentation update. The published version is [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1); screenshot and native-validation records remain version-specific.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.\***. Guide screenshots use the local 0.4.4 build on **Windows 11 / Zotero 10.0.2**, with synthetic data and mocked services. This screenshot run timed out at the wide-reader viewport check and is not a full smoke-test pass. Other platforms, Zotero 8/9 and real paid providers were not tested during this documentation update. The published version is [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2); screenshot and native-validation records remain version-specific.
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 
@@ -344,7 +336,7 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-Install v0.6.1 over GitHub 0.4.0–0.6.0. The same `.cn` plugin ID preserves settings and local history. Existing translations are not regenerated automatically.
+Install v0.6.2 over GitHub 0.4.0–0.6.1. The same `.cn` plugin ID preserves settings and local history. Existing translations are not regenerated automatically.
 
 If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install the latest published XPI**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 
