@@ -25,19 +25,17 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.2 已发布：**更新弹窗可直接查看最新版更新要点；对照翻译入口归入阅读操作，插件侧栏遵循 Zotero 原生收起状态。[更新与升级指引](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2)
-
-**v0.6.3 待发布：**关联长 PDF 默认截取与问题相关的原文，不再自动分批概括；需要全文概括时，可在「设置 → 功能配置 → AI 对话」明确开启。图片解读沿用此设置。
+**v0.6.3 已发布：**关联长 PDF 默认截取与问题相关的原文，不再自动分批概括；需要全文概括时，可在「设置 → 功能配置 → AI 对话」明确开启。图片解读沿用此设置。[更新与升级指引](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
 
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — 关联长 PDF 默认截取相关原文，全文分批概括改为主动开启，并改进无输出等待与停止反馈。
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — 更新弹窗显示版本要点，统一对照翻译入口并改进侧栏收起行为。
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — 移除待恢复 AI 请求按钮，精简功能配置页。
 - [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF 对照翻译、部分成果与补译、多屏阅读、引擎离线包及字号滑块。
 
 - [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1) — 云 OCR 可选引擎、独立翻译配置及设置界面优化。
-- [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0) — 新增文献分类、文件问答与长 PDF 阅读；全文任务默认文字层，OCR 按需启用，参考文献候选更清楚。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->

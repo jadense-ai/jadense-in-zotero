@@ -24,19 +24,17 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.2 is released:** The update dialog shows the latest release highlights; Parallel translation joins the reading actions, and the plugin sidebar follows Zotero's native collapsed state. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2)
-
-**v0.6.3 is pending release:** Long linked PDFs use question-relevant source passages by default instead of automatic batch summaries. Opt in to full-document summaries under Settings → Feature settings → AI chat; figure interpretation shares this setting.
+**v0.6.3 is released:** Long linked PDFs use question-relevant source passages by default instead of automatic batch summaries. Opt in to full-document summaries under Settings → Feature settings → AI chat; figure interpretation shares this setting. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
 
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — Select relevant passages from long linked PDFs by default, make full summaries opt-in, and improve no-output and stop feedback.
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — Show release highlights in update dialogs, unify the Parallel translation entry, and improve sidebar collapse.
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — Remove the pending AI requests button from feature settings.
 - [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF parallel translation, partial output/retry, multi-screen reading, offline engine bundle and font-size slider.
 
 - [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1) — Optional cloud OCR, independent translation settings and clearer preferences.
-- [v0.5.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.0) — Add paper classification, file attachments and long-PDF reading; make OCR optional and clarify reference candidates.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
