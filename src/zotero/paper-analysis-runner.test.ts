@@ -62,6 +62,15 @@ function structured(summary = "总结") {
 }
 
 describe("independent paper analysis", () => {
+  it('persists extraction fallback warnings in the readable analysis history', async () => {
+    const { zotero } = fakeZotero({ token: 'synthetic-token' })
+    const pdf = snapshot(), notice = '当前 OCR 未提供有效位置，已回退传统文字提取。'
+    pdf.coverage.warnings.push(notice)
+    const result = await runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal,
+      services: { readPdf: async () => pdf, send: async () => structured(), saveAnnotations: async () => emptySaved() } })
+    expect(result.record.warnings).toContain(notice)
+    expect(readPaperAnalysisHistory(zotero.Prefs!).records[0].warnings).toContain(notice)
+  })
   it.each([{ kind: "default" }, { kind: "model", modelId: "analysis-model" }, { kind: "route", routeTier: "premium" }] as const)("dispatches the exact Jadense analysis selection $kind", async selection => {
     const { zotero } = fakeZotero({ token: "synthetic-token", analysisModel: { route: "jadense", selection } })
     const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(

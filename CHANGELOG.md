@@ -1,5 +1,99 @@
 # 更新说明 / Changelog
 
+## 0.6.0 — 待发布 / Unreleased
+
+## 本次更新
+
+v0.6.0 相比 v0.5.1，重点新增 **PDF 对照与原位翻译**：保留论文版面阅读译文，边生成边查看，失败后保留已有成果并继续补译。同时改进翻译请求调度、长文处理和设置体验。
+
+### PDF 对照阅读与导出
+
+- 从 PDF 阅读操作进入「对照翻译」，并排查看原文和译文；可切换为整页译文，也可打开独立窗口用于多屏阅读。
+- 支持连续滚动、同步/解除同步滚动，方便按自己的节奏对照核读。
+- 「保存译文」导出仅译文 PDF，「保存对照」导出原文与译文对照 PDF；不会覆盖原附件。
+- 新功能与原有侧栏段落翻译并存，可根据阅读习惯选择。
+
+### 精简、完整与部分成果
+
+- 默认「精简」：翻译正文、图表说明和学术脚注，出版信息与参考文献保留原文；「完整」翻译所有可译文字。
+- 整理文段并聚合请求，减少碎片化翻译；完成内容逐步显示，不必等待全文结束。
+- 部分段落失败时，已完成成果仍可阅读和导出；点击「补译未完成部分」复用已完成片段。
+- 改进临时网络错误、限流、模型输出不完整和版面处理异常的恢复提示。重试和补译可能继续产生服务费用，不代表原请求一定未计费。
+
+### 翻译与设置体验
+
+- 全文翻译新增「请求与速度（高级）」：按服务地址设置并发、每分钟 HTTP 请求数和 PDF 每批原文 token，并查看在途及排队状态。多个翻译入口共享相应服务额度。
+- OCR 与 PDF 排版引擎集中到「外置依赖配置」，功能设置提供跳转入口。
+- 「界面字号」改为滑块：80%–200%、1% 微调，显示当前百分比，拖动即时生效，可恢复 100%；工作台与原生设置共用偏好。
+- 改进长文提取、翻译成果读取与文件处理，减少重复工作；保留已有设置及历史。
+
+## 操作与配置
+
+### 1. 安装与升级
+
+下载本页 `jadense-in-zotero-v0.6.0.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」选择它，安装后重启 Zotero。
+
+GitHub v0.5.1 用户可直接覆盖安装；相同 `.cn` 插件身份保留设置及本地历史。不要删除 Zotero profile。仍使用 `jadense-in-zotero@jadense.com` 的旧版用户，先禁用旧插件再安装，避免两套插件同时启用。GitHub Release 与官网自动更新渠道独立；未收到更新时请手动安装。
+
+### 2. 选择翻译服务、模型与范围
+
+1. **BYOK**：在「设置 → BYOK」添加服务商，填写 API Key、Base URL、协议与模型 ID；不需要攻玉账号。也可在「设置 → 连接攻玉」保存插件令牌，使用账号可用模型。
+2. 在「设置 → 功能配置 → 全文翻译」选择翻译接口、AI 模型和精简/完整范围；目标语言按翻译入口选择。选文翻译与全文翻译独立配置。
+3. 检查模型输出上限及服务商额度。首次建议保持默认速度，用较短的文字版 PDF 验证；遇到限流时降低并发或 HTTP 请求/分钟，不要同时启动大量任务。
+4. 若需调整，展开「请求与速度（高级）」并保存：并发数为 1–8；RPM 包含检查和恢复请求。新速度用于尚未发送的请求，单批原文容量用于新任务。Bing/Google 网页翻译保持串行。
+
+模型 Key 只填自己的服务商凭据，不要使用文档示例。翻译会将所需文字发送到选定服务；本机排版不代表 AI 离线运行。
+
+### 3. 安装 PDF 版面解析引擎
+
+普通问答、选文翻译及文字层 Markdown 提取不需要排版引擎；对照翻译需要它。**排版引擎与 OCR 独立**。
+
+**自动安装**：在「设置 → 外置依赖配置 → PDF 翻译引擎」点击「准备 PDF 翻译引擎」，等待“已就绪”。也可从「功能配置 → 全文翻译 → 外置依赖」跳转。此版本自动准备使用随插件的安装器，下载独立 Python 3.12、锁定依赖、模型和字体，无需预装 Python；需能访问相关下载站。
+
+**手动离线安装（Windows x64）**：下载本 Release 的 `jadense-pdf-engine-0.6.4-1-windows-x64.zip`，点击「导入离线包」选择 ZIP，无需解压、管理员权限或预装 Python/uv。可以在另一台电脑下载后复制过来。插件按固定 SHA-256 校验，在临时目录检测模型及 PDF 渲染，通过后替换引擎，保留任务成果及原 PDF。
+
+- 包大小：462102143 字节（约 441 MiB）；建议至少预留 3 GiB。
+- SHA-256：`b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887`。
+- 完整 ZIP 的自动下载开关在本版本仍未开启；自动准备与离线导入是两条不同安装路径。
+
+**库内备用安装**：使用仓库 `content/pdf-translation/` 内的安装器、锁文件和适配器，按指南手动安装后点击「检测已安装引擎」。此备用源是安装源码，仍需联网下载依赖和资产，不是另一份模型镜像。请勿混用不同插件版本的文件。
+
+检测不下载、不调用翻译服务；缺少模型或字体时使用「修复引擎」或重新导入匹配的离线包。不要关闭哈希校验或自行创建就绪标记。
+
+详细步骤：[中文安装指南](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.md) · [English setup](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.en.md) · [操作指南](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/usage-guide.md#pdf-translation-060)。
+
+### 4. 开始对照翻译
+
+打开文字版 PDF → 阅读操作「对照翻译」→ 选择目标语言和范围 → 等待译文逐步显示。可随时核对原文；部分完成时使用「保存译文 / 保存对照」，失败后再点「补译未完成部分」。更换范围仅影响新任务，旧历史不会自动重译。
+
+扫描页保持原文；安装 PDF 引擎不会自动开启扫描 OCR。需要识别扫描文字时，请单独配置本机/云 OCR，并使用相应的原文提取与段落翻译流程。公式、表格和复杂版面应人工核对。
+
+## 升级与兼容
+
+- Manifest 声明支持 Zotero 8.0–10.0.*；实测范围见下方验收记录。
+- Windows x64 提供完整引擎离线包；macOS、Linux、Windows ARM64 暂无本次验证的完整包，手动安装路径不等于已完成对应平台验收。
+- 新版可复用兼容的历史成果；旧版未完成任务可能按新的分片策略重新开始，界面会提示，旧缓存仍保留。
+- 原件和文献资料库不会因导出译文而被替换；翻译质量与网络可用性取决于所选模型/服务。真实付费 Provider、其他操作系统与 Zotero 8/9 不在本次实测范围。
+
+## 验证与下载
+
+发布验收以 GitHub v0.6.0 Release 的最终记录为准；源码候选版不等于已发布安装包。
+
+---
+
+### English
+
+v0.6.0 adds layout-preserving parallel/in-place PDF translation, full-width and multi-screen reading, synchronized scrolling, and translated-only/bilingual PDF export. Concise mode translates body text, captions and academic footnotes while preserving publication details and references; Full mode translates all eligible prose. Results appear progressively. Partial output stays readable/exportable, and **Translate remaining passages** reuses completed segments.
+
+Configure a provider under **Settings → BYOK**, or connect Jadense with a plugin token. Choose your translation service/model and scope under **Feature settings → Full translation**. Advanced request settings control concurrency (1–8), HTTP requests/minute and source tokens per PDF batch. Limits are shared by translation tools using the same service; Bing/Google remain serial. Retries may incur further charges.
+
+Prepare the layout engine under **External dependencies → PDF translation engine**. Automatic setup downloads isolated Python, locked dependencies, models and fonts. For Windows x64, import this release's complete engine ZIP without extracting it; preinstalled Python/uv and administrator access are not required. The full-bundle automatic-download switch is not enabled in this version. Repository-source manual installation still requires network downloads. See the [English installation guide](https://github.com/jadense-ai/jadense-in-zotero/blob/v0.6.0/docs/pdf-engine.en.md).
+
+The interface font setting is now an 80%–200% slider with 1% steps and an instant reset to 100%. Upgrade from v0.5.1 by installing the XPI and restarting Zotero; settings/history are retained. Do not enable the old `.com` plugin alongside the current `.cn` identity. Website automatic updates are maintained separately.
+
+Scanned pages remain original; OCR is separate. Proofread formulas, tables and layout against the source. Windows x64 is the validated engine platform; other operating systems, Zotero 8/9 and live paid providers are not covered by this release's validation.
+
+
 ## 0.5.1 — 2026-09-22
 
 - 新增可选云 OCR：MinerU、智谱 GLM-OCR、硅基流动、阿里百炼和 OpenAI 兼容服务；使用前配置密钥、模型和 HTTPS 地址，并确认文档上传及费用。普通文字层提取仍无需 OCR。

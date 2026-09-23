@@ -76,7 +76,9 @@ export class ChatDocuments {
           await this.save(state)
         }
       }
-      if (!state.complete || pages.length !== state.totalPages || retry || identity.modificationTime === undefined) {
+      // 重新关联只补齐失败/空白页；完整且版本一致的缓存无需逐页重写状态。
+      const retryMissing = retry && pages.some(page => !page.paragraphs.length || page.warning)
+      if (!state.complete || pages.length !== state.totalPages || retryMissing || identity.modificationTime === undefined) {
         state.complete = false
         await this.save(state)
         const old = new Map(pages.map(page => [page.pageIndex, page]))
@@ -87,8 +89,8 @@ export class ChatDocuments {
             const saved = await this.store.savePage(state!.id, { ...page, translations: {}, pieces: [] })
             state!.storageWarning ||= !saved
             if (!state!.pageIndexes.includes(page.pageIndex)) state!.pageIndexes.push(page.pageIndex)
+            await this.save(state!)
           }
-          await this.save(state!)
           progress(uiText(`已提取 ${page.pageIndex + 1}/${total} 页`, `Extracted ${page.pageIndex + 1}/${total} pages`))
         }, identity.modificationTime === undefined ? [] : pages)
         await validateDocument(documentHost, identity)

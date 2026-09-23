@@ -47,14 +47,14 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
     row.append(label, selectRoot); container.append(row)
     return { row, select, help }
   }
-  const kind = makeField(scope === 'selection' ? uiText('选文翻译', 'Selection translation') : uiText('全文翻译', 'Full translation'), 'kind')
+  const kind = makeField(uiText('翻译方式', 'Translation method'), 'kind')
   const service = makeField(uiText('翻译服务', 'Translation service'), 'service')
   service.help.textContent = uiText('原文将直接发送至所选翻译服务，无需攻玉令牌或 API Key；可用性受网络与服务限流影响。', 'Source text is sent directly to the selected service. No Jadense token or API key is required; availability depends on network access and service rate limits.')
   const status = element('p'); status.setAttribute('role', 'status'); container.append(status)
   const capacity = element('details'), capacityTitle = element('summary')
-  capacityTitle.textContent = uiText('高级设置：全文翻译容量（缺少模型元数据时使用）', 'Full translation capacity (when model metadata is unavailable)'); capacity.append(capacityTitle)
+  capacityTitle.textContent = uiText('AI 模型容量（缺少模型元数据时使用）', 'AI model capacity (when model metadata is unavailable)'); capacity.append(capacityTitle)
   const capacityInputs: HTMLInputElement[] = []
-  for (const [key, title, fallback] of [['contextWindow', uiText('上下文窗口 tokens', 'Context window tokens'), 16384], ['maxOutputTokens', uiText('最大输出 tokens', 'Maximum output tokens'), 8192]] as const) {
+  for (const [key, title, fallback] of [['contextWindow', uiText('上下文窗口 tokens', 'Context window tokens'), 16384]] as const) {
     const label = element('label'), input = element('input'); input.type = 'number'; input.min = '1024'; input.step = '1024'; input.value = String(fallback); input.dataset.capacity = key
     try { const saved = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')); if (Number.isFinite(saved[key]) && saved[key] >= 1024) input.value = String(saved[key]) } catch { /* optional */ }
     label.textContent = title; label.append(input); capacity.append(label); capacityInputs.push(input)
@@ -72,7 +72,7 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
     try { limits = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* optional */ }
     for (const field of capacityInputs) {
       const value = Number(limits[field.dataset.capacity!])
-      field.value = String(Number.isFinite(value) && value >= 1024 ? value : field.dataset.capacity === 'contextWindow' ? 16384 : 8192)
+      field.value = String(Number.isFinite(value) && value >= 1024 ? value : 16384)
     }
     kind.help.textContent = value.kind === 'machine'
       ? uiText('仅返回译文，不进行额外的术语解析、歧义理清或公式恢复。适用于选文和全文翻译。', 'Returns translation only, without extra terminology analysis, ambiguity clarification or formula recovery. Applies to selected text and full documents.')

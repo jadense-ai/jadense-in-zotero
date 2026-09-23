@@ -66,6 +66,7 @@ describe("chrome content registration", () => {
     expect(registerChrome).toHaveBeenCalledWith(manifestURI, JADENSE_CHROME_ENTRIES)
     expect(JADENSE_CHROME_ENTRIES).toEqual([
       ["content", "jadense-in-zotero", "content/"],
+      ['content', 'jadense-pdf-reader', 'content/pdfjs/', 'contentaccessible=yes'],
     ])
 
     unregisterChromeContent(handle)

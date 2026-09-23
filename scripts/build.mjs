@@ -32,15 +32,22 @@ await mkdir(releasePaths.versionDir, { recursive: true })
 
 for (const directory of ["content", "locale", "_locales", "icons"]) {
   await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true,
-    filter: source => !source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh'].includes(path.basename(source)) })
+    filter: source => (!source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh'].includes(path.basename(source)))
+      && (!source.startsWith(path.join(projectRoot, 'content', 'pdf-translation') + path.sep) || ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'bundles.json', 'viewer.html', 'viewer.mjs', 'LICENSE'].includes(path.basename(source))) })
 }
 
 // PDF 文字解析完全离线，模块、worker、CJK 字符表和标准字体随 XPI 分发。
 const pdfRoot = path.join(projectRoot, 'node_modules/pdfjs-dist')
 const pdfTarget = path.join(buildDir, 'content/pdfjs')
 await mkdir(pdfTarget, { recursive: true })
+for (const name of ['viewer.html', 'viewer.mjs']) await cp(path.join(projectRoot, 'content/pdf-translation', name), path.join(pdfTarget, name))
 await writeFile(path.join(pdfTarget, 'loader.mjs'), "import * as pdfjs from './pdf.mjs'; globalThis.__jadenseChatPdfJS = pdfjs;\n")
 for (const name of ['pdf.mjs', 'pdf.worker.mjs']) await cp(path.join(pdfRoot, 'build', name), path.join(pdfTarget, name))
+for (const name of ['pdf_viewer.mjs', 'pdf_viewer.css']) await cp(path.join(pdfRoot, 'web', name), path.join(pdfTarget, name))
+await cp(path.join(pdfRoot, 'web/images'), path.join(pdfTarget, 'images'), { recursive: true })
+// Reader 的 resource:// 内容文档不能跨源 import chrome ES modules；固定静态脚本打包为 classic。
+await build({ entryPoints: [path.join(pdfTarget, 'viewer.mjs')], outfile: path.join(pdfTarget, 'viewer.js'), bundle: true, format: 'iife', target: 'firefox140', legalComments: 'none', define: { 'import.meta.url': JSON.stringify('chrome://jadense-pdf-reader/content/viewer.js') } })
+await build({ entryPoints: [path.join(pdfTarget, 'pdf.worker.mjs')], outfile: path.join(pdfTarget, 'viewer-worker.js'), bundle: true, format: 'iife', target: 'firefox140', legalComments: 'none' })
 for (const name of ['cmaps', 'standard_fonts']) await cp(path.join(pdfRoot, name), path.join(pdfTarget, name), { recursive: true })
 
 // 使用插件仓库内的品牌素材，开源仓库可独立安装依赖并构建发行包。

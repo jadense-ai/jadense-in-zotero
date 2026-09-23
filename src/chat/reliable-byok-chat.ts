@@ -15,6 +15,8 @@ export class ReliableByokChatClient extends ByokChatClient {
     const account = await requestHash('jadense-profile-byok-executions')
     const fingerprint = await requestHash(JSON.stringify({ config: this.options.config, conversation: input.conversationId, messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
+    const completed = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'completed' && row.fingerprint === fingerprint) : undefined
+    if (completed) return completed.text ?? ''
     const previous = rows.find(row => row.account === account && (row.body.clientRequestId === input.clientRequestId || (input.operationId && row.body.operationId === input.operationId && row.status === 'pending')))
     if (previous && previous.fingerprint !== fingerprint) throw new Error('BYOK request identity belongs to different input')
     if (previous?.status === 'completed') { input.onTextDelta?.(previous.text ?? '', previous.text ?? ''); return previous.text ?? '' }

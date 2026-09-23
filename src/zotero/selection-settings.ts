@@ -44,8 +44,8 @@ export function wireSelectionSettings(host: ZoteroLike | null, root: HTMLElement
   const behaviorLabel = make('div'); behaviorLabel.append(make('h3', uiText('选中文本后', 'After selecting text')))
   behaviorRow.append(behaviorLabel, behaviorRoot)
   const ocrRow = make('div'); ocrRow.className = 'jdx-feature-model-row'
-  const description = make('div'); description.append(label, help, status)
-  const controls = make('div'); controls.dataset.ocrSummaryHost = ''
+  const description = make('div'); description.append(make('h3', uiText('文字提取', 'Text extraction')))
+  const controls = make('div'); controls.append(label, help, status); controls.dataset.ocrSummaryHost = ''
   ocrRow.append(description, controls)
   body.append(behaviorRow, ocrRow)
   root.append(body)

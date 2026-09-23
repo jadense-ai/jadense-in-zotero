@@ -41,7 +41,7 @@
               </html:div>
             </html:section>
             <html:section class="jdx-settings-task" data-settings-task="selection">
-              <html:h3 data-ui-en="Selected text and images">选文与图片</html:h3>
+              <html:h3 data-ui-en="Selection translation">选文翻译</html:h3>
               <html:div data-selection-settings-host="">
               </html:div>
               <html:section data-translation-scope="selection">
@@ -56,8 +56,11 @@
                   </html:div>
                 </html:div>
               </html:section>
+            </html:section>
+            <html:section class="jdx-settings-task" data-settings-task="figure">
+              <html:h3 data-ui-en="Image interpretation">图片解读</html:h3>
               <html:div class="jdx-feature-model-row jdx-pref-field">
-                <html:div><html:h3 id="jadense-in-zotero-feature-figure-label" data-ui-en="Image interpretation">图片解读</html:h3></html:div>
+                <html:div><html:h3 id="jadense-in-zotero-feature-figure-label" data-ui-en="AI model">AI 模型</html:h3></html:div>
                 <html:div>
                   <html:div id="jadense-in-zotero-feature-figure-model" aria-labelledby="jadense-in-zotero-feature-figure-label">
                   </html:div>
@@ -67,10 +70,8 @@
                 </html:div>
               </html:div>
             </html:section>
-            <html:section class="jdx-settings-task" data-settings-task="document">
-              <html:h3 data-ui-en="Document reading and processing">文献阅读与处理</html:h3>
-              <html:div data-document-ocr-host="">
-              </html:div>
+            <html:section class="jdx-settings-task" data-settings-task="pdf-translation">
+              <html:h3 data-ui-en="Bilingual PDF translation">对照翻译</html:h3>
               <html:section data-translation-scope="document">
                 <html:div class="jdx-feature-model-row jdx-pref-field">
                   <html:div><html:h3 id="jadense-in-zotero-feature-fullTranslation-label" data-ui-en="AI model">AI 模型</html:h3></html:div>
@@ -83,10 +84,17 @@
                   </html:div>
                 </html:div>
               </html:section>
-              <html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Translates saved Markdown using each paper’s language settings.">翻译已保存的原文 Markdown，语言沿用每篇文献的设置。</html:p>
+              <html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Preserves PDF layout. Choose source and target languages in the paper’s translation toolbar; language settings are saved per paper. Scanned pages retain the original.">保留 PDF 版面。源语言与目标语言在文献翻译工具栏中选择，按文献保存；扫描页保留原文。</html:p>
+            </html:section>
+            <html:section class="jdx-settings-task" data-settings-task="document">
+              <html:h3 data-ui-en="Document extraction">全文提取</html:h3>
+              <html:div data-document-ocr-host=""></html:div>
+            </html:section>
+            <html:section class="jdx-settings-task" data-settings-task="analysis">
+              <html:h3 data-ui-en="Literature analysis">文献解析</html:h3>
               <html:section data-feature-group="analysis">
                 <html:div class="jdx-feature-model-row jdx-pref-field">
-                  <html:div><html:h3 id="jadense-in-zotero-feature-analysis-label" data-ui-en="Literature analysis">文献解析</html:h3></html:div>
+                  <html:div><html:h3 id="jadense-in-zotero-feature-analysis-label" data-ui-en="AI model">AI 模型</html:h3></html:div>
                   <html:div>
                     <html:div id="jadense-in-zotero-feature-analysis-model" aria-labelledby="jadense-in-zotero-feature-analysis-label">
                     </html:div>

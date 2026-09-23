@@ -10,7 +10,8 @@ import type { ZoteroLike } from './runtime'
 
 const mock = vi.hoisted(() => ({ read: vi.fn(), ensure: vi.fn() }))
 vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRDocument: mock.read, ensureLocalOCR: mock.ensure, stopLocalOCR: () => {} }))
-vi.mock('@/chat/translation-queue', async original => ({ ...await original<typeof import('@/chat/translation-queue')>(), queueTranslation: async (_host: unknown, _key: string, _signal: unknown, run: () => Promise<unknown>) => run() }))
+// 本文件验证文档调度；HTTP 时钟/并发边界由 translation-scheduler.test.ts 覆盖。
+vi.mock('@/chat/translation-queue', async original => ({ ...await original<typeof import('@/chat/translation-queue')>(), translationScheduler: () => ({ run: (input: { fetchImpl: typeof fetch; signal?: AbortSignal }, run: (network: typeof fetch, signal: AbortSignal) => Promise<unknown>) => run(input.fetchImpl, input.signal ?? new AbortController().signal) }) }))
 
 function fixture(texts = ['First sentence.', 'Second sentence.']) {
   mock.read.mockReset(); mock.ensure.mockReset(); mock.ensure.mockResolvedValue(undefined)
@@ -172,11 +173,26 @@ describe('OCR continuous translation', () => {
       expect(pieces.slice(0, -1).every(piece => measure(piece.text) >= limit * .8)).toBe(true)
     }
   })
-  it('bounds input and output jointly and ignores additive capacity fields', () => {
+  it('uses the configured model output limit even for a short translated passage', async () => {
+    const { host, prefs } = fixture(['Short passage.'])
+    prefs.set('extensions.jadenseInZotero.autoFollowChatModel', false)
+    prefs.set('extensions.jadenseInZotero.fullTranslationModel', JSON.stringify({ route: 'byok', modelId: 'm' }))
+    prefs.set('extensions.jadenseInZotero.byokConfig', JSON.stringify({ version: 2, activeProviderId: 'p', activeModelId: 'm', providers: [{ id: 'p', name: 'P', protocol: 'openai-chat-completions', baseUrl: 'https://test.invalid/v1', apiKey: 'synthetic' }], models: [{ id: 'm', providerId: 'p', name: 'M', model: 'model', contextWindow: 64000, maxOutputTokens: 16000 }] }))
+    prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ maxOutputTokens: 1024 }))
+    const network = vi.fn<typeof fetch>(async () => new Response('data: {"choices":[{"delta":{"content":"译文"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'))
+    const jobs = new DocumentJobs(host, network, new DocumentStore())
+    await jobs.start('extraction', 1)
+    const task = await jobs.start('translation', 1); await jobs.idle()
+    expect(task.status).toBe('complete')
+    expect(JSON.parse(String(network.mock.calls[0][1]?.body)).max_completion_tokens).toBe(16000)
+    jobs.dispose()
+  })
+  it('reserves context space and ignores the retired translation output budget', () => {
     const { host, prefs } = fixture()
     prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ contextWindow: 32000, maxOutputTokens: 4096, future: true }))
     const value = translationCapacity(host)
-    expect(value.sourceTokens * 3 + 256).toBeLessThanOrEqual(4096)
+    expect(value).not.toHaveProperty('maxOutputTokens')
+    expect(value.sourceTokens).toBe(Math.floor((32000 - 1024) / 4))
     expect(value.sourceTokens * 4 + 1024).toBeLessThanOrEqual(32000)
     expect(formulasPreserved('⟦F1⟧ then ⟦F2⟧', '⟦F2⟧ then ⟦F1⟧')).toBe(false)
   })

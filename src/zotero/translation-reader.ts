@@ -1,4 +1,4 @@
-import { confirmFirstFullTranslation } from './translation-warning'
+import { translationSpeedText } from './translation-speed-settings'
 import { openDocumentSettings } from './document-notices'
 import { createJdxSelect } from "./ui/select"
 /** 连续译文阅读器：Reader 原生侧栏、停靠栏和 Manager 历史共用；不拥有模型请求生命周期。 */
@@ -96,6 +96,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const issueCopy = action(doc, uiText('复制诊断编号', 'Copy diagnostic ID'), () => { const id = jobs.get(taskID)?.issue?.id; if (id) void copyTextToClipboard(host, id) }); issueCopy.hidden = true
   footer.append(issueAction, issueCopy)
   const state = element(doc, "span", "jdx-reading-state"); state.setAttribute("role", "status")
+  const speedState = element(doc, 'span', 'jdx-reading-state'); speedState.setAttribute('role', 'status'); footer.append(speedState)
   const locations = element(doc, "div", "jdx-reading-location"); locations.hidden = true; locations.setAttribute("aria-label", uiText("当前段落原文位置", "Source locations for this paragraph"))
   const locationSelect = createJdxSelect(locations, { compact: true, portal: true, ariaLabel: uiText("原文位置", "Source location"), popupWidth: 180 })
   const progress = element(doc, "div", "jdx-reading-progress"); progress.setAttribute("aria-label", uiText("翻译进度", "Translation progress"))
@@ -160,18 +161,11 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const observers: unknown[] = []
   for (const key of [FONT, LINE]) try { const id = host.Prefs?.registerObserver?.(key, applyAppearance, true); if (id !== undefined) observers.push(id) } catch { /* 当前窗口仍可调整。 */ }
   const notice = (message: string, error = false) => { if (!error) { feedback(message); return }; lastNotice = message; state.textContent = message; state.title = message; state.dataset.error = String(error) }
-  const restart = action(doc, uiText("重新翻译", "Translate again"), () => {
-    closeMenus(); const task = jobs.get(taskID); if (!task) return
-    if (!confirmFirstFullTranslation(host)) return
-    restart.disabled = true
-    void jobs.start("translation", task.source.itemID, true, { extractionID: task.extractionID }).then(next => options.onReplace?.(next.id)).catch(error => notice(String(error), true)).finally(() => { restart.disabled = false })
-  })
   const copyAll = action(doc, uiText("复制全文", "Copy all"), () => {
     closeMenus(); void jobs.copy(taskID).then(async text => { if (!await copyTextToClipboard(host, text)) throw new Error(uiText("复制失败", "Copy failed")); notice(uiText("已复制", "Copied")) }).catch(error => notice(String(error), true))
   })
   more.content.append(copyAll)
   if (options.onHistory) more.content.append(action(doc, uiText("翻译历史", "Translation history"), () => { closeMenus(); options.onHistory?.() }))
-  more.content.append(restart)
   const diagnostics = element(doc, "p"); diagnostics.style.whiteSpace = "pre-wrap"; more.content.append(diagnostics)
   const pause = action(doc, uiText("暂停", "Pause"), () => { lastNotice = ""; if (jobs.get(taskID)?.status === "running") jobs.pause(taskID); else jobs.resume(taskID) })
   pause.dataset.translationPause = ""; footer.append(state, locations, pause)
@@ -301,7 +295,6 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
         progress.dataset.state = task.status; footer.dataset.state = task.error || task.storageWarning ? 'error' : task.status
         pause.hidden = task.status === "complete" || task.status === "partial" && task.completed === task.total; pause.textContent = task.status === "running" ? uiText("暂停", "Pause") : uiText("继续", "Continue")
         actionIcon(pause, task.status === "running" ? "pause" : "play")
-        restart.disabled = task.status === "running"
         locate.disabled = task.status === 'running'
         locate.title = task.status === 'running' ? uiText('生成期间暂不支持定位', 'Location is unavailable while generating') : uiText('定位', 'Locate')
         if ((task.extractionVersion ?? 0) < 5) pause.hidden = true
@@ -311,10 +304,15 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   }
   setMode(false); applyAppearance()
   const stop = jobs.subscribe(() => { void update() }); void jobs.ready.then(update)
+  const speedTimer = setInterval(() => {
+    if (disposed) return
+    const speed = jobs.get(taskID)?.status === 'running' ? jobs.translationSpeed(taskID) : undefined
+    speedState.textContent = speed ? translationSpeedText(speed) : ''
+  }, 1000)
   return () => {
     locationSelect.destroy(); fontSelect.destroy(); lineSelect.destroy()
     if (disposed) return
-    disposed = true; clearTimeout(toastTimer); stop()
+    disposed = true; clearTimeout(toastTimer); clearInterval(speedTimer); stop()
     try { savePosition() } catch { /* 窗口已销毁时保留最后一次正常滚动锚点。 */ }
     for (const id of observers) host.Prefs?.unregisterObserver?.(id)
     stopTheme(); resize?.disconnect()

@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="classification.css" />
     <script defer="defer" src="manager.js"></script>
     <link rel="stylesheet" href="chat.css"/>
+    <link rel="stylesheet" href="settings.css"/>
   </head>
   <body>
     <main id="jadense-manager-shell" class="jdx-manager-shell">
@@ -237,7 +238,7 @@
                 <h4 data-ui-en="Which translation should I use?">怎么选择</h4>
                 <ul>
                   <li><strong data-ui-en="Selected-text translation: ">选中翻译：</strong><span data-ui-en="Best for unfamiliar terms, difficult sentences, and important paragraphs. It is more focused and usually uses fewer tokens.">适合查术语、看难句和理解关键段落，内容更集中，通常也更省 token。</span></li>
-                  <li><strong data-ui-en="Full-PDF translation: ">全文翻译：</strong><span data-ui-en="Best only when you need to browse a paper quickly. It sends a large amount of text for processing, so it takes longer and uses more tokens.">只在需要快速浏览整篇材料时考虑。它会处理大量文字，等待更久，也会消耗更多 token。</span></li>
+                  <li><strong data-ui-en="Bilingual PDF: ">对照翻译：</strong><span data-ui-en="Best only when you need to browse a paper quickly. It sends a large amount of text for processing, so it takes longer and uses more tokens.">只在需要快速浏览整篇材料时考虑。它会处理大量文字，等待更久，也会消耗更多 token。</span></li>
                 </ul>
                 <h4 data-ui-en="Selected-text translation">选中翻译</h4>
                 <ol>
@@ -246,14 +247,9 @@
                   <li data-ui-en="Read the result in the translation panel. The default direction is English → Simplified Chinese. Change the source and target languages, or set the source to Auto-detect, then click Translate again.">在翻译浮窗中查看结果。默认方向为「英文 → 简体中文」，可修改源语言和目标语言，也可将源语言设为「自动识别」，然后点击「重新翻译」。</li>
                   <li data-ui-en="Click Copy translation to take the result with you.">需要带走译文时点击「复制译文」。</li>
                 </ol>
-                <h4 data-ui-en="Full-PDF translation">全文翻译</h4>
-                <p class="jdx-guide-note" data-ui-en="Full translation is not recommended for most reading. It processes many pages and sends much more text to the model, which can waste tokens on passages you do not need. Start with Literature analysis or selected-text translation when you only want to understand the main points.">不建议把全文翻译作为常规阅读方式：它会处理很多页面，把大量文字交给模型，可能在不需要翻译的内容上浪费 token。想先了解重点时，建议先用「文献解析」或「选中翻译」。</p>
-                <ol>
-                  <li data-ui-en="Open the reader sidebar and switch to Full Markdown. Click Extract source to prepare the read-only document and its images.">打开 PDF 阅读器侧栏，切换到「全文 Markdown」，点击「提取原文」，生成可阅读的正文和图片。</li>
-                  <li data-ui-en="After extraction, read the source and choose a target language. Click Translate full text to translate this saved Markdown version.">提取完成后先阅读原文并选择目标语言；手动点击「翻译全文」，翻译当前保存的 Markdown 版本。</li>
-                  <li data-ui-en="Pause or continue from the translation window or its details. Completed pages are kept, so you can continue later. After restarting Zotero, resume the task manually.">可以在翻译浮窗或详情中暂停、继续。已经完成的页面会保留，之后可以接着做；重启 Zotero 后需要手动点击继续。</li>
-                </ol>
-                <p data-ui-en="You can drag or resize the translation window, minimize it, or hide it while the task continues. Use Locate original beside a passage to return to its PDF page.">翻译进行时，可以拖动或调整浮窗大小，也可以最小化或隐藏浮窗；隐藏后任务仍会继续。点击段落旁的「定位原文」可以回到 PDF 对应页面。</p>
+                <h4 data-ui-en="Bilingual PDF">对照翻译</h4>
+                <p data-ui-en="Click Bilingual PDF in the PDF reader toolbar to read the original and translation side by side. Use Translation only to switch the display.">点击 PDF 阅读器工具条中的「对照翻译」，并排阅读原文与译文；通过「仅显示译文」切换显示方式。</p>
+                <p data-ui-en="Legacy full translation no longer creates new records. Existing translations remain available in history for reading, copying and locating the source; unfinished records can still be resumed.">旧全文翻译不再新建记录。历史译文仍可查看、复制及定位原文，未完成记录仍可继续翻译。</p>
                 <h4 data-ui-en="Review translation history">回看翻译历史</h4>
                 <p data-ui-en="Analysis history groups source extraction, full translations, selected-text translations and analysis results by paper. Select an attachment in the details, or use History to revisit a result version. Everything is stored locally, separately from Chat.">「解析历史」以文献汇总原文提取、全文翻译、选中翻译和解析成果。进入详情选择附件，通过「历史」回看各次结果。记录保存在本机，与 AI 对话分开。</p>
                 <p data-ui-en="Settings → General lets you change the plugin font size, translation window style, and background transparency. Settings → Feature settings lets you choose the model used by translation.">「设置 → 常规」可以调整插件字号、翻译浮窗样式和背景透明度；「设置 → 功能配置」可以选择翻译功能使用的模型。</p>
@@ -437,7 +433,7 @@
           <div id="jadense-settings-tabs" class="jdx-tabs" role="tablist" aria-label="设置分区" data-ui-en-aria-label="Settings sections">
             <button id="jadense-settings-tab-general" type="button" role="tab" aria-controls="jadense-settings-panel-general" aria-selected="true" data-ui-en="General">常规</button>
             <button id="jadense-settings-tab-features" type="button" role="tab" aria-controls="jadense-settings-panel-features" aria-selected="false" tabindex="-1" data-ui-en="Feature settings">功能配置</button>
-            <button id="jadense-settings-tab-ocr" type="button" role="tab" aria-controls="jadense-settings-panel-ocr" aria-selected="false" tabindex="-1" data-ui-en="OCR configuration">OCR配置</button>
+            <button id="jadense-settings-tab-ocr" type="button" role="tab" aria-controls="jadense-settings-panel-ocr" aria-selected="false" tabindex="-1" data-ui-en="External dependencies">外置依赖配置</button>
             <button id="jadense-settings-tab-shortcuts" type="button" role="tab" aria-controls="jadense-settings-panel-shortcuts" aria-selected="false" tabindex="-1" data-ui-en="Keyboard shortcuts">快捷键设置</button>
             <button id="jadense-settings-tab-connection" type="button" role="tab" aria-controls="jadense-settings-panel-connection" aria-selected="false" tabindex="-1" data-ui-en="Connect Jadense">连接攻玉</button>
             <button id="jadense-settings-tab-ai" type="button" role="tab" aria-controls="jadense-settings-panel-ai" aria-selected="false" tabindex="-1">BYOK</button>
@@ -475,7 +471,7 @@
               </div>
             </section>
             <section class="jdx-settings-task" data-settings-task="selection">
-              <h3 data-ui-en="Selected text and images">选文与图片</h3>
+              <h3 data-ui-en="Selection translation">选文翻译</h3>
               <div data-selection-settings-host="">
               </div>
               <section data-translation-scope="selection">
@@ -490,8 +486,11 @@
                   </div>
                 </div>
               </section>
+            </section>
+            <section class="jdx-settings-task" data-settings-task="figure">
+              <h3 data-ui-en="Image interpretation">图片解读</h3>
               <div class="jdx-feature-model-row">
-                <div><h3 id="jadense-feature-figure-label" data-ui-en="Image interpretation">图片解读</h3></div>
+                <div><h3 id="jadense-feature-figure-label" data-ui-en="AI model">AI 模型</h3></div>
                 <div>
                   <div id="jadense-feature-figure-model" aria-labelledby="jadense-feature-figure-label">
                   </div>
@@ -501,10 +500,8 @@
                 </div>
               </div>
             </section>
-            <section class="jdx-settings-task" data-settings-task="document">
-              <h3 data-ui-en="Document reading and processing">文献阅读与处理</h3>
-              <div data-document-ocr-host="">
-              </div>
+            <section class="jdx-settings-task" data-settings-task="pdf-translation">
+              <h3 data-ui-en="Bilingual PDF translation">对照翻译</h3>
               <section data-translation-scope="document">
                 <div class="jdx-feature-model-row">
                   <div><h3 id="jadense-feature-fullTranslation-label" data-ui-en="AI model">AI 模型</h3></div>
@@ -517,10 +514,17 @@
                   </div>
                 </div>
               </section>
-              <p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Translates saved Markdown using each paper’s language settings.">翻译已保存的原文 Markdown，语言沿用每篇文献的设置。</p>
+              <p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Preserves PDF layout. Choose source and target languages in the paper’s translation toolbar; language settings are saved per paper. Scanned pages retain the original.">保留 PDF 版面。源语言与目标语言在文献翻译工具栏中选择，按文献保存；扫描页保留原文。</p>
+            </section>
+            <section class="jdx-settings-task" data-settings-task="document">
+              <h3 data-ui-en="Document extraction">全文提取</h3>
+              <div data-document-ocr-host=""></div>
+            </section>
+            <section class="jdx-settings-task" data-settings-task="analysis">
+              <h3 data-ui-en="Literature analysis">文献解析</h3>
               <section data-feature-group="analysis">
                 <div class="jdx-feature-model-row">
-                  <div><h3 id="jadense-feature-analysis-label" data-ui-en="Literature analysis">文献解析</h3></div>
+                  <div><h3 id="jadense-feature-analysis-label" data-ui-en="AI model">AI 模型</h3></div>
                   <div>
                     <div id="jadense-feature-analysis-model" aria-labelledby="jadense-feature-analysis-label">
                     </div>

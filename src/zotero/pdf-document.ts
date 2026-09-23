@@ -9,9 +9,20 @@ export type DocumentPage = { pageIndex: number; pageLabel: string; paragraphs: P
 export type PdfTextDocument = { source: DocumentIdentity; pages: DocumentPage[]; ocrVersion?: number; ocr?: { engine: string; model: string; fingerprint: string; version: number } }
 type Char = { c: string; rect?: number[]; inlineRect?: number[]; fontSize?: number; ignorable?: boolean; spaceAfter?: boolean; lineBreakAfter?: boolean; paragraphBreakAfter?: boolean }
 type Item = { id: number; libraryID: number; key: string; deleted?: boolean; parentItem?: Item; getField?(key: string): unknown; isPDFAttachment?(): boolean; attachmentModificationTime?: number | Promise<number | null> }
-type View = { initializedPromise?: Promise<unknown>; _ensureBasicPageData?(page: number): Promise<void>; _pdfPages?: Record<number, { chars: Char[]; viewBox?: number[] }>; _iframeWindow?: { PDFViewerApplication?: { pdfDocument?: { numPages: number; getPageLabels?(): Promise<string[] | null> } } } }
+type View = { initializedPromise?: Promise<unknown>; _ensureBasicPageData?(page: number): Promise<void>; _pdfPages?: Record<number, { chars: Char[]; viewBox?: number[] }>; _iframeWindow?: { JSON?: Pick<JSON, 'stringify'>; PDFViewerApplication?: { pdfDocument?: { numPages: number; getPageLabels?(): Promise<string[] | null> } } } }
 type Reader = { itemID: number; _initPromise?: Promise<unknown>; _iframeWindow?: Window; navigate?(location: unknown): unknown; _internalReader?: { _primaryView?: View; navigate?(location: unknown, options?: unknown): unknown } }
 export type TextLayerPDF = { getPage?(page: number): Promise<{ view?: number[]; getTextContent(): Promise<{ items: Array<{ str?: string; transform?: number[]; width?: number; height?: number; hasEOL?: boolean }> }> }> }
+
+/** 在 Reader realm 一次序列化字形，避免逐字/矩形运算反复经过 Gecko 跨域包装；不可用时沿用原数组。 */
+export function snapshotPDFChars<T extends Char>(chars: T[], win?: { JSON?: Pick<JSON, 'stringify'> }): T[] {
+  try {
+    if (win?.JSON) {
+      const copy: T[] = JSON.parse(win.JSON.stringify(chars))
+      if (Array.isArray(copy)) return copy
+    }
+  } catch { /* 快照优化不可用时不丢弃可读文字或阻断提取。 */ }
+  return chars
+}
 
 /** 原生 chars 不可用时直接读取 PDF.js 文字层；坐标来自原始文本块，不启动 OCR。 */
 export async function readPDFTextPage(pdf: TextLayerPDF, pageIndex: number) {
@@ -154,7 +165,7 @@ export async function readTextDocument(host: DocumentHost, itemID: number, signa
       try { await view._ensureBasicPageData?.(pageIndex); data = view._pdfPages?.[pageIndex] } catch { checkCancelled(signal) }
       if (!data?.chars?.length && (pdf as TextLayerPDF).getPage) data = await readPDFTextPage(pdf as TextLayerPDF, pageIndex)
       if (!Array.isArray(data?.chars)) throw new Error("missing page text")
-      page = textPage(data.chars, pageIndex, pageLabel)
+      page = textPage(snapshotPDFChars(data.chars, view._iframeWindow), pageIndex, pageLabel)
       if (rectangle(data.viewBox)) page.viewBox = [...data.viewBox]
     } catch { page = { pageIndex, pageLabel, lines: [], paragraphs: [], warning: uiText("本页文字读取失败", "Could not read this page") } }
     pages.push(page)

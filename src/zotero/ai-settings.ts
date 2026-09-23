@@ -35,7 +35,7 @@ export type AiFeature = typeof AI_FEATURES[number]
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   get chat() { return uiText("AI 对话", "AI Chat") },
   get translation() { return uiText("选文翻译", "Selection translation") },
-  get fullTranslation() { return uiText("全文翻译", "Full translation") },
+  get fullTranslation() { return uiText("对照翻译", "Bilingual PDF translation") },
   get analysis() { return uiText("文献解析", "Literature analysis") },
   get figure() { return uiText("图片解读", "Image interpretation") },
 }

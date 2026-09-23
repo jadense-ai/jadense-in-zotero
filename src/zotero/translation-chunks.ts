@@ -10,15 +10,14 @@ export const FORMULA_MARKER = /⟦F\d+⟧/gu
 export const tokenCost = (text: string) => [...text].reduce((sum, c) => sum + (c.charCodeAt(0) < 128 ? 1 / 3 : 1.5), 0)
 
 export function translationCapacity(host: ZoteroLike) {
-  let local: { contextWindow?: number; maxOutputTokens?: number } = {}
+  let local: { contextWindow?: number } = {}
   try { local = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* 可选容量降级。 */ }
   const valid = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value >= 1024 ? Math.floor(value) : fallback
   const selection = featureModelState(host, 'fullTranslation').selection
   const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : undefined
   const contextWindow = valid(model?.contextWindow, valid(local.contextWindow, 16384))
-  const maxOutputTokens = valid(model?.maxOutputTokens, valid(local.maxOutputTokens, 8192))
-  // 译文最坏估算为原文 token 的 3 倍；预留提示词与输出格式开销。
-  return { contextWindow, maxOutputTokens, sourceTokens: Math.max(32, Math.floor(Math.min((contextWindow - 1024) / 4, (maxOutputTokens - 256) / 3))) }
+  // 只按上下文预留译文空间；实际生成上限由模型配置负责，不另设翻译输出预算。
+  return { contextWindow, sourceTokens: Math.max(32, Math.floor((contextWindow - 1024) / 4)) }
 }
 
 /** 优先采用容量最后 20% 中的句界/空白；没有边界则按 Unicode 字符切开。 */

@@ -2,6 +2,8 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.0 对照翻译与引擎配置（待发布）](#pdf-translation-060)
+
 ## 目录
 
 - [1. 安装并打开工作台](#install)
@@ -322,3 +324,18 @@ Text-layer extraction remains the default. Enable OCR only for the desired use; 
 
 ![文献功能配置](images/guide-settings-051.png)
 ![OCR 引擎配置](images/guide-ocr-051.png)
+
+
+<a id="pdf-translation-060"></a>
+
+## 0.6.0 对照翻译与引擎配置（待发布）
+
+1. 在 **设置 → 功能配置 → 全文翻译** 选择服务、模型、目标语言及精简/完整范围。精简默认保留出版信息和参考文献，完整翻译所有可译文字；只影响新任务，阅读器可单次覆盖。
+2. 从该处的外置依赖链接进入 **外置依赖配置**，准备 PDF 翻译引擎。参见[自动安装、手动安装与库内备用源](pdf-engine.md)。OCR 与版面引擎分别准备，普通文字层提取不需要排版引擎。
+3. 打开 PDF，在阅读操作中选择 **对照翻译**。译文逐步出现，可与原文并排阅读、切换整页译文、同步滚动或进入多屏模式。
+4. 使用 **保存译文 / 保存对照** 导出 PDF，原附件不被覆盖。部分失败时可阅读和导出已有结果，再点击 **补译未完成部分**；补译会产生新的翻译请求，可能继续计费。
+5. 扫描页保持原文；复杂公式、表格与版面应人工核对。旧历史不会自动重译；旧版未完成任务可能以新分片策略重启，界面会提示。
+
+### English
+
+Configure the translation service, model, target language and concise/full scope under **Settings → Feature settings → Full translation**. Follow the dependency link to prepare the [PDF engine](pdf-engine.en.md), then open **Parallel translation** from PDF reading actions. Read progressively completed output side by side, full-width or on another screen; toggle synchronized scrolling and save translated-only or bilingual PDFs. Partial results remain available, and **Translate remaining passages** reuses completed segments but may incur further translation charges. Scanned pages remain original. Review formulas, tables and layout against the source. Existing history is not automatically translated again; unfinished legacy tasks may restart using the new batching strategy with a visible notice.

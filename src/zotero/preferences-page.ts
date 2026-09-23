@@ -160,7 +160,7 @@ function element<T extends HTMLElement>(id: string) {
 
 function readElements(): PreferenceElements {
   const strings = selectPreferencesStrings(getUiLocale())
-  const labels = { chat: strings.featureChatLabel, translation: uiText("选文翻译", "Selection translation"), fullTranslation: uiText("全文翻译", "Full translation"), analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
+  const labels = { chat: strings.featureChatLabel, translation: uiText("选文翻译", "Selection translation"), fullTranslation: uiText("对照翻译", "Bilingual PDF translation"), analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
     featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), {
       showSelectedIcon: true,

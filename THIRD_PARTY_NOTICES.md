@@ -1,5 +1,18 @@
 # Third-party notices
 
+## Optional PDF translation process
+
+The separately installed PDF layout engine is BabelDOC 0.6.4 (AGPL-3.0),
+https://github.com/funstory-ai/BabelDOC. Its dependencies are pinned in
+`content/pdf-translation/uv.lock` and retain their upstream licenses (including
+PyMuPDF). The Python adapter `content/pdf-translation/worker.py` is provided as
+source under AGPL-3.0-or-later; the complete license is in that directory's
+`LICENSE`, overriding the root license for that adapter. BabelDOC's engine,
+models and fonts are downloaded during explicit setup, not bundled in the XPI.
+The reference project https://github.com/guaguastandup/zotero-pdf2zh was studied
+for its task and mono/dual output design; its plugin/server code is not copied.
+The PDF.js viewer uses the same bundled Apache-2.0 PDF.js version described below.
+
 Jadense in Zotero bundles the following runtime libraries. Their original license texts are reproduced below and included in every XPI. Build-only dependencies are installed from the committed lockfile and retain their own package licenses.
 
 When a bundled dependency changes, update its version and complete license text here before building a release. The plugin uses KaTeX MathML output; it does not distribute KaTeX font files.

@@ -6,6 +6,17 @@ import { ByokChatClient } from '@/chat/byok-chat'
 import { diagnosticGesture, saveDiagnosticExport } from './diagnostics-panel'
 
 const host = {}
+it('persists translation counters without arbitrary fields or false failures', async () => {
+  const disk = memoryDisk(), store = new Diagnostics(disk.platform); await store.ready
+  const trace = store.start({ feature: 'pdf-translation' })
+  trace.event('translation_summary', { translation: { batches: 4, submissions: 4, extraHttp: 1, batchMean: 1500, batchRowsMean: 12, batchFillMean: 0.9375, endSource: 3, endDocument: 1, endOutput: -1, endContext: NaN, failed: 2, missing: 1, rawBlocks: 1120, organized: 505, token: 'PRIVATE', source: 'PRIVATE', repairs: -1, queueTimeMs: NaN } } as never)
+  trace.end(); await store.flush()
+  const restored = new Diagnostics(disk.platform); await restored.ready
+  expect(restored.list()[0].category).toBe('success')
+  expect(restored.list()[0].events[1].translation).toEqual({ batches: 4, submissions: 4, extraHttp: 1, batchMean: 1500, batchRowsMean: 12, batchFillMean: 0.9375, endSource: 3, endDocument: 1, failed: 2, missing: 1, rawBlocks: 1120, organized: 505 })
+  expect(restored.export()).not.toContain('PRIVATE')
+  store.dispose(); restored.dispose()
+})
 it('retains bounded operation metrics and build identity through persistence without raw data', async () => {
   const disk = memoryDisk(), store = new Diagnostics(disk.platform); await store.ready
   store.environment = { build: '0.4.11-test-build' }

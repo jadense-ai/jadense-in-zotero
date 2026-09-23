@@ -29,6 +29,15 @@ export function documentFixture(count = 26, options: { noVersion?: boolean; fail
 }
 
 describe('complete PDF cache', () => {
+  it('does not rewrite every cached page state when a complete PDF is associated again', async () => {
+    const f = documentFixture(81)
+    await f.cache.ensure(f.host, f.source)
+    vi.mocked(f.io.writeUTF8).mockClear(); f.read.mockClear()
+    const result = await f.cache.ensure(f.host, f.source, undefined, undefined, true)
+    expect(result.pages).toHaveLength(81)
+    expect(f.io.writeUTF8).not.toHaveBeenCalled()
+    expect(f.read).not.toHaveBeenCalled()
+  })
   it.each([26, 81, 300])('preserves all %i pages including the final fact after restart', async count => {
     const f = documentFixture(count)
     const result = await f.cache.ensure(f.host, f.source)

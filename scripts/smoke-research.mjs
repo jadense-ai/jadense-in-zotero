@@ -1,3 +1,4 @@
+import { verifyTranslationFiles } from './smoke-translation-files.mjs'
 import { verifyFeatureSettings, verifyFeatureSettingsRestart } from './smoke-feature-settings.mjs'
 import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
 import { verifyClassification } from './smoke-classification.mjs'
@@ -9,6 +10,7 @@ import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-lon
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
 import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
 import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
+import { verifyPDFTranslation, verifyPDFTranslationRestart } from './smoke-pdf-translation.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -16,7 +18,7 @@ import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
 /* global Zotero, Services, Components, ChromeUtils, IOUtils, PathUtils */
 import { spawn } from "node:child_process"
 import { createServer } from "node:http"
-import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile, symlink } from "node:fs/promises"
+import { access, copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -606,6 +608,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    if (config.pdfTranslationResume) {
+      await verifyPDFTranslationRestart({ Zotero, waitFor, assert, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.featureSettingsResume) {
       verifyFeatureSettingsRestart({ Zotero, assert, report })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
@@ -956,6 +962,16 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     if (config.featureSettingsOnly) {
       await stage('feature-settings')
       await verifyFeatureSettings({ Zotero, assert, waitFor, screenshot, report, findManager, findWindowContaining, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.translationFilesOnly) {
+      await stage('translation-files')
+      await verifyTranslationFiles({ Zotero, reader, assert, waitFor, screenshot, report, findManager })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.pdfTranslationOnly) {
+      await stage('pdf-translation')
+      await verifyPDFTranslation({ Zotero, reader, assert, waitFor, screenshot, report, config, findManager })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.cloudOCROnly) {
@@ -2866,7 +2882,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       await Promise.resolve(Zotero.Utilities.Internal.openPreferences("jadense-in-zotero-preferences"))
       const preferences = await waitFor(() => findWindowContaining("jadense-in-zotero-preferences-pane"), "document native Preferences")
       const preferenceRoot = preferences.document.getElementById("jadense-in-zotero-preferences-pane")
-      await waitFor(() => preferenceRoot.querySelector('.jdx-reading-preferences input[type="number"]'), "native font preference")
+      await waitFor(() => preferenceRoot.querySelector('.jdx-reading-preferences input[data-jdx-font-size][type="range"]'), "native font preference")
       const nativeOpacity = preferenceRoot.querySelector("input[data-jdx-translation-opacity]")
       assert(nativeOpacity?.closest('[data-settings-section="general"]'), "Native opacity setting is outside General")
       styleControl.querySelector(".jdx-select-trigger").click()
@@ -2880,9 +2896,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       for (const theme of ["light", "dark"]) {
         Zotero.Prefs.set("extensions.jadenseInZotero.theme", theme, true)
         for (const size of [12, 13, 18, 24]) {
-          sizeInput.value = String(size); sizeInput.dispatchEvent(new manager.Event("change", { bubbles: true }))
+          sizeInput.value = String(size); sizeInput.dispatchEvent(new manager.Event("input", { bubbles: true }))
           await Zotero.Promise.delay(120)
-          assert(preferenceRoot.querySelector('input[type="number"]').value === String(size), "Native Preferences font control is stale")
+          assert(preferenceRoot.querySelector('input[data-jdx-font-size][type="range"]').value === String(size), "Native Preferences font control is stale")
           assert(Math.abs(parseFloat(manager.getComputedStyle(manager.document.documentElement).fontSize) - size) < .1, "Manager font is stale")
           const card = readingControls.closest(".jdx-manager-settings-card").getBoundingClientRect()
           for (const control of [sizeInput, opacityInput, styleControl]) {
@@ -2980,6 +2996,9 @@ async function writeCompanion(extensionsDir, config) {
     verifyMachineTranslation.toString(),
     verifyOCRTranslation.toString(),
     verifyCloudOCR.toString(),
+    verifyTranslationFiles.toString(),
+    verifyPDFTranslation.toString(),
+    verifyPDFTranslationRestart.toString(),
     verifyFeatureSettings.toString(),
     verifyFeatureSettingsRestart.toString(),
     verifyLiteratureWorkspace.toString(),
@@ -3055,6 +3074,16 @@ async function main() {
   let passed = false
   try {
     await mkdir(extensionsDir, { recursive: true })
+    // 后续阅读器专项可复用已通过独立安装检查的引擎；不会使用用户 Zotero profile。
+    const pdfRuntime = argValue(argv, '--pdf-runtime')
+    if (pdfRuntime && argv.includes('--pdf-translation-only')) {
+      const target = path.join(profileDir, 'jadense-pdf-translation')
+      await mkdir(target, { recursive: true })
+      const portable = await access(path.join(path.resolve(pdfRuntime), 'runtime', 'bundle.json')).then(() => true, () => false)
+      for (const name of portable ? ['runtime'] : ['.venv', 'assets']) await symlink(path.join(path.resolve(pdfRuntime), name), path.join(target, name), process.platform === 'win32' ? 'junction' : 'dir')
+      for (const name of ['worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'pyproject.toml', 'uv.lock', 'install.ps1', 'install.sh']) await copyFile(path.join('content/pdf-translation', name), path.join(target, name))
+      await copyFile(path.join(path.resolve(pdfRuntime), 'babeldoc-0.6.4-v1'), path.join(target, 'babeldoc-0.6.4-v1'))
+    }
     await mkdir(dataDir, { recursive: true })
     const ocrRuntime = argValue(argv, '--ocr-runtime')
     if (ocrRuntime) {
@@ -3089,6 +3118,7 @@ async function main() {
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
+      translationFilesOnly: argv.includes('--translation-files-only'), pdfTranslationOnly: argv.includes('--pdf-translation-only'), pdfStatusOnly: argv.includes('--pdf-status-only'), pdfAI: argv.includes('--pdf-ai'), pdfPartial: argv.includes('--pdf-partial'), pdfViewerFixture: argValue(argv, '--pdf-viewer-fixture') ? path.resolve(argValue(argv, '--pdf-viewer-fixture')) : undefined, pdfEngineArchive: argValue(argv, '--pdf-engine-archive') ? path.resolve(argValue(argv, '--pdf-engine-archive')) : undefined, pdfEngineSettingsCheck: argv.includes('--pdf-engine-settings-check'), pdfEngineOnly: argv.includes('--pdf-engine-only'),
       sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'),
       classificationOnly: argv.includes('--classification-only'),
       chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'),
@@ -3106,8 +3136,14 @@ async function main() {
     ].join("\n"))
     stdout = await open(path.join(smokeRoot, "zotero.stdout.log"), "w")
     stderr = await open(path.join(smokeRoot, "zotero.stderr.log"), "w")
+    const engineEnvironment = { ...process.env }
+    if (argv.includes('--pdf-engine-archive')) {
+      const home = path.join(smokeRoot, 'empty-home'); await mkdir(home)
+      Object.assign(engineEnvironment, { PATH: path.join(process.env.SystemRoot, 'System32'), HOME: home, USERPROFILE: home, LOCALAPPDATA: home, APPDATA: home, UV_CACHE_DIR: path.join(home, 'uv-cache'), UV_PYTHON_INSTALL_DIR: path.join(home, 'python'), PYTHONNOUSERSITE: '1' })
+      delete engineEnvironment.PYTHONPATH; delete engineEnvironment.PYTHONHOME
+    }
     child = spawn(executable, ["-no-remote", "-profile", profileDir, "-datadir", dataDir, "-ZoteroDebugText"], {
-      windowsHide: true, stdio: ["ignore", stdout.fd, stderr.fd],
+      windowsHide: true, env: engineEnvironment, stdio: ["ignore", stdout.fd, stderr.fd],
     })
     let spawnError
     child.once("error", (error) => { spawnError = error })
@@ -3160,6 +3196,22 @@ async function main() {
       if (restored?.state !== 'passed') throw new Error('Settings cold restart timed out')
       report.checks.push(...restored.checks)
     }
+    if (argv.includes('--pdf-translation-only') && !argv.includes('--pdf-viewer-fixture')) {
+      await stopIsolatedProcess(child, profileDir)
+      const savedReport = path.join(smokeRoot, 'pdf-translation-restart-report.json')
+      await writeCompanion(extensionsDir, { ...companionConfig, pdfTranslationResume: true, reportPath: savedReport })
+      child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
+      const deadline = Date.now() + 60000
+      let restored
+      while (Date.now() < deadline) {
+        restored = await readFile(savedReport, 'utf8').then(JSON.parse).catch(() => undefined)
+        if (restored?.state === 'failed') throw new Error(restored.error)
+        if (restored?.state === 'passed') break
+        await delay(250)
+      }
+      if (restored?.state !== 'passed') throw new Error('PDF cold restart timed out')
+      report.checks.push(...restored.checks)
+    }
     if (argv.includes("--document-restart")) {
       const requestsBefore = stub.requests.filter(row => row.kind === "full-translation").length
       await stopIsolatedProcess(child, profileDir)
@@ -3183,11 +3235,11 @@ async function main() {
       if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
       report.checks.push('no-generation-or-upload-request')
     }
-    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -3204,7 +3256,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

@@ -1,0 +1,98 @@
+/* 全部设置页共用表单尺度与目录布局；只作用于插件设置，不改变阅读器或宿主窗口。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) {
+  --settings-text: var(--jdx-text, var(--jdx-pref-text));
+  --settings-muted: var(--jdx-muted, var(--jdx-pref-muted));
+  --settings-line: var(--jdx-line, var(--jdx-pref-line));
+  --settings-surface: var(--jdx-surface, var(--jdx-pref-surface));
+  --settings-rail: var(--jdx-sidebar, var(--jdx-pref-subtle));
+  --settings-active: var(--jdx-active-bg, var(--jdx-pref-active));
+  --settings-green: var(--jdx-green-deep, var(--jdx-pref-green-text));
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) [hidden] { display: none !important; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-settings-card, .jdx-pref-card) {
+  padding: 20px; gap: 16px; border: 1px solid var(--settings-line); border-radius: 8px; min-width: 0;
+  background: var(--settings-surface); box-shadow: none; container-type: inline-size;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row {
+  display: grid; grid-template-columns: minmax(130px, 34%) minmax(0, 1fr); gap: 8px 20px;
+  align-items: start; padding-block: 10px; border: 0; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-feature-model-row, .jdx-manager-field, .jdx-pref-field) > * { min-width: 0; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-feature-model-row h3, .jdx-manager-field > span, .jdx-pref-field-label) {
+  margin: 0; font-size: calc(14px * var(--jdx-font-scale, 1)); font-weight: 500; color: var(--settings-text); line-height: 1.5;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-settings-note, .jdx-pref-card-note, .jdx-feature-model-row p) {
+  margin: 4px 0 0; font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; color: var(--settings-muted); overflow-wrap: anywhere;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-settings-controls, .jdx-manager-field, .jdx-pref-field) { gap: 8px; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-actions, .jdx-pref-actions, .jdx-actions, .jdx-classification-actions) {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-actions, .jdx-pref-actions, .jdx-pref-inline-actions, .jdx-actions, .jdx-classification-actions, .jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) > button,
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-button {
+  min-height: 34px; padding: 6px 12px; border: 1px solid var(--settings-line); border-radius: 6px;
+  background: var(--settings-surface); color: var(--settings-text); font: inherit; line-height: 1.5; white-space: normal;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-actions, .jdx-pref-actions, .jdx-actions) > :is(.jdx-manager-primary, .jdx-pref-primary, .jdx-button-primary) {
+  background: var(--settings-active); border-color: var(--settings-green); color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 34px; border-radius: 6px;
+  border: 1px solid var(--settings-line); padding: 7px 10px; background: var(--settings-surface); color: var(--settings-text); font: inherit;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--settings-green); outline-offset: 2px; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout {
+  display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 0; min-width: 0; align-items: stretch;
+}
+/* 目录属于容器边缘；留白只由表单承担，避免外壳与侧栏双重缩进。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-settings-card, .jdx-pref-card):has(> .jdx-settings-layout) { padding: 0; gap: 0; }
+#jadense-manager-section-settings .jdx-manager-settings-card:has(> .jdx-settings-layout) > h3 { display: none; }
+#jadense-in-zotero-preferences-pane .jdx-pref-card:has(> .jdx-settings-layout) > h3 { margin: 0; padding: 12px; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout ~ .jdx-temporary-recovery { margin: 0; padding: 12px; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory {
+  display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 7px 0 0 7px; background: var(--settings-rail); min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory button {
+  border: 0; border-radius: 5px; padding: 9px 10px; min-height: 36px; background: transparent;
+  color: var(--settings-text); font: inherit; text-align: start; white-space: normal; line-height: 1.5; cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory button:hover { background: var(--settings-surface); }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory button[aria-current="page"] { background: var(--settings-active); color: var(--settings-green); font-weight: 600; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail { min-width: 0; padding: 16px; container-type: inline-size; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail .jdx-settings-task {
+  display: block; margin: 0; padding: 0; border: 0; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail .jdx-settings-task > h3 {
+  margin: 0 0 18px; padding: 0; color: var(--settings-text); font-size: calc(18px * var(--jdx-font-scale, 1)); line-height: 1.4; font-weight: 600;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail details {
+  border: 0; border-top: 1px solid var(--settings-line); margin: 20px 0 0; padding: 14px 0 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail summary { cursor: pointer; font-weight: 500; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail :is(.jdx-translation-interface, .jdx-reference-ai-setting) { border: 0; padding: 0; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail .jdx-classification-settings { grid-template-columns: minmax(0, 1fr); }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail .jdx-ocr-summary { margin-top: 8px; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail [data-external-dependency="layout"] .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail [role="status"]:empty { display: none; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-settings-link { border: 0; padding: 0; min-height: 0; background: transparent; color: var(--settings-green); font: inherit; cursor: pointer; }
+/* 原生偏好宽度由宿主决定；统一组件在可用容器内折叠，不靠整窗断点猜测。 */
+@container (max-width: 700px) {
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory { flex-direction: row; flex-wrap: wrap; border-radius: 7px 7px 0 0; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-layout, .jdx-pref-byok-layout) { grid-template-columns: minmax(0, 1fr); }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) { border-right: 0; border-bottom: 1px solid var(--settings-line); padding: 0 0 12px; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) { flex-wrap: wrap; gap: 8px; }
+}
+@container (max-width: 480px) {
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+@media (max-width: 820px) {
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+
+#jadense-manager-section-settings #jadense-settings-tabs { flex-wrap: wrap; overflow: visible; gap: 4px 16px; padding: 0; }
+#jadense-manager-section-settings #jadense-settings-tabs button { background: transparent; border-radius: 0; padding: 10px 4px; box-shadow: none; }
+#jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"] { color: var(--settings-green); }
+#jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"]::after { top: auto; bottom: 0; left: 4px; right: 4px; }
+
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(button.jdx-ocr-danger, button.jdx-pref-danger, button.jdx-manager-danger) { color: var(--jdx-red, var(--jdx-pref-error)); border-color: var(--jdx-red, var(--jdx-pref-error)); }
