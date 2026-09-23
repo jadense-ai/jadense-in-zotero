@@ -49,14 +49,17 @@ function fixture(native = false) {
   const doc = new Doc(), pdf = new Doc(), parent = doc.createElement('div'), browser = doc.createElement('browser')
   doc.body.append(parent); parent.append(browser)
   const detail = Object.assign(doc.createElement('item-details'), { tabID: 'tab-1', render: vi.fn(async () => {}), scrollToPane: vi.fn(async () => {}) })
-  detail.classList.add('deck-selected'); doc.body.append(detail)
+  detail.classList.add('deck-selected')
+  const contextPane = doc.createElement('context-pane'); contextPane.id = 'zotero-context-pane'
+  Object.defineProperty(contextPane, 'collapsed', { get: () => contextPane.getAttribute('collapsed') === 'true', set: (value: boolean) => contextPane.setAttribute('collapsed', String(value)) })
+  doc.body.append(contextPane); contextPane.append(detail)
   const body = doc.createElement('div'); body.dataset.type = 'body'
   if (native) { const section = doc.createElement('item-pane-custom-section'); section.dataset.pane = 'jadense-in-zotero-sync-panel'; section.append(body); detail.append(section) }
   const reader = { itemID: 1, tabID: 'tab-1', _window: { document: doc }, _iframeWindow: Object.assign(pdf.defaultView, { document: pdf }), _iframe: browser }
   const host = { Reader: { _readers: [reader] }, Prefs: { get: () => undefined, set: vi.fn() } } as unknown as ZoteroLike
   hosts.push(host)
   const open = () => openChatSidebar(host, pdf as unknown as Document, 1, reader as never)
-  return { host, doc, pdf, reader, detail, body, parent, open }
+  return { host, doc, pdf, reader, detail, body, parent, contextPane, open }
 }
 beforeEach(() => { vi.useFakeTimers(); mocks.chat.mockReset().mockImplementation(() => ({ refresh() {}, closeMenus() {}, newSession: vi.fn(async () => {}), remove: vi.fn() })); mocks.jobs.mockReset().mockImplementation(() => { throw new Error('synthetic document runtime failure') }) })
 afterEach(() => { for (const host of hosts.splice(0)) removeReaderSidebars(host); vi.useRealTimers() })
@@ -167,6 +170,33 @@ it('cancels an opening when its PDF window closes', async () => {
   const opened = f.open(); f.pdf.defaultView.dispatchEvent(new Event('pagehide')); await opened; resolve()
   await Promise.resolve()
   expect(mocks.chat).not.toHaveBeenCalled()
+})
+it('respects the host context pane collapse and reopens only on an explicit action', async () => {
+  const f = fixture(true)
+  await f.open()
+  expect(f.detail.getAttribute('data-jdx-reading-active')).not.toBeNull()
+  f.contextPane.collapsed = true
+  f.doc.defaultView.dispatchEvent(new Event('resize'))
+  await vi.advanceTimersByTimeAsync(1100)
+  expect(f.contextPane.collapsed).toBe(true)
+  expect(f.detail.getAttribute('data-jdx-reading-active')).toBeNull()
+  expect(f.parent.querySelector('.jdx-reader-workspace')).toBeNull()
+  f.doc.defaultView.dispatchEvent(new Event('resize'))
+  expect(f.contextPane.collapsed).toBe(true)
+  await f.open()
+  expect(f.contextPane.collapsed).toBe(false)
+  expect(f.detail.getAttribute('data-jdx-reading-active')).not.toBeNull()
+})
+it('releases a docked fallback when the user reopens the host context pane', async () => {
+  const f = fixture(true)
+  f.contextPane.classList.add('stacked')
+  await f.open()
+  expect(f.parent.querySelector('.jdx-reader-dock')).not.toBeNull()
+  expect(f.contextPane.collapsed).toBe(true)
+  f.contextPane.collapsed = false
+  f.doc.defaultView.dispatchEvent(new Event('resize'))
+  expect(f.contextPane.collapsed).toBe(false)
+  expect(f.parent.querySelector('.jdx-reader-dock')).toBeNull()
 })
 it('recovers an activated native body that stays invisible without replaying new conversation', async () => {
   const f = fixture(true)

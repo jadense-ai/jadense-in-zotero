@@ -254,6 +254,14 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
     if (pane && pane.collapsed !== value) pane.collapsed = value
   }
   const fit = () => {
+    // 停靠兜底已主动收起原生侧栏；宿主重新展开代表用户要回到宿主侧栏。
+    if (active && docked && nativePane && !(nativePane as HTMLElement & { collapsed: boolean }).collapsed) {
+      leave(true, true); return
+    }
+    // 用户收起 Zotero 原生侧栏时结束本次激活，不能把有意隐藏误判为挂载失败并转为停靠侧栏。
+    if (active && !docked && (nativePane as (HTMLElement & { collapsed?: boolean }) | null)?.collapsed) {
+      leave(true, true); return
+    }
     if (active && dock && (fallback || outerPane?.classList.contains("stacked"))) {
       docked = true; detail.removeAttribute("data-jdx-reading-active"); section.removeAttribute("data-jdx-reading-pane"); dock.show(); collapsed(true); return
     }
@@ -268,7 +276,7 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
     if (active && outerPane && outerPane.clientWidth > 0) saveWidth(host, outerPane.clientWidth)
     verifyVisible()
   }
-  const leave = (clear = true) => {
+  const leave = (clear = true, preserveHostCollapse = false) => {
     clearTimeout(visibilityTimer); visibilityTimer = undefined
     if (clear) wanted = false
     if (!active) return
@@ -277,10 +285,10 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
     if (docked) { docked = false; dock?.hide(); body.append(root) }
     if (nativePane) nativePane.style.minWidth = oldNativeMinWidth
     if (outerPane) { outerPane.style.width = oldWidth; outerPane.style.minWidth = oldMinWidth; if (oldWidthAttribute === null) outerPane.removeAttribute("width"); else outerPane.setAttribute("width", oldWidthAttribute) }
-    if (detail.pinnedPane === paneID) detail.pinnedPane = oldPin
-    if (oldCollapsed !== undefined) collapsed(oldCollapsed)
+    if (!preserveHostCollapse && detail.pinnedPane === paneID) detail.pinnedPane = oldPin
+    if (!preserveHostCollapse && oldCollapsed !== undefined) collapsed(oldCollapsed)
     const nav = (detail as Details & { sidenav?: { _collapsed?: boolean; _contextNotesPaneVisible?: boolean } }).sidenav
-    if (nav) { nav._collapsed = oldNavCollapsed; nav._contextNotesPaneVisible = oldNotes }
+    if (nav && !preserveHostCollapse) { nav._collapsed = oldNavCollapsed; nav._contextNotesPaneVisible = oldNotes }
   }
   const activateNative = () => {
     const readerDoc = reader._iframeWindow?.document
@@ -315,7 +323,7 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
       // 宿主负责原生侧栏可见性；不覆写其 DOM 或内容。
       const sidenav = (detail as Details & { sidenav?: { _collapsed?: boolean; _contextNotesPaneVisible?: boolean } }).sidenav
       if (sidenav) { sidenav._contextNotesPaneVisible = false; sidenav._collapsed = false }
-      collapsed(false)
+      if (!docked) collapsed(false)
       detail.pinnedPane = paneID
       fit(); if (!docked) await detail.scrollToPane?.(paneID, "instant"); if (active) fit()
     },
@@ -327,11 +335,14 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
   try {
     layout = new (win as Window & typeof globalThis).MutationObserver(() => {
       const selected = detail.classList.contains("deck-selected")
-      if (!selected && active) leave(false)
+      // 宿主折叠也可能暂时移除 deck-selected；先判折叠，避免按切换标签回滚它。
+      if (active && !docked && (nativePane as (HTMLElement & { collapsed?: boolean }) | null)?.collapsed) leave(true, true)
+      else if (!selected && active) leave(false)
       else if (selected && wanted && !active) activateNative()
       else if (active) fit()
     })
-    if (outerPane) layout.observe(outerPane, { attributes: true, attributeFilter: ["class"] })
+    if (outerPane) layout.observe(outerPane, { attributes: true, attributeFilter: ["class", "collapsed"] })
+    if (nativePane && nativePane !== outerPane) layout.observe(nativePane, { attributes: true, attributeFilter: ["collapsed"] })
     layout.observe(detail, { attributes: true, attributeFilter: ["class"] })
   } catch { /* 旧宿主仍响应窗口 resize。 */ }
   fit(); return true

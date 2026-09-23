@@ -3,6 +3,7 @@
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
 - [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
+- [0.6.2 更新提示与阅读入口](#release-062)
 
 ## 目录
 
@@ -37,6 +38,12 @@
 ### 1.1 下载与安装
 
 从 [GitHub 最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi`，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
+
+<a id="release-062"></a>
+
+从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；没有可用摘要或网络请求失败时仍可按提示打开 Release 页面。提示只展示说明，不会自动安装插件。阅读器中的「对照翻译」随窗口宽度出现在阅读操作或「•••」菜单；收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。
+
+From 0.6.2 onward, **Help → Check for updates** and the new-version prompt show highlights from the latest GitHub Release with a download link. If notes are unavailable, open the Release page from the prompt; checking does not install the plugin. Parallel translation appears in the reading actions or **•••** menu as space allows. Closing Zotero's native pane also closes the plugin sidebar; use a reading action to open it again.
 
 <a id="open-workbench"></a>
 
@@ -332,7 +339,7 @@ Text-layer extraction remains the default. Enable OCR only for the desired use; 
 
 1. 在 **设置 → 功能配置 → 全文翻译** 选择服务、模型、目标语言及精简/完整范围。精简默认保留出版信息和参考文献，完整翻译所有可译文字；只影响新任务，阅读器可单次覆盖。
 2. 从该处的外置依赖链接进入 **外置依赖配置**，准备 PDF 翻译引擎。参见[自动安装、手动安装与库内备用源](pdf-engine.md)。OCR 与版面引擎分别准备，普通文字层提取不需要排版引擎。
-3. 打开 PDF，在阅读操作中选择 **对照翻译**。译文逐步出现，可与原文并排阅读、切换整页译文、同步滚动或进入多屏模式。
+3. 打开 PDF，在阅读操作中选择 **对照翻译**；窗口较窄时从 **•••** 菜单进入。译文逐步出现，可与原文并排阅读、切换整页译文、同步滚动或进入多屏模式。运行中的图标显示进度。
 4. 使用 **保存译文 / 保存对照** 导出 PDF，原附件不被覆盖。部分失败时可阅读和导出已有结果，再点击 **补译未完成部分**；补译会产生新的翻译请求，可能继续计费。
 5. 扫描页保持原文；复杂公式、表格与版面应人工核对。旧历史不会自动重译；旧版未完成任务可能以新分片策略重启，界面会提示。
 

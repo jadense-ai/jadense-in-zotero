@@ -92,6 +92,7 @@ test("verified artifacts create one draft with user-facing notes and no publishi
   assert.equal(args[args.indexOf("--title") + 1], "v0.3.1");
   assert.ok(!args.includes("--generate-notes"));
   assert.deepEqual(args.slice(-2), ["--notes-file", "-"])
+  assert.deepEqual([...stdin.matchAll(/^## .+$/gm)].map((match) => match[0]), ["## 本次更新", "## What's new", "## 操作与配置", "## 升级与兼容", "## 验证与下载"])
   assert.match(stdin, /smoke:installed/)
   assert.match(stdin, /smoke:research/)
   assert.ok(!args.includes("--clobber"))

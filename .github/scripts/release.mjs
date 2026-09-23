@@ -9,7 +9,11 @@ import { fileURLToPath } from "node:url"
 const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const NOTES = `## 本次更新
 
-待填写：相对上一正式版的用户可见变化。
+- 待填写：相对上一正式版的中文用户可见变化。
+
+## What's new
+
+- TODO: Describe the same user-facing changes in English.
 
 ## 操作与配置
 
@@ -19,7 +23,7 @@ const NOTES = `## 本次更新
 
 待填写：安装方式、兼容范围及迁移注意事项。
 
-## 发布验收（公开前由维护者填写）
+## 验证与下载
 
 - 实测 Zotero 版本：待填写；操作系统及版本：待填写。
 - 兼容范围、功能限制与升级注意事项：待填写。
