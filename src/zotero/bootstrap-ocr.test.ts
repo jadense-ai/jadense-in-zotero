@@ -14,7 +14,7 @@ it('prepares OCR resources after bootstrap supplies missing Web APIs', async () 
   const host = { getMainWindow: () => ({ fetch }), Prefs: { get: () => undefined, set: () => {} } }
   const context = createContext({
     host, mainWindow: () => ({ AbortController, AbortSignal, TextEncoder, setTimeout, clearTimeout, setInterval, clearInterval }),
-    IOUtils: { makeDirectory: async () => {}, writeUTF8, readUTF8: async () => JSON.stringify({ revision: 5, versions: { docling: '2.126.0', rapidocr: '3.9.2' } }) },
+    IOUtils: { makeDirectory: async () => {}, exists: async () => false, writeUTF8, readUTF8: async () => JSON.stringify({ revision: 5, versions: { docling: '2.126.0', rapidocr: '3.9.2' } }) },
     PathUtils: { profileDir: '/profile', join: (...parts: string[]) => parts.join('/') },
   })
   expect(runInContext('typeof AbortSignal', context)).toBe('undefined')
@@ -23,7 +23,7 @@ it('prepares OCR resources after bootstrap supplies missing Web APIs', async () 
   const bundle = await build({ entryPoints: [fileURLToPath(new URL('./local-ocr.ts', import.meta.url))], bundle: true, write: false, format: 'iife', globalName: 'ocr', platform: 'browser' })
   runInContext(bundle.outputFiles[0].text, context)
   await expect(runInContext('ocr.checkLocalOCR(host)', context)).resolves.toMatchObject({ ready: true, modelsReady: true })
-  expect(fetch).toHaveBeenCalledTimes(5)
-  expect(writeUTF8).toHaveBeenCalledTimes(5)
+  expect(fetch).toHaveBeenCalledTimes(8)
+  expect(writeUTF8).toHaveBeenCalledTimes(8)
   expect(fetch.mock.calls.every(call => call[1].signal instanceof AbortSignal)).toBe(true)
 })

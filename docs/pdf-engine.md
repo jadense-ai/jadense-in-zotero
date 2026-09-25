@@ -1,4 +1,4 @@
-# PDF 版面解析与翻译引擎安装（0.6.0）
+# PDF 版面解析与翻译引擎安装（0.6.4）
 
 [返回 README](../README.md) · [English](pdf-engine.en.md) · [使用对照翻译](usage-guide.md#pdf-translation-060)
 
@@ -10,15 +10,15 @@
 2. 点击 **准备 PDF 翻译引擎**，等待依赖、模型和字体准备完成。首次进入对照翻译也会准备引擎。
 3. 看到 **PDF 翻译引擎已就绪** 后开始翻译。已有安装可点击 **检测已安装引擎**，检测本身不下载、不调用翻译服务。
 
-**当前分发状态：**v0.6.0 中，[包清单](../content/pdf-translation/bundles.json)的 Windows x64 完整包仍为 `published: false`，自动安装走库内 `install.ps1` / `install.sh`：复用可用的 uv 或下载 uv，在独立目录安装 Python 3.12、锁定依赖，再准备模型与字体。需要访问 GitHub、Python 下载源、PyPI 和模型资源站；不需要预装 Python，也不修改系统 Python。
+**当前分发状态：**源码及普通 PR 预览中的 [包清单](../content/pdf-translation/bundles.json)保持 `published: false`，避免指向未发布附件；这类构建从库内 `install.ps1` / `install.sh` 安装。正式发布标签构建会临时写入该 Release 的精确 URL 与 SHA-256，并把完整包放进 v0.6.4 正式 XPI，因此该 XPI 在 Windows x64 自动准备时可直接用完整包。下载、摘要或离线检查失败会给出阶段说明并保留原引擎。
 
-只有完整包正式公开、核验并启用清单后，Windows x64 自动安装才改为下载固定版本 ZIP。该流程支持分段续传、每个源最多三次尝试、SHA-256 校验、解压和离线检测；不支持续传的服务器会重新下载。完整包已作为 v0.6.0 附件公开，可手动下载导入；本版本尚未启用 ZIP 自动下载。
+正式 Release 为 Windows x64 提供固定摘要的完整引擎包。v0.6.4 标签构建会把该版本附件地址和摘要写入 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。候选包公开前请继续使用已发布的 v0.6.0 PDF 引擎 ZIP 或源码安装。
 
 安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。完整包约 441 MiB，展开约 940 MiB；建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；可从 [v0.6.0 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)下载。
+自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；v0.6.4 候选版尚未正式发布，正式发布后 Windows x64 完整离线套装也会包含 PDF 引擎 ZIP。发布前可使用现有 v0.6.0 PDF ZIP 或库内安装器。
 
 | 项目 | 固定值 |
 | --- | --- |
@@ -34,6 +34,8 @@ Get-FileHash .\jadense-pdf-engine-0.6.4-1-windows-x64.zip -Algorithm SHA256
 ```
 
 完整包包含 Python、依赖、模型和字体，无需管理员权限、Python 或 uv。其他平台不要使用 Windows x64 包。
+
+插件以 `-ExecutionPolicy Bypass` 在独立 PowerShell 子进程中运行 Windows 安装器；Windows 默认 `Restricted` 执行策略通常无需修改。若运行仍被 `MachinePolicy`/`UserPolicy`、AppLocker、WDAC 或单位终端防护阻止，或 profile 写入被拒绝，请联系管理员按组织政策为 Zotero 插件进程配置限于当前用户的授权。不要永久修改整机执行策略、关闭安全软件/证书/哈希验证，也不要反复以管理员身份启动 Zotero。导入失败会显示安装阶段；先核对下载摘要和磁盘空间，再请管理员检查明确的策略拦截。
 
 ## 3. 库内备用源：用随库安装器手动安装
 
@@ -64,6 +66,31 @@ printf '{"operation":"check","root":"%s"}\n' "$pdf_runtime" | "$pdf_runtime/.ven
 ```
 
 最后回到插件点击 **检测已安装引擎**。检测检查 BabelDOC 版本、资源哈希、模型加载和 PDF 渲染；历史安装记录不能代替检测通过。Windows x64 已有安装验收记录；macOS、Linux、Windows ARM64 尚未完成对应平台验收，不保证依赖可用性。
+
+<a id="network-environment"></a>
+
+## 网络、代理与单位环境
+
+GitHub 首页、AI 接口与安装器下载是不同链路。Release 附件可能重定向到其他域名；旧式安装还需访问 Python、PyPI 及模型站。浏览器代理扩展不自动覆盖 PowerShell，PDF 引擎也不使用 OCR 下载源设置。受限网络优先采用上面的完整 ZIP 离线导入，不需要管理员权限或预装 Python/uv。
+
+如需使用已获准的本机 HTTP 代理进行手动安装，先在设置中点击「检测已安装引擎」部署安装文件，再打开临时 **Windows PowerShell** 窗口，在同一窗口执行（端口和目录必须替换）：
+
+```powershell
+$pdfRuntime = 'C:\path\to\profile\jadense-pdf-translation'
+$pdfProxy = 'http://127.0.0.1:7890' # 示例，替换为代理软件的实际 HTTP 端口
+$env:HTTPS_PROXY = $pdfProxy
+$env:HTTP_PROXY = $pdfProxy
+[Net.WebRequest]::DefaultWebProxy = [Net.WebProxy]::new($pdfProxy)
+& "$pdfRuntime\install.ps1" $pdfRuntime
+if ($LASTEXITCODE -ne 0) { throw '依赖安装失败，请检查网络和代理，或导入完整包' }
+@{ operation = 'prepare'; root = $pdfRuntime } | ConvertTo-Json -Compress | & "$pdfRuntime\.venv\Scripts\python.exe" -s "$pdfRuntime\worker.py"
+if ($LASTEXITCODE -ne 0) { throw '模型准备失败，请检查下载错误，或导入完整包' }
+@{ operation = 'check'; root = $pdfRuntime } | ConvertTo-Json -Compress | & "$pdfRuntime\.venv\Scripts\python.exe" -s "$pdfRuntime\worker.py"
+```
+
+这些设置仅影响该窗口及子进程，关闭窗口即结束；不保存系统配置。旧版 PowerShell 下载 uv 不保证识别 `HTTPS_PROXY`，因此显式设置 .NET 代理，并用 `&` 在同一进程运行脚本。此示例使用无需认证的本机 HTTP 端点，不是 SOCKS 端点；需认证的单位代理应咨询管理员，不要在公开日志中提供密码。如果执行策略阻止脚本，优先离线导入或联系管理员，不需要永久放宽全机执行策略。
+
+单位明确禁止 PowerShell/Python、外网下载或写入 profile 时，安装器无法自行解除规则。证书错误应检查系统时间和受信任的单位证书，不要跳过 TLS/哈希校验。仅有“无法连接远程服务器”不能证明需要管理员权限。
 
 ## 4. 失败后的处理
 

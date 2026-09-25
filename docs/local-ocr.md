@@ -22,6 +22,10 @@
 
 ## 1. 设置界面操作（推荐）
 
+**v0.6.4 候选版 Windows x64 完整离线包：**正式发布后，Release ZIP 将含匹配的插件 XPI 与本机 OCR 引擎 ZIP。按[完整 ZIP 离线安装指南](usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并重启后，在 **设置 → 外置依赖配置 → 本机 OCR → 导入离线包** 选择 `jadense-ocr-engine-*.zip`；等待离线模型验证完成并显示已就绪。无需预装 Python/uv、在线下载依赖或管理员权限。此包包含全文 OCR 模型，选文公式增强仍需首次下载 CodeFormulaV2。
+
+插件用 `-ExecutionPolicy Bypass` 启动独立 PowerShell 进程。Windows 默认执行策略通常无需调整；若组策略、AppLocker/WDAC 或终端安全软件仍阻止运行，或禁止 Zotero profile 写入，请联系管理员配置当前用户范围内的允许规则。不要永久降低机器执行策略。
+
 1. 在 Zotero 打开 Jadense 工作台，点击左下角设置，进入 **OCR配置**。Zotero 原生设置中的 Jadense OCR 区域使用同一套状态与操作。
 2. 在 **模型下载源** 选择来源：默认是 Hugging Face（或系统 `HF_ENDPOINT`）；连接困难时可选 **魔搭 ModelScope（中国国内）** 或 **HF-Mirror（第三方镜像）**。切换来源保留已有缓存，仅影响后续模型下载，不改变 Python 包下载源或翻译服务。
 3. 点击 **启用本机 OCR**，插件自动检查 uv、安装独立 Python 及依赖、准备模型，最后用合成样例离线验证。不需要填写 Python 路径、端口、API Key 或攻玉令牌。

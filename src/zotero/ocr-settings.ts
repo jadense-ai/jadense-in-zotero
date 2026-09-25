@@ -39,8 +39,9 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   install.className = 'jdx-button jdx-button-primary'; install.dataset.ocrAction = 'install'
   const check = make('button', uiText('重新检查', 'Check again')); check.type = 'button'; check.className = 'jdx-button'; check.dataset.ocrAction = 'check'
   const repair = make('button', uiText('修复识别组件', 'Repair recognition components')); repair.type = 'button'; repair.className = 'jdx-button'; repair.dataset.ocrAction = 'repair'
+  const offline = make('button', uiText('导入离线包', 'Import offline package')); offline.type = 'button'; offline.className = 'jdx-button'; offline.dataset.ocrAction = 'import'
   repair.title = uiText('重新同步依赖并验证模型，保留已下载模型。', 'Synchronize dependencies and verify models, retaining downloaded models.')
-  announcement.append(state, status, stage); actions.append(install, check, repair); panel.append(announcement, progressBar, metrics, elapsed, actions); overview.append(heading, panel)
+  announcement.append(state, status, stage); actions.append(install, check, repair, offline); panel.append(announcement, progressBar, metrics, elapsed, actions); overview.append(heading, panel)
 
   const source = make('section'); source.className = 'jdx-ocr-section'
   const sourceTitle = make('h4', uiText('模型下载源', 'Model download source'))
@@ -51,7 +52,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   source.append(sourceTitle, sourceRoot, sourceHelp, sourceStatus)
   const tip = make('section'); tip.className = 'jdx-ocr-tip'
   const tipTitle = make('h4', uiText('💡 使用提示', '💡 Good to know'))
-  tip.append(tipTitle, make('p', uiText('首次启用需要联网下载，可能持续数分钟。完成后无需反复检查，重开设置会自动显示状态。选文公式增强在首次使用时另行加载，不影响全文 OCR。PDF 不会发送到模型下载站点；全文翻译仍会将提取的内容发送给你选择的翻译服务。', 'First setup downloads files and may take several minutes. Once ready, no repeated checks are needed; settings refresh automatically. Selection formula enhancement loads separately on first use. PDFs are never sent to model download sites; full translation still sends extracted content to your chosen translation service.')))
+  tip.append(tipTitle, make('p', uiText('可联网准备，也可导入匹配版本的完整离线包，无需预装 Python。完成后无需反复检查，重开设置会自动显示状态。选文公式增强在首次使用时另行下载，不影响全文 OCR。PDF 不会发送到模型下载站点；全文翻译仍会将提取的内容发送给你选择的翻译服务。', 'Set up online or import a matching complete offline package; Python need not be preinstalled. Once ready, settings refresh automatically. Selection formula enhancement downloads separately on first use. PDFs are never sent to model download sites; full translation still sends extracted content to your chosen translation service.')))
 
   const details = make('details'); details.className = 'jdx-ocr-section'
   details.append(make('summary', uiText('环境与故障排查', 'Environment and troubleshooting')))
@@ -97,7 +98,9 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     cache: uiText('3 / 5 · 读取已下载模型的就绪凭据', '3 / 5 · Reading cached model readiness'),
     offline: uiText('3 / 5 · 离线验证已有模型', '3 / 5 · Verifying cached models offline'),
     models: uiText('4 / 5 · 加载模型并下载缺失文件', '4 / 5 · Loading models and downloading missing files'),
-    download: uiText('4 / 5 · 下载模型', '4 / 5 · Downloading models'),
+    download: uiText('下载引擎或模型', 'Downloading engine or models'),
+    extract: uiText('解压完整引擎包', 'Extracting engine package'),
+    retry: uiText('下载中断，正在续传', 'Download interrupted; resuming'),
     checksum: uiText('4 / 5 · 校验模型文件完整性', '4 / 5 · Checking model file integrity'),
     verify: uiText('5 / 5 · 使用合成样例验证识别', '5 / 5 · Verifying recognition with a synthetic sample'),
   }
@@ -147,11 +150,11 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     environment.textContent = value.uvPath ? `${value.uvVersion} · ${value.uvSource === 'user' ? uiText('复用已有安装', 'Using existing installation') : uiText('由插件管理', 'Managed by the plugin')}\n${value.uvPath}` : value.ready ? uiText('复用已确认的运行环境；“重新检查”可更新工具详情。', 'Using the confirmed runtime. Check again to refresh tool details.') : uiText('尚未找到兼容的 uv，启用时会自动下载，无需自行安装。', 'Compatible uv not found. Setup will download it automatically.')
     path.textContent = `${uiText('安装日志：', 'Installation log: ')}${value.logPath}\n${uiText('模型准备日志：', 'Model setup log: ')}${value.logPath.replace(/install\.log$/u, 'models-prepare.log')}`
   }
-  const run = async (setup = false, repairing = false, force = false) => {
+  const run = async (setup = false, repairing = false, force = false, archive?: string) => {
     if (busy || disposed) return
     const trace = lifecycleTrace(host, 'ocr-settings', repairing ? 'repair' : setup ? 'prepare' : 'check')
     let currentStage = 'environment', outcome: 'success' | 'error' = 'success'
-    busy = true; retryRead = false; install.disabled = true; check.disabled = true; repair.disabled = true; sourceSelect.setDisabled(true)
+    busy = true; retryRead = false; install.disabled = true; check.disabled = true; repair.disabled = true; offline.disabled = true; sourceSelect.setDisabled(true)
     remove.disabled = true; confirmRemove.disabled = true; cancelRemove.disabled = true; removeModels.disabled = true; confirmation.hidden = true; remove.hidden = false
     const preparing = setup || isLocalOCRPreparing(host)
     errorDetails.hidden = true; errorDetails.textContent = ''
@@ -163,7 +166,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     try {
       // 阶段由结构化订阅更新；说明行稳定保留后台运行提示。
       const progress = () => {}
-      if (repairing) await installLocalOCR(host, progress, true)
+      if (repairing || archive) await installLocalOCR(host, progress, repairing, archive)
       if (setup) await prepareLocalOCRModels(host, progress)
       const value = await checkLocalOCR(host, force)
       if (!disposed) render(value)
@@ -183,19 +186,30 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
       clearInterval(timer)
       unobserve()
       busy = false
-      if (!disposed) { install.disabled = false; check.disabled = false; repair.disabled = false; sourceSelect.setDisabled(false) }
+      if (!disposed) { install.disabled = false; check.disabled = false; repair.disabled = false; offline.disabled = false; sourceSelect.setDisabled(false) }
       if (!disposed) { remove.disabled = false; confirmRemove.disabled = false; cancelRemove.disabled = false; removeModels.disabled = false }
     }
   }
   install.addEventListener('click', () => { void run(!retryRead) })
   check.addEventListener('click', () => { void run(false, false, true) })
   repair.addEventListener('click', () => { void run(true, true) })
+  offline.addEventListener('click', async () => {
+    if (busy || disposed) return
+    try {
+      const pickerHost = globalThis as unknown as { ChromeUtils: { importESModule(url: string): { FilePicker: new () => { init(win: Window, title: string, mode: number): void; modeOpen: number; returnCancel: number; appendFilter(label: string, pattern: string): void; show(): Promise<number>; file: string } } } }
+      const { FilePicker } = pickerHost.ChromeUtils.importESModule('chrome://zotero/content/modules/filePicker.mjs')
+      const picker = new FilePicker()
+      picker.init(host.getMainWindow?.() ?? doc.defaultView!, uiText('选择 OCR 离线引擎包', 'Choose OCR offline engine package'), picker.modeOpen)
+      picker.appendFilter('ZIP', '*.zip')
+      if (await picker.show() !== picker.returnCancel && picker.file) await run(true, false, true, picker.file)
+    } catch (error) { if (!disposed) showState('error', uiText('离线导入失败', 'Offline import failed'), error instanceof Error ? error.message : String(error)) }
+  })
   remove.addEventListener('click', () => { confirmation.hidden = false; remove.hidden = true; removeModels.checked = false; cancelRemove.focus() })
   cancelRemove.addEventListener('click', () => { confirmation.hidden = true; remove.hidden = false; remove.focus() })
   confirmRemove.addEventListener('click', async () => {
     if (busy || disposed) return
     busy = true
-    for (const button of [install, check, repair, remove, confirmRemove, cancelRemove]) button.disabled = true
+    for (const button of [install, check, repair, offline, remove, confirmRemove, cancelRemove]) button.disabled = true
     removeModels.disabled = true; sourceSelect.setDisabled(true)
     errorDetails.hidden = true
     showState('working', uiText('正在删除 OCR 依赖', 'Removing OCR dependencies'), uiText('正在停止本机服务并清理所选组件，请稍候。', 'Stopping the local service and removing selected components. Please wait.'))
@@ -214,7 +228,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     } finally {
       busy = false
       if (!disposed) {
-        for (const button of [install, check, repair, remove, confirmRemove, cancelRemove]) button.disabled = false
+        for (const button of [install, check, repair, offline, remove, confirmRemove, cancelRemove]) button.disabled = false
         removeModels.disabled = false; sourceSelect.setDisabled(false)
         if (confirmation.hidden) install.focus()
       }

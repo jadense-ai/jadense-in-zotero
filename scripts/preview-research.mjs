@@ -286,6 +286,8 @@ function installPreviewHost() {
     } }) }
   }
   window.fetch = async (input, options = {}) => {
+    if (ocrFixture && String(input).endsWith('/bundles.json')) return Response.json({})
+    if (ocrFixture && String(input).endsWith('/install-network.ps1')) return new Response('Synthetic installer network helper')
     if (ocrFixture && String(input).startsWith('chrome://jadense-in-zotero/content/ocr/')) return new Response('Synthetic bundled OCR resource')
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href)
     if (url.origin !== location.origin) throw new Error("浏览器验收 fixture 禁止外网请求")

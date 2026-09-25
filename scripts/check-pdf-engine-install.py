@@ -20,7 +20,7 @@ def main():
     root = Path(tempfile.mkdtemp(prefix='jadense-engine-ordinary-user-'))
     runtime = root / '普通用户 profile' / 'jadense-pdf-translation'
     runtime.mkdir(parents=True)
-    for name in ('worker.py', 'batch_adapter.py', 'install-bundle.ps1', 'bundles.json'):
+    for name in ('worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install-bundle.ps1', 'install-network.ps1', 'bundles.json'):
         shutil.copy2(source / name, runtime / name)
     entry = json.loads((source / 'bundles.json').read_text())['windows-x64']
     powershell = str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe')

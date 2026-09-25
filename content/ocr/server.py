@@ -226,6 +226,7 @@ def convert(path, result_path, progress_path):
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions, LayoutObjectDetectionOptions
         from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
+        from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
         import pypdfium2
         pdf = pypdfium2.PdfDocument(path)
         total = len(pdf); pdf.close()
@@ -234,7 +235,10 @@ def convert(path, result_path, progress_path):
         options.layout_options = LayoutObjectDetectionOptions.from_preset("layout_egret_large")
         options.accelerator_options = AcceleratorOptions(device=AcceleratorDevice.CPU, num_threads=4)
         options.enable_remote_services = False
-        converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
+        # Windows 的 docling-parse 原生库无法读取中文安装路径中的 glyphs 资源；
+        # 全页 OCR 已使用 PDFium 渲染，以同一后端读取 PDF，保留 Docling 的版面/表格模型。
+        backend = {"backend": PyPdfiumDocumentBackend} if os.name == "nt" else {}
+        converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options, **backend)})
         pages = []
         for index in range(total):
             Path(progress_path).write_text(json.dumps({"page": index + 1, "total": total}), encoding="utf8")
@@ -544,7 +548,8 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--convert":
         convert(*sys.argv[2:])
     else:
-        config = json.loads(sys.stdin.readline())
+        # Gecko/Node 写 UTF-8 JSON；Windows 默认代码页不能用于解码中文 profile 路径。
+        config = json.loads(sys.stdin.buffer.readline())
         root = Path(config["root"]).resolve()
-        os.environ["HF_HOME"] = str(root / "models")
+        os.environ["HF_HOME"] = str(Path(config.get("modelRoot", root)) / "models")
         serve(str(root / "cache"), config["token"])

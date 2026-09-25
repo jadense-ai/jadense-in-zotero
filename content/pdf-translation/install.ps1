@@ -5,6 +5,7 @@ $OutputEncoding = [Console]::OutputEncoding
 # Zotero 可能继承 PowerShell 7 的模块路径；补入当前 Windows PowerShell 模块。
 $env:PSModulePath = (Join-Path $PSHOME 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $runtimePath = [IO.Path]::GetFullPath($RuntimeDirectory)
+. (Join-Path $PSScriptRoot 'install-network.ps1')
 Write-Output 'JADENSE_PDF_PROGRESS {"stage":"environment"}'
 # 只探测用户可执行文件，不执行 shell 配置，也不修改用户 uv。
 $uvPath = $null
@@ -33,20 +34,23 @@ if ($CheckOnly) {
 }
 New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
 if (-not $uvPath) {
+    Initialize-PDFNetwork
     $uvPath = Join-Path $runtimePath 'uv.exe'
     Write-Output 'Downloading uv...'
     Write-Output 'JADENSE_PDF_PROGRESS {"stage":"uv"}'
     $archive = Join-Path $runtimePath 'uv.zip'
-    $url = 'https://github.com/astral-sh/uv/releases/download/0.9.3/uv-x86_64-pc-windows-msvc.zip'
-    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing -TimeoutSec 300
-    $checksumBody = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing -TimeoutSec 120).Content
-    if ($checksumBody -is [byte[]]) { $checksumBody = [Text.Encoding]::UTF8.GetString($checksumBody) }
+    $nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    $target = if ($nativeArch -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+    $url = "https://github.com/astral-sh/uv/releases/download/0.9.3/uv-$target-pc-windows-msvc.zip"
+    Save-PDFBootstrapDownload $url $archive
+    Save-PDFBootstrapDownload "$url.sha256" "$archive.sha256"
+    $checksumBody = Get-Content -LiteralPath "$archive.sha256" -Raw
     $expected = ($checksumBody.Trim() -split '\s+')[0]
     $stream = [IO.File]::OpenRead($archive)
     $algorithm = [Security.Cryptography.SHA256]::Create()
     try { $actual = [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $stream.Dispose(); $algorithm.Dispose() }
-    if ($actual -ne $expected.ToLowerInvariant()) { throw 'uv checksum mismatch' }
+    if ($expected -notmatch '^[a-fA-F0-9]{64}$' -or $actual -ne $expected.ToLowerInvariant()) { Write-PDFInstallError 'integrity' 'uv'; throw 'uv checksum mismatch' }
     # 不依赖 Zotero 可能继承的 Archive 模块版本，只覆盖插件目录中的固定文件。
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)

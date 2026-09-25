@@ -10,7 +10,20 @@ from types import SimpleNamespace
 import hashlib
 import io
 import json
+import subprocess
+import sys
 from server import download_model, configure_model_downloads, download_progress_class
+
+
+class ServiceConfigurationTests(unittest.TestCase):
+    def test_utf8_profile_config_is_independent_of_windows_stdio_codepage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / '中文 profile'
+            result = subprocess.run([sys.executable, '-u', str(Path(__file__).with_name('server.py'))],
+                                    input=json.dumps({'root': str(root), 'modelRoot': str(root / 'runtime'), 'token': 'synthetic-test'}, ensure_ascii=False).encode('utf-8'),
+                                    env={**os.environ, 'PYTHONIOENCODING': 'ascii:surrogateescape'}, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((root / 'cache').is_dir())
 
 
 class DownloadTests(unittest.TestCase):

@@ -24,7 +24,7 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
   offline.textContent = uiText('导入离线包', 'Import offline package'); offline.dataset.pdfEngineImport = ''
   prepare.textContent = uiText('准备 PDF 翻译引擎', 'Prepare PDF translation engine'); repair.textContent = uiText('修复引擎', 'Repair engine'); cancel.textContent = uiText('取消', 'Cancel'); cancel.hidden = true
   const help = element('a'); help.textContent = uiText('GitHub 下载与手动安装指南', 'GitHub downloads and manual installation')
-  help.href = 'https://github.com/jadense-ai/jadense-in-zotero/releases'; help.target = '_blank'; help.rel = 'noopener noreferrer'
+  help.href = 'https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.md'; help.target = '_blank'; help.rel = 'noopener noreferrer'
   const location = element('p'); location.className = 'jdx-manager-settings-note jdx-pref-card-note'; location.style.overflowWrap = 'anywhere'
   try { location.textContent = uiText('安装目录：', 'Install directory: ') + pdfRuntimeRoot() } catch { /* 不影响设置展示。 */ }
   actions.append(prepare, repair, offline, check, cancel); controls.append(actions, help, location); row.append(description, controls); root.append(title, row)
@@ -32,13 +32,16 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
   const progress: PDFEngineProgress = (stage, detail) => {
     if (disposed) return
     const labels: Record<string, string> = {
+      environment: uiText('检查安装环境', 'Checking installation environment'), uv: uiText('下载安装工具 uv', 'Downloading the uv installer'),
+      imports: uiText('加载引擎依赖', 'Loading engine dependencies'),
       download: uiText('下载完整引擎包', 'Downloading engine package'), retry: uiText('下载中断，正在重试；已下载内容保留', 'Download interrupted; retrying with retained bytes'),
       verify: uiText('校验安装包', 'Verifying package'), extract: uiText('解压引擎', 'Extracting engine'), check: uiText('离线检测模型、字体和 PDF 渲染', 'Checking models, fonts and PDF rendering offline'),
       assets: uiText('准备模型和字体', 'Preparing models and fonts'), installed: uiText('引擎已安装，正在检测', 'Engine installed; checking'),
     }
     const bytes = Number(detail?.bytes), total = Number(detail?.total)
     const amount = total > 0 ? stage === 'download' ? ` · ${(bytes / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB` : ` · ${Math.round(bytes / total * 100)}%` : ''
-    status.textContent = (labels[stage] ?? uiText('安装 Python 和引擎依赖', 'Installing Python and engine dependencies')) + amount + '…'
+    const label = stage === 'retry' && detail?.downloadStage === 'uv' ? uiText('安装工具下载中断，正在重试', 'Installer download interrupted; retrying') : labels[stage]
+    status.textContent = (label ?? uiText('安装 Python 和引擎依赖', 'Installing Python and engine dependencies')) + amount + '…'
   }
   const run = async (operation: 'prepare' | 'repair' | 'check' | 'import') => {
     if (controller) return
