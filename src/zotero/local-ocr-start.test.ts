@@ -9,8 +9,49 @@ it('prepares bundled resources without AbortSignal.timeout', async () => {
   const f = coldProfile(); f.finish()
   vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => { throw new TypeError('Unavailable') })
   await installLocalOCR(f.host)
-  expect(f.network).toHaveBeenCalledTimes(5)
+  expect(f.network).toHaveBeenCalledTimes(8)
   vi.restoreAllMocks(); f.jobs.dispose()
+})
+
+it('downloads the published complete package and accepts additive catalog fields', async () => {
+  const f = coldProfile(); f.finish()
+  const original = f.network.getMockImplementation()!
+  f.network.mockImplementation((url, init) => url.endsWith('/bundles.json') ? Promise.resolve(Response.json({ 'windows-x64': { published: true, future: 'ignored' }, future: {} })) : original(url, init))
+  await installLocalOCR(f.host)
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['/profile/jadense-ocr/v1/install-bundle.ps1']) }))
+  f.jobs.dispose()
+})
+
+it('imports a local package without requiring a published download URL', async () => {
+  const f = coldProfile(); f.finish()
+  await installLocalOCR(f.host, () => {}, false, 'C:/离线 包/ocr.zip')
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['-ArchivePath', 'C:/离线 包/ocr.zip', '/profile/jadense-ocr/v1/install-bundle.ps1']) }))
+  f.jobs.dispose()
+})
+
+it('checks portable models offline without invoking uv and retains models on removal', async () => {
+  const f = coldProfile(); f.finish()
+  f.files.set('/profile/jadense-ocr/v1/runtime/python/python.exe', 'python')
+  f.files.set('/profile/jadense-ocr/v1/runtime/models/weight.bin', 'model')
+  expect(await checkLocalOCR(f.host, true)).toMatchObject({ ready: true, modelsReady: true, uvSource: 'bundle' })
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ command: '/profile/jadense-ocr/v1/runtime/python/python.exe', arguments: expect.arrayContaining(['--verify-models', '/profile/jadense-ocr/v1/runtime']) }))
+  expect(f.spawn).toHaveBeenCalledOnce()
+  await removeLocalOCR(f.host)
+  expect(f.files.has('/profile/jadense-ocr/v1/runtime/python/python.exe')).toBe(false)
+  expect(f.files.has('/profile/jadense-ocr/v1/runtime/models/weight.bin')).toBe(true)
+  f.jobs.dispose()
+})
+
+it('does not replace an environment while recognition owns it', async () => {
+  const f = coldProfile(); Object.assign(f.host, { __jadenseOCRUsers: 1 })
+  await expect(installLocalOCR(f.host, () => {}, false, 'C:/ocr.zip')).rejects.toThrow(/OCR/u)
+  expect(f.spawn).not.toHaveBeenCalled(); f.jobs.dispose()
+})
+
+it('does not repair over another window model preparation', async () => {
+  const f = coldProfile(); Object.assign(f.host, { __jadenseOCRModels: new Promise(() => {}) })
+  await expect(installLocalOCR(f.host, () => {}, true)).rejects.toThrow(/OCR/u)
+  expect(f.spawn).not.toHaveBeenCalled(); f.jobs.dispose()
 })
 
 it('bounds a silent service startup and releases it for a retry', async () => {
@@ -234,6 +275,7 @@ function coldProfile() {
   vi.stubGlobal('IOUtils', { remove, makeDirectory: async () => {}, exists: async (path: string) => files.has(path), writeUTF8: async (path: string, text: string) => { files.set(path, text) }, readUTF8: async (path: string) => files.get(path), getChildren: async () => [], read: async () => new Uint8Array([1]) })
   vi.stubGlobal('ChromeUtils', { importESModule: () => ({ Subprocess: { getEnvironment: () => ({}), call: spawn } }) })
   const network = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/bundles.json')) return Response.json({})
     if (url.startsWith('chrome://')) return new Response('synthetic bundled resource')
     if (init?.method === 'POST') return Response.json({ id: 'ocr-test' })
     return Response.json({ state: 'complete', result: { pages: [{ pageIndex: 0, blocks: [{ text: 'Hello.', locations: [{ pageIndex: 0, rects: [[0, 0, 10, 10]] }] }] }] } })

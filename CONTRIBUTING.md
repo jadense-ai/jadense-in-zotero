@@ -67,7 +67,7 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 | 推送 `v*` 标签 | 验证稳定版本、标签来源，构建后创建草稿 Release |
 | `workflow_dispatch` | 只验证并上传 Actions 制品，即使选择标签也不创建 Release |
 
-`verify` 超时 20 分钟，`draft-release` 超时 10 分钟。新 PR 提交取消同 PR 旧检查；标签运行按标签串行，不取消已在进行的发布。Actions 制品保留 30 天。Node/pnpm 使用项目固定版本，Actions 固定完整 commit SHA；更新 Actions 时必须核验上游仓库的目标提交。
+`verify` 超时 20 分钟，Windows x64 的 `package-offline` 超时 90 分钟，`draft-release` 超时 30 分钟。PR/main 只生成普通预览 XPI；标签及手动运行构建完整离线套装，手动运行不创建 Release。新 PR 提交取消同 PR 旧检查；标签运行按标签串行，不取消已在进行的发布。Actions 制品保留 30 天。Node/pnpm 使用项目固定版本，Actions 固定完整 commit SHA；更新 Actions 时必须核验上游仓库的目标提交。
 
 仓库设置作为本流程的一部分维护：
 
@@ -96,9 +96,13 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
    git push origin refs/tags/v0.4.1
    ```
 
-3. 工作流要求标签与包版本精确一致，且提交已包含在 `origin/main` 历史中。`verify` 只构建一次；`draft-release` 下载同次运行的制品，重新检查哈希和元数据后创建草稿，附以下三个文件：
+3. 工作流要求标签与包版本精确一致，且提交已包含在 `origin/main` 历史中。`verify` 完成源码检查后，`package-offline` 按锁文件构建两种独立 Python 引擎和模型，将本次引擎摘要及当前 Release 下载地址写入候选 XPI，随后组装完整套装。`draft-release` 只下载同次运行制品，重新检查全部摘要和版本后创建草稿，附以下文件：
 
    - `jadense-in-zotero-vX.Y.Z.xpi`
+   - `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip`（内含同一 XPI、两个引擎 ZIP、安装指南和摘要）
+   - `jadense-pdf-engine-<引擎版本>-windows-x64.zip`
+   - `jadense-ocr-engine-<引擎版本>-windows-x64.zip`
+   - `distribution-metadata.json` 与 `DISTRIBUTION-SHA256SUMS`（上述四个二进制附件）
    - `release-metadata.json`
    - `SHA256SUMS`
 
@@ -114,11 +118,27 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 
    路径和版本均替换为实际值。升级测试只用于存在同插件身份的上一正式版时；首版或身份不同则在验收记录填写不适用及原因，不将冷启动当作升级验证。冒烟使用临时 profile、合成数据和模拟接口，不上传真实用户资料或凭据。
 
-5. 按下方文案规范完善草稿，补齐实际 Zotero/操作系统版本、功能限制和升级注意事项，确认附件齐全。Manifest 兼容范围不能代替实测记录。运行 `pnpm run release:notes:check -- <Release正文.md>` 检查最终正文，所有验收项完成后在 GitHub 人工公开草稿。
+5. 从同一草稿下载完整离线套装并核对 `DISTRIBUTION-SHA256SUMS`，在无系统 Python/uv 的 Windows x64 环境验证两种引擎导入及运行。按下方文案规范完善草稿，补齐实际 Zotero/操作系统版本、功能限制和升级注意事项，确认附件齐全。Manifest 兼容范围不能代替实测记录。运行 `pnpm run release:notes:check -- <Release正文.md>` 检查最终正文，所有验收项完成后在 GitHub 人工公开草稿。
 
 同名草稿或正式 Release 已存在时，工作流明确停止，不覆盖、删除或自动重新上传。只读查询或创建命令失败也不自动重试写入；网络中断可能已经留下部分草稿附件，应先检查远端状态。修复草稿只能补齐原 Actions 运行的已验证制品；若原制品已过期或无法确认一致性，使用新版本，不重打旧标签。公开后需要更换任何制品时必须增加版本号。
 
 创建草稿及公开 Release 都不会执行官网发布或修改自动更新配置。
+
+### 完整 ZIP 的构建约定
+
+标签发布必须成功生成普通 XPI、两个引擎 ZIP 和完整离线 ZIP；模型下载或构建失败、附件缺失、版本或摘要不匹配均停止草稿创建。单个附件必须小于 2 GiB，超限需先调整分发方案。草稿中的引擎链接在正式公开后可供普通插件在线下载；公开前通过离线导入验收。构建只临时更改引擎清单，结束或失败后恢复源码清单，不提交本次摘要。
+
+独立构建需要 Windows x64、项目固定 Node/pnpm、Python 3.12 和 uv 0.9.3，以及下载锁定依赖和模型的网络。Python/uv 是发布机依赖，用户安装完整套装不需要它们。每个引擎构建完成后清理本次独占临时目录；已压缩制品上传 Actions 时不重复压缩。
+
+```powershell
+pnpm install --frozen-lockfile
+python -m pip install uv==0.9.3
+$env:PYTHONUTF8 = "1"
+python .github/scripts/package-release.py --repository jadense-ai/jadense-in-zotero
+```
+
+使用全新 checkout 或空的对应版本输出目录执行；已有离线 ZIP 不覆盖。也可从 Actions 手动运行工作流获取同样的 `zotero-release` 附件。普通 `pnpm run build` 仍只构建 XPI。完整套装当前仅覆盖 Windows x64；全文 OCR 模型包含在包内，选文公式专用 CodeFormulaV2 仍需首次下载。AI 翻译仍需服务和网络。
+
 
 ## Release 说明文案
 

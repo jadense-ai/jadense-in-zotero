@@ -9,7 +9,11 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     main.openDialog('chrome://jadense-in-zotero/content/manager.xhtml?section=settings-ocr', 'jadense-engine-settings-smoke', 'chrome,dialog=no,titlebar,resizable,width=1100,height=900', { zotero: Zotero, section: 'settings-ocr', pluginID: config.pluginID })
     const manager = await waitFor(findManager, 'engine settings Manager')
     if (manager.document.querySelector('#jadense-quick-start-dialog')?.open) manager.document.getElementById('jadense-quick-start-close').click()
+    // 设置已按依赖分组，必须先显示 PDF 页，避免对隐藏节点做零宽度断言和截图。
+    const layoutTab = await waitFor(() => manager.document.querySelector('[data-settings-target="layout"]'), 'PDF engine settings tab')
+    layoutTab.click()
     const row = await waitFor(() => manager.document.querySelector('[data-pdf-engine-settings]'), 'PDF engine settings')
+    assert(row.getBoundingClientRect().width > 0, 'PDF engine settings must be visible')
     const check = row.querySelector('[data-pdf-engine-check]')
     assert(check && row.querySelector('[data-pdf-engine-import]'), 'Engine import/check controls missing')
     check.click()
@@ -37,6 +41,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     manager.close()
     await new Promise(resolve => main.setTimeout(resolve, 100))
     assert(Array.isArray(jobs.list()), 'PDF jobs must survive closing engine settings')
+    if (config.pdfEngineSetupOnly) return
   }
   let fixtureStarts = 0
   let fixtureTask, notifyFixture = () => {}

@@ -26,6 +26,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.3 is released:** Long linked PDFs use question-relevant source passages by default instead of automatic batch summaries. Opt in to full-document summaries under Settings → Feature settings → AI chat; figure interpretation shares this setting. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
 
+**v0.6.4 candidate — pending release:** The Windows x64 complete offline ZIP will include the XPI, PDF layout engine and local OCR engine. Extract it, install the included XPI, then import the PDF and OCR engine ZIPs separately under **Settings → External dependencies**. Preinstalled Python/uv and administrator access are not required. See the [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
+
 <!-- release-summary:start -->
 ## Recent releases
 
@@ -127,6 +129,16 @@ The **[detailed OCR installation guide (Chinese)](docs/local-ocr.md)** covers [s
 3. **Repository fallback:** use the [included installers and locked source](content/pdf-translation/) to install manually, then **Check installed engine**. This fallback still downloads dependencies and assets; it is not an offline binary mirror.
 
 [Full installation, platform limits and troubleshooting](docs/pdf-engine.en.md). The layout engine is separate from OCR and does not affect ordinary text-layer reading.
+
+### Installation environment and network settings
+
+- **Windows x64: prefer the complete offline package on restricted networks.** Get `jadense-pdf-engine-0.6.4-1-windows-x64.zip` from [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) and select it with **Import offline package**. Do not extract it yourself. No preinstalled Python/uv or administrator access is required. The ZIP is about 441 MiB; allow at least 3 GiB of free space. You can download it on another computer and transfer it.
+- **Check the download path, not just the home page.** Setup needs access to GitHub Release redirects; source-based setup also needs Python, PyPI and model resources. Working AI requests, browser access or changing the OCR download source do not establish connectivity for the PDF installer.
+- **Configure the installation process's proxy.** A browser proxy extension does not configure Windows PowerShell. Use an HTTP proxy allowed by your network. For manual installation, configure both the .NET proxy and `HTTPS_PROXY` / `HTTP_PROXY` in the same PowerShell window; see [proxy instructions](docs/pdf-engine.en.md#network-environment). Setting terminal variables does not update an already running Zotero process or an unrelated desktop launch.
+- **Managed computers:** setup needs permission to write to the current user's profile and run PowerShell/Python. Contact your administrator for explicit policy blocks; do not disable certificates, package checks or the firewall, or repeatedly elevate privileges to fix an ordinary download failure. Complete bundles for macOS, Linux and Windows ARM64 have not been validated.
+- **`install.ps1:41 Invoke-WebRequest` cannot connect:** downloading the uv installation tool failed before the PDF engine was installed. Import the complete package or check the installer's network/proxy; changing the translation model will not fix it.
+
+**Windows policy note:** The plugin starts its installer in a separate PowerShell process with `-ExecutionPolicy Bypass`; users normally do not need to change PowerShell policy. If organizational Group Policy, AppLocker/WDAC or security software still blocks PowerShell or writes to the Zotero profile, ask your administrator to allow the required per-user operation for the Jadense installation. Do not repeatedly elevate Zotero or permanently weaken computer-wide policy.
 
 ## Contents
 

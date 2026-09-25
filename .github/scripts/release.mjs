@@ -6,6 +6,8 @@ import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 
+import { verifyDistribution } from "./distribution.mjs"
+
 const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const NOTES = `## 本次更新
 
@@ -28,6 +30,7 @@ const NOTES = `## 本次更新
 - 实测 Zotero 版本：待填写；操作系统及版本：待填写。
 - 兼容范围、功能限制与升级注意事项：待填写。
 - [ ] 已下载本草稿的 XPI，并核对 SHA256SUMS。
+- [ ] 已核对完整离线 ZIP 和两种引擎摘要，并在无系统 Python/uv 的 Windows x64 环境导入验收。
 - [ ] smoke:installed 三次冷启动通过。
 - [ ] smoke:research 通过，使用临时 profile、合成数据及模拟接口。
 - [ ] 已从同插件身份的上一正式版验证升级；无适用版本时填写原因。
@@ -90,6 +93,8 @@ export function createDraftRelease({ directory, env = process.env, gh = runGh })
     throw new Error("Release metadata does not match the release XPI.")
   }
 
+  const distribution = verifyDistribution(directory, version)
+
   // 分页包含所有草稿及正式版本；查询失败直接停止，不能误判为不存在。
   const tags = gh(["api", `repos/${repository}/releases`, "--paginate", "--jq", ".[].tag_name"])
   if (tags.split(/\r?\n/).includes(tag)) {
@@ -97,6 +102,8 @@ export function createDraftRelease({ directory, env = process.env, gh = runGh })
   }
   gh([
     "release", "create", tag, artifact, metadataPath, checksumsPath,
+    ...distribution.filter(file => file !== artifact),
+    path.resolve(directory, "distribution-metadata.json"), path.resolve(directory, "DISTRIBUTION-SHA256SUMS"),
     "--repo", repository, "--verify-tag", "--draft",
     "--title", tag, "--notes-file", "-",
   ], NOTES)

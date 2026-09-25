@@ -20,6 +20,34 @@ export const pdfTaskDirectory = (id: string) => {
 }
 const isWindows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platform ?? '').toLowerCase().startsWith('win')
 
+/** 安装失败按阶段给出恢复入口；仅使用固定类别，不回显下载地址或代理凭据。 */
+function installationFailure(stage: string, category = '') {
+  const stages: Record<string, string> = {
+    uv: uiText('下载安装工具 uv', 'Downloading the uv installer'),
+    download: uiText('下载完整 PDF 引擎包', 'Downloading the complete PDF engine'),
+    dependencies: uiText('安装 Python 和引擎依赖', 'Installing Python and engine dependencies'),
+    imports: uiText('加载引擎依赖', 'Loading engine dependencies'),
+    extract: uiText('解压 PDF 引擎', 'Extracting the PDF engine'),
+    verify: uiText('校验安装包', 'Verifying the installation package'),
+    check: uiText('检测模型、字体和 PDF 渲染', 'Checking models, fonts and PDF rendering'),
+    environment: uiText('检查安装环境', 'Checking the installation environment'),
+  }
+  const causes: Record<string, string> = {
+    proxy: uiText('请检查安装器代理地址、HTTP 端口及代理认证。', 'Check the installer proxy address, HTTP port and authentication.'),
+    tls: uiText('安全连接或证书校验失败，请检查系统时间及单位证书配置。', 'The secure connection or certificate check failed. Check system time and managed certificates.'),
+    dns: uiText('无法解析下载站地址，请检查网络和 DNS。', 'The download host could not be resolved. Check the network and DNS.'),
+    connect: uiText('无法连接下载站或代理，请检查网络和代理是否可用。', 'Cannot connect to the download host or proxy. Check network and proxy access.'),
+    timeout: uiText('下载超时，请检查网络后重试。', 'The download timed out. Check the network and retry.'),
+    http: uiText('下载站拒绝请求或文件不可用。', 'The download was rejected or the file is unavailable.'),
+    integrity: uiText('安装包校验失败，请重新获取与插件匹配的官方包。', 'Package verification failed. Download the matching official package again.'),
+    permission: uiText('无法写入安装目录，请检查目录权限或联系管理员。', 'Cannot write to the installation directory. Check permissions or contact your administrator.'),
+    disk: uiText('读写安装文件失败，请检查磁盘空间和目录权限。', 'Cannot read or write installation files. Check disk space and permissions.'),
+  }
+  return (stages[stage] ?? uiText('准备 PDF 引擎', 'Preparing the PDF engine')) + uiText('失败。', ' failed. ')
+    + (causes[category] ?? uiText('请重试，并查看安装目录中的 install.log。', 'Retry and inspect install.log in the installation directory.'))
+    + uiText(' Windows x64 可在设置 → 外置依赖配置中导入官方离线包，无需预装 Python 或 uv。安装与环境说明见“GitHub 下载与手动安装指南”。', ' On Windows x64, import the official offline package in Settings → External dependencies; Python and uv need not be preinstalled. See “GitHub downloads and manual installation” for environment setup.')
+}
+
 export function parsePDFMessage(line: string): Record<string, unknown> | null {
   try {
     if (line.startsWith('JADENSE_PDF_PROGRESS ')) return { ...JSON.parse(line.slice('JADENSE_PDF_PROGRESS '.length)), type: 'progress' }
@@ -79,6 +107,7 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
   let complete = false
   // 不把引擎日志（可能含原文）保存到插件诊断；只显示结构化阶段与错误。
   let installationLog = ''
+  let installationStage = 'environment', installationCategory = ''
   const drain = (async () => { let text: string | null; while ((text = await process.stderr.readString())) { lastProgress = Date.now(); if (!initial) installationLog = (installationLog + text).slice(-3000) } })()
   try {
     checkCancelled(signal)
@@ -88,6 +117,11 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     for await (const message of readPDFMessages(process.stdout, () => { lastProgress = Date.now() })) {
         checkCancelled(signal)
         lastProgress = Date.now()
+        if (!initial && message.type === 'install-error') {
+          installationStage = String(message.stage ?? installationStage); installationCategory = String(message.category ?? '')
+          continue
+        }
+        if (!initial && message.type === 'progress' && message.stage !== 'retry') installationStage = String(message.stage ?? installationStage)
         if (message.type === 'error') throw new Error(message.category === 'incomplete' ? uiText(`翻译已暂停：补缺一次后仍有 ${Number(message.missing) || 1} 个文段未完成，已保留成功译文。`, `Translation paused: ${Number(message.missing) || 1} passages remain incomplete after one repair. Successful translations were retained.`) : String(message.message ?? 'PDF translation failed'))
         if (message.type === 'complete') complete = true
         if (message.type !== 'translate') { await onMessage(message); continue }
@@ -105,9 +139,11 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     await Promise.race([Promise.all(pending), termination])
     if (dispatchError) throw dispatchError
     const result = await process.wait()
+    // 等待 stderr EOF 后再构造错误；避免快速退出时丢失最后一段安装日志。
+    await drain
     checkCancelled(signal)
     if (timedOut) throw new Error(finishSignal?.aborted ? uiText('保存已完成译文超时，已保留最近成果和译文缓存，请重试。', 'Saving translations timed out. The latest PDF and cached translations were retained. Retry.') : uiText('PDF 翻译阶段超时，请重试。', 'PDF translation stage timed out. Retry.'))
-    if (result.exitCode !== 0 || (initial && !complete)) throw new Error(uiText('PDF 引擎未完成，请修复引擎或重试。', 'PDF engine did not finish. Repair the engine or retry.') + (installationLog ? '\n' + installationLog : ''))
+    if (result.exitCode !== 0 || (initial && !complete)) throw new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎未完成，请修复引擎或重试。', 'PDF engine did not finish. Repair the engine or retry.'))
   } catch (error) { kill(); throw error } finally {
     clearInterval(timer); signal.removeEventListener('abort', kill)
     if (finishTimer) clearTimeout(finishTimer)
@@ -124,7 +160,7 @@ async function deployPDFResources(host: ZoteroLike, signal: AbortSignal) {
   const window = host.getMainWindow?.()
   if (!window) throw new Error('Zotero window unavailable')
   const network = window.fetch.bind(window)
-  for (const name of ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'bundles.json']) {
+  for (const name of ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-network.ps1', 'bundles.json']) {
     checkCancelled(signal)
     const response = await network(`chrome://jadense-in-zotero/content/pdf-translation/${name}`, { signal })
     if (!response.ok) throw new Error(`Cannot load PDF engine resource: ${name}`)

@@ -12,7 +12,10 @@ const root = await mkdtemp(path.join(tmpdir(), 'jadense-ocr-smoke-'))
 const python = process.argv[2] || path.resolve('content/ocr/.venv/Scripts/python.exe')
 const child = spawn(python, ['-u', path.resolve('content/ocr/server.py')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
 const token = randomUUID()
-child.stdin.write(JSON.stringify({ root: process.argv[3] || root, token }) + '\n')
+const modelRootIndex = process.argv.indexOf('--model-root')
+const modelRoot = modelRootIndex >= 0 ? process.argv[modelRootIndex + 1] : undefined
+if (modelRootIndex >= 0 && !modelRoot) throw new Error('--model-root requires the portable runtime directory')
+child.stdin.write(JSON.stringify({ root: process.argv[3] || root, modelRoot, token }) + '\n')
 const url = await new Promise((resolve, reject) => {
   let buffer = ''
   child.stdout.on('data', data => {

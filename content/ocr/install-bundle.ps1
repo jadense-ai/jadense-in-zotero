@@ -9,7 +9,7 @@ $root = [IO.Path]::GetFullPath($RuntimeDirectory)
 $env:PYTHONNOUSERSITE = '1'
 $env:PYTHONPATH = ''; $env:PYTHONHOME = ''
 function Progress($stage, $message, $bytes = 0, $total = 0) {
-    Write-Output (ConvertTo-Json -Compress @{ type='progress'; stage=$stage; message=$message; bytes=$bytes; total=$total })
+    Write-Output ('JADENSE_OCR_PROGRESS ' + (ConvertTo-Json -Compress @{ stage=$stage; file=$message; completed=$bytes; total=$total; unit='B' }))
 }
 function Hash($file) {
     $stream = [IO.File]::OpenRead($file); $algorithm = [Security.Cryptography.SHA256]::Create()
@@ -22,6 +22,7 @@ $target = if ($nativeArch -eq 'ARM64') { 'windows-arm64' } else { 'windows-x64' 
 $catalog = Get-Content -LiteralPath (Join-Path $root 'bundles.json') -Raw | ConvertFrom-Json
 $entry = $catalog.$target
 if (-not $entry -or $entry.sha256 -notmatch '^[a-f0-9]{64}$') { throw "No verified offline package for $target. Use the manual installation guide." }
+if (-not $ArchivePath -and -not $entry.published) { throw 'This package is not published yet. Import the offline ZIP.' }
 $archive = if ($ArchivePath) { [IO.Path]::GetFullPath($ArchivePath) } else { Join-Path $root ($entry.file + '.part') }
 if (-not $ArchivePath) {
     Initialize-PDFNetwork
@@ -37,7 +38,7 @@ if (-not $ArchivePath) {
                     Progress 'download' "Downloading engine (attempt $attempt/3)" $offset $entry.size
                     $request = [Net.HttpWebRequest]::Create($url)
                     $request.Timeout = 60000; $request.ReadWriteTimeout = 60000
-                    $request.UserAgent = 'Jadense-PDF-Engine'; $request.AllowAutoRedirect = $true
+                    $request.UserAgent = 'Jadense-OCR-Engine'; $request.AllowAutoRedirect = $true
                     if ($offset -gt 0) { $request.AddRange([long]$offset) }
                     $response = $request.GetResponse()
                     if ($offset -gt 0 -and [int]$response.StatusCode -ne 206) { $offset = 0 }
@@ -79,7 +80,12 @@ if (-not $ArchivePath) {
     if (-not $downloaded) { Write-PDFInstallError $category 'download'; throw 'Engine download failed. Retry to resume, or download the offline ZIP from GitHub and import it.' }
 }
 Progress 'verify' 'Verifying offline package'
-if ((Hash $archive) -ne $entry.sha256) { Write-PDFInstallError 'integrity' 'verify'; throw 'Engine checksum mismatch. Download the matching official offline package.' }
+if ((Hash $archive) -ne $entry.sha256) {
+    # 损坏的自动下载分段不能永久阻止重试；用户选择的原始 ZIP 保留。
+    if (-not $ArchivePath -and [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($archive)) -eq $root.TrimEnd('\')) { Remove-Item -LiteralPath $archive -Force }
+    Write-PDFInstallError 'integrity' 'verify'
+    throw 'Engine checksum mismatch. Download the matching official offline package.'
+}
 $stage = Join-Path $root ('bundle-stage-' + [Guid]::NewGuid().ToString('N'))
 $destination = Join-Path $root 'runtime'
 $backup = Join-Path $root ('runtime-backup-' + [Guid]::NewGuid().ToString('N'))
@@ -105,9 +111,11 @@ try {
             if ($index % 200 -eq 0) { Progress 'extract' 'Extracting engine' $index $zip.Entries.Count }
         }
     } finally { $zip.Dispose() }
-    Progress 'check' 'Checking offline Python, models and PDF rendering'
-    $config = ConvertTo-Json -Compress @{ operation='check'; root=$stage; assetRoot=(Join-Path $stage 'assets') }
-    $config | & (Join-Path $stage 'python/python.exe') -s (Join-Path $root 'worker.py')
+    Progress 'offline' 'Checking offline Python and OCR recognition'
+    $env:HF_HUB_OFFLINE = '1'
+    $env:HF_HUB_DISABLE_IMPLICIT_TOKEN = '1'
+    $env:JADENSE_OCR_MODEL_SOURCE = 'modelscope'
+    & (Join-Path $stage 'python/python.exe') -s (Join-Path $root 'server.py') --verify-models $stage
     if ($LASTEXITCODE -ne 0) { throw "Offline engine check failed (exit $LASTEXITCODE); the previous installation was retained." }
     if (Test-Path -LiteralPath $destination) { Move-Item -LiteralPath $destination -Destination $backup }
     try { Move-Item -LiteralPath $stage -Destination $destination }

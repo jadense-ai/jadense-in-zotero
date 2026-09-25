@@ -75,6 +75,13 @@ function releaseFixture(t) {
   writeFileSync(path.join(directory, "release-metadata.json"), JSON.stringify({
     version: "0.3.1", artifactName, artifactSha256: digest, artifactSizeBytes: bytes.length, additiveField: true,
   }))
+  const assets = {xpi: {file: artifactName, size: bytes.length, sha256: digest}}
+  for (const [kind, file] of Object.entries({offline: 'jadense-in-zotero-v0.3.1-windows-x64-offline.zip', 'pdf-translation': 'jadense-pdf-engine-1-windows-x64.zip', ocr: 'jadense-ocr-engine-1-windows-x64.zip'})) {
+    writeFileSync(path.join(directory, file), bytes)
+    assets[kind] = {file, size: bytes.length, sha256: digest, additive: true}
+  }
+  writeFileSync(path.join(directory, 'distribution-metadata.json'), JSON.stringify({version: '0.3.1', assets, additive: true}))
+  writeFileSync(path.join(directory, 'DISTRIBUTION-SHA256SUMS'), Object.values(assets).map(entry => `${entry.sha256}  ${entry.file}\n`).join(''))
   const env = { GITHUB_EVENT_NAME: "push", GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: "v0.3.1", GH_REPO: "fixture/plugin" }
   return { directory, env }
 }
@@ -88,6 +95,7 @@ test("verified artifacts create one draft with user-facing notes and no publishi
   const { args, stdin } = calls[1]
   assert.deepEqual(args.slice(0, 3), ["release", "create", "v0.3.1"])
   assert.deepEqual(args.slice(3, 6).map((file) => path.basename(file)), ["jadense-in-zotero-v0.3.1.xpi", "release-metadata.json", "SHA256SUMS"])
+  for (const name of ['jadense-in-zotero-v0.3.1-windows-x64-offline.zip', 'jadense-pdf-engine-1-windows-x64.zip', 'jadense-ocr-engine-1-windows-x64.zip', 'distribution-metadata.json', 'DISTRIBUTION-SHA256SUMS']) assert.ok(args.some(arg => path.basename(arg) === name))
   for (const flag of ["--verify-tag", "--draft"]) assert.ok(args.includes(flag))
   assert.equal(args[args.indexOf("--title") + 1], "v0.3.1");
   assert.ok(!args.includes("--generate-notes"));
@@ -99,7 +107,7 @@ test("verified artifacts create one draft with user-facing notes and no publishi
 })
 
 test("bad hashes, metadata, unsupported tags and non-tag events cannot reach GitHub", (t) => {
-  for (const scenario of ["checksum", "metadata", "beta", "manual", "pull-request"]) {
+  for (const scenario of ["checksum", "metadata", "beta", "manual", "pull-request", "missing-zip", "corrupt-zip", "wrong-version", "path-traversal", "distribution-checksum"]) {
     const input = releaseFixture(t)
     if (scenario === "checksum") writeFileSync(path.join(input.directory, "SHA256SUMS"), "wrong")
     if (scenario === "metadata") {
@@ -110,6 +118,16 @@ test("bad hashes, metadata, unsupported tags and non-tag events cannot reach Git
     if (scenario === "beta") input.env.GITHUB_REF_NAME = "v0.3.1-rc.1"
     if (scenario === "manual") input.env.GITHUB_EVENT_NAME = "workflow_dispatch"
     if (scenario === "pull-request") input.env.GITHUB_EVENT_NAME = "pull_request"
+    if (scenario === 'missing-zip') rmSync(path.join(input.directory, 'jadense-in-zotero-v0.3.1-windows-x64-offline.zip'))
+    if (scenario === 'corrupt-zip') writeFileSync(path.join(input.directory, 'jadense-ocr-engine-1-windows-x64.zip'), 'corrupt')
+    if (scenario === 'distribution-checksum') writeFileSync(path.join(input.directory, 'DISTRIBUTION-SHA256SUMS'), 'wrong')
+    if (['wrong-version', 'path-traversal'].includes(scenario)) {
+      const file = path.join(input.directory, 'distribution-metadata.json')
+      const metadata = JSON.parse(readFileSync(file, 'utf8'))
+      if (scenario === 'wrong-version') metadata.version = '0.3.0'
+      else metadata.assets.ocr.file = '../escape.zip'
+      writeFileSync(file, JSON.stringify(metadata))
+    }
     let calls = 0
     assert.throws(() => createDraftRelease({ ...input, gh: () => { calls++; return "" } }))
     assert.equal(calls, 0, scenario)

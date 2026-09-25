@@ -39,6 +39,31 @@
 
 从 [GitHub 最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi`，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
 
+<a id="windows-x64-zip-离线安装"></a>
+<a id="windows-x64-zip-offline-installation"></a>
+
+#### Windows x64 ZIP 离线安装
+
+完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 `安装指南.md`。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
+
+v0.6.4 候选版尚未正式发布；发布后从对应 Release 获取离线 ZIP。发布前请继续使用现有 XPI 与已发布引擎附件。
+
+1. 从目标版本的 GitHub Release 下载 `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip` 和 `DISTRIBUTION-SHA256SUMS`。用 `Get-FileHash -Algorithm SHA256` 核对外层 ZIP，摘要必须与清单中同名文件一致。
+2. 将外层 ZIP 解压到本地文件夹。用其中的 `SHA256SUMS` 分别核对 XPI、`jadense-pdf-engine-*.zip` 和 `jadense-ocr-engine-*.zip`。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
+3. 打开 Zotero「工具 → 插件」，点插件管理器齿轮菜单中的「从文件安装插件」，选择解压目录中的 `jadense-in-zotero-vX.Y.Z.xpi`，然后重启 Zotero。
+4. 打开「设置 → 外置依赖配置 → 版面解析引擎 → 导入离线包」，选择该目录中的 `jadense-pdf-engine-*.zip`，等待状态显示引擎已就绪。PDF 排版引擎是全文翻译所需的可选组件。
+5. 在同一设置页「本机 OCR → 导入离线包」，选择 `jadense-ocr-engine-*.zip`，等待验证完成并显示 OCR 已就绪。PDF 与 OCR 可以分别安装；全文 OCR 模型包含在套装中。选文公式增强使用额外的 CodeFormulaV2 模型，首次启用仍需下载。
+
+PDF ZIP 导入后会校验 SHA-256、模型/字体和 PDF 渲染；OCR ZIP 导入后会校验文件及全文识别模型。检查通过后才替换对应引擎，失败会保留原有安装。仅把 ZIP 放进目录或解压引擎 ZIP 不会完成安装。离线安装的是本机依赖；论文问答和全文翻译仍需配置服务，AI 请求需要网络。
+
+插件会在单独的 PowerShell 子进程中使用 `-ExecutionPolicy Bypass` 执行 Windows 安装器；Windows 默认的 `Restricted` 策略通常不需要手动修改。若 `MachinePolicy`/`UserPolicy` 组策略、AppLocker、WDAC、Defender 或单位安全软件仍阻止 PowerShell 或 Zotero profile 写入，联系管理员为插件在当前用户范围内放行必要操作。不要运行 `Set-ExecutionPolicy Unrestricted`、关闭杀毒/证书/哈希验证或反复以管理员身份启动 Zotero。若离线包校验通过但引擎仍无法启动，请将具体报错和 Windows 安全事件交给管理员检查。
+
+The complete offline ZIP is for Windows x64 and contains the matching XPI, PDF layout-engine ZIP, local OCR-engine ZIP and an installation guide. Extract the outer ZIP, install the included XPI through **Tools → Add-ons → gear menu → Install Add-on From File**, and restart Zotero. Then use **Settings → External dependencies → Layout parsing engine → Import offline package** for the PDF ZIP and **Local OCR → Import offline package** for the OCR ZIP. Import the engine ZIPs directly; do not extract them. No system Python/uv or administrator access is required. Hash and offline health checks run before replacing an existing engine. AI requests still require a configured service and network access.
+
+The v0.6.4 candidate is not yet a public download. After release, get the ZIP from that version's GitHub Release; before then, use an existing XPI and released engine attachments.
+
+The plugin starts installers with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the default Windows execution policy normally needs no change. If organizational Group Policy, AppLocker/WDAC, Defender or endpoint security still blocks PowerShell or writes to the Zotero profile, ask your administrator for a scoped allow rule. Do not permanently weaken machine policy, disable security checks or repeatedly run Zotero as administrator.
+
 <a id="release-062"></a>
 
 从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；没有可用摘要或网络请求失败时仍可按提示打开 Release 页面。提示只展示说明，不会自动安装插件。阅读器中的「对照翻译」随窗口宽度出现在阅读操作或「•••」菜单；收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。

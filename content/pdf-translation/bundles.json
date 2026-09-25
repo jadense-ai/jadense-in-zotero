@@ -1,6 +1,6 @@
 {
   "windows-x64": {
-    "published": false,
+    "published": true,
     "version": "pdf-engine-0.6.4-1",
     "engine": "babeldoc-0.6.4-v1",
     "platform": "windows-x64",

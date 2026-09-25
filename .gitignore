@@ -15,3 +15,7 @@ profiles/
 content/ocr/.venv/
 content/ocr/__pycache__/
 content/ocr/.cache/
+
+# Python packaging/test bytecode is local runtime output.
+__pycache__/
+*.py[cod]

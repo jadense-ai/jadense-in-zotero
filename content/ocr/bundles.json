@@ -1,0 +1,12 @@
+{
+  "windows-x64": {
+    "version": "ocr-engine-2.126.0-3.9.2-1",
+    "engine": "docling-2.126.0-rapidocr-3.9.2",
+    "platform": "windows-x64",
+    "published": false,
+    "file": "jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip",
+    "size": 864717207,
+    "sha256": "79727a759cef17fad619ec98ddf6c967bad1bd89a8c06f43aafde95c6dfca84d",
+    "urls": []
+  }
+}
