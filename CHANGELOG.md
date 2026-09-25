@@ -1,13 +1,15 @@
 # 更新说明 / Changelog
 
-## 0.6.4 — 待发布 / Pending release
+## 0.6.5 — 待发布 / Pending release
 
 - Windows x64 新增包含插件、PDF 版面引擎与全文 OCR 引擎的完整离线 ZIP。解压后安装其中的 XPI，再分别导入两个引擎 ZIP；无需预装 Python/uv 或管理员权限。
 - PDF 引擎优先使用固定版本的完整包，并改进代理继承、可恢复下载及阶段化错误说明。完整性或离线健康检查失败时保留已有引擎。
 - 本机 OCR 增加匹配版本的离线引擎导入，包含全文识别模型；选文公式增强仍在首次使用时另行下载。AI 翻译仍需要服务与网络。
+- 固定 Docling TableFormer 的 ModelScope 下载提交，避免镜像分支前移导致离线引擎构建摘要不匹配。
 - Windows x64 gains a complete offline ZIP containing the plugin, PDF layout engine and full-document OCR engine. Extract it, install the included XPI, then import each engine ZIP; preinstalled Python/uv and administrator access are unnecessary.
 - PDF setup prefers the fixed full bundle, with improved proxy inheritance, resumable downloads and stage-specific errors. The existing engine is retained if integrity or offline health checks fail.
 - Local OCR can import the matching offline engine bundle, including full-document recognition models. Selection formula enhancement still downloads separately on first use; AI translation still requires a service and network access.
+- Pin the Docling TableFormer ModelScope commit so offline engine builds do not drift when the mirror branch advances.
 - 待正式发布；完整离线套装目前仅覆盖 Windows x64。其他系统与 Zotero 8/9 的实测范围将在发布验收记录中说明。
 - Pending formal release. The complete offline suite currently targets Windows x64 only; release verification will document tested operating systems and Zotero versions.
 

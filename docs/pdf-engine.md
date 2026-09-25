@@ -10,15 +10,15 @@
 2. 点击 **准备 PDF 翻译引擎**，等待依赖、模型和字体准备完成。首次进入对照翻译也会准备引擎。
 3. 看到 **PDF 翻译引擎已就绪** 后开始翻译。已有安装可点击 **检测已安装引擎**，检测本身不下载、不调用翻译服务。
 
-**当前分发状态：**源码及普通 PR 预览中的 [包清单](../content/pdf-translation/bundles.json)保持 `published: false`，避免指向未发布附件；这类构建从库内 `install.ps1` / `install.sh` 安装。正式发布标签构建会临时写入该 Release 的精确 URL 与 SHA-256，并把完整包放进 v0.6.4 正式 XPI，因此该 XPI 在 Windows x64 自动准备时可直接用完整包。下载、摘要或离线检查失败会给出阶段说明并保留原引擎。
+**当前分发状态：**源码及普通 PR 预览中的 [包清单](../content/pdf-translation/bundles.json)保持 `published: false`，避免指向未发布附件；这类构建从库内 `install.ps1` / `install.sh` 安装。正式发布标签构建会临时写入该 Release 的精确 URL 与 SHA-256，并把完整包放进 v0.6.5 正式 XPI，因此该 XPI 在 Windows x64 自动准备时可直接用完整包。下载、摘要或离线检查失败会给出阶段说明并保留原引擎。
 
-正式 Release 为 Windows x64 提供固定摘要的完整引擎包。v0.6.4 标签构建会把该版本附件地址和摘要写入 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。候选包公开前请继续使用已发布的 v0.6.0 PDF 引擎 ZIP 或源码安装。
+正式 Release 为 Windows x64 提供固定摘要的完整引擎包。v0.6.5 标签构建会把该版本附件地址和摘要写入 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。候选包公开前请继续使用已发布的 v0.6.0 PDF 引擎 ZIP 或源码安装。
 
 安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。完整包约 441 MiB，展开约 940 MiB；建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；v0.6.4 候选版尚未正式发布，正式发布后 Windows x64 完整离线套装也会包含 PDF 引擎 ZIP。发布前可使用现有 v0.6.0 PDF ZIP 或库内安装器。
+自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；v0.6.5 候选版尚未正式发布，正式发布后 Windows x64 完整离线套装也会包含 PDF 引擎 ZIP。发布前可使用现有 v0.6.0 PDF ZIP 或库内安装器。
 
 | 项目 | 固定值 |
 | --- | --- |
