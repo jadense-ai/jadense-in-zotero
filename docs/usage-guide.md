@@ -46,7 +46,7 @@
 
 完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 `安装指南.md`。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-v0.6.4 候选版尚未正式发布；发布后从对应 Release 获取离线 ZIP。发布前请继续使用现有 XPI 与已发布引擎附件。
+v0.6.5 候选版尚未正式发布；发布后从对应 Release 获取离线 ZIP。发布前请继续使用现有 XPI 与已发布引擎附件。
 
 1. 从目标版本的 GitHub Release 下载 `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip` 和 `DISTRIBUTION-SHA256SUMS`。用 `Get-FileHash -Algorithm SHA256` 核对外层 ZIP，摘要必须与清单中同名文件一致。
 2. 将外层 ZIP 解压到本地文件夹。用其中的 `SHA256SUMS` 分别核对 XPI、`jadense-pdf-engine-*.zip` 和 `jadense-ocr-engine-*.zip`。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
@@ -60,7 +60,7 @@ PDF ZIP 导入后会校验 SHA-256、模型/字体和 PDF 渲染；OCR ZIP 导�
 
 The complete offline ZIP is for Windows x64 and contains the matching XPI, PDF layout-engine ZIP, local OCR-engine ZIP and an installation guide. Extract the outer ZIP, install the included XPI through **Tools → Add-ons → gear menu → Install Add-on From File**, and restart Zotero. Then use **Settings → External dependencies → Layout parsing engine → Import offline package** for the PDF ZIP and **Local OCR → Import offline package** for the OCR ZIP. Import the engine ZIPs directly; do not extract them. No system Python/uv or administrator access is required. Hash and offline health checks run before replacing an existing engine. AI requests still require a configured service and network access.
 
-The v0.6.4 candidate is not yet a public download. After release, get the ZIP from that version's GitHub Release; before then, use an existing XPI and released engine attachments.
+The v0.6.5 candidate is not yet a public download. After release, get the ZIP from that version's GitHub Release; before then, use an existing XPI and released engine attachments.
 
 The plugin starts installers with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the default Windows execution policy normally needs no change. If organizational Group Policy, AppLocker/WDAC, Defender or endpoint security still blocks PowerShell or writes to the Zotero profile, ask your administrator for a scoped allow rule. Do not permanently weaken machine policy, disable security checks or repeatedly run Zotero as administrator.
 

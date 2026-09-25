@@ -27,7 +27,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **v0.6.3 已发布：**关联长 PDF 默认截取与问题相关的原文，不再自动分批概括；需要全文概括时，可在「设置 → 功能配置 → AI 对话」明确开启。图片解读沿用此设置。[更新与升级指引](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
 
-**v0.6.4 候选版待发布：**Windows x64 完整离线 ZIP 将包含 XPI、PDF 版面解析引擎与本机 OCR 引擎。先解压并从 ZIP 中安装 XPI，再分别从「设置 → 外置依赖配置」导入 PDF 与 OCR 引擎 ZIP；不需要预装 Python/uv 或管理员权限。[ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
+**v0.6.5 候选版待发布：**Windows x64 完整离线 ZIP 将包含 XPI、PDF 版面解析引擎与本机 OCR 引擎。先解压并从 ZIP 中安装 XPI，再分别从「设置 → 外置依赖配置」导入 PDF 与 OCR 引擎 ZIP；不需要预装 Python/uv 或管理员权限。[ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
 <!-- release-summary:start -->
 ## 最近版本

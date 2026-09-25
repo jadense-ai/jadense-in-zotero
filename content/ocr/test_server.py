@@ -70,6 +70,16 @@ class DownloadTests(unittest.TestCase):
                 self.assertEqual(download_model("docling-project/docling-layout-egret-large"), cached)
                 network.assert_not_called()
 
+    def test_docling_modelscope_download_uses_verified_immutable_revision(self):
+        from huggingface_hub.errors import LocalEntryNotFoundError
+        content = b"pinned model"
+        expected = hashlib.sha256(content).hexdigest()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"HF_HOME": directory, "JADENSE_OCR_MODEL_SOURCE": "modelscope", "HF_HUB_OFFLINE": "0"}), patch("huggingface_hub.snapshot_download", side_effect=LocalEntryNotFoundError("missing")), patch("server.MODELSCOPE_FILES", {"docling-models": {"weight": expected}}):
+            with patch("urllib.request.urlopen", return_value=io.BytesIO(content)) as network:
+                download_model("docling-project/docling-models", revision="v2.3.0")
+            self.assertIn("/resolve/8acc91be15a3c0bfcb7f652b5e94bcf32528ad1c/weight", network.call_args.args[0])
+            self.assertEqual((Path(directory) / "modelscope" / "docling-models" / "weight").read_bytes(), content)
+
     def test_offline_rapidocr_never_downloads_missing_weights(self):
         from rapidocr.utils.download_file import DownloadFile
         from docling.models.utils import hf_model_download

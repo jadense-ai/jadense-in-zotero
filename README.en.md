@@ -26,7 +26,7 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.3 is released:** Long linked PDFs use question-relevant source passages by default instead of automatic batch summaries. Opt in to full-document summaries under Settings → Feature settings → AI chat; figure interpretation shares this setting. [Release and upgrade guide](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
 
-**v0.6.4 candidate — pending release:** The Windows x64 complete offline ZIP will include the XPI, PDF layout engine and local OCR engine. Extract it, install the included XPI, then import the PDF and OCR engine ZIPs separately under **Settings → External dependencies**. Preinstalled Python/uv and administrator access are not required. See the [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
+**v0.6.5 candidate — pending release:** The Windows x64 complete offline ZIP will include the XPI, PDF layout engine and local OCR engine. Extract it, install the included XPI, then import the PDF and OCR engine ZIPs separately under **Settings → External dependencies**. Preinstalled Python/uv and administrator access are not required. See the [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
 
 <!-- release-summary:start -->
 ## Recent releases

@@ -22,7 +22,7 @@
 
 ## 1. 设置界面操作（推荐）
 
-**v0.6.4 候选版 Windows x64 完整离线包：**正式发布后，Release ZIP 将含匹配的插件 XPI 与本机 OCR 引擎 ZIP。按[完整 ZIP 离线安装指南](usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并重启后，在 **设置 → 外置依赖配置 → 本机 OCR → 导入离线包** 选择 `jadense-ocr-engine-*.zip`；等待离线模型验证完成并显示已就绪。无需预装 Python/uv、在线下载依赖或管理员权限。此包包含全文 OCR 模型，选文公式增强仍需首次下载 CodeFormulaV2。
+**v0.6.5 候选版 Windows x64 完整离线包：**正式发布后，Release ZIP 将含匹配的插件 XPI 与本机 OCR 引擎 ZIP。按[完整 ZIP 离线安装指南](usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并重启后，在 **设置 → 外置依赖配置 → 本机 OCR → 导入离线包** 选择 `jadense-ocr-engine-*.zip`；等待离线模型验证完成并显示已就绪。无需预装 Python/uv、在线下载依赖或管理员权限。此包包含全文 OCR 模型，选文公式增强仍需首次下载 CodeFormulaV2。
 
 插件用 `-ExecutionPolicy Bypass` 启动独立 PowerShell 进程。Windows 默认执行策略通常无需调整；若组策略、AppLocker/WDAC 或终端安全软件仍阻止运行，或禁止 Zotero profile 写入，请联系管理员配置当前用户范围内的允许规则。不要永久降低机器执行策略。
 

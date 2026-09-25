@@ -86,6 +86,11 @@ MODELSCOPE_FILES = {
     }
 }
 
+# ModelScope master 前移后不再等于 Docling v2.3.0；固定到含有以下校验文件的镜像提交。
+MODELSCOPE_REVISIONS = {
+    "docling-models": "8acc91be15a3c0bfcb7f652b5e94bcf32528ad1c",
+}
+
 
 def download_model(repo_id, local_dir=None, force=False, progress=False, revision=None):
     """Docling 下载边界：优先复用旧 HF/魔搭缓存，仅缺失时访问所选源。"""
@@ -119,7 +124,8 @@ def download_model(repo_id, local_dir=None, force=False, progress=False, revisio
         print(f"Downloading ModelScope: ds4sd/{name}/{filename}", flush=True)
         try:
             # 固定公开 URL，无 SDK 凭据、无 PDF；失败不覆盖已完成文件。
-            url = f"https://www.modelscope.cn/models/ds4sd/{name}/resolve/master/{filename}"
+            model_revision = MODELSCOPE_REVISIONS.get(name, "master")
+            url = f"https://www.modelscope.cn/models/ds4sd/{name}/resolve/{model_revision}/{filename}"
             with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as output:
                 total = int(getattr(response, "headers", {}).get("Content-Length", 0)) or None
                 with download_progress_class()(total=total, unit="B", desc=f"{name}/{filename}") as bar:

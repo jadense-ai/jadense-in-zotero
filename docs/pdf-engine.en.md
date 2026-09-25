@@ -8,11 +8,11 @@ The BabelDOC 0.6.4 engine parses PDF layouts and typesets translated PDFs. It is
 
 Open **Settings → External dependencies → Layout parsing engine**, or follow the dependency link under **Feature settings → Full translation**. Choose **Prepare PDF translation engine** and wait for **PDF translation engine ready**. First use of parallel translation also prepares the engine.
 
-Source builds and ordinary PR previews keep the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) at `published: false`, so they do not point to unavailable assets. Tagged release builds temporarily write that release's exact URL and SHA-256 into the XPI and include the full bundle; the v0.6.4 release XPI can use it during automatic Windows x64 setup. Failed downloads, checksums or offline health checks report the install stage and retain the existing engine.
+Source builds and ordinary PR previews keep the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) at `published: false`, so they do not point to unavailable assets. Tagged release builds temporarily write that release's exact URL and SHA-256 into the XPI and include the full bundle; the v0.6.5 release XPI can use it during automatic Windows x64 setup. Failed downloads, checksums or offline health checks report the install stage and retain the existing engine.
 
-The previously released v0.6.0 engine ZIP remains available for manual import. The v0.6.4 Windows x64 offline suite will include the matching PDF and OCR engine ZIPs; see the [ZIP offline installation guide](usage-guide.md#windows-x64-zip-offline-installation) after that release is published.
+The previously released v0.6.0 engine ZIP remains available for manual import. The v0.6.5 Windows x64 offline suite will include the matching PDF and OCR engine ZIPs; see the [ZIP offline installation guide](usage-guide.md#windows-x64-zip-offline-installation) after that release is published.
 
-The v0.6.4 candidate is not yet a public download. After release, get the complete ZIP and engine attachments from that version's GitHub Release. Before then, use the existing v0.6.0 PDF engine ZIP or source installer.
+The v0.6.5 candidate is not yet a public download. After release, get the complete ZIP and engine attachments from that version's GitHub Release. Before then, use the existing v0.6.0 PDF engine ZIP or source installer.
 
 The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the roughly 441 MiB archive, 940 MiB extracted runtime and replacement workspace.
 
