@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--report', type=Path, required=True)
+    parser.add_argument('--offline-only', action='store_true', help='Verify one offline import and relocated recognition only')
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[1] / 'content'
     archive = args.archive.resolve()
@@ -46,6 +47,10 @@ def main():
     health = [str(python), '-s', str(runtime / 'server.py'), '--verify-models', str(runtime / 'runtime')]
     invoke(health)
     checks.append('relocated-python-models-and-real-recognition')
+    if args.offline_only:
+        args.report.write_text(json.dumps({'root': str(root), 'checks': checks}, indent=2), encoding='utf-8')
+        print(json.dumps(checks))
+        return
     bad = root / 'bad.zip'; bad.write_bytes(b'corrupt')
     invoke(command + ['-ArchivePath', str(bad)], success=False)
     invoke(health)

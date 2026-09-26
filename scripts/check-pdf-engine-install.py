@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--archive', required=True)
     parser.add_argument('--report', required=True)
+    parser.add_argument('--offline-only', action='store_true', help='Verify one offline import and relocated PDF rendering only')
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[1] / 'content' / 'pdf-translation'
     archive = Path(args.archive).resolve()
@@ -48,6 +49,11 @@ def main():
         return invoke([str(python), '-s', str(runtime / 'worker.py')], expected, json.dumps({'operation': 'check', 'root': str(runtime)}) + '\n')
     health()
     checks.append('portable-python-model-and-pdf-rendering-offline-check')
+    if args.offline_only:
+        report = {'passed': True, 'root': str(root), 'runtime': str(runtime), 'checks': checks}
+        Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+        print(json.dumps(report, ensure_ascii=False))
+        return
     assert not (home / 'uv-cache').exists() and not (home / 'python').exists()
     # 损坏包不得执行或覆盖已安装环境；失败范围仅安装操作。
     bad = root / 'bad.zip'; bad.write_bytes(b'not an engine')

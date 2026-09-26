@@ -40,7 +40,7 @@ function installationFailure(stage: string, category = '') {
     timeout: uiText('下载超时，请检查网络后重试。', 'The download timed out. Check the network and retry.'),
     http: uiText('下载站拒绝请求或文件不可用。', 'The download was rejected or the file is unavailable.'),
     integrity: uiText('安装包校验失败，请重新获取与插件匹配的官方包。', 'Package verification failed. Download the matching official package again.'),
-    permission: uiText('无法写入安装目录，请检查目录权限或联系管理员。', 'Cannot write to the installation directory. Check permissions or contact your administrator.'),
+    permission: uiText('无法写入安装目录。请检查磁盘空间，并在 Windows 安全中心 → 保护历史记录中查看是否拦截了 Zotero、PowerShell 或引擎 Python；若启用了受控文件夹访问，可在该页面允许被拦程序。', 'Cannot write to the installation directory. Check disk space and Windows Security → Protection history for Zotero, PowerShell or engine Python blocks; if Controlled folder access is enabled, allow the blocked app there.'),
     disk: uiText('读写安装文件失败，请检查磁盘空间和目录权限。', 'Cannot read or write installation files. Check disk space and permissions.'),
   }
   return (stages[stage] ?? uiText('准备 PDF 引擎', 'Preparing the PDF engine')) + uiText('失败。', ' failed. ')

@@ -27,7 +27,11 @@ class OfflineSuiteTest(unittest.TestCase):
                     plugin.writestr(f'content/{kind}/bundles.json', json.dumps({'windows-x64': entry}))
             target = suite.build(xpi, engines, root / 'output')
             with zipfile.ZipFile(target) as bundle:
-                self.assertEqual(set(bundle.namelist()), {'plugin.xpi', 'ocr.zip', 'pdf-translation.zip', '安装指南.md', 'SHA256SUMS'})
+                self.assertEqual(set(bundle.namelist()), {'plugin.xpi', 'ocr.zip', 'pdf-translation.zip', '安装指南.md'})
+                guide = bundle.read('安装指南.md').decode('utf-8')
+                self.assertIn('导入离线包', guide)
+                self.assertNotIn('核对', guide)
+                self.assertNotIn('联系管理员', guide)
             engines['ocr'].write_bytes(b'wrong executable')
             with self.assertRaises(ValueError):
                 suite.build(xpi, engines, root / 'bad')

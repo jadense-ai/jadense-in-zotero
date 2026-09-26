@@ -5,8 +5,8 @@
     "engine": "babeldoc-0.6.4-v1",
     "platform": "windows-x64",
     "file": "jadense-pdf-engine-0.6.4-1-windows-x64.zip",
-    "size": 462102143,
-    "sha256": "b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887",
-    "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.0/jadense-pdf-engine-0.6.4-1-windows-x64.zip"]
+    "size": 454424663,
+    "sha256": "579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd",
+    "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.5/jadense-pdf-engine-0.6.4-1-windows-x64.zip"]
   }
 }
