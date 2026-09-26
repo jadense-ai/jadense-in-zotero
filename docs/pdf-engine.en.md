@@ -10,21 +10,21 @@ Open **Settings → External dependencies → Layout parsing engine**, or follow
 
 Source builds and ordinary PR previews keep the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) at `published: false`, so they do not point to unavailable assets. Tagged release builds temporarily write that release's exact URL and SHA-256 into the XPI and include the full bundle; the v0.6.5 release XPI can use it during automatic Windows x64 setup. Failed downloads, checksums or offline health checks report the install stage and retain the existing engine.
 
-The previously released v0.6.0 engine ZIP remains available for manual import. The v0.6.5 Windows x64 offline suite will include the matching PDF and OCR engine ZIPs; see the [ZIP offline installation guide](usage-guide.md#windows-x64-zip-offline-installation) after that release is published.
+The [v0.6.5 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) provides the matching Windows x64 PDF and OCR engine ZIPs, both separately and inside the complete offline suite. Follow the [ZIP offline installation guide](usage-guide.md#windows-x64-zip-offline-installation). An older same-named engine ZIP can have a different checksum and must not be mixed with the v0.6.5 XPI.
 
-The v0.6.5 candidate is not yet a public download. After release, get the complete ZIP and engine attachments from that version's GitHub Release. Before then, use the existing v0.6.0 PDF engine ZIP or source installer.
-
-The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the roughly 441 MiB archive, 940 MiB extracted runtime and replacement workspace.
+The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the roughly 433 MiB v0.6.5 engine archive, 940 MiB extracted runtime and replacement workspace.
 
 ## Manual download and offline import
 
-From [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases), download `jadense-pdf-engine-0.6.4-1-windows-x64.zip` on a connected computer and transfer it. The attachment is available in v0.6.0.
+From the [v0.6.5 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5), download `jadense-pdf-engine-0.6.4-1-windows-x64.zip` on a connected computer and transfer it.
 
-- Size: **462102143 bytes**.
-- SHA-256: `b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887`.
+- Size: **454424663 bytes**.
+- SHA-256: `579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd`.
 - Platform: **Windows x64 only**.
 
 Choose **Import offline package** and select the ZIP without extracting it. The plugin verifies the hash, loads models and checks PDF rendering before replacing the runtime. Original PDFs and saved `tasks/` results are preserved. The complete bundle includes Python, dependencies, models and fonts; administrator access, Python and uv are not required.
+
+If the check reports a missing VC++ runtime or a DLL load error under a deeply nested custom Zotero profile, use the [offline ZIP troubleshooting steps](usage-guide.md#windows-x64-zip-offline-installation) to verify the official x64 runtime and the profile path before retrying. Do not disable checksum checks or change your translation model for an installation error.
 
 ## Repository fallback and manual setup
 

@@ -12,20 +12,20 @@
 
 **当前分发状态：**源码及普通 PR 预览中的 [包清单](../content/pdf-translation/bundles.json)保持 `published: false`，避免指向未发布附件；这类构建从库内 `install.ps1` / `install.sh` 安装。正式发布标签构建会临时写入该 Release 的精确 URL 与 SHA-256，并把完整包放进 v0.6.5 正式 XPI，因此该 XPI 在 Windows x64 自动准备时可直接用完整包。下载、摘要或离线检查失败会给出阶段说明并保留原引擎。
 
-正式 Release 为 Windows x64 提供固定摘要的完整引擎包。v0.6.5 标签构建会把该版本附件地址和摘要写入 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。候选包公开前请继续使用已发布的 v0.6.0 PDF 引擎 ZIP 或源码安装。
+v0.6.5 正式 Release 为 Windows x64 提供固定摘要的完整引擎包，并已将该版本附件地址和摘要写入正式 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。
 
-安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。完整包约 441 MiB，展开约 940 MiB；建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
+安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。v0.6.5 完整引擎包约 433 MiB，展开约 940 MiB；单独导入建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，可在另一台电脑下载与清单匹配的完整包，复制到目标电脑。请以 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 实际提供的附件为准；v0.6.5 候选版尚未正式发布，正式发布后 Windows x64 完整离线套装也会包含 PDF 引擎 ZIP。发布前可使用现有 v0.6.0 PDF ZIP 或库内安装器。
+自动下载不可达时，可在另一台电脑从 [v0.6.5 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) 下载与 XPI 匹配的完整离线套装或下表中的独立引擎 ZIP，再复制到目标电脑。旧版同名引擎包的摘要可能不同，不能与当前 XPI 混用。
 
 | 项目 | 固定值 |
 | --- | --- |
 | 平台 | Windows x64 |
 | 文件名 | `jadense-pdf-engine-0.6.4-1-windows-x64.zip` |
-| 大小 | 462102143 字节 |
-| SHA-256 | `b9b160f727f3bb962df8011a14131250c20753f64faac1793e902dbf6b6cf887` |
+| 大小 | 454424663 字节 |
+| SHA-256 | `579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd` |
 
 在设置中点击 **导入离线包**，直接选择 ZIP，无需自行解压。插件校验包哈希，在临时目录检查模型加载和 PDF 渲染，通过后替换引擎。导入或修复保留 `tasks/` 中的成果与原 PDF。可用 PowerShell 预先核对下载：
 
@@ -36,6 +36,8 @@ Get-FileHash .\jadense-pdf-engine-0.6.4-1-windows-x64.zip -Algorithm SHA256
 完整包包含 Python、依赖、模型和字体，无需管理员权限、Python 或 uv。其他平台不要使用 Windows x64 包。
 
 插件以 `-ExecutionPolicy Bypass` 在独立 PowerShell 子进程中运行 Windows 安装器；Windows 默认 `Restricted` 执行策略通常无需修改。若运行仍被 `MachinePolicy`/`UserPolicy`、AppLocker、WDAC 或单位终端防护阻止，或 profile 写入被拒绝，请联系管理员按组织政策为 Zotero 插件进程配置限于当前用户的授权。不要永久修改整机执行策略、关闭安全软件/证书/哈希验证，也不要反复以管理员身份启动 Zotero。导入失败会显示安装阶段；先核对下载摘要和磁盘空间，再请管理员检查明确的策略拦截。
+
+若报缺少 VC++ 运行库，或自定义 Zotero profile 路径很深时出现类似 DLL 加载错误，按 [ZIP 指南的环境排障](usage-guide.md#windows-x64-zip-离线安装)检查官方 x64 运行库及路径；不要仅凭该错误关闭校验或更换翻译模型。
 
 ## 3. 库内备用源：用随库安装器手动安装
 

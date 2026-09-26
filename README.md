@@ -25,19 +25,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.3 已发布：**关联长 PDF 默认截取与问题相关的原文，不再自动分批概括；需要全文概括时，可在「设置 → 功能配置 → AI 对话」明确开启。图片解读沿用此设置。[更新与升级指引](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3)
-
-**v0.6.5 候选版待发布：**Windows x64 完整离线 ZIP 将包含 XPI、PDF 版面解析引擎与本机 OCR 引擎。先解压并从 ZIP 中安装 XPI，再分别从「设置 → 外置依赖配置」导入 PDF 与 OCR 引擎 ZIP；不需要预装 Python/uv 或管理员权限。[ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
+**v0.6.5 已发布：**Windows x64 完整离线 ZIP 包含 XPI、PDF 版面解析引擎与本机 OCR 引擎。先解压并安装 XPI，再分别从「设置 → 外置依赖配置」导入 PDF 与 OCR 引擎 ZIP；不需要预装 Python/uv 或管理员权限。[下载 v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Windows x64 完整离线 ZIP 同时提供插件、PDF 引擎与本机 OCR 引擎，并改进引擎安装恢复。
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — 关联长 PDF 默认截取相关原文，全文分批概括改为主动开启，并改进无输出等待与停止反馈。
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — 更新弹窗显示版本要点，统一对照翻译入口并改进侧栏收起行为。
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — 移除待恢复 AI 请求按钮，精简功能配置页。
 - [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF 对照翻译、部分成果与补译、多屏阅读、引擎离线包及字号滑块。
-
-- [v0.5.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.5.1) — 云 OCR 可选引擎、独立翻译配置及设置界面优化。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
@@ -129,15 +126,15 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 ## 版面解析引擎安装（0.6.0）
 
-1. **系统自动安装**：进入 **设置 → 外置依赖配置 → 版面解析引擎 → 准备 PDF 翻译引擎**。当前源码自动安装独立 Python、锁定依赖、模型和字体；完整包自动下载尚未启用。
-2. **手动/离线安装**：取得匹配的 Windows x64 完整 ZIP 后点击 **导入离线包**，无需预装 Python 或管理员权限。完整包见 [v0.6.0 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)。
+1. **系统自动安装**：进入 **设置 → 外置依赖配置 → 版面解析引擎 → 准备 PDF 翻译引擎**。v0.6.5 正式 XPI 在 Windows x64 优先下载匹配的完整引擎包；其他平台按库内安装器准备独立 Python、锁定依赖、模型和字体。
+2. **手动/离线安装**：取得与所装 XPI 版本匹配的 Windows x64 完整 ZIP 后点击 **导入离线包**，无需预装 Python 或管理员权限。v0.6.5 的完整套装及单独引擎包见 [v0.6.5 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5)。
 3. **库内备用源**：使用[仓库内安装器与锁定源码](content/pdf-translation/)手动安装，再点击 **检测已安装引擎**。此备用路径仍需下载依赖与资产，不是离线二进制镜像。
 
 [查看完整安装指南、平台限制与故障处理](docs/pdf-engine.md)。版面解析引擎与 OCR 独立，不影响普通文字层阅读。
 
 ### 安装环境与网络设置
 
-- **Windows x64 推荐完整离线包**：网络受限时，从 [v0.6.0 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)取得 `jadense-pdf-engine-0.6.4-1-windows-x64.zip`，在「导入离线包」直接选择，无需解压、预装 Python/uv 或管理员权限。约 441 MiB，建议预留至少 3 GiB；可以在另一台电脑下载后复制过来。
+- **Windows x64 推荐完整离线包**：网络受限时，从 [v0.6.5 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5)取得完整离线 ZIP，按[安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并分别导入两个引擎 ZIP；也可单独下载约 433 MiB 的匹配 PDF 引擎 ZIP。无需预装 Python/uv 或管理员权限，完整套装建议预留 6 GiB。不要混用旧版同名引擎包，安装时以 XPI 内清单摘要为准。
 - **网络必须覆盖下载链路**：自动安装不仅要能打开 GitHub 首页，还需要访问 Release 附件重定向地址；旧式逐项安装还会访问 Python、PyPI 和模型资源。AI 服务可用、浏览器能上网或修改 OCR 下载源，都不保证 PDF 引擎安装器可联网。
 - **代理应覆盖安装进程**：浏览器代理扩展不会自动配置 Windows PowerShell。使用单位或网络允许的 HTTP 代理；手动安装时在同一 PowerShell 窗口设置 .NET 代理及 `HTTPS_PROXY` / `HTTP_PROXY`，详见[代理操作步骤](docs/pdf-engine.md#network-environment)。只在终端设置变量后从桌面打开已有 Zotero，不保证它能继承这些设置。
 - **受管电脑**：安装需要允许当前用户写入 profile、启动 PowerShell 和 Python。遇到明确策略拦截时联系管理员；不要通过关闭证书/哈希校验、防火墙或反复提升管理员权限排查普通下载错误。macOS、Linux、Windows ARM64 暂无已验收的完整离线包。
