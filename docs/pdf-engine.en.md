@@ -1,4 +1,4 @@
-# PDF layout and translation engine setup (0.6.6 pending release)
+# PDF layout and translation engine setup (0.6.6)
 
 [README](../README.en.md) · [中文完整指南](pdf-engine.md)
 
@@ -14,7 +14,7 @@ The settings show the installation directory: `jadense-pdf-translation/` inside 
 
 ## Manual download and offline import
 
-On a connected computer, open [GitHub Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) and download `jadense-in-zotero-v0.6.6-windows-x64-offline.zip` from the **v0.6.6** release page once it is published. Transfer it to the Windows x64 computer and extract the outer ZIP.
+On a connected computer, open the [v0.6.6 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) and download `jadense-in-zotero-v0.6.6-windows-x64-offline.zip`. Transfer it to the Windows x64 computer and extract the outer ZIP.
 
 1. Install `jadense-in-zotero-v0.6.6.xpi` from the extracted folder, then restart Zotero.
 2. Open **Settings → External dependencies → Layout parsing engine → Import offline package** and select `jadense-pdf-engine-*.zip` from that folder. Keep this engine ZIP intact.
