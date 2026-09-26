@@ -25,16 +25,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.6 正在准备：**修复版面解析引擎指南链接、PDF 离线检测的 UTF-8 BOM 错误，以及深层 profile 下两种引擎解压失败。Windows x64 完整套装将同时包含 XPI、PDF 引擎与本机 OCR 引擎。[ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
+**v0.6.6 已发布：**修复版面解析引擎指南链接、PDF 离线检测的 UTF-8 BOM 错误，以及深层 profile 下两种引擎解压失败。Windows x64 完整套装同时包含 XPI、PDF 引擎与本机 OCR 引擎。[下载 v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — 修复离线安装的 BOM 和深路径解压错误，版面引擎指南可从设置页打开。
 - [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Windows x64 完整离线 ZIP 同时提供插件、PDF 引擎与本机 OCR 引擎，并改进引擎安装恢复。
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — 关联长 PDF 默认截取相关原文，全文分批概括改为主动开启，并改进无输出等待与停止反馈。
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — 更新弹窗显示版本要点，统一对照翻译入口并改进侧栏收起行为。
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — 移除待恢复 AI 请求按钮，精简功能配置页。
-- [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF 对照翻译、部分成果与补译、多屏阅读、引擎离线包及字号滑块。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->

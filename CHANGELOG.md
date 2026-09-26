@@ -1,6 +1,6 @@
 # 更新说明 / Changelog
 
-## 0.6.6 — 待发布 / Pending
+## 0.6.6 — 2026-09-26
 
 - 修复设置页“GitHub 下载与手动安装指南”点击后不打开系统浏览器的问题。
 - 修复 PDF 离线检测请求带 UTF-8 BOM 时的解析错误，以及深层 Zotero profile 下 PDF/OCR 引擎解压路径过长的问题。
@@ -10,6 +10,8 @@
 - Accept a leading UTF-8 BOM in the PDF engine's offline-check request and shorten extraction paths for both engines under deep Zotero profiles.
 - Allow a user-selected official engine ZIP to proceed to offline health checks; automatic downloads still verify downloaded bytes. OCR installation errors now show the actual failure instead of extraction progress.
 - Update Windows x64 offline setup and troubleshooting guidance; the release includes the XPI and both engines in one suite.
+- 已公开发布；完整离线套装仅覆盖 Windows x64。Windows 11 / Zotero 10.0.3 的草稿原包通过三次冷启动、0.6.5 原位升级及两种引擎的普通用户离线安装和健康检查；其他系统及 Zotero 8/9 未实测。
+- Released publicly. The complete offline suite targets Windows x64. Draft assets passed three cold starts, in-place upgrade from 0.6.5 and offline installation/health checks for both engines on Windows 11 / Zotero 10.0.3; other systems and Zotero 8/9 were not tested.
 
 ## 0.6.5 — 2026-09-26
 

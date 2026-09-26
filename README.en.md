@@ -24,16 +24,16 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.6 is in preparation:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite will include the XPI, PDF engine and local OCR engine. [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
+**v0.6.6 is released:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite includes the XPI, PDF engine and local OCR engine. [Download v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
 
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — Fix offline installation BOM and deep-path extraction errors; open the PDF engine guide from settings.
 - [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Complete Windows x64 offline ZIP with the plugin, PDF engine and local OCR engine, plus more reliable engine setup.
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — Select relevant passages from long linked PDFs by default, make full summaries opt-in, and improve no-output and stop feedback.
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — Show release highlights in update dialogs, unify the Parallel translation entry, and improve sidebar collapse.
 - [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — Remove the pending AI requests button from feature settings.
-- [v0.6.0](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0) — PDF parallel translation, partial output/retry, multi-screen reading, offline engine bundle and font-size slider.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->

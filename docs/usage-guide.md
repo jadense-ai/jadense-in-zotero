@@ -46,7 +46,7 @@
 
 完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 `安装指南.md`。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-v0.6.6 发布后，从 [v0.6.6 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) 下载完整离线 ZIP。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
+从 [v0.6.6 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) 下载完整离线 ZIP。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
 
 1. 从目标版本的 GitHub Release 下载 `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
 2. 保留解压目录中的两个引擎 ZIP 原样，不要再次解压。
@@ -64,7 +64,7 @@ v0.6.6 发布后，从 [v0.6.6 Release](https://github.com/jadense-ai/jadense-in
 
 The complete offline ZIP is for Windows x64 and contains the matching XPI, PDF layout-engine ZIP, local OCR-engine ZIP and an installation guide. Extract the outer ZIP, install the included XPI through **Tools → Add-ons → gear menu → Install Add-on From File**, and restart Zotero. Then use **Settings → External dependencies → Layout parsing engine → Import offline package** for the PDF ZIP and **Local OCR → Import offline package** for the OCR ZIP. Import the engine ZIPs directly; do not extract them. No system Python/uv or administrator access is required. The plugin checks each engine before replacing an existing installation. AI requests still require a configured service and network access.
 
-After publication, download the complete ZIP from the [v0.6.6 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6). Use the XPI and engine ZIPs inside that suite together.
+Download the complete ZIP from the [v0.6.6 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6). Use the XPI and engine ZIPs inside that suite together.
 
 The plugin starts installers with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the default Windows execution policy normally needs no change. If a script is blocked, run `Get-ExecutionPolicy -List`. When `MachinePolicy` and `UserPolicy` are both `Undefined`, leave `CurrentUser` unchanged and inspect the program-blocking records below; for manual installation, use the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...` command in the [PDF guide](pdf-engine.en.md). If either device policy is set, inspect the AppLocker or CodeIntegrity Operational event log for the blocked path and have that specific rule changed by the device policy maintainer. For blocked profile writes, inspect **Windows Security → Virus & threat protection → Protection history**. If Controlled folder access names Zotero, PowerShell or engine Python, allow that named program under **Ransomware protection → Allow an app through Controlled folder access** and retry. For `Unexpected UTF-8 BOM`, install the 0.6.6 XPI and import the original ZIP again.
 

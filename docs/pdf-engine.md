@@ -1,4 +1,4 @@
-# PDF 版面解析与翻译引擎安装（0.6.6 待发布）
+# PDF 版面解析与翻译引擎安装（0.6.6）
 
 [返回 README](../README.md) · [English](pdf-engine.en.md) · [使用对照翻译](usage-guide.md#pdf-translation-060)
 
@@ -16,7 +16,7 @@ Windows x64 正式版可自动下载引擎包；网络不可用时可按下文�
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，在另一台电脑打开 [GitHub Releases](https://github.com/jadense-ai/jadense-in-zotero/releases)，从 **v0.6.6** 页面下载 `jadense-in-zotero-v0.6.6-windows-x64-offline.zip`，复制到目标电脑并解压外层 ZIP。该版本发布前请勿把其他版本的套装当作 v0.6.6 使用。
+自动下载不可达时，在另一台电脑打开 [v0.6.6 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6)，下载 `jadense-in-zotero-v0.6.6-windows-x64-offline.zip`，复制到目标电脑并解压外层 ZIP。
 
 1. 从解压目录安装其中的 `jadense-in-zotero-v0.6.6.xpi`，重启 Zotero。
 2. 打开 **设置 → 外置依赖配置 → 版面解析引擎 → 导入离线包**，选择解压目录中的 `jadense-pdf-engine-*.zip`，**不要解压这个引擎 ZIP**。
