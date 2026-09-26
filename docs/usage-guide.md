@@ -46,7 +46,7 @@
 
 完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 `安装指南.md`。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-v0.6.5 候选版尚未正式发布；发布后从对应 Release 获取离线 ZIP。发布前请继续使用现有 XPI 与已发布引擎附件。
+从 [v0.6.5 正式 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) 下载完整离线 ZIP。引擎 ZIP 必须与同一 Release 的 XPI 匹配；旧版即使文件名相同，也可能因摘要不同而无法导入。
 
 1. 从目标版本的 GitHub Release 下载 `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip` 和 `DISTRIBUTION-SHA256SUMS`。用 `Get-FileHash -Algorithm SHA256` 核对外层 ZIP，摘要必须与清单中同名文件一致。
 2. 将外层 ZIP 解压到本地文件夹。用其中的 `SHA256SUMS` 分别核对 XPI、`jadense-pdf-engine-*.zip` 和 `jadense-ocr-engine-*.zip`。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
@@ -58,11 +58,15 @@ PDF ZIP 导入后会校验 SHA-256、模型/字体和 PDF 渲染；OCR ZIP 导�
 
 插件会在单独的 PowerShell 子进程中使用 `-ExecutionPolicy Bypass` 执行 Windows 安装器；Windows 默认的 `Restricted` 策略通常不需要手动修改。若 `MachinePolicy`/`UserPolicy` 组策略、AppLocker、WDAC、Defender 或单位安全软件仍阻止 PowerShell 或 Zotero profile 写入，联系管理员为插件在当前用户范围内放行必要操作。不要运行 `Set-ExecutionPolicy Unrestricted`、关闭杀毒/证书/哈希验证或反复以管理员身份启动 Zotero。若离线包校验通过但引擎仍无法启动，请将具体报错和 Windows 安全事件交给管理员检查。
 
+若 PDF 引擎健康检查提示缺少 Microsoft Visual C++ Redistributable，先确认系统是否有适用于 x64 的运行库；确实缺失时，可在有网络的电脑从 [Microsoft 官方地址](https://aka.ms/vs/17/release/vc_redist.x64.exe)取得安装程序，复制到目标电脑后按组织权限安装，再重新导入引擎。两种引擎导入本身无需管理员权限，但补装系统运行库可能需要管理员。若运行库已安装，但 Zotero 使用很深的自定义 profile 路径，DLL 路径过长也可能触发相同提示；先在较短路径的隔离 profile 复测，并按 Zotero 的 profile 管理流程迁移，勿直接改动文献数据目录。
+
 The complete offline ZIP is for Windows x64 and contains the matching XPI, PDF layout-engine ZIP, local OCR-engine ZIP and an installation guide. Extract the outer ZIP, install the included XPI through **Tools → Add-ons → gear menu → Install Add-on From File**, and restart Zotero. Then use **Settings → External dependencies → Layout parsing engine → Import offline package** for the PDF ZIP and **Local OCR → Import offline package** for the OCR ZIP. Import the engine ZIPs directly; do not extract them. No system Python/uv or administrator access is required. Hash and offline health checks run before replacing an existing engine. AI requests still require a configured service and network access.
 
-The v0.6.5 candidate is not yet a public download. After release, get the ZIP from that version's GitHub Release; before then, use an existing XPI and released engine attachments.
+Download the complete ZIP from the [v0.6.5 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5). Use the engine ZIPs from the same release as the XPI: an older package can have the same filename but a different checksum.
 
 The plugin starts installers with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the default Windows execution policy normally needs no change. If organizational Group Policy, AppLocker/WDAC, Defender or endpoint security still blocks PowerShell or writes to the Zotero profile, ask your administrator for a scoped allow rule. Do not permanently weaken machine policy, disable security checks or repeatedly run Zotero as administrator.
+
+If the PDF engine check reports a missing Microsoft Visual C++ Redistributable, verify the x64 runtime first. If absent, obtain the [official Microsoft installer](https://aka.ms/vs/17/release/vc_redist.x64.exe) on a connected computer, transfer it, install it under your organization's policy, and retry the engine import. Engine imports themselves do not require administrator access, but installing the system runtime may. If the runtime is present but a custom Zotero profile is nested in a very deep path, a DLL path length limit can produce the same message; retry with an isolated short-path profile and use Zotero's profile management procedure before moving an existing profile.
 
 <a id="release-062"></a>
 
