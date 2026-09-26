@@ -1,12 +1,5 @@
 # 更新说明 / Changelog
 
-## 0.6.7 — 待发布 / Pending release
-
-- 版面解析引擎设置页的“GitHub 下载与手动安装指南”改为打开最新 GitHub Release 说明；该页面直接列出对应版本的离线包、导入步骤和故障处理。
-- 本补丁保留 0.6.6 的 PDF/OCR 离线安装修复，并继续提供匹配版本的 Windows x64 完整套装。
-- The layout engine settings link now opens the latest GitHub Release notes, where users can find the matching offline package, import steps and troubleshooting.
-- This patch retains the PDF/OCR offline installation fixes from 0.6.6 and provides a matching complete Windows x64 suite.
-
 ## 0.6.6 — 2026-09-26
 
 - 修复设置页“GitHub 下载与手动安装指南”点击后不打开系统浏览器的问题。

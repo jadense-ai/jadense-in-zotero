@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.7 pending release:** The PDF engine's “GitHub downloads and manual installation” link in settings will open the latest GitHub Release notes, with offline installation steps and download assets on one page. The Windows x64 suite includes the XPI, PDF engine and local OCR engine. [Current release v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
+**v0.6.6 is released:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite includes the XPI, PDF engine and local OCR engine. [Download v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
 
 <!-- release-summary:start -->
 ## Recent releases
@@ -102,9 +102,9 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current release XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest Release notes include the Windows x64 offline suite and installation steps; maintainer verification files are attached |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download `jadense-in-zotero-v0.6.2.xpi`, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The current public release is [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install the matching XPI from `release/zotero/vX.Y.Z/` | Builds the current source; only this repository and the listed build dependencies are needed |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | Builds the current source; only this repository and the listed build dependencies are needed |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -173,7 +173,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### 1. Install and open the workbench
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.2**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 

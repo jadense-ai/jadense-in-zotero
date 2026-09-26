@@ -16,7 +16,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     assert(row.getBoundingClientRect().width > 0, 'PDF engine settings must be visible')
     const check = row.querySelector('[data-pdf-engine-check]')
     assert(check && row.querySelector('[data-pdf-engine-import]'), 'Engine import/check controls missing')
-    const guide = row.querySelector('a[href="https://github.com/jadense-ai/jadense-in-zotero/releases/latest"]')
+    const guide = row.querySelector('a[href$="/docs/pdf-engine.md"]')
     assert(guide, 'PDF engine manual guide link missing')
     const launchURL = Zotero.launchURL, opened = []
     try {
