@@ -1,4 +1,4 @@
-# PDF 版面解析与翻译引擎安装（0.6.4）
+# PDF 版面解析与翻译引擎安装（0.6.6 待发布）
 
 [返回 README](../README.md) · [English](pdf-engine.en.md) · [使用对照翻译](usage-guide.md#pdf-translation-060)
 
@@ -10,34 +10,23 @@
 2. 点击 **准备 PDF 翻译引擎**，等待依赖、模型和字体准备完成。首次进入对照翻译也会准备引擎。
 3. 看到 **PDF 翻译引擎已就绪** 后开始翻译。已有安装可点击 **检测已安装引擎**，检测本身不下载、不调用翻译服务。
 
-**当前分发状态：**源码及普通 PR 预览中的 [包清单](../content/pdf-translation/bundles.json)保持 `published: false`，避免指向未发布附件；这类构建从库内 `install.ps1` / `install.sh` 安装。正式发布标签构建会临时写入该 Release 的精确 URL 与 SHA-256，并把完整包放进 v0.6.5 正式 XPI，因此该 XPI 在 Windows x64 自动准备时可直接用完整包。下载、摘要或离线检查失败会给出阶段说明并保留原引擎。
+Windows x64 正式版可自动下载引擎包；网络不可用时可按下文导入完整离线套装中的引擎 ZIP。自动下载支持中断后继续，并由插件检查下载结果。手动选择离线包后，插件会直接解压并检查 Python、模型、字体及 PDF 渲染，确认可用才替换旧引擎。
 
-v0.6.5 正式 Release 为 Windows x64 提供固定摘要的完整引擎包，并已将该版本附件地址和摘要写入正式 XPI：自动准备优先下载完整 ZIP，支持可恢复下载、SHA-256 校验、解压及离线检测；不支持续传的服务器会重新下载。
-
-安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。v0.6.5 完整引擎包约 433 MiB，展开约 940 MiB；单独导入建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
+安装目录显示在设置中，位于 Zotero **profile** 下的 `jadense-pdf-translation/`，不一定是文献数据目录。单独导入建议至少预留 3 GiB，供下载、解压和修复时保留旧环境。
 
 ## 2. 手动下载与离线导入
 
-自动下载不可达时，可在另一台电脑从 [v0.6.5 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) 下载与 XPI 匹配的完整离线套装或下表中的独立引擎 ZIP，再复制到目标电脑。旧版同名引擎包的摘要可能不同，不能与当前 XPI 混用。
+自动下载不可达时，在另一台电脑打开 [GitHub Releases](https://github.com/jadense-ai/jadense-in-zotero/releases)，从 **v0.6.6** 页面下载 `jadense-in-zotero-v0.6.6-windows-x64-offline.zip`，复制到目标电脑并解压外层 ZIP。该版本发布前请勿把其他版本的套装当作 v0.6.6 使用。
 
-| 项目 | 固定值 |
-| --- | --- |
-| 平台 | Windows x64 |
-| 文件名 | `jadense-pdf-engine-0.6.4-1-windows-x64.zip` |
-| 大小 | 454424663 字节 |
-| SHA-256 | `579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd` |
-
-在设置中点击 **导入离线包**，直接选择 ZIP，无需自行解压。插件校验包哈希，在临时目录检查模型加载和 PDF 渲染，通过后替换引擎。导入或修复保留 `tasks/` 中的成果与原 PDF。可用 PowerShell 预先核对下载：
-
-```powershell
-Get-FileHash .\jadense-pdf-engine-0.6.4-1-windows-x64.zip -Algorithm SHA256
-```
+1. 从解压目录安装其中的 `jadense-in-zotero-v0.6.6.xpi`，重启 Zotero。
+2. 打开 **设置 → 外置依赖配置 → 版面解析引擎 → 导入离线包**，选择解压目录中的 `jadense-pdf-engine-*.zip`，**不要解压这个引擎 ZIP**。
+3. 等待“PDF 翻译引擎已就绪”。导入或修复会保留 `tasks/` 中的成果与原 PDF。
 
 完整包包含 Python、依赖、模型和字体，无需管理员权限、Python 或 uv。其他平台不要使用 Windows x64 包。
 
-插件以 `-ExecutionPolicy Bypass` 在独立 PowerShell 子进程中运行 Windows 安装器；Windows 默认 `Restricted` 执行策略通常无需修改。若运行仍被 `MachinePolicy`/`UserPolicy`、AppLocker、WDAC 或单位终端防护阻止，或 profile 写入被拒绝，请联系管理员按组织政策为 Zotero 插件进程配置限于当前用户的授权。不要永久修改整机执行策略、关闭安全软件/证书/哈希验证，也不要反复以管理员身份启动 Zotero。导入失败会显示安装阶段；先核对下载摘要和磁盘空间，再请管理员检查明确的策略拦截。
+插件以 `-ExecutionPolicy Bypass` 在独立 PowerShell 子进程中运行安装器，Windows 默认执行策略通常无需修改。若出现脚本或文件被拦截，请按 [ZIP 指南的环境排障](usage-guide.md#windows-x64-zip-离线安装)查看当前用户执行策略、Windows 安全中心的保护历史记录和具体拦截程序，再重试导入。
 
-若报缺少 VC++ 运行库，或自定义 Zotero profile 路径很深时出现类似 DLL 加载错误，按 [ZIP 指南的环境排障](usage-guide.md#windows-x64-zip-离线安装)检查官方 x64 运行库及路径；不要仅凭该错误关闭校验或更换翻译模型。
+若报缺少 VC++ 运行库，或自定义 Zotero profile 路径很深时出现类似 DLL 加载错误，按同一指南检查官方 x64 运行库及路径。若出现 `Unexpected UTF-8 BOM`，先升级到 0.6.6 插件，再重新导入原始引擎 ZIP；旧安装器的 Python 读取入口无法处理带 BOM 的请求。
 
 ## 3. 库内备用源：用随库安装器手动安装
 
@@ -90,16 +79,17 @@ if ($LASTEXITCODE -ne 0) { throw '模型准备失败，请检查下载错误，�
 @{ operation = 'check'; root = $pdfRuntime } | ConvertTo-Json -Compress | & "$pdfRuntime\.venv\Scripts\python.exe" -s "$pdfRuntime\worker.py"
 ```
 
-这些设置仅影响该窗口及子进程，关闭窗口即结束；不保存系统配置。旧版 PowerShell 下载 uv 不保证识别 `HTTPS_PROXY`，因此显式设置 .NET 代理，并用 `&` 在同一进程运行脚本。此示例使用无需认证的本机 HTTP 端点，不是 SOCKS 端点；需认证的单位代理应咨询管理员，不要在公开日志中提供密码。如果执行策略阻止脚本，优先离线导入或联系管理员，不需要永久放宽全机执行策略。
+这些设置仅影响该窗口及子进程，关闭窗口即结束；不保存系统配置。旧版 PowerShell 下载 uv 不保证识别 `HTTPS_PROXY`，因此显式设置 .NET 代理，并用 `&` 在同一进程运行脚本。此示例使用无需认证的本机 HTTP 端点，不是 SOCKS 端点。若执行策略阻止脚本，请按 [ZIP 指南的具体步骤](usage-guide.md#windows-x64-zip-离线安装)检查当前用户策略和拦截记录。
 
-单位明确禁止 PowerShell/Python、外网下载或写入 profile 时，安装器无法自行解除规则。证书错误应检查系统时间和受信任的单位证书，不要跳过 TLS/哈希校验。仅有“无法连接远程服务器”不能证明需要管理员权限。
+单位明确禁止 PowerShell/Python、外网下载或写入 profile 时，先通过 Windows 安全中心和事件查看器确定被拦截的程序与规则。证书错误应检查系统时间和受信任的单位证书。仅有“无法连接远程服务器”不能证明需要管理员权限。
 
 ## 4. 失败后的处理
 
 | 现象 | 操作 |
 | --- | --- |
 | 自动安装下载失败 | 检查提示中的下载阶段；重试准备，或导入匹配的完整离线包。源码安装仍需要第三方下载源可达 |
-| ZIP 校验失败 | 重新获取清单匹配的包；不要关闭校验或更改摘要 |
+| ZIP 解压失败 | 从当前版本的官方完整套装中重新取得引擎 ZIP，直接导入；确认磁盘空间充足，0.6.6 已缩短临时目录路径 |
+| `Unexpected UTF-8 BOM` | 升级到 0.6.6 插件并重新导入原始引擎 ZIP |
 | 缺少模型、字体或资源哈希不符 | 点击修复引擎，或重新导入完整包，再检测 |
 | 模型/DLL 加载失败 | 保留错误提示，检查系统运行库或企业子进程限制；更换翻译模型不能修复本机引擎 |
 | 只有安装记录，没有就绪状态 | 点击检测；不要手工创建 ready 标记 |

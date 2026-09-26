@@ -420,7 +420,11 @@ export async function installLocalOCR(host: ZoteroLike, progress: (text: string)
       const logPath = paths.join(root, 'install.log')
       try { exitCode = await collectOCRProcess(host, process, 30 * 60000, chunk => { log += chunk; consume(chunk) }) }
       finally { try { await io.writeUTF8(logPath, log) } catch { /* 可选日志。 */ } }
-      if (exitCode !== 0) throw new Error(uiText('OCR 安装失败。请在设置 → OCR配置中重试。安装日志：', 'OCR installation failed. Retry in Settings → OCR configuration. Installation log: ') + logPath + '\n' + log.slice(-2000))
+      // 进度已在设置页单独展示；失败摘要只保留实际错误，避免数十行解压进度淹没原因。
+      if (exitCode !== 0) {
+        const error = log.split(/\r?\n/u).filter(line => line.trim() && !line.startsWith('JADENSE_OCR_PROGRESS ')).join('\n').slice(-2000)
+        throw new Error(uiText('OCR 安装失败。安装日志：', 'OCR installation failed. Installation log: ') + logPath + (error ? '\n' + error : ''))
+      }
       await io.writeUTF8(paths.join(root, 'ready-2.126.0-3.9.2'), 'ready')
     }
     return root

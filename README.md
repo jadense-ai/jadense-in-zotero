@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.5 已发布：**Windows x64 完整离线 ZIP 包含 XPI、PDF 版面解析引擎与本机 OCR 引擎。先解压并安装 XPI，再分别从「设置 → 外置依赖配置」导入 PDF 与 OCR 引擎 ZIP；不需要预装 Python/uv 或管理员权限。[下载 v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
+**v0.6.6 正在准备：**修复版面解析引擎指南链接、PDF 离线检测的 UTF-8 BOM 错误，以及深层 profile 下两种引擎解压失败。Windows x64 完整套装将同时包含 XPI、PDF 引擎与本机 OCR 引擎。[ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
 <!-- release-summary:start -->
 ## 最近版本

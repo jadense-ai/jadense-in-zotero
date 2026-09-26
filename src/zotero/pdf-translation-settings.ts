@@ -25,6 +25,16 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
   prepare.textContent = uiText('准备 PDF 翻译引擎', 'Prepare PDF translation engine'); repair.textContent = uiText('修复引擎', 'Repair engine'); cancel.textContent = uiText('取消', 'Cancel'); cancel.hidden = true
   const help = element('a'); help.textContent = uiText('GitHub 下载与手动安装指南', 'GitHub downloads and manual installation')
   help.href = 'https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.md'; help.target = '_blank'; help.rel = 'noopener noreferrer'
+  help.addEventListener('click', event => {
+    event.preventDefault()
+    try {
+      const open = (host as ZoteroLike & { launchURL?: (url: string) => void }).launchURL
+      if (!open) throw new Error('System browser unavailable')
+      open.call(host, help.href)
+    } catch {
+      status.textContent = uiText('无法打开浏览器，请复制指南链接到浏览器访问。', 'Could not open the browser. Copy the guide link into your browser.')
+    }
+  })
   const location = element('p'); location.className = 'jdx-manager-settings-note jdx-pref-card-note'; location.style.overflowWrap = 'anywhere'
   try { location.textContent = uiText('安装目录：', 'Install directory: ') + pdfRuntimeRoot() } catch { /* 不影响设置展示。 */ }
   actions.append(prepare, repair, offline, check, cancel); controls.append(actions, help, location); row.append(description, controls); root.append(title, row)

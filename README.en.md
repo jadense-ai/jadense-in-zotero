@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.5 is released:** The Windows x64 complete offline ZIP includes the XPI, PDF layout engine and local OCR engine. Extract it, install the included XPI, then import the PDF and OCR engine ZIPs separately under **Settings → External dependencies**. Preinstalled Python/uv and administrator access are not required. [Download v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
+**v0.6.6 is in preparation:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite will include the XPI, PDF engine and local OCR engine. [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
 
 <!-- release-summary:start -->
 ## Recent releases

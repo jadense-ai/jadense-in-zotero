@@ -2,6 +2,7 @@
 import hashlib
 import asyncio
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,15 @@ def fixture(path):
 
 
 class PDFOutputTests(unittest.TestCase):
+    def test_offline_check_accepts_powershell_utf8_bom_on_first_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = '\ufeff' + json.dumps({'operation': 'check', 'root': directory}) + '\n'
+            with patch.object(worker.sys, 'stdin', io.StringIO(request)), \
+                    patch.object(worker, 'setup_cache'), patch.object(worker, 'check_engine') as check:
+                worker.main()
+            check.assert_called_once_with()
+            self.assertEqual((Path(directory) / worker.ENGINE).read_text(encoding='utf-8'), 'ready')
+
     def test_worker_and_host_share_the_adapter_deployment_version(self):
         from batch_adapter import STRATEGY
         self.assertEqual(worker.ADAPTER, STRATEGY)

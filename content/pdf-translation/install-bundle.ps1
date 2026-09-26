@@ -1,5 +1,5 @@
 ﻿param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [string]$ArchivePath = '')
-# 官方清单来自 XPI。哈希在执行包内 Python 前校验；离线包也走同一安全边界。
+# 自动下载使用 XPI 清单校验；用户明确选择的离线 ZIP 直接导入。
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $OutputEncoding = [Console]::OutputEncoding
@@ -21,7 +21,7 @@ $nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } e
 $target = if ($nativeArch -eq 'ARM64') { 'windows-arm64' } else { 'windows-x64' }
 $catalog = Get-Content -LiteralPath (Join-Path $root 'bundles.json') -Raw | ConvertFrom-Json
 $entry = $catalog.$target
-if (-not $entry -or $entry.sha256 -notmatch '^[a-f0-9]{64}$') { throw "No verified offline package for $target. Use the manual installation guide." }
+if (-not $entry -or (-not $ArchivePath -and $entry.sha256 -notmatch '^[a-f0-9]{64}$')) { throw "No offline package for $target. Use the manual installation guide." }
 $archive = if ($ArchivePath) { [IO.Path]::GetFullPath($ArchivePath) } else { Join-Path $root ($entry.file + '.part') }
 if (-not $ArchivePath) {
     Initialize-PDFNetwork
@@ -78,9 +78,12 @@ if (-not $ArchivePath) {
     }
     if (-not $downloaded) { Write-PDFInstallError $category 'download'; throw 'Engine download failed. Retry to resume, or download the offline ZIP from GitHub and import it.' }
 }
-Progress 'verify' 'Verifying offline package'
-if ((Hash $archive) -ne $entry.sha256) { Write-PDFInstallError 'integrity' 'verify'; throw 'Engine checksum mismatch. Download the matching official offline package.' }
-$stage = Join-Path $root ('bundle-stage-' + [Guid]::NewGuid().ToString('N'))
+if (-not $ArchivePath) {
+    Progress 'verify' 'Verifying download'
+    if ((Hash $archive) -ne $entry.sha256) { Write-PDFInstallError 'integrity' 'verify'; throw 'Engine download is incomplete. Retry the download or import the offline ZIP.' }
+}
+# 短暂存目录避免深层 Zotero profile 与依赖包长文件名叠加触发 MAX_PATH。
+$stage = Join-Path $root ('s-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $destination = Join-Path $root 'runtime'
 $backup = Join-Path $root ('runtime-backup-' + [Guid]::NewGuid().ToString('N'))
 # 删除和移动只涉及 root 中明确生成的目录，不接触 tasks 或用户文献。

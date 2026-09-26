@@ -3,10 +3,10 @@
     "version": "ocr-engine-2.126.0-3.9.2-1",
     "engine": "docling-2.126.0-rapidocr-3.9.2",
     "platform": "windows-x64",
-    "published": false,
+    "published": true,
     "file": "jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip",
-    "size": 864717207,
-    "sha256": "79727a759cef17fad619ec98ddf6c967bad1bd89a8c06f43aafde95c6dfca84d",
-    "urls": []
+    "size": 856821566,
+    "sha256": "775db6909dece9aef9b1a0a5f17de79638ab50f42efc1da298d2b93e2af66901",
+    "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.5/jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip"]
   }
 }

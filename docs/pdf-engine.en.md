@@ -1,4 +1,4 @@
-# PDF layout and translation engine setup (0.6.0)
+# PDF layout and translation engine setup (0.6.6 pending release)
 
 [README](../README.en.md) · [中文完整指南](pdf-engine.md)
 
@@ -8,23 +8,21 @@ The BabelDOC 0.6.4 engine parses PDF layouts and typesets translated PDFs. It is
 
 Open **Settings → External dependencies → Layout parsing engine**, or follow the dependency link under **Feature settings → Full translation**. Choose **Prepare PDF translation engine** and wait for **PDF translation engine ready**. First use of parallel translation also prepares the engine.
 
-Source builds and ordinary PR previews keep the Windows x64 entry in [bundles.json](../content/pdf-translation/bundles.json) at `published: false`, so they do not point to unavailable assets. Tagged release builds temporarily write that release's exact URL and SHA-256 into the XPI and include the full bundle; the v0.6.5 release XPI can use it during automatic Windows x64 setup. Failed downloads, checksums or offline health checks report the install stage and retain the existing engine.
+The Windows x64 release can download its engine automatically. If that download is unavailable, import the engine ZIP from the complete offline suite below. The plugin resumes interrupted automatic downloads and checks the result. For a ZIP you select manually, it extracts the package and checks Python, models, fonts and PDF rendering before replacing an existing engine.
 
-The [v0.6.5 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) provides the matching Windows x64 PDF and OCR engine ZIPs, both separately and inside the complete offline suite. Follow the [ZIP offline installation guide](usage-guide.md#windows-x64-zip-offline-installation). An older same-named engine ZIP can have a different checksum and must not be mixed with the v0.6.5 XPI.
-
-The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the roughly 433 MiB v0.6.5 engine archive, 940 MiB extracted runtime and replacement workspace.
+The settings show the installation directory: `jadense-pdf-translation/` inside your Zotero **profile**, which may differ from your library data directory. Allow at least 3 GiB for the archive, extracted runtime and replacement workspace.
 
 ## Manual download and offline import
 
-From the [v0.6.5 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5), download `jadense-pdf-engine-0.6.4-1-windows-x64.zip` on a connected computer and transfer it.
+On a connected computer, open [GitHub Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) and download `jadense-in-zotero-v0.6.6-windows-x64-offline.zip` from the **v0.6.6** release page once it is published. Transfer it to the Windows x64 computer and extract the outer ZIP.
 
-- Size: **454424663 bytes**.
-- SHA-256: `579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd`.
-- Platform: **Windows x64 only**.
+1. Install `jadense-in-zotero-v0.6.6.xpi` from the extracted folder, then restart Zotero.
+2. Open **Settings → External dependencies → Layout parsing engine → Import offline package** and select `jadense-pdf-engine-*.zip` from that folder. Keep this engine ZIP intact.
+3. Wait for **PDF translation engine ready**. Original PDFs and saved `tasks/` results are preserved.
 
-Choose **Import offline package** and select the ZIP without extracting it. The plugin verifies the hash, loads models and checks PDF rendering before replacing the runtime. Original PDFs and saved `tasks/` results are preserved. The complete bundle includes Python, dependencies, models and fonts; administrator access, Python and uv are not required.
+The suite includes Python, dependencies, models and fonts; administrator access, preinstalled Python and uv are not required.
 
-If the check reports a missing VC++ runtime or a DLL load error under a deeply nested custom Zotero profile, use the [offline ZIP troubleshooting steps](usage-guide.md#windows-x64-zip-offline-installation) to verify the official x64 runtime and the profile path before retrying. Do not disable checksum checks or change your translation model for an installation error.
+If the check reports a missing VC++ runtime or a DLL load error under a deeply nested custom Zotero profile, use the [offline ZIP troubleshooting steps](usage-guide.md#windows-x64-zip-offline-installation) to verify the official x64 runtime and the profile path. For `Unexpected UTF-8 BOM`, upgrade the plugin to 0.6.6 and import the original engine ZIP again; the older Python request reader could not handle a leading BOM.
 
 ## Repository fallback and manual setup
 
@@ -77,11 +75,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Model setup failed. Check download errors or i
 
 These settings apply only to this window and child processes; closing the window ends them without changing system configuration. Older PowerShell uv downloads do not necessarily read `HTTPS_PROXY`, so the example also sets the .NET proxy and invokes the script with `&` in the same process. Use an HTTP endpoint, not a SOCKS endpoint. This example assumes a local proxy without authentication; ask your administrator about authenticated proxies and never post passwords in logs. If script execution is blocked, prefer offline import or contact your administrator rather than permanently relaxing machine-wide policy.
 
-The plugin starts its installer with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the Windows default `Restricted` policy normally needs no change. `MachinePolicy`/`UserPolicy` Group Policy can override process settings, and AppLocker/WDAC or endpoint protection can block process launch or profile writes. Ask your administrator for an approved, scoped allow rule for the Zotero plugin operation; do not set machine-wide `Unrestricted`, disable antivirus, or repeatedly run Zotero as administrator. For certificate errors, check system time and trusted organizational certificates instead of bypassing TLS or package verification. A connection error alone does not establish that administrator privileges are needed.
+The plugin starts its installer with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the Windows default `Restricted` policy normally needs no change. If a process or profile write is blocked, follow the [specific Windows troubleshooting steps](usage-guide.md#windows-x64-zip-offline-installation): inspect `Get-ExecutionPolicy -List`, Windows Security protection history and the named blocked program, then retry. For certificate errors, check system time and trusted certificates. A connection error alone does not establish that administrator privileges are needed.
 
 ## Recovery
 
-Retry interrupted downloads or import a matching offline package. For missing or corrupt resources, use **Repair engine** or import again. Never disable hash checks or create ready markers yourself. Model/DLL errors may require system runtime or subprocess-policy fixes; changing the translation model will not repair the local engine. Installer error output, when present, is saved to `install.log` in the displayed directory. Review personal paths before sharing it.
+Retry interrupted downloads or import the original offline package. For missing or corrupt resources, use **Repair engine** or import again. Model/DLL errors may require the official system runtime or an allowed subprocess; changing the translation model will not repair the local engine. Installer error output, when present, is saved to `install.log` in the displayed directory. Review personal paths before sharing it.
 
 OCR source settings do not change this engine's download source. If translation is partial but the engine is healthy, read/export completed output and retry missing segments instead of reinstalling.
 

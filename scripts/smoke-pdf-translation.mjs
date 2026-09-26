@@ -16,6 +16,14 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     assert(row.getBoundingClientRect().width > 0, 'PDF engine settings must be visible')
     const check = row.querySelector('[data-pdf-engine-check]')
     assert(check && row.querySelector('[data-pdf-engine-import]'), 'Engine import/check controls missing')
+    const guide = row.querySelector('a[href$="/docs/pdf-engine.md"]')
+    assert(guide, 'PDF engine manual guide link missing')
+    const launchURL = Zotero.launchURL, opened = []
+    try {
+      Zotero.launchURL = url => opened.push(url)
+      guide.click()
+      assert(opened.length === 1 && opened[0] === guide.href, 'PDF engine guide did not open in the system browser')
+    } finally { Zotero.launchURL = launchURL }
     check.click()
     await waitFor(() => !check.disabled, 'empty profile engine check')
     const jobs = await waitFor(() => Zotero.__jadensePDFTranslationJobs, 'PDF engine jobs')

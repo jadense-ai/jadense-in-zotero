@@ -298,7 +298,9 @@ def check_engine():
 
 
 def main():
-    config = json.loads(sys.stdin.readline())
+    # Windows PowerShell 5.1 的管道在部分系统会给首个 JSON 消息加 UTF-8 BOM。
+    # BOM 不是配置内容，读取边界去掉它，后续协议仍按标准 JSON 解析。
+    config = json.loads(sys.stdin.readline().lstrip('\ufeff'))
     with contextlib.redirect_stdout(sys.stderr):
         setup_cache(config["root"], config.get('assetRoot'))
         if config.get("operation") in ("prepare", "check"):
