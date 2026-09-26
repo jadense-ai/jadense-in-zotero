@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.7 待发布：**版面解析引擎设置页的“GitHub 下载与手动安装指南”将直接打开最新 GitHub Release 说明，方便从同一页面查看离线安装步骤和下载附件。Windows x64 完整套装包含 XPI、PDF 引擎与本机 OCR 引擎。[查看当前正式版 v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
+**v0.6.6 已发布：**修复版面解析引擎指南链接、PDF 离线检测的 UTF-8 BOM 错误，以及深层 profile 下两种引擎解压失败。Windows x64 完整套装同时包含 XPI、PDF 引擎与本机 OCR 引擎。[下载 v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
 <!-- release-summary:start -->
 ## 最近版本
@@ -107,9 +107,9 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最新 Release 说明提供 Windows x64 完整离线套装和安装步骤；维护者核验清单位于页面附件中 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载 `jadense-in-zotero-v0.6.2.xpi`，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 当前公开版本为 [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装对应版本 `release/zotero/vX.Y.Z/` 中的 XPI | 构建当前源码；仅需本仓库与所列构建依赖 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.2/jadense-in-zotero-v0.6.2.xpi` | 构建当前源码；仅需本仓库与所列构建依赖 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
@@ -180,7 +180,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 ### 1. 安装与打开工作台
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前正式版为 **0.6.2**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 

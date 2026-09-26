@@ -1,4 +1,4 @@
-# PDF layout and translation engine setup (0.6.7 pending release)
+# PDF layout and translation engine setup (0.6.6)
 
 [README](../README.en.md) · [中文完整指南](pdf-engine.md)
 
@@ -7,8 +7,6 @@ The BabelDOC 0.6.4 engine parses PDF layouts and typesets translated PDFs. It is
 ## Automatic setup
 
 Open **Settings → External dependencies → Layout parsing engine**, or follow the dependency link under **Feature settings → Full translation**. Choose **Prepare PDF translation engine** and wait for **PDF translation engine ready**. First use of parallel translation also prepares the engine.
-
-The **GitHub downloads and manual installation** link in settings opens the [latest Release notes](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) in your system browser. The notes list the offline package and steps for that version.
 
 The Windows x64 release can download its engine automatically. If that download is unavailable, import the engine ZIP from the complete offline suite below. The plugin resumes interrupted automatic downloads and checks the result. For a ZIP you select manually, it extracts the package and checks Python, models, fonts and PDF rendering before replacing an existing engine.
 
