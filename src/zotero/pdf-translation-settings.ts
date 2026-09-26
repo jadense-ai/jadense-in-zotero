@@ -24,7 +24,7 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
   offline.textContent = uiText('导入离线包', 'Import offline package'); offline.dataset.pdfEngineImport = ''
   prepare.textContent = uiText('准备 PDF 翻译引擎', 'Prepare PDF translation engine'); repair.textContent = uiText('修复引擎', 'Repair engine'); cancel.textContent = uiText('取消', 'Cancel'); cancel.hidden = true
   const help = element('a'); help.textContent = uiText('GitHub 下载与手动安装指南', 'GitHub downloads and manual installation')
-  help.href = 'https://github.com/jadense-ai/jadense-in-zotero/blob/main/docs/pdf-engine.md'; help.target = '_blank'; help.rel = 'noopener noreferrer'
+  help.href = 'https://github.com/jadense-ai/jadense-in-zotero/releases/latest'; help.target = '_blank'; help.rel = 'noopener noreferrer'
   help.addEventListener('click', event => {
     event.preventDefault()
     try {
