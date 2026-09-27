@@ -10,6 +10,7 @@ import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-lon
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
 import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
 import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
+import { verifyJadenseMode } from './smoke-jadense-mode.mjs'
 import { verifyPDFTranslation, verifyPDFTranslationRestart } from './smoke-pdf-translation.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
@@ -278,6 +279,15 @@ async function startStub(selectionOnly = false) {
         }))
         return
       }
+      // 热升级后恢复的设置窗口也会只读能力；派发仍由模式专项捕获，不能放行未知 POST。
+      if (request.url === "/api/extension/zotero/ai/capabilities" && request.method === "GET") {
+        if (request.headers.authorization !== `Bearer ${SYNTHETIC_TOKEN}`) throw new Error("Synthetic capability token was not used")
+        requests.push({ kind: "zotero-ai-capabilities" })
+        const capability = { enabled: true, available: true, authorized: true, revision: 1, modelId: 'synthetic-model', displayName: 'Synthetic Model', reason: null }
+        response.writeHead(200, { "content-type": "application/json" })
+        response.end(JSON.stringify({ userId: 'synthetic-user', decision: capability, ocr: capability }))
+        return
+      }
       if (request.url === "/api/extension/profile/me" && request.method === "GET") {
         if (request.headers.authorization !== `Bearer ${SYNTHETIC_TOKEN}`) throw new Error("Synthetic account token was not used")
         requests.push({ kind: "account-profile" })
@@ -367,7 +377,7 @@ async function startStub(selectionOnly = false) {
         ].join(""))
         return
       }
-      if (request.url !== "/api/chat" || request.method !== "POST") throw new Error("Unexpected endpoint requested")
+      if (request.url !== "/api/chat" || request.method !== "POST") throw new Error(`Unexpected endpoint requested: ${request.method} ${request.url?.split('?')[0]}`)
       if (request.headers.authorization !== `Bearer ${SYNTHETIC_TOKEN}`) throw new Error("Synthetic token was not used")
       const chunks = []
       let bytes = 0
@@ -653,6 +663,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         report.upgrade = { previousWhiteSpace: previousManager.getComputedStyle(probe).whiteSpace }
         const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs")
         report.upgrade.from = (await AddonManager.getAddonByID(config.pluginID)).version
+        if (config.featureSettingsOnly) {
+          await Promise.resolve(Zotero.Utilities.Internal.openPreferences('jadense-in-zotero-preferences'))
+          const previousPreferences = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'previous native preferences stylesheet')
+          const row = await waitFor(() => previousPreferences.document.querySelector('.jdx-feature-model-row'), 'previous native settings row')
+          report.upgrade.previousNativeColumns = previousPreferences.getComputedStyle(row).gridTemplateColumns
+          previousPreferences.close()
+        }
         await stage("installing-upgrade-without-restart")
         const file = Components.classes["@mozilla.org/file/local;1"].createInstance(Components.interfaces.nsIFile)
         file.initWithPath(config.upgradeXpi)
@@ -963,6 +980,17 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     if (config.featureSettingsOnly) {
       await stage('feature-settings')
       await verifyFeatureSettings({ Zotero, assert, waitFor, screenshot, report, findManager, findWindowContaining, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.jadenseModeOnly && !config.jadenseModeResume) {
+      await stage('jadense-mode')
+      await verifyJadenseMode({ Zotero, reader, assert, waitFor, screenshot, report, findManager, findWindowContaining })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.jadenseModeResume) {
+      assert(Zotero.Prefs.get('extensions.jadenseInZotero.jadenseMode', true) === true, 'Cold restart lost mode')
+      assert(Zotero.Prefs.get('extensions.jadenseInZotero.ocrEngine', true) === 'glm', 'Cold restart lost manual OCR choice')
+      report.checks.push('mode-native-cold-restart')
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.translationFilesOnly) {
@@ -3002,6 +3030,7 @@ async function writeCompanion(extensionsDir, config) {
     verifyMachineTranslation.toString(),
     verifyOCRTranslation.toString(),
     verifyCloudOCR.toString(),
+    verifyJadenseMode.toString(),
     verifyTranslationFiles.toString(),
     verifyPDFTranslation.toString(),
     verifyPDFTranslationRestart.toString(),
@@ -3124,6 +3153,7 @@ async function main() {
         assistant: createMarkdownFixture("assistant", stub.origin),
       },
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
+      jadenseModeOnly: argv.includes('--jadense-mode-only'),
       translationFilesOnly: argv.includes('--translation-files-only'), pdfTranslationOnly: argv.includes('--pdf-translation-only'), pdfStatusOnly: argv.includes('--pdf-status-only'), pdfAI: argv.includes('--pdf-ai'), pdfPartial: argv.includes('--pdf-partial'), pdfViewerFixture: argValue(argv, '--pdf-viewer-fixture') ? path.resolve(argValue(argv, '--pdf-viewer-fixture')) : undefined, pdfEngineArchive: argValue(argv, '--pdf-engine-archive') ? path.resolve(argValue(argv, '--pdf-engine-archive')) : undefined, pdfEngineSettingsCheck: argv.includes('--pdf-engine-settings-check'), pdfEngineOnly: argv.includes('--pdf-engine-only'), pdfEngineSetupOnly: argv.includes('--pdf-engine-setup-only'),
       sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'),
       classificationOnly: argv.includes('--classification-only'),
@@ -3186,10 +3216,10 @@ async function main() {
       if (stub.requests.filter(row => row.kind === 'long-pdf-summary').length !== summariesBefore) throw new Error('Cold restart unnecessarily regenerated document summaries')
       report.checks.push(...restored.checks, 'native-cold-restart-summary-reuse')
     }
-    if (argv.includes('--feature-settings-only')) {
+    if (argv.includes('--feature-settings-only') || argv.includes('--jadense-mode-only')) {
       await stopIsolatedProcess(child, profileDir)
       const savedReport = path.join(smokeRoot, 'settings-restart-report.json')
-      await writeCompanion(extensionsDir, { ...companionConfig, featureSettingsResume: true, reportPath: savedReport })
+      await writeCompanion(extensionsDir, { ...companionConfig, featureSettingsResume: argv.includes('--feature-settings-only'), jadenseModeResume: argv.includes('--jadense-mode-only'), reportPath: savedReport })
       child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
       const deadline = Date.now() + 60000
       let restored

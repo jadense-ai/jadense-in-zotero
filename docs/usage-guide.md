@@ -387,3 +387,22 @@ Configure the translation service, model, target language and concise/full scope
 ## 0.6.1 设置界面调整
 
 功能配置页移除“查看待恢复 AI 请求”按钮及其专用面板，无需替代配置。任务内部的错误恢复、部分译文和补译入口不变。升级保留已有设置和历史，已安装的版面解析引擎无需重装；离线安装继续使用 [v0.6.0 引擎 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)。
+
+
+<a id="literature-radar"></a>
+## 文献雷达 / Literature Radar（0.6.7 待发布 / pending release）
+
+官方完整安装包的工作台侧栏提供「文献雷达」。公开源码独立构建的基础版不包含此模块。0.6.7 仅检索 arXiv，没有来源选择控件；多文献源与选择 UI 留待下一版本。
+
+1. 在设置中连接攻玉账号，再开启默认关闭的「攻玉模式」。服务端需为账号提供相应模型能力；权限或积分不足时按提示处理。
+2. 打开「文献雷达 → 编辑兴趣档案」。输入关键词或完整短语后按 Enter 添加。建议英文关键词；中文会在运行时翻译。默认最近 1 天，也可指定日期区间；默认每轮最多 100 篇候选。
+3. AI 评价默认关闭；开启后可选择攻玉模型。关闭评价仍会使用 Jev 相关性初筛，中文翻译与模型调用可能消耗积分。相关性分数为 0–10，不代表论文质量；评价仅依据标题与摘要。
+4. 主动开始检索；需要自动执行时开启每日追踪并设置本机时间（默认 09:00）。自动执行需要 Zotero 运行、连接可用且攻玉模式开启。可停止执行；已提交的模型请求可能继续处理。
+5. 在历史中查看本轮入选论文，展开摘要或 AI 评价；「收藏到」选择文库或分类，「收藏并自动下载 PDF」额外尝试下载 PDF。批量操作先勾选文献。PDF 失败仍保留已收藏条目，可稍后重试。
+6. 未开启模式时可点击「查看演示」。演示展示示例论文；明确选择收藏操作才会写入文库。
+
+Official complete packages expose **Literature Radar** in the workspace sidebar; public-source base builds do not. Version 0.6.7 searches **arXiv only** and has no source selector. Multiple sources and their selection UI are planned for the next version.
+
+Connect your Jadense account and enable **Jadense mode** (off by default), then open **Literature Radar → Research interests**. Add phrases with Enter; English terms are recommended and Chinese terms are translated at run time. The defaults are the last one day and up to 100 candidates; an explicit date range is available. Optional AI review is off by default and uses a selected Jadense model. Jev screening and keyword translation may use points even when review is off. Scores indicate relevance, not paper quality, and reviews use titles and abstracts only.
+
+Start a run manually or enable daily runs (09:00 local time by default). Automatic runs require Zotero, an active connection and Jadense mode. History preserves results. Select a library/collection when saving; saving with PDF also attempts a download. PDF failures retain saved metadata and can be retried. Mode-off users can view the demo; only an explicit save action writes demo papers to their library.

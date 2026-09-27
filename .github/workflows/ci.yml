@@ -1,5 +1,5 @@
 # 独立仓库验证与草稿发布：构建只执行一次，发布任务消费同一份已校验制品。
-name: Verify and draft release
+name: Verify and package base distribution
 
 on:
   pull_request:
@@ -90,26 +90,5 @@ jobs:
           compression-level: 0
           retention-days: 30
 
-  draft-release:
-    needs: [verify, package-offline]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .node-version
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: zotero-release
-          path: release-assets
-      - name: Verify and create draft
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: node .github/scripts/release.mjs draft release-assets
+  # Official complete packages are assembled and verified by the maintainer.
+  # Public CI artifacts are base distributions and must never become official assets.

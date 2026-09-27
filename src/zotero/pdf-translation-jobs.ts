@@ -30,6 +30,8 @@ export type PDFTranslationTask = {
   createdAt?: string; service?: string; completed?: number; total?: number; legacy?: boolean; summary?: Record<string, unknown>
   budget?: { batchTokens: number; contextWindow: number; maxOutputTokens?: number; sourceTokens: number }
   retrying?: Record<string, PDFRetryState>
+  failureCounts?: Record<string, number>; diagnosticId?: string
+  formulaPolicy?: 'math-fonts-v1'
 }
 type Attachment = DocumentIdentity & { id: number; key: string; libraryID: number; getFilePathAsync(): Promise<string>; getField(key: string): unknown; attachmentModificationTime?: number | Promise<number> }
 export async function pdfSource(host: ZoteroLike, itemID: number) {
@@ -104,22 +106,33 @@ export class PDFTranslationJobs {
     await io.makeDirectory(pdfTaskDirectory(task.id), { ignoreExisting: true })
     await io.writeUTF8(file, JSON.stringify(task), { tmpPath: file + '.tmp' }); this.emit()
   }
-  start(itemID: number, mode = readPDFTranslationMode(this.host)): Promise<PDFTranslationTask> {
-    const key = `${itemID}:${mode}`
+  /** 阅读优先：跨配置和引擎升级查找同一原件的成果，不启动旧任务或调用翻译服务。 */
+  async openOrStart(itemID: number, mode = readPDFTranslationMode(this.host)): Promise<PDFTranslationTask> {
+    const origin = await pdfSource(this.host, itemID)
+    await this.loadHistory()
+    const saved = this.list().find(task => task.source.itemID === itemID
+      && task.source.libraryID === origin.source.libraryID && task.source.itemKey === origin.source.itemKey
+      && task.fingerprint === origin.fingerprint && this.hasOutput(task))
+    if (saved) return saved
+    return this.start(itemID, mode)
+  }
+  start(itemID: number, mode = readPDFTranslationMode(this.host), fresh = false): Promise<PDFTranslationTask> {
+    const key = `${itemID}:${mode}:${fresh}`
     const pending = this.starts.get(key)
     if (pending) return pending
-    const result = this.startTask(itemID, mode).finally(() => this.starts.delete(key))
+    const result = this.startTask(itemID, mode, fresh).finally(() => this.starts.delete(key))
     this.starts.set(key, result); return result
   }
-  private async startTask(itemID: number, mode: PDFTranslationMode) {
+  private async startTask(itemID: number, mode: PDFTranslationMode, fresh: boolean) {
     const origin = await pdfSource(this.host, itemID), config = await settings(this.host), languages = await readArticleTranslationLanguages(this.host, itemID)
     const service = translationServiceKey(config.translation.kind === 'machine' ? config.translation.service : config.model.route === 'byok' ? config.model.config?.baseUrl ?? '' : config.connection.baseUrl)
     const budget = { ...translationCapacity(this.host), batchTokens: translationSpeed(this.host, service).batchTokens }
     const baseIdentity = [origin.source.libraryID, origin.source.itemKey, origin.fingerprint, config.fingerprint, languages, PDF_ENGINE]
     const strategy = config.translation.kind === 'machine' ? 'readable-v3' : PDF_ADAPTER
-    const id = await requestHash(JSON.stringify([...baseIdentity, strategy, budget, mode]))
+    const formulaPolicy = 'math-fonts-v1' as const
+    const id = await requestHash(JSON.stringify([...baseIdentity, strategy, budget, mode, formulaPolicy, ...(fresh ? [crypto.randomUUID()] : [])]))
     if (this.tasks.has(id)) return this.tasks.get(id)!
-    let task: PDFTranslationTask = { id, version: 1, createdAt: new Date().toISOString(), engine: PDF_ENGINE, source: origin.source, fingerprint: origin.fingerprint, configuration: config.fingerprint, languages, service, mode, strategy, budget, status: 'queued', stage: 'queued', percent: 0, pages: 0, skipped: [] }
+    let task: PDFTranslationTask = { id, version: 1, createdAt: new Date().toISOString(), engine: PDF_ENGINE, source: origin.source, fingerprint: origin.fingerprint, configuration: config.fingerprint, languages, service, mode, strategy, formulaPolicy, budget, status: 'queued', stage: 'queued', percent: 0, pages: 0, skipped: [] }
     try {
       const saved = JSON.parse(await pdfPlatform().IOUtils.readUTF8(pdfPlatform().PathUtils.join(pdfTaskDirectory(id), 'task.json')))
       if (saved.id === id && saved.fingerprint === origin.fingerprint && saved.configuration === config.fingerprint && saved.engine === PDF_ENGINE) {
@@ -178,7 +191,7 @@ export class PDFTranslationJobs {
   private dispatch(task: PDFTranslationTask) {
     const controller = new AbortController(); this.controllers.set(task.id, controller)
     void this.queue.enqueue(controller.signal, async () => {
-      task.status = 'running'; task.legacy = false; task.percent = 0; task.retrying = {}; await this.save(task)
+      task.status = 'running'; task.legacy = false; task.percent = 0; task.retrying = {}; task.failureCounts = {}; task.diagnosticId = undefined; await this.save(task)
       const admission = await settings(this.host)
       // 旧任务的批次/付费请求身份不能套用新组批策略；成果仍可独立读取。
       if (admission.translation.kind === 'ai' && task.strategy !== PDF_ADAPTER) throw new Error(uiText('翻译策略已更新，请重新点击对照翻译开始新任务；旧成果仍可阅读。', 'Translation strategy changed. Start a new parallel translation; existing results remain readable.'))
@@ -202,7 +215,7 @@ export class PDFTranslationJobs {
       const budget = task.budget ?? { ...translationCapacity(this.host), batchTokens: translationSpeed(this.host, task.service!).batchTokens }
       const request = new AbortController(); this.requests.set(task.id, request)
       controller.signal.addEventListener('abort', () => request.abort(), { once: true })
-      await runPDFWorker(this.host, { source: origin.path, layoutIdentity: [task.source.libraryID, task.source.itemKey], directory: pdfTaskDirectory(task.id), fingerprint: task.fingerprint, configuration: task.configuration, ...task.languages, machine: config.translation.kind === 'machine', mode: task.mode ?? 'full', strategy: task.strategy, budget, workers: config.translation.kind === 'machine' ? 1 : 8 }, controller.signal, async message => {
+      await runPDFWorker(this.host, { source: origin.path, layoutIdentity: [task.source.libraryID, task.source.itemKey], directory: pdfTaskDirectory(task.id), fingerprint: task.fingerprint, configuration: task.configuration, ...task.languages, machine: config.translation.kind === 'machine', mode: task.mode ?? 'full', strategy: task.strategy, formulaPolicy: task.formulaPolicy, budget, workers: config.translation.kind === 'machine' ? 1 : 8 }, controller.signal, async message => {
         if (message.type === 'artifact') {
           const artifact = await this.artifact(task)
           if (artifact) {
@@ -228,8 +241,13 @@ export class PDFTranslationJobs {
           return
         }
         if (message.type === 'passage_failure') {
+          const code = typeof message.category === 'string' ? message.category.toUpperCase() : ''
+          if (/^[A-Z][A-Z0-9_]{0,79}$/u.test(code) && typeof message.missing === 'number' && Number.isSafeInteger(message.missing) && message.missing > 0) {
+            task.failureCounts ??= {}; task.failureCounts[code] = (task.failureCounts[code] ?? 0) + message.missing
+          }
           try {
             const trace = diagnostics()?.start({ feature: 'pdf-translation', taskId: task.id, operationId: message.operation })
+            if (trace) task.diagnosticId = trace.row.id
             trace?.event('passage_failure', { code: String(message.category).toUpperCase(), translation: { missing: Number(message.missing) || 0 } }); trace?.end()
           } catch { /* 可选诊断不可中断排版。 */ }
           return
@@ -319,6 +337,9 @@ export class PDFTranslationJobs {
       task.status = request.signal.aborted ? 'cancelled' : task.coverage?.failed ? 'partial' : 'complete'; task.percent = 100; task.stage = task.status; if (task.status === 'complete') task.error = undefined; await this.save(task)
     }).catch(async error => {
       task.status = controller.signal.aborted || this.requests.get(task.id)?.signal.aborted ? 'cancelled' : 'error'; task.error = controller.signal.aborted ? undefined : error instanceof Error ? error.message : String(error)
+      if (task.status !== 'cancelled') {
+        try { const trace = diagnostics()?.start({ feature: 'pdf-translation', taskId: task.id }); if (trace) { task.diagnosticId = trace.row.id; trace.fail(error, 'task_failed'); trace.end() } } catch { /* 诊断失败不覆盖翻译结果。 */ }
+      }
       await this.restoreArtifact(task).catch(() => {})
       await this.save(task).catch(() => this.emit())
     }).finally(() => { controller.abort(); this.requests.delete(task.id); this.controllers.delete(task.id); this.emit() })

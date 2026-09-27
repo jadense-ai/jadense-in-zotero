@@ -17,9 +17,7 @@
         <button id="jadense-manager-sidebar-toggle" class="jdx-manager-sidebar-toggle" type="button" aria-expanded="true" aria-controls="jadense-manager-sidebar" title="收起导航" data-ui-en-title="Collapse navigation">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2.5"/><path d="M7 3v10"/></svg>
           </button>
-        <button id="jadense-home" type="button" title="打开攻玉首页" data-ui-en-title="Open Jadense homepage" aria-label="攻玉首页" data-ui-en-aria-label="Jadense homepage">
-          <img src="icons/logo-padded.png" alt="" width="22" height="22" />
-        </button>
+        <span id="jadense-home" class="jdx-titlebar-mode"></span>
         <button id="jadense-github" type="button" title="在浏览器打开 GitHub 仓库" data-ui-en-title="Open GitHub repository in browser" aria-label="GitHub 仓库" data-ui-en-aria-label="GitHub repository">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4c0-1-.3-2-1-2.5 4-.5 7-2 7-6a5 5 0 0 0-1.5-3.5A5 5 0 0 0 19 2s-1.5 0-4 1.5a14 14 0 0 0-6 0C6.5 2 5 2 5 2a5 5 0 0 0-.5 4A5 5 0 0 0 3 9.5c0 4 3 5.5 7 6-.7.5-1 1.5-1 2.5v4"/></svg>
         </button>
@@ -522,6 +520,7 @@
             </section>
             <section class="jdx-settings-task" data-settings-task="analysis">
               <h3 data-ui-en="Literature analysis">文献解析</h3>
+              <div data-analysis-ocr-host=""></div>
               <section data-feature-group="analysis">
                 <div class="jdx-feature-model-row">
                   <div><h3 id="jadense-feature-analysis-label" data-ui-en="AI model">AI 模型</h3></div>
@@ -685,7 +684,7 @@
               <div class="jdx-feature-model-row">
                 <div>
                   <h3><label id="jadense-manager-token-label" for="jadense-manager-token-input" data-ui-en="Jadense token">攻玉令牌</label></h3>
-                  <p id="jadense-manager-token-help" data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、账号信息和文献同步。</p>
+                  <p id="jadense-manager-token-help" data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, Jev/OCR in Jadense mode, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、攻玉模式 Jev/OCR、账号信息和文献同步。</p>
                 </div>
                 <div class="jdx-settings-controls">
                   <div id="jadense-manager-token-display" class="jdx-manager-token-row" role="group" aria-labelledby="jadense-manager-token-label">
@@ -708,7 +707,7 @@
               <div class="jdx-feature-model-row">
                 <div>
                   <h3 data-ui-en="Token access and permissions">令牌获取与权限</h3>
-                  <p class="jdx-manager-settings-note" data-ui-en="Need a token? Click Generate / update token to open Settings → Integrations on the Jadense website. Create a Zotero token and paste it above. A complete token should include Chat, account, points, and upload permissions; missing permissions affect the corresponding features.">还没有令牌？点击「生成 / 更新令牌」打开攻玉网页端，在「设置 → 集成」中创建 Zotero 专用令牌后粘贴到上方。建议选择包含对话、账号、积分与上传权限的完整令牌，权限不全时部分功能会不可用。</p>
+                  <p class="jdx-manager-settings-note" data-ui-en="Click Generate / update token to create a Zotero token in Settings → Integrations on Jadense, then paste it above. Include Chat, account, points and upload permissions. Jadense mode additionally requires Jev (ai:decision) and OCR (ai:ocr); older tokens need to be regenerated.">点击「生成 / 更新令牌」，在攻玉网页端「设置 → 集成」中创建 Zotero 专用令牌并粘贴到上方。请选择对话、账号、积分与上传权限。攻玉模式还需要 Jev（ai:decision）与 OCR（ai:ocr）权限，旧令牌需重新生成。</p>
                 </div>
                 <div class="jdx-manager-actions">
                   <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>

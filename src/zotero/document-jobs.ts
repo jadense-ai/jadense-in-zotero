@@ -25,7 +25,7 @@ import { readTranslationInterface, TRANSLATION_INTERFACE_PREF, TRANSLATION_INTER
 import { translateMachineText, TRANSLATION_LIMITS } from '@/chat/machine-translation'
 import { translationScheduler, stopTranslationScheduler } from '@/chat/translation-queue'
 import { stopLocalOCR } from './local-ocr'
-import { readDocument } from './document-extraction'
+import { extractionOCREnabled, readDocument } from './document-extraction'
 import { chunkTranslationDocument, translationCapacity, OCR_EXTRACTION_VERSION, TRANSLATION_CAPACITY_PREF, formulasPreserved, hasTranslatableText, capacitySlices, tokenCost } from './translation-chunks'
 import { documentIssue, notifyDocumentIssue } from './document-notices'
 import { retryAt, TranslationRateLimitError } from '@/chat/translation-queue'
@@ -234,7 +234,7 @@ export class DocumentJobs {
         task = { version: 1, id: crypto.randomUUID(), kind, source: { ...source, ...(literature ? { literature, title: literature.title } : {}) }, createdAt: new Date().toISOString(), status: 'running', totalPages: 0, completed: 0, total: 0, models: [], warnings: [] }
         this.tasks.set(task.id, task); this.controllers.set(task.id, controller); await this.save(task)
         const report = (text: string) => { this.activity = text; this.phases.set(task!.id, text); options.onProgress?.(text); this.emit() }
-        const raw = await waitForDocumentRead(readDocument(this.host, itemID, controller.signal, report, options.useOCR), controller.signal)
+        const raw = await waitForDocumentRead(readDocument(this.host, itemID, controller.signal, report, extractionOCREnabled(this.host, kind, options.useOCR)), controller.signal)
         checkCancelled(controller.signal)
         task.source = { ...raw.source, ...(literature ? { literature } : {}) }
         task.totalPages = raw.pages.length; task.warnings = raw.pages.flatMap(page => page.warning ? [page.warning] : [])

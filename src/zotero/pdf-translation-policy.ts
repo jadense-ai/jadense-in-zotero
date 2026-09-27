@@ -24,6 +24,24 @@ export function pdfCoverageText(coverage?: PDFCoverage) {
     + (failedPages.length ? uiText(` · 未完成页：${failedPages.map(n => n + 1).join('、')}`, ` · Incomplete pages: ${failedPages.map(n => n + 1).join(', ')}`) : '')
 }
 
+/** 恢复过程按事件累计，明确区别于最终覆盖；诊断关闭时仍能凭任务编号定位。 */
+export function pdfFailureDetails(task: { id: string; status: string; diagnosticId?: string; failureCounts?: Record<string, number> }) {
+  if (!['partial', 'error', 'interrupted'].includes(task.status)) return ''
+  const labels: Record<string, string> = {
+    OUTPUT_FAILED: uiText('模型批次失败', 'Model batch failed'),
+    PLACEHOLDER_MISMATCH: uiText('公式或格式标记不匹配', 'Formula or formatting mismatch'),
+    MISSING_ID: uiText('响应缺少段落', 'Missing passages'),
+    INVALID_OUTPUT: uiText('补译后仍未完成', 'Incomplete after repair'),
+    INVALID_JSON: uiText('响应格式无法解析', 'Unreadable response format'),
+    LAYOUT_MAPPING: uiText('译文排版回填失败', 'Layout mapping failed'),
+  }
+  const counts = Object.entries(task.failureCounts ?? {}).filter(([code, count]) => /^[A-Z][A-Z0-9_]{0,79}$/u.test(code) && Number.isSafeInteger(count) && count > 0)
+  return [uiText('任务编号：', 'Task ID: ') + task.id,
+    typeof task.diagnosticId === 'string' && task.diagnosticId ? uiText('诊断编号：', 'Diagnostic ID: ') + task.diagnosticId : '',
+    counts.length ? uiText('恢复过程记录（含重复尝试，不等于最终未译段数）：', 'Recovery records (including repeated attempts, not final untranslated counts): ') + counts.map(([code, count]) => `${labels[code] ?? code} [${code}] ${count}`).join('；') : '',
+  ].filter(Boolean).join('\n')
+}
+
 /** 未确认请求不由 PDF 层重放；服务级故障停止派发，但允许本地生成部分成果。 */
 export function pdfProviderFailure(error: unknown) {
   const value = error as { code?: unknown; status?: unknown }

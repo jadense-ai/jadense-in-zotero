@@ -58,7 +58,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     const task = { id: 'viewer-fixture', status: 'complete', pages: native.pagesCount, skipped: [] }
     fixtureTask = task
     Zotero.__jadensePDFTranslationJobs = {
-      start: async () => { fixtureStarts++; return task }, subscribe: callback => { notifyFixture = callback; return () => {} }, isActive: () => false,
+      start: async () => { fixtureStarts++; return task }, openOrStart: async () => { fixtureStarts++; return task }, subscribe: callback => { notifyFixture = callback; return () => {} }, isActive: () => false,
       speed: () => ({ active: 1, concurrency: 2, httpMinute: 3, rpm: 20, queued: 0, waitMs: 0 }),
       hasOutput: () => true, bytes: () => globalThis.IOUtils.read(config.pdfViewerFixture), stop() {},
     }
@@ -95,6 +95,8 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
   }
   try {
     const compare = await waitFor(() => doc.querySelector('[data-jadense-pdf-mode="compare"]'), 'PDF comparison button')
+    if (!compare.getBoundingClientRect().width) doc.querySelector('.jadense-reader-actions-toggle')?.click()
+    await waitFor(() => compare.getBoundingClientRect().width > 0, 'visible PDF comparison menu action')
     assert(!doc.querySelector('[data-jadense-pdf-mode="inplace"]') && compare.getBoundingClientRect().width > 0, 'Top toolbar must only expose comparison')
     compare.click()
     let panel = await waitFor(() => doc.querySelector('.jdx-pdf-translation'), 'PDF translation panel')
@@ -141,8 +143,11 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       await screenshot('pdf-translation-auto-retry-narrow-light', reader._iframeWindow)
       Object.assign(fixtureTask, { stage: 'parse', total: undefined, retrying: {} }); notifyFixture()
       assert(!status.querySelector('progress').hasAttribute('value'), 'Unknown progress must be indeterminate')
-      Object.assign(fixtureTask, { status: 'partial', error: undefined }); notifyFixture()
+      Object.assign(fixtureTask, { status: 'partial', error: undefined, diagnosticId: 'synthetic-diagnostic-123', failureCounts: { OUTPUT_FAILED: 34, PLACEHOLDER_MISMATCH: 6 } }); notifyFixture()
       assert(!status.classList.contains('is-working') && /已保存|saved/u.test(status.textContent), 'Partial result must stop animation and explain saved work')
+      assert(status.textContent.includes('synthetic-diagnostic-123') && status.textContent.includes('OUTPUT_FAILED') && status.textContent.includes('PLACEHOLDER_MISMATCH'), 'Failure details lack identity or recovery categories')
+      status.querySelector('details').open = true
+      await screenshot('pdf-translation-failure-details', reader._iframeWindow)
       Object.assign(fixtureTask, { status: 'complete' }); notifyFixture()
       report.checks.push('pdf-working-animation-countdown-progress-details-partial-state')
       return

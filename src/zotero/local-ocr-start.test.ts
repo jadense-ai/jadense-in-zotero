@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { DocumentJobs } from './document-jobs'
 import { DocumentStore } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, ensureLocalOCR, installLocalOCR, removeLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection, readOCRDocument, prepareLocalOCRModels, observeOCRProgress, startLocalOCR } from './local-ocr'
+import { checkLocalOCR, ensureLocalOCR, installLocalOCR, removeLocalOCR, ocrFailureMessage, readOCRModelSource, readOCRSelection, readOCRDocument, prepareLocalOCRModels, observeOCRProgress, startLocalOCR, registerOCRSettingsOperation, cancelOCRSettingsOperations } from './local-ocr'
 
 it('prepares bundled resources without AbortSignal.timeout', async () => {
   const f = coldProfile(); f.finish()
@@ -235,6 +235,47 @@ it('terminates the exact Windows installer process tree before returning a timeo
   await vi.advanceTimersByTimeAsync(1800001); await result
   expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ command: expect.stringContaining('taskkill.exe'), arguments: ['/PID', '23456', '/T', '/F'] }))
   expect(f.files.has('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2')).toBe(false)
+  f.jobs.dispose()
+})
+
+it('stops a silent installer on request and allows a fresh attempt', async () => {
+  const f = coldProfile(), kill = vi.fn(), controller = new AbortController()
+  f.spawn.mockImplementation(async options => options.command.endsWith('taskkill.exe')
+    ? { stdout: { readString: async () => null }, wait: async () => ({ exitCode: 0 }) } as never
+    : { pid: 34567, stdout: { readString: () => new Promise(() => {}) }, kill } as never)
+  const installing = expect(installLocalOCR(f.host, () => {}, false, undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce())
+  controller.abort(); await installing
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ command: expect.stringContaining('taskkill.exe'), arguments: ['/PID', '34567', '/T', '/F'] }))
+  expect(f.files.has('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2')).toBe(false)
+  f.spawn.mockResolvedValue(f.installer as never)
+  const retry = installLocalOCR(f.host)
+  await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(3))
+  f.finish(); await retry
+  f.jobs.dispose()
+})
+
+it('stops a silent model preparation and releases shared setup state', async () => {
+  const f = coldProfile(), kill = vi.fn(), controller = new AbortController()
+  f.files.set('/profile/jadense-ocr/v1/.venv/Scripts/python.exe', 'python')
+  f.files.set('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2', 'ready')
+  f.spawn.mockResolvedValue({ stdout: { readString: () => new Promise(() => {}) }, kill } as never)
+  const preparing = expect(prepareLocalOCRModels(f.host, () => {}, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce())
+  controller.abort(); await preparing
+  expect(kill).toHaveBeenCalledOnce()
+  expect((f.host as ZoteroLike & { __jadenseOCRModels?: unknown }).__jadenseOCRModels).toBeUndefined()
+  f.jobs.dispose()
+})
+
+it('stops all active OCR settings windows without retaining closed ones', () => {
+  const f = coldProfile(), first = new AbortController(), second = new AbortController()
+  const closeFirst = registerOCRSettingsOperation(f.host, first)
+  registerOCRSettingsOperation(f.host, second)
+  closeFirst()
+  cancelOCRSettingsOperations(f.host)
+  expect(first.signal.aborted).toBe(false)
+  expect(second.signal.aborted).toBe(true)
   f.jobs.dispose()
 })
 

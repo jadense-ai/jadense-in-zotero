@@ -73,7 +73,7 @@ function releaseFixture(t) {
   writeFileSync(path.join(directory, artifactName), bytes)
   writeFileSync(path.join(directory, "SHA256SUMS"), `${digest}  ${artifactName}\n`)
   writeFileSync(path.join(directory, "release-metadata.json"), JSON.stringify({
-    version: "0.3.1", artifactName, artifactSha256: digest, artifactSizeBytes: bytes.length, additiveField: true,
+    version: "0.3.1", artifactName, artifactSha256: digest, artifactSizeBytes: bytes.length, additiveField: true, distribution: 'full', features: ['literature-tracking'], buildMode: 'production',
   }))
   const assets = {xpi: {file: artifactName, size: bytes.length, sha256: digest}}
   for (const [kind, file] of Object.entries({offline: 'jadense-in-zotero-v0.3.1-windows-x64-offline.zip', 'pdf-translation': 'jadense-pdf-engine-1-windows-x64.zip', ocr: 'jadense-ocr-engine-1-windows-x64.zip'})) {
@@ -146,5 +146,14 @@ test("existing release or failed lookup prevents creation; failed creation is ne
     }
     assert.throws(() => createDraftRelease({ ...input, gh }), scenario === "exists" ? /already exists/ : /simulated gh failure/)
     assert.equal(calls.length, scenario === "create-failure" ? 2 : 1)
+  }
+})
+
+/** Official releases cannot silently publish a CI base distribution. */
+test('rejects base, missing capability and test-mode artifacts before GitHub calls', t => {
+  for (const patch of [{distribution:'base'}, {features:[]}, {buildMode:'test'}]) {
+    const input = releaseFixture(t), file = path.join(input.directory, 'release-metadata.json')
+    writeFileSync(file, JSON.stringify({...JSON.parse(readFileSync(file, 'utf8')), ...patch}))
+    assert.throws(() => createDraftRelease({...input, gh: () => {throw new Error('must not contact GitHub')}}), /production full distribution/)
   }
 })

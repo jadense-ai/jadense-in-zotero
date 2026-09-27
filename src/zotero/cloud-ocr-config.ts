@@ -1,7 +1,8 @@
 /** 云 OCR 配置与凭证：偏好仅存公开参数，密钥由 Gecko 登录管理器或宿主会话保存。 */
 import type { ZoteroLike } from './runtime'
 
-export const OCR_ENGINE_PREF = 'extensions.jadenseInZotero.ocrEngine'
+import { OCR_ENGINE_PREF, LAST_OCR_PREF, modeEnabled } from './jadense-mode-state'
+export { OCR_ENGINE_PREF } from './jadense-mode-state'
 const PREFIX = 'extensions.jadenseInZotero.cloudOCR.'
 export const CLOUD_OCR_SERVICES = {
   mineru: { name: 'MinerU', endpoint: 'https://mineru.net/api/v4', model: 'vlm', link: 'https://mineru.net/apiManage/token' },
@@ -11,7 +12,7 @@ export const CLOUD_OCR_SERVICES = {
   custom: { name: 'OpenAI compatible', endpoint: '', model: '', link: '' },
 } as const
 export type CloudOCREngine = keyof typeof CLOUD_OCR_SERVICES
-export type OCREngine = 'local' | CloudOCREngine
+export type OCREngine = 'local' | 'jadense' | CloudOCREngine
 export type CloudOCRConfig = { engine: CloudOCREngine; endpoint: string; model: string; consent: boolean; key: string }
 type Login = { hostname: string; httpRealm: string; username: string; password: string }
 type LoginManager = { findLogins(origin: string, form: string | null, realm: string): Login[]; addLoginAsync(login: Login): Promise<unknown>; removeLogin(login: Login): void }
@@ -28,7 +29,11 @@ function loginPlatform(host: Host) {
 }
 
 export function ocrEngine(host: ZoteroLike): OCREngine {
-  const value = host.Prefs?.get(OCR_ENGINE_PREF, true)
+  let value = host.Prefs?.get(OCR_ENGINE_PREF, true)
+  if (value === 'jadense') {
+    if (modeEnabled(host)) return 'jadense'
+    value = host.Prefs?.get(LAST_OCR_PREF, true)
+  }
   return typeof value === 'string' && Object.hasOwn(CLOUD_OCR_SERVICES, value) ? value as CloudOCREngine : 'local'
 }
 export function cloudOCRSettings(host: ZoteroLike, engine: CloudOCREngine) {

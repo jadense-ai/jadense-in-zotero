@@ -3,7 +3,7 @@ import { pdfCoverageText, pdfModeLabel } from './pdf-translation-policy'
 import type { DocumentIdentity } from './pdf-document'
 import type { ZoteroLike } from './runtime'
 import { pdfTranslationJobs, type PDFTranslationTask } from './pdf-translation-jobs'
-import { openSavedPDFTranslation } from './pdf-translation-reader'
+import { openOriginalPDF, openSavedPDFTranslation } from './pdf-translation-reader'
 import { sameAttachment } from './document-results'
 import { translationLanguageDisplayLabel } from '@/chat/translation-languages'
 import { action, badge, element, notice } from './ui/controls'
@@ -42,8 +42,9 @@ export function mountPDFTranslationFiles(root: HTMLElement, host: ZoteroLike, so
       row.append(element(doc, 'p', 'jdx-literature-meta', `${pdfModeLabel(task.mode ?? 'full')} · ${pdfCoverageText(task.artifact?.coverage ?? task.coverage)}`))
       if (task.error) row.append(element(doc, 'p', 'jdx-notice', task.error))
       const controls = element(doc, 'div', 'jdx-actions')
-      const open = action(doc, uiText('打开对照翻译', 'Open bilingual PDF'), () => { void perform(open, () => openSavedPDFTranslation(host, task.id)) })
-      controls.append(open)
+      const original = action(doc, uiText('打开原文 PDF', 'Open original PDF'), () => { void perform(original, () => openOriginalPDF(host, task.source)) })
+      const open = action(doc, uiText('打开双语对照阅读', 'Open bilingual PDF'), () => { void perform(open, () => openSavedPDFTranslation(host, task.id)) })
+      controls.append(original, open)
       for (const [kind, label] of [['mono', uiText('导出译文 PDF', 'Export translated PDF')], ['dual', uiText('导出双语 PDF', 'Export bilingual PDF')]] as const) {
         const save = action(doc, label, () => { void perform(save, () => jobs.export(task.id, kind, doc.defaultView!)) })
         save.disabled = !jobs.hasOutput(task); controls.append(save)
@@ -51,7 +52,7 @@ export function mountPDFTranslationFiles(root: HTMLElement, host: ZoteroLike, so
       if (task.status !== 'complete') { const retry = action(doc, uiText('补译未完成部分', 'Translate remaining passages'), () => jobs.retry(task.id)); retry.disabled = jobs.isActive(task.id); controls.append(retry) }
       open.disabled = !jobs.hasOutput(task); row.append(controls); list.append(row)
     }
-    if (!tasks.length) list.append(element(doc, 'p', 'jdx-result-empty', uiText('暂无翻译文件。请在 PDF 阅读器工具条中使用“对照翻译”，完成后会自动显示在这里。', 'No translated files yet. Use Bilingual PDF in the PDF reader toolbar. Completed files appear here automatically.')))
+    if (!tasks.length) list.append(element(doc, 'p', 'jdx-result-empty', uiText('暂无对照翻译。请在 PDF 阅读器工具条中使用“对照翻译”，完成后会自动显示在这里。', 'No bilingual PDFs yet. Use Bilingual PDF in the PDF reader toolbar. Completed files appear here automatically.')))
   }
   refresh()
   return { refresh, remove() { disposed = true } }

@@ -1,4 +1,4 @@
-import { readPDFTranslationMode, pdfModeLabel, pdfCoverageText, type PDFTranslationMode } from './pdf-translation-policy'
+import { readPDFTranslationMode, pdfModeLabel, pdfCoverageText, pdfFailureDetails, type PDFTranslationMode } from './pdf-translation-policy'
 /** 原生 PDF 旁的译文视图；保持原 Reader 实例，退出恢复宿主布局与批注交互。 */
 import type { ZoteroLike } from './runtime'
 import { pdfTranslationJobs, type PDFTranslationTask } from './pdf-translation-jobs'
@@ -9,6 +9,7 @@ import { READER_UI_THEME_CSS } from './reader-ui-theme'
 import { chromeContentUrl } from './chrome-registration'
 import type { ZoteroManagerWindow } from './manager-window'
 import { copyTextToClipboard } from './connection-display'
+import { validateDocument, type DocumentIdentity } from './pdf-document'
 
 export type PDFReadingState = { page: number; fraction: number; scale: number; rotation: number }
 type NativePDF = { pagesCount: number; currentPageNumber: number; currentScale: number; pagesRotation: number; container: HTMLElement; getPageView(index: number): { div: HTMLElement }; eventBus: { on(name: string, callback: () => void): void; off(name: string, callback: () => void): void } }
@@ -16,6 +17,13 @@ type Reader = { itemID: number; _initPromise?: Promise<unknown>; _internalReader
 type PDFView = { open(bytes: Uint8Array, notify: (state: PDFReadingState) => void, workerSource: string): Promise<number>; state(): PDFReadingState; set(state: PDFReadingState): void; find(query: string, again?: boolean): void; destroy(): Promise<void> }
 type WireView = Omit<PDFView, 'open'> & { open(bytes: Uint8Array, notify: (state: string) => void, workerSource: string): Promise<number>; stateJSON(): string }
 const views = new Map<Reader, { taskID(): string | undefined; show(mode: 'compare' | 'inplace'): void; remove(): void }>()
+
+/** 从历史返回原生原文阅读器，关闭该附件已有的对照视图。 */
+export async function openOriginalPDF(host: ZoteroLike, source: DocumentIdentity) {
+  await validateDocument(host, source)
+  const reader = await (host as ZoteroLike & { Reader?: { open(id: number): Promise<Reader | undefined> } }).Reader?.open(source.itemID)
+  if (reader) views.get(reader)?.remove()
+}
 
 /** 将页内位置规范化，不使用左右阅读区不同的绝对滚动像素。 */
 export function normalizedPDFState(value: PDFReadingState): PDFReadingState {
@@ -175,7 +183,8 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
   const scope = element('select'); scope.setAttribute('aria-label', uiText('翻译范围', 'Translation scope'))
   for (const value of ['concise', 'full'] as const) { const option = element('option'); option.value = value; option.textContent = pdfModeLabel(value); scope.append(option) }
   scope.value = translationMode; actions.append(scope)
-  scope.addEventListener('change', () => { translationMode = scope.value as PDFTranslationMode; savedTaskID = undefined; void start() })
+  scope.addEventListener('change', () => { translationMode = scope.value as PDFTranslationMode })
+  const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), () => { savedTaskID = undefined; void start(true) })
   const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (task) jobs.retry(task.id); else void start() })
   const cancel = button(uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id); preparation.abort() })
   const expandStatus = button(uiText('展开提示', 'Expand details'), () => {
@@ -289,7 +298,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     const detailsOpen = status.querySelector('details')?.open
     if (!task || removed) return
     const busy = task.status === 'queued' || task.status === 'running'
-    scope.disabled = busy; scope.value = task.mode ?? translationMode; repair.hidden = jobs.hasOutput(task); cancel.hidden = !busy; retry.hidden = busy || task.status === 'complete'; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !jobs.hasOutput(task)
+    scope.disabled = regenerate.disabled = busy; repair.hidden = jobs.hasOutput(task); cancel.hidden = !busy; retry.hidden = busy || task.status === 'complete'; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !jobs.hasOutput(task)
     retry.textContent = jobs.hasOutput(task) && task.status !== 'complete' ? uiText('补译未完成部分', 'Translate remaining passages') : uiText('重试', 'Retry')
     const stages: Record<string, string> = { parse_missing: uiText('建立 PDF 版面缓存', 'Building PDF layout cache'), parse_invalid: uiText('版面缓存不可用，重新解析 PDF', 'Layout cache unavailable; parsing PDF again'), preparing_pdf: uiText('检查 PDF 与版面缓存', 'Checking PDF and layout cache'), finishing: uiText('正在保存已完成译文', 'Saving completed translations'), layout_cached: uiText('已复用 PDF 版面', 'Reusing PDF layout'), queued: uiText('等待其他 PDF 任务', 'Waiting for another PDF task'), dependencies: uiText('安装 PDF 翻译引擎', 'Installing PDF translation engine'), assets: uiText('准备模型和字体', 'Preparing models and fonts'), download: uiText('下载完整引擎包', 'Downloading engine package'), retry: uiText('下载中断，正在续传重试', 'Retrying interrupted download'), verify: uiText('校验引擎包', 'Verifying engine package'), extract: uiText('解压引擎', 'Extracting engine'), check: uiText('离线检测引擎', 'Checking engine offline'), installed: uiText('引擎已安装', 'Engine installed'), parse: uiText('解析 PDF', 'Parsing PDF') }
     const stage = stages[task.stage] || (/translat/iu.test(task.stage) ? uiText('翻译正文', 'Translating text') : /typeset|render|save|generate|write/iu.test(task.stage) ? uiText('生成译文 PDF', 'Typesetting translated PDF') : uiText('解析 PDF 版面', 'Parsing PDF layout'))
@@ -319,7 +328,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
       if (/translat/iu.test(task.stage) && task.total && task.completed !== undefined) { meter.max = task.total; meter.value = task.completed }
       status.append(meter)
     }
-    const technical = [windowError, task.error, busy && jobs.speed(task.id) ? translationSpeedText(jobs.speed(task.id)!) : ''].filter(Boolean).join('\n')
+    const technical = [windowError, task.error, pdfFailureDetails(task), busy && jobs.speed(task.id) ? translationSpeedText(jobs.speed(task.id)!) : ''].filter(Boolean).join('\n')
     if (technical) {
       const details = element('details'), summary = element('summary'), body = element('div')
       details.open = Boolean(detailsOpen); summary.textContent = uiText('详细信息', 'Details'); body.textContent = technical; details.append(summary, body); status.append(details)
@@ -382,15 +391,20 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
   const unsubscribe = jobs.subscribe(() => { void render() })
   const speedTimer = win.setInterval(() => { if (task?.status === 'running' || task?.status === 'queued') void render() }, 1000)
   cleanups.push(() => win.clearInterval(speedTimer))
-  const start = async () => {
+  let starting = false
+  const start = async (fresh = false) => {
+    if (starting) return
+    starting = true; regenerate.disabled = true
     status.hidden = false; status.textContent = uiText('准备 PDF 翻译…', 'Preparing PDF translation…')
     try {
-      const next = savedTaskID ? jobs.get(savedTaskID) : await jobs.start(reader.itemID, translationMode)
+      const next = fresh ? await jobs.start(reader.itemID, translationMode, true)
+        : savedTaskID ? jobs.get(savedTaskID) : await jobs.openOrStart(reader.itemID, translationMode)
       if (!next || (savedTaskID && next.source.itemID !== reader.itemID)) throw new Error(uiText('翻译记录不可用。', 'Translation record unavailable.'))
       if (removed) return
       if (task && task.id !== next.id) { renderEpoch++; void api?.destroy(); api = undefined; loadedID = loadingID = ''; frame.hidden = true }
-      task = next; panel.dataset.pdfTaskId = next.id; applyMode(); await render()
+      task = next; translationMode = task.mode ?? 'full'; scope.value = translationMode; panel.dataset.pdfTaskId = next.id; applyMode(); await render()
     } catch (value) { error(value); retry.hidden = false }
+    finally { starting = false; if (!removed) regenerate.disabled = Boolean(task && jobs.isActive(task.id)) }
   }
   const remove = () => {
     if (removed) return

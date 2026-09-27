@@ -111,13 +111,21 @@ for (const fileName of bundledFiles) {
 const managerEntry = zip.file("content/manager.xhtml")
 if (managerEntry) {
   const managerHtml = await managerEntry.async("string")
-  for (const [attribute, fileName] of [["href", "manager.css"], ["href", "ui.css"], ["href", "analysis.css"], ["src", "manager.js"]]) {
+  for (const [attribute, fileName] of [["href", "manager.css"], ["href", "ui.css"], ["href", "analysis.css"], ["href", "settings.css"], ["src", "manager.js"]]) {
     const resource = zip.file(`content/${fileName}`)
     if (!resource) continue
     const revision = sha256(await resource.async("nodebuffer")).slice(0, 12)
     check(managerHtml.includes(`${attribute}="${fileName}?v=${revision}"`),
       `Manager ${fileName} reference must include its bundled content hash (${revision}).`)
   }
+}
+
+// 外层 CSS 的版本不会传给 @import；原生偏好的共享样式也必须显式版本化。
+const preferencesCss = zip.file('content/preferences.css'), settingsCss = zip.file('content/settings.css')
+check(Boolean(settingsCss), 'XPI is missing shared settings CSS.')
+if (preferencesCss && settingsCss) {
+  const revision = sha256(await settingsCss.async('nodebuffer')).slice(0, 12)
+  check((await preferencesCss.async('string')).includes(`@import url("settings.css?v=${revision}")`), 'Preferences settings.css import must include its bundled content hash.')
 }
 
 const manifestEntry = zip.file("manifest.json")
@@ -145,6 +153,13 @@ if (buildManifest) {
 
 const metadata = await readRequiredJson(releasePaths.metadataPath, "release-metadata.json")
 if (metadata) {
+  const featurePath = path.join(projectRoot, 'private/features.json')
+  const expectedFeatures = existsSync(featurePath) ? JSON.parse(await readFile(featurePath, 'utf8')) : []
+  checkDeep(metadata.features, expectedFeatures, 'Distribution features drifted')
+  checkDeep(metadata.distribution, expectedFeatures.length ? 'full' : 'base', 'Distribution kind drifted')
+  if (process.env.JADENSE_REQUIRE_FULL === '1') check(metadata.distribution === 'full', 'Official distribution must include optional modules')
+  for (const feature of expectedFeatures) check((await zip.file('content/manager.js').async('string')).includes(feature), `Missing feature marker: ${feature}`)
+  check(!bundledFiles.some(name => /\.(?:map|ts|tsx)$/.test(name) || name.startsWith('private/')), 'Source files must not be packaged')
   const expectedMetadata = buildReleaseMetadata({
     manifest: expectedManifest,
     version,

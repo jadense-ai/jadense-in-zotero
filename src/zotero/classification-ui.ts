@@ -1,6 +1,8 @@
 /** 独立文献分类界面与工作台密钥配置：密钥配置、目录选择和可核对预览；只用本地 DOM，不解析模型 HTML。 */
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
+import { modeEnabled, observeJadenseMode } from './jadense-mode-state'
+import { jadenseClassificationRequest, jadenseAiClient } from './jadense-ai'
 import { applyClassification, loadClassificationFolders, loadClassificationItems, readTypesafeKey, recommendClassification, testTypesafeKey, TYPESAFE_KEY_PREF, TYPESAFE_KEYS_URL, type ClassificationFolder, type ClassificationItem, type ClassificationRow } from './classification'
 
 export function mountClassification(doc: Document, host: ZoteroLike, openSettings: () => void) {
@@ -81,7 +83,7 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
       input.disabled = busy || !row.target || Boolean(row.applied)
       input.addEventListener('change', () => { row.selected = input.checked; updateActions() })
       selectCell.append(input)
-      const paper = make('td', row.item.title); if (row.error) paper.append(make('p', row.error, 'jdx-classification-error'))
+      const paper = make('td', row.item.title); if (row.error) paper.append(make('p', row.error, 'jdx-classification-error')); if (row.warning) paper.append(make('p', row.warning))
       if (row.applied) paper.append(make('p', uiText('已应用', 'Applied'), 'jdx-classification-applied'))
       const original = make('td'); original.append(paths(folderPaths(row.item.collections)))
       const target = make('td'); target.append(row.target ? paths([row.target.path]) : make('span', row.error ? uiText('推荐失败，保持不变', 'Failed, unchanged') : uiText('未匹配，保持不变', 'No match, unchanged')))
@@ -102,18 +104,20 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
   }
   const generate = button(uiText('生成推荐预览', 'Generate recommendations'), () => { void (async () => {
     if (busy) return
-    if (!readTypesafeKey(host)) { keyGuide.showModal(); return }
+    const useJadense = modeEnabled(host), frozenKey = readTypesafeKey(host)
+    if (!useJadense && !frozenKey) { keyGuide.showModal(); return }
     busy = true; controller = new AbortController(); rows = []; step = 1; renderRows()
     const candidates = folders.filter(folder => candidateIDs.has(folder.id))
     const selected = items.filter(item => item.libraryID === currentLibrary())
     try {
       // 重新读取条目，重复生成时不会继续使用已经应用前的集合快照。
       const fresh = await loadClassificationItems(host, selected.map(item => item.id))
+      const request = useJadense ? await jadenseClassificationRequest(host, controller.signal) : undefined
       for (const item of fresh) {
         if (controller.signal.aborted) break
         status.textContent = uiText(`正在推荐 ${rows.length + 1} / ${fresh.length}…`, `Recommending ${rows.length + 1} / ${fresh.length}…`)
         try {
-          const result = await recommendClassification(item, candidates, readTypesafeKey(host), controller.signal)
+          const result = await recommendClassification(item, candidates, frozenKey, controller.signal, undefined, request)
           if (controller.signal.aborted) break
           const remove = result.target && replace.checked ? item.collections.filter(id => candidateIDs.has(id) && id !== result.target!.id) : []
           rows.push({ item, ...result, remove, selected: Boolean(result.target && (!item.collections.includes(result.target.id) || remove.length)) })
@@ -228,8 +232,21 @@ export function mountClassificationSettings(doc: Document, host: ZoteroLike, roo
   const controls = make('div', '', 'jdx-manager-field jdx-pref-field')
   controls.append(keyLabel, key, settingActions, make('p', uiText('密钥仅保存在本机 Zotero 配置。测试会向 TypeSafe 发送一次固定示例请求，可能消耗额度。', 'The key stays in your local Zotero profile. Testing sends one fixed example to TypeSafe and may use credits.')), settingStatus)
   settings.append(description, controls)
+  const managed = make('p'); settings.append(managed)
+  let modeRevision = 0
+  const stopMode = observeJadenseMode(host, () => {
+    const enabled = modeEnabled(host), current = ++modeRevision
+    controls.hidden = enabled; managed.hidden = !enabled
+    note.textContent = enabled ? uiText('仅发送标题、摘要、标签及候选目录，不发送 PDF。', 'Only titles, abstracts, tags and candidate folders are sent, never PDFs.') : uiText('独立使用 Jev，不跟随对话模型。仅向 TypeSafe 发送分类元数据。', 'Uses Jev independently of Chat. Classification metadata is sent to TypeSafe.')
+    managed.textContent = uiText('由攻玉学术提供', 'Provided by Jadense')
+    if (enabled) void Promise.resolve().then(() => jadenseAiClient(host).getZoteroAiCapabilities()).then(value => {
+      if (current === modeRevision) managed.textContent = `${uiText('由攻玉学术提供', 'Provided by Jadense')} · ${value.decision.displayName ?? uiText('尚未配置', 'Not configured')}`
+    }).catch(() => { /* 可选模型说明失败不改变模式。 */ })
+  })
   root?.append(settings)
 
   const observer = host.Prefs?.registerObserver?.(TYPESAFE_KEY_PREF, () => { key.value = readTypesafeKey(host) }, true)
-  return () => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); testAbort?.abort(); key.value = ''; settings.remove() }
+  const removeMode = () => { modeRevision++; stopMode() }
+  settings.ownerDocument.defaultView?.addEventListener('unload', removeMode, { once: true })
+  return () => { removeMode(); settings.ownerDocument.defaultView?.removeEventListener('unload', removeMode); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); testAbort?.abort(); key.value = ''; settings.remove() }
 }

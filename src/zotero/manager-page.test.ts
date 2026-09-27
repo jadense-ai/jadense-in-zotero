@@ -706,12 +706,13 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain('class="jdx-manager-brand"')
     const titlebar = xhtml.match(/<header id="jadense-titlebar"[\s\S]*?<\/header>/)?.[0] ?? ""
     expect(titlebar).not.toContain('<strong>Jadense</strong>')
-    expect(titlebar.indexOf('id="jadense-manager-sidebar-toggle"')).toBeLessThan(titlebar.indexOf('<img'))
+    expect(titlebar.indexOf('id="jadense-manager-sidebar-toggle"')).toBeLessThan(titlebar.indexOf('id="jadense-home"'))
     expect(titlebar.indexOf('id="jadense-home"')).toBeLessThan(titlebar.indexOf('id="jadense-github"'))
     expect(titlebar.indexOf('id="jadense-github"')).toBeLessThan(titlebar.indexOf('id="jadense-help-toggle"'))
     expect(titlebar.indexOf('id="jadense-help-toggle"')).toBeLessThan(titlebar.indexOf('id="jadense-check-in"'))
     expect(titlebar).toContain('data-ui-en="Check in for points"')
-    expect(titlebar).toContain('aria-label="攻玉首页"')
+    expect(titlebar).toContain('class="jdx-titlebar-mode"')
+    expect(titlebar).not.toContain('Open Jadense homepage')
     expect(titlebar).toContain('<path d="M7 3v10"/>')
   })
 

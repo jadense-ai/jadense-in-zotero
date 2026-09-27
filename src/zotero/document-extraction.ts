@@ -6,7 +6,20 @@ import { CloudOCRError } from './cloud-ocr-client'
 import { uiText } from './ui-preferences'
 
 export const DOCUMENT_OCR_PREF = 'extensions.jadenseInZotero.documentOCR'
-export function documentOCREnabled(host: ZoteroLike) { return host.Prefs?.get(DOCUMENT_OCR_PREF, true) === true }
+export const MARKDOWN_OCR_PREF = 'extensions.jadenseInZotero.markdownOCR'
+export const ANALYSIS_OCR_PREF = 'extensions.jadenseInZotero.analysisOCR'
+/** 旧总开关仅作未配置用途的兼容默认值；新设置互不覆盖，也不在读取时写偏好。 */
+function scopedOCREnabled(host: ZoteroLike, key: string) {
+  const value = host.Prefs?.get(key, true)
+  return typeof value === 'boolean' ? value : host.Prefs?.get(DOCUMENT_OCR_PREF, true) === true
+}
+export function documentOCREnabled(host: ZoteroLike) { return scopedOCREnabled(host, MARKDOWN_OCR_PREF) }
+export function analysisOCREnabled(host: ZoteroLike) { return scopedOCREnabled(host, ANALYSIS_OCR_PREF) }
+
+/** 参考文献与定位解析属于同一用途，Markdown 保持独立；显式单次选择仍优先。 */
+export function extractionOCREnabled(host: ZoteroLike, kind: 'extraction' | 'references', override?: boolean) {
+  return override ?? (kind === 'references' ? analysisOCREnabled(host) : documentOCREnabled(host))
+}
 
 export async function readDocument(host: ZoteroLike, itemID: number, signal: AbortSignal, progress: (text: string) => void = () => {}, useOCR = documentOCREnabled(host)) {
   let warning = ''

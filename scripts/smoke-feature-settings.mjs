@@ -10,11 +10,19 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   await waitFor(() => doc.querySelector('[data-translation-scope="document"] .jdx-select-trigger'), 'independent translation controls')
   if (doc.querySelector('#jadense-quick-start-dialog')?.open) doc.getElementById('jadense-quick-start-close').click()
   const root = doc.getElementById('jadense-settings-panel-features')
+  const assertVerticalFields = scope => {
+    for (const row of scope.querySelectorAll('.jdx-feature-model-row, .jdx-cloud-ocr-field, .jdx-pref-token-row')) {
+      if (!row.checkVisibility() || !row.getBoundingClientRect().width) continue
+      const style = row.ownerDocument.defaultView.getComputedStyle(row)
+      assert(/^\d+(?:\.\d+)?px$/u.test(style.gridTemplateColumns), 'Setting still has side-by-side title and control: ' + row.className + ' columns=' + style.gridTemplateColumns + ' title=' + row.querySelector('h3')?.textContent)
+    }
+  }
   // 比较真实宿主的计算样式，避免功能页再次偏离常规设置的行布局。
   doc.getElementById('jadense-settings-tab-general').click()
   assert(root.getBoundingClientRect().height === 0, 'Hidden feature settings remain visible')
   const generalStyle = manager.getComputedStyle(doc.querySelector('#jadense-settings-panel-general .jdx-feature-model-row'))
   const rowStyle = { padding: generalStyle.paddingBlock, border: generalStyle.borderBottomWidth, font: generalStyle.fontSize }
+  assertVerticalFields(doc.getElementById('jadense-settings-panel-general'))
   doc.getElementById('jadense-settings-tab-features').click()
   for (const row of root.querySelectorAll('.jdx-feature-model-row:not([hidden]):not(.jdx-classification-settings)')) {
     const style = manager.getComputedStyle(row)
@@ -166,8 +174,24 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   const documentOCR = root.querySelector('[data-ocr-setting="document"]')
   openGroup(root, 'document'); documentOCR.click()
   await waitFor(() => !documentOCR.disabled && !documentOCR.checked, 'unconfigured cloud OCR remains disabled')
-  assert(!get('documentOCR'), 'Failed OCR check persisted enabled')
+  assert(!get('markdownOCR'), 'Failed OCR check persisted enabled')
   assert(root.querySelector('[data-document-ocr-host] [role="status"]').textContent, 'OCR failure missing inline feedback')
+  const analysisOCR = root.querySelector('[data-ocr-setting="analysis"]')
+  openGroup(root, 'analysis'); analysisOCR.click()
+  await waitFor(() => !analysisOCR.disabled && !analysisOCR.checked, 'analysis OCR failure stays local')
+  assert(!get('analysisOCR'), 'Failed analysis OCR check persisted enabled')
+  // 模拟旧版已开启：两种用途继承，但任一新设置不得改写另一用途或旧键。
+  set('documentOCR', true)
+  await waitFor(() => documentOCR.checked && analysisOCR.checked, 'legacy OCR inherited in both scopes')
+  openGroup(root, 'document'); documentOCR.click()
+  await waitFor(() => !documentOCR.checked && analysisOCR.checked && !native.querySelector('[data-ocr-setting="document"]').checked, 'Markdown disable isolated and synchronized')
+  assert(get('markdownOCR') === false && get('documentOCR') === true, 'Markdown disable overwrote legacy preference')
+  openGroup(native, 'analysis'); native.querySelector('[data-ocr-setting="analysis"]').click()
+  await waitFor(() => !analysisOCR.checked && !documentOCR.checked, 'analysis disable synchronized independently')
+  assert(get('analysisOCR') === false, 'Analysis preference did not save')
+  assert(!root.querySelector('[data-analysis-ocr-host] [role="status"]').textContent, 'Cross-window save retained a stale OCR error')
+  set('documentOCR', false)
+  report.checks.push('settings-ocr-scopes-legacy-inheritance-isolation-and-cross-window-sync')
   set('ocrEngine', 'local')
   report.checks.push('settings-ocr-check-failure-contained')
   const pause = () => Zotero.Promise.delay(250)
@@ -185,13 +209,16 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
       openGroup(root, name); root.querySelector(`[data-settings-task="${name}"]`).scrollIntoView({ block: 'start' });
       if (name === 'chat') for (let node = root.parentElement; node; node = node.parentElement) node.scrollTop = 0
       await pause()
+      assertVerticalFields(root)
       await screenshot(`settings-${english ? 'en' : 'zh'}-${theme}-${name}`, manager)
     }
     openGroup(native, 'selection'); native.querySelector('[data-settings-task="selection"]').scrollIntoView({ block: 'start' }); await pause()
+    assertVerticalFields(native)
     await screenshot(`settings-native-${english ? 'en' : 'zh'}-${theme}`, preferences)
     openGroup(root, 'document'); configure.click(); await pause(); await screenshot(`settings-ocr-${english ? 'en' : 'zh'}-${theme}`, manager); openGroup(dependencies, 'layout'); dependencies.querySelector('[data-external-dependency="layout"]').scrollIntoView({ block: 'start' }); await pause(); await screenshot(`settings-layout-${english ? 'en' : 'zh'}-${theme}`, manager); doc.getElementById('jadense-settings-tab-features').click()
     for (const name of ['shortcuts', 'connection']) {
       doc.getElementById(`jadense-settings-tab-${name}`).click(); await pause()
+      assertVerticalFields(doc.getElementById(`jadense-settings-panel-${name}`))
       await screenshot(`settings-${name}-${english ? 'en' : 'zh'}-${theme}`, manager)
     }
     doc.getElementById('jadense-settings-tab-ai').click(); await pause()
@@ -265,5 +292,6 @@ export function verifyFeatureSettingsRestart({ Zotero, assert, report }) {
   assert(JSON.parse(get('selectionTranslationInterface')).service === 'google', 'Restart lost selection settings')
   assert(JSON.parse(get('fullTranslationInterface')).kind === 'ai', 'Restart lost full translation settings')
   assert(Zotero.Prefs.get('extensions.jadenseInZotero.autoFollowChatModel') === false && !get('ocrSelection'), 'Restart lost follow/OCR settings')
+  assert(get('markdownOCR') === false && get('analysisOCR') === false, 'Restart lost scoped OCR preferences')
   report.checks.push('settings-cold-restart-preserves-independent-preferences')
 }

@@ -1,6 +1,7 @@
 /** Zotero 云识别运行时：本地 PDF.js 渲染，页缓存与远端任务恢复，不依赖本机 Python。 */
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import type { ZoteroLike } from './runtime'
+import { jadenseOCRSnapshot, recognizeJadenseImage, type JadenseOCRSnapshot } from './jadense-ocr'
 import { cloudOCRConfig, ocrEngine, requireCloudOCR, type CloudOCRConfig } from './cloud-ocr-config'
 import { recognizeImage, mineruRecognize, CloudOCRError, type CloudPage, type CloudIO, OCR_IMAGE_LIMIT } from './cloud-ocr-client'
 import { readTextDocument, validateDocument, checkCancelled, type DocumentHost, type DocumentPage, type PdfRect, type PdfTextDocument } from './pdf-document'
@@ -38,6 +39,7 @@ class OCRCache {
 export async function checkOCREngine(host: ZoteroLike) {
   const engine = ocrEngine(host)
   if (engine === 'local') { await ensureLocalOCR(host); return }
+  if (engine === 'jadense') { await jadenseOCRSnapshot(host); return }
   requireCloudOCR(await cloudOCRConfig(host, engine))
 }
 function cloudIO(host: ZoteroLike, signal: AbortSignal, progress: (text: string) => void): CloudIO {
@@ -143,7 +145,11 @@ async function materializeCloudPage(value: CloudPage, base: DocumentPage, page: 
 async function configSnapshot(host: ZoteroLike) {
   const engine = ocrEngine(host)
   if (engine === 'local') return null
+  if (engine === 'jadense') return jadenseOCRSnapshot(host)
   const config = await cloudOCRConfig(host, engine); requireCloudOCR(config); return config
+}
+function recognizeEngineImage(config: CloudOCRConfig | JadenseOCRSnapshot, image: string, io: CloudIO) {
+  return config.engine === 'jadense' ? recognizeJadenseImage(config, image, io) : recognizeImage(config, image, io)
 }
 export async function readEngineDocument(host: Host, itemID: number, signal: AbortSignal, progress: (text: string) => void): Promise<PdfTextDocument> {
   const config = await configSnapshot(host)
@@ -181,7 +187,7 @@ export async function readEngineDocument(host: Host, itemID: number, signal: Abo
           const index = work[cursor++]; checkCancelled(signal)
           try {
             const pdfPage = await render.pdf.getPage(index + 1), image = await renderOCRImage(pdfPage, render.doc, signal), saved = await cache.read(`${key}-${index}`)
-            const result = await recognizeImage(config, image, { ...io, batchID: saved.batchID, saveBatch: id => cache.write(`${key}-${index}`, { batchID: id }) })
+            const result = await recognizeEngineImage(config, image, { ...io, batchID: saved.batchID ?? (config.engine === 'jadense' ? `${key}-${index}` : undefined), saveBatch: id => cache.write(`${key}-${index}`, { batchID: id }) })
             if (!result.blocks.length) throw new CloudOCRError('EMPTY_RESULT')
             const page = await materializeCloudPage(result, base.pages[index], pdfPage, render.doc, signal)
             checkCancelled(signal); pages[index] = page; await cache.write(`${key}-${index}`, { page })
@@ -214,7 +220,7 @@ export async function readEngineSelection(host: Host, itemID: number, regions: O
     const key = await ocrHash(JSON.stringify(['selection', base.source.libraryID, base.source.itemKey, fingerprint, region.pageIndex, rect, image]))
     const saved = await cache.read(key)
     if (saved.page?.paragraphs.length && !saved.page.warning) { parts.push(saved.page.paragraphs.map(p => p.text).join('\n')); continue }
-    const result = await recognizeImage(config, image, { ...cloudIO(host, signal, progress), batchID: saved.batchID, saveBatch: id => cache.write(key, { batchID: id }) })
+    const result = await recognizeEngineImage(config, image, { ...cloudIO(host, signal, progress), batchID: saved.batchID ?? (config.engine === 'jadense' ? key : undefined), saveBatch: id => cache.write(key, { batchID: id }) })
     const text = result.blocks.map(block => block.text).join('\n')
     if (!text.trim()) throw new CloudOCRError('EMPTY_RESULT')
     await cache.write(key, { page: projectCloudPage({ blocks: [{ text }] }, base.pages[region.pageIndex]) })
@@ -225,10 +231,10 @@ export async function readEngineSelection(host: Host, itemID: number, regions: O
   return parts.join('\n\n')
 }
 /** 设置测试只识别内置生成的小图，不获取 Reader 或用户文献。 */
-export async function testCloudOCR(host: ZoteroLike, config: CloudOCRConfig, doc: Document, signal: AbortSignal) {
+export async function testCloudOCR(host: ZoteroLike, config: CloudOCRConfig | JadenseOCRSnapshot, doc: Document, signal: AbortSignal) {
   const canvas = doc.createElementNS('http://www.w3.org/1999/xhtml', 'canvas') as HTMLCanvasElement
   canvas.width = 480; canvas.height = 140
   const context = canvas.getContext('2d')!
   context.fillStyle = 'white'; context.fillRect(0, 0, 480, 140); context.fillStyle = 'black'; context.font = '32px sans-serif'; context.fillText('OCR Test 123 测试', 20, 75)
-  return (await recognizeImage(config, canvas.toDataURL('image/png'), cloudIO(host, signal, () => {}))).blocks.map(block => block.text).join('\n')
+  return (await recognizeEngineImage(config, canvas.toDataURL('image/png'), cloudIO(host, signal, () => {}))).blocks.map(block => block.text).join('\n')
 }

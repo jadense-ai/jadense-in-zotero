@@ -304,6 +304,44 @@ function defaultFetch(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 export class JadenseApiClient {
+  /** 专用请求无自动重试；取消/超时后可能已计费，稳定 operationId 禁止重复派发。 */
+    async zoteroAiRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+      signal?.throwIfAborted()
+    const controller = new AbortController(), abort = () => controller.abort()
+    signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let canceled: (() => void) | undefined
+    try {
+      return await Promise.race([
+        this.requestJson<T>(`/api/extension/zotero/ai/${path}`, { method: body === undefined ? 'GET' : 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal, credentials: 'omit', redirect: 'error' }),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => { reject(new Error(uiText('攻玉请求超时，未自动重发，请检查任务状态。', 'Jadense request timed out and was not replayed. Check task status.'))); abort() }, body === undefined ? 15000 : 180000) }),
+        new Promise<never>((_, reject) => { canceled = () => reject(new Error(uiText('已停止等待，云端请求可能继续处理和计费。', 'Stopped waiting; the cloud request may continue processing and billing.'))); controller.signal.addEventListener('abort', canceled, { once: true }); if (controller.signal.aborted) canceled() }),
+      ])
+    } catch (error) {
+      const operationId = body && typeof body === 'object' && 'operationId' in body ? body.operationId : null
+      // 只查询原身份；取消、权限/输入失败不自动请求，任何状态均不授权再次 POST。
+      if (!signal?.aborted && (path === 'decision' || path === 'ocr') && typeof operationId === 'string' &&
+        (!(error instanceof JadenseApiError) || error.status >= 500 || error.code === 'SPECIALIZED_OPERATION_ALREADY_SUBMITTED')) {
+        const status = await this.getZoteroAiOperation(path, operationId, signal).catch(() => null)
+        const message = status?.billingStatus === 'reconciliation_required'
+          ? uiText('费用待管理员核对；未重新提交。', 'Billing awaits administrator review; the request was not replayed.')
+          : status?.status === 'completed'
+            ? uiText('原操作已完成，请优先使用本地缓存；未重新提交。', 'The original operation completed. Use the local cache; the request was not replayed.')
+            : uiText('原操作尚未确认完成，请查询状态或联系管理员；未重新提交。', 'The original operation is not confirmed complete. Check status or contact an administrator; the request was not replayed.')
+        throw new JadenseApiError({ status: error instanceof JadenseApiError ? error.status : 503,
+          code: error instanceof JadenseApiError ? error.code ?? 'SPECIALIZED_RESULT_UNCERTAIN' : 'SPECIALIZED_RESULT_UNCERTAIN',
+          body: JSON.stringify({ operationId, status: status?.status ?? 'unknown' }), message })
+      }
+      throw error
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); if (canceled) controller.signal.removeEventListener('abort', canceled) }
+  }
+  /** 本人状态投影无文档正文与供应商身份，调用此入口不会产生消费。 */
+  getZoteroAiOperation(capability: 'decision' | 'ocr', operationId: string, signal?: AbortSignal) {
+    return this.zoteroAiRequest<{ status: string; billingStatus?: string; code?: string | null }>(`operations?capability=${capability}&operationId=${encodeURIComponent(operationId)}`, undefined, signal)
+  }
+  getZoteroAiCapabilities(signal?: AbortSignal) {
+    return this.zoteroAiRequest<import('@/zotero/jadense-ai').AiCapabilities>('capabilities', undefined, signal)
+  }
   private readonly baseUrl: string
   private readonly token: string
   private readonly fetchImpl: typeof fetch

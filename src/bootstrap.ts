@@ -1,3 +1,4 @@
+import { startOptionalFeatures, stopOptionalFeatures } from '@/zotero/optional-features'
 import { migrateTranslationConfiguration } from './zotero/translation-config-migration'
 import { lifecycleTrace } from './zotero/lifecycle-diagnostics'
 import { selectedClassificationIDs } from './zotero/classification'
@@ -406,8 +407,8 @@ async function startup(data: BootstrapData = {}) {
         }).then((record) => ({ translation: record.result.text }))
       }
       openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)
-    }, () => {
-      if (!openManager()) throw new Error(uiText("无法打开攻玉工作台。", "Could not open Jadense Workspace."))
+    }, (section) => {
+      if (!openManager(section)) throw new Error(uiText("无法打开攻玉工作台。", "Could not open Jadense Workspace."))
     })
   })
   await step('reader_figures', () => {
@@ -419,6 +420,7 @@ async function startup(data: BootstrapData = {}) {
   await step('smoke', async () => { await probeLocalizationForSmoke(); if (active()) openManagerForSmoke() })
   if (!active()) { trace.end('cancelled'); return }
   warmFavoriteFoldersCache()
+  await step('optional', () => startOptionalFeatures(Zotero))
   trace.event(degraded ? 'startup_degraded' : 'startup_complete'); trace.end(degraded ? 'error' : 'success')
   log(degraded ? 'startup_degraded' : 'startup_complete'); log('started')
 }
@@ -427,6 +429,7 @@ function shutdown() {
   stopped = true; lifecycleGeneration++; cancelStartupWait?.(); cancelStartupWait = undefined
   const trace = lifecycleTrace(Zotero, 'initialization', 'shutdown')
   const cleanups: Array<[string, () => void]> = [
+    ['optional', () => stopOptionalFeatures(Zotero)],
     ['analysis', () => stopAnalysisRuntime(Zotero)], ['chat', () => stopChatRuntime(Zotero)], ['documents', () => stopDocumentJobs(Zotero)],
     ['pdf', () => stopPDFTranslationJobs(Zotero)],
     ['figures', () => { const remove = unregisterReaderFigureTools; unregisterReaderFigureTools = null; remove?.() }],

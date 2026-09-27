@@ -1,16 +1,47 @@
 /** 提取策略回归：默认零 OCR、可选增强故障回退、取消隔离、PDF.js 兜底。 */
 import { expect, it, vi } from 'vitest'
-import { readDocument, DOCUMENT_OCR_PREF } from './document-extraction'
+import { readDocument, DOCUMENT_OCR_PREF, MARKDOWN_OCR_PREF, ANALYSIS_OCR_PREF, documentOCREnabled, analysisOCREnabled, extractionOCREnabled } from './document-extraction'
 import { ensureLocalOCR, readOCRDocument } from './local-ocr'
 import { readPdfForAnalysis, saveAnalysisAnnotations } from './reader-tools'
 import { OCR_ENGINE_PREF } from './cloud-ocr-config'
 import { snapshotPDFChars, textPage } from './pdf-document'
 vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), ensureLocalOCR: vi.fn(), readOCRDocument: vi.fn() }))
 
+it.each([undefined, false, true])('inherits legacy OCR %s without writing preferences', legacy => {
+  const set = vi.fn()
+  const host = { Prefs: { get: (key: string) => key === DOCUMENT_OCR_PREF ? legacy : undefined, set } }
+  expect(documentOCREnabled(host)).toBe(legacy === true)
+  expect(analysisOCREnabled(host)).toBe(legacy === true)
+  expect(set).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('keeps Markdown OCR %s independent of the shared analysis/reference choice', markdown => {
+  const prefs = new Map<string, unknown>([[DOCUMENT_OCR_PREF, true], [MARKDOWN_OCR_PREF, markdown], [ANALYSIS_OCR_PREF, !markdown]])
+  const host = { Prefs: { get: (key: string) => prefs.get(key) } }
+  expect(documentOCREnabled(host)).toBe(markdown)
+  expect(analysisOCREnabled(host)).toBe(!markdown)
+  expect(extractionOCREnabled(host, 'references')).toBe(!markdown)
+  expect(extractionOCREnabled(host, 'extraction')).toBe(markdown)
+  expect(extractionOCREnabled(host, 'references', markdown)).toBe(markdown)
+  prefs.delete(ANALYSIS_OCR_PREF)
+  expect(analysisOCREnabled(host)).toBe(true)
+})
+
+it.each([false, true])('routes actual analysis through analysis OCR %s despite the opposite Markdown preference', async analysis => {
+  const { host, pdf } = fixture()
+  const prefs = new Map<string, unknown>([[MARKDOWN_OCR_PREF, !analysis], [ANALYSIS_OCR_PREF, analysis]])
+  host.Prefs.get = (key: string) => prefs.get(key) as boolean | undefined
+  vi.mocked(readOCRDocument).mockResolvedValue({ source: { itemID: 1, libraryID: 1, itemKey: 'PDF1', title: 'Paper' }, pages: [{ pageIndex: 0, pageLabel: '1', lines: [], paragraphs: [{ id: 'ocr-1', text: 'OCR located passage.', pageIndex: 0, pageLabel: '1', rects: [[10, 20, 100, 40]], lineIDs: [] }] }] })
+  const result = await readPdfForAnalysis(host, 1)
+  expect(result.passages[0].text).toContain(analysis ? 'OCR located' : 'Traditional extraction')
+  expect(readOCRDocument).toHaveBeenCalledTimes(analysis ? 1 : 0)
+  expect(pdf.getPage).toHaveBeenCalledTimes(analysis ? 0 : 1)
+})
+
 function fixture(ocr = false) {
   vi.mocked(ensureLocalOCR).mockReset(); vi.mocked(readOCRDocument).mockReset()
   const pdf = { numPages: 1, getPage: vi.fn(async () => ({ view: [0, 0, 600, 800], getTextContent: async () => ({ items: [{ str: 'Traditional extraction preserves this sentence.', width: 240, height: 12, transform: [12, 0, 0, 12, 20, 100] }] }) })) }
-  const host = { Prefs: { get: (key: string) => key === DOCUMENT_OCR_PREF && ocr }, Items: { get: () => ({ id: 1, libraryID: 1, key: 'PDF1', isPDFAttachment: () => true, getField: () => 'Paper' }) }, Reader: { _readers: [{ itemID: 1, _internalReader: { _primaryView: { _iframeWindow: { PDFViewerApplication: { pdfDocument: pdf } } } } }] } }
+  const host = { Prefs: { get: (key: string) => key === DOCUMENT_OCR_PREF ? ocr : undefined }, Items: { get: () => ({ id: 1, libraryID: 1, key: 'PDF1', isPDFAttachment: () => true, getField: () => 'Paper' }) }, Reader: { _readers: [{ itemID: 1, _internalReader: { _primaryView: { _iframeWindow: { PDFViewerApplication: { pdfDocument: pdf } } } } }] } }
   return { host, pdf }
 }
 it('copies native glyphs through the Reader serializer without changing text or coordinates', () => {
