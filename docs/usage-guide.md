@@ -390,7 +390,7 @@ Configure the translation service, model, target language and concise/full scope
 
 
 <a id="literature-radar"></a>
-## 文献雷达 / Literature Radar（0.6.7 待发布 / pending release）
+## 文献雷达 / Literature Radar（0.6.7）
 
 官方完整安装包的工作台侧栏提供「文献雷达」。公开源码独立构建的基础版不包含此模块。0.6.7 仅检索 arXiv，没有来源选择控件；多文献源与选择 UI 留待下一版本。
 
