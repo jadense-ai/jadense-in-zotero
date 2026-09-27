@@ -24,20 +24,18 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.6 is released:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite includes the XPI, PDF engine and local OCR engine. [Download v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
-
-**v0.6.7 pending release:** Literature Radar discovers arXiv papers by your interests, with relevance, optional AI reviews and saving papers/PDFs. This version supports arXiv only; multiple sources and a source-selection UI are planned for the next version. Official packages include Literature Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
+**v0.6.7 is released:** Literature Radar discovers arXiv papers by your interests, with relevance, optional AI reviews and saving papers/PDFs. This version supports arXiv only; multiple sources and a source-selection UI are planned for the next version. Official packages include Literature Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
 
 The offline suite includes the new [PDF installation guide](<docs/jadense-in-zotero 离线安装详细流程.pdf>) (Chinese).
 
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — Add arXiv-only Literature Radar, Jadense mode and an illustrated PDF offline guide; improve OCR setup cancellation and PDF translation recovery.
 - [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — Fix offline installation BOM and deep-path extraction errors; open the PDF engine guide from settings.
 - [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Complete Windows x64 offline ZIP with the plugin, PDF engine and local OCR engine, plus more reliable engine setup.
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — Select relevant passages from long linked PDFs by default, make full summaries opt-in, and improve no-output and stop feedback.
 - [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — Show release highlights in update dialogs, unify the Parallel translation entry, and improve sidebar collapse.
-- [v0.6.1](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.1) — Remove the pending AI requests button from feature settings.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
