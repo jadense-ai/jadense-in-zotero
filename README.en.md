@@ -28,6 +28,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.7 pending release:** Literature Radar discovers arXiv papers by your interests, with relevance, optional AI reviews and saving papers/PDFs. This version supports arXiv only; multiple sources and a source-selection UI are planned for the next version. Official packages include Literature Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
 
+The offline suite includes the new [PDF installation guide](<docs/jadense-in-zotero 离线安装详细流程.pdf>) (Chinese).
+
 <!-- release-summary:start -->
 ## Recent releases
 

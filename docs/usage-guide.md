@@ -406,3 +406,6 @@ Official complete packages expose **Literature Radar** in the workspace sidebar;
 Connect your Jadense account and enable **Jadense mode** (off by default), then open **Literature Radar → Research interests**. Add phrases with Enter; English terms are recommended and Chinese terms are translated at run time. The defaults are the last one day and up to 100 candidates; an explicit date range is available. Optional AI review is off by default and uses a selected Jadense model. Jev screening and keyword translation may use points even when review is off. Scores indicate relevance, not paper quality, and reviews use titles and abstracts only.
 
 Start a run manually or enable daily runs (09:00 local time by default). Automatic runs require Zotero, an active connection and Jadense mode. History preserves results. Select a library/collection when saving; saving with PDF also attempts a download. PDF failures retain saved metadata and can be retried. Mode-off users can view the demo; only an explicit save action writes demo papers to their library.
+
+
+离线套装随附 [PDF 详细安装指南](<jadense-in-zotero 离线安装详细流程.pdf>)，替代此前包内的 Markdown 安装指南。The offline suite includes this illustrated PDF guide in place of the previous generated Markdown guide.
