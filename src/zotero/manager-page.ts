@@ -1,4 +1,6 @@
+import { mountOptionalFeatures } from './optional-features'
 import { wireFeatureSettings } from './feature-settings'
+import { wireJadenseMode } from './jadense-mode-ui'
 import { analysisRuntime } from './analysis-runtime'
 import { diagnostics, markDiagnosticAbort } from "./diagnostics"
 import { wireDiagnosticsPanel } from "./diagnostics-panel"
@@ -1015,7 +1017,9 @@ export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConn
   }
 }
 
-function setActiveSection(elements: ManagerElements, section: ManagerSection) {
+function setActiveSection(elements: ManagerElements, section: ManagerSection | string) {
+  document.querySelectorAll<HTMLElement>('[data-optional-page]').forEach(node => { node.hidden = node.dataset.optionalPage !== section })
+  document.querySelectorAll<HTMLElement>('[data-optional-nav]').forEach(node => { node.dataset.active = String(node.dataset.optionalNav === section); node.setAttribute('aria-selected', String(node.dataset.optionalNav === section)) })
   if (section === "translations") section = "analysis"
   elements.navTranslations.hidden = true
   const isChat = section === "chat"
@@ -3110,6 +3114,25 @@ export function initJadenseManagerPage() {
   if (dock) mountChatComposer(dock)
   const elements = readElements()
   const section = initialSection()
+  if (zotero) {
+    try {
+    const cleanup = mountOptionalFeatures({ host: zotero, document, registerPage(id, label, icon) {
+      const section = document.createElementNS('http://www.w3.org/1999/xhtml', 'section') as HTMLElement
+      section.id = `jadense-manager-section-${id}`; section.className = 'jdx-manager-section'; section.dataset.optionalPage = id; section.hidden = true
+      const button = document.createElementNS('http://www.w3.org/1999/xhtml', 'button') as HTMLButtonElement
+      button.id = `jadense-manager-nav-${id}`; button.type = 'button'; button.dataset.optionalNav = id; button.title = label
+      button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', section.id); button.setAttribute('aria-label', label)
+      section.setAttribute('role', 'tabpanel'); section.setAttribute('aria-labelledby', button.id)
+      const glyph = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); glyph.className = 'jdx-manager-nav-icon'; glyph.textContent = icon; glyph.setAttribute('aria-hidden', 'true')
+      const text = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); text.className = 'jdx-manager-nav-label'; text.textContent = label
+      button.append(glyph, text); document.querySelector('.jdx-manager-nav')?.prepend(button); elements.chatSection.parentElement?.append(section)
+      const open = () => setActiveSection(elements, id)
+      button.addEventListener('click', open)
+      return { section, button, open }
+    } })
+    window.addEventListener('unload', cleanup, { once: true })
+    } catch { /* 可选发行页初始化失败不能阻断对话、阅读或设置。 */ }
+  }
   setConnectionTab(elements, "account")
   setActiveSection(elements, section)
   wireGuideNavigation(elements.guideSection)
@@ -3150,6 +3173,12 @@ export function initJadenseManagerPage() {
     if (zotero) applySidebarCollapsed(elements, readSidebarCollapsed(zotero))
   })
   const stopOCR = wireOCRSettings(zotero, elements.settingsPanelOcr.querySelector<HTMLElement>('[data-ocr-settings]'))
+  const stopToolbarMode = wireJadenseMode(zotero, document.getElementById('jadense-home')!, () => {
+    setActiveSection(elements, 'settings-connection')
+    elements.settingsTabConnection.click()
+    elements.tokenEdit.focus()
+  }, { compact: true })
+  window.addEventListener('unload', stopToolbarMode, { once: true })
   window.addEventListener("unload", stopOCR, { once: true })
   const stopFeatures = wireFeatureSettings(zotero, elements.settingsPanelFeatures, elements.settingsPanelOcr, ocr => { (ocr ? elements.settingsTabOcr : elements.settingsTabFeatures).click() })
   window.addEventListener("unload", stopFeatures, { once: true })

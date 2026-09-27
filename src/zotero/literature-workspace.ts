@@ -28,7 +28,7 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
   actionIcon(nav.lastElementChild as HTMLButtonElement, 'open')
   const tabsHost = element(doc, 'div', 'jdx-tabs'), panels = element(doc, 'div', 'jdx-literature-panels')
   tabsHost.setAttribute('role', 'tablist'); tabsHost.setAttribute('aria-label', uiText('文献成果', 'Paper results'))
-  const labels = { ...resultLabels(), files: uiText('翻译文件', 'Translated files'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = ['source', 'files', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
+  const labels = { ...resultLabels(), files: uiText('对照翻译', 'Bilingual PDF'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = ['source', 'files', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
   const tabs = modes.map(mode => { const button = action(doc, labels[mode], () => {}); button.setAttribute('role', 'tab'); button.id = `jdx-literature-tab-${mode}`; button.setAttribute('aria-controls', `jdx-literature-panel-${mode}`); tabsHost.append(button); return button })
   const hero = element(doc, 'header', 'jdx-literature-hero'); hero.append(title, metadata)
   detail.append(nav, hero, tabsHost, panels)

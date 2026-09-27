@@ -2,7 +2,8 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { build } from "esbuild"
+import { build as esbuild } from "esbuild"
+import { existsSync } from 'node:fs'
 import JSZip from "jszip"
 
 import {
@@ -22,6 +23,16 @@ import {
 } from "./release-common.mjs"
 
 const { facts, version, manifest } = await loadReleaseContext()
+// 可选模块只从本机私有目录装配；公开源码仍可独立构建基础发行。
+const optionalEntry = path.join(projectRoot, 'private/entry.ts')
+const optionalManifest = path.join(projectRoot, 'private/features.json')
+const hasOptional = existsSync(optionalEntry)
+if (process.env.JADENSE_REQUIRE_FULL === '1' && !hasOptional) throw new Error('Official distribution requires local optional modules.')
+const features = hasOptional ? JSON.parse(await readFile(optionalManifest, 'utf8')) : []
+const build = options => esbuild({ minify: hasOptional, ...options, plugins: [...(options.plugins || []), {
+  name: 'local-optional-modules', setup(builder) {
+    if (hasOptional) builder.onResolve({ filter: /(?:^|\/)optional-features$/ }, () => ({ path: optionalEntry }))
+  } }] })
 const builtAt = resolveBuiltAt()
 const buildID = `${version}-${builtAt.replace(/[^0-9]/g, '')}`
 const releasePaths = buildReleasePaths(facts, version)
@@ -92,6 +103,10 @@ await build({
 })
 
 // Chrome 样式缓存按资源地址复用；内容摘要让热升级和同版本重建都加载匹配的 CSS/JS。
+// @import 独立缓存，不能只刷新外层 preferences.css 的地址。
+const settingsRevision = sha256(await readFile(path.join(buildDir, 'content/settings.css'))).slice(0, 12)
+const preferencesCssPath = path.join(buildDir, 'content/preferences.css')
+await writeFile(preferencesCssPath, (await readFile(preferencesCssPath, 'utf8')).replace('"settings.css"', `"settings.css?v=${settingsRevision}"`))
 await build({
   entryPoints: [path.join(projectRoot, 'src/zotero/classification-page.ts')],
   outfile: path.join(buildDir, 'content/classification.js'),
@@ -105,7 +120,7 @@ for (const fileName of ['manager.css', 'status.css', 'classification.css', 'clas
 await writeFile(classificationHtmlPath, classificationHtml)
 const managerHtmlPath = path.join(buildDir, "content/manager.xhtml")
 let managerHtml = await readFile(managerHtmlPath, "utf8")
-for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "classification.css", "manager.js"]) {
+for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "classification.css", "settings.css", "manager.js"]) {
   const revision = sha256(await readFile(path.join(buildDir, "content", fileName))).slice(0, 12)
   managerHtml = managerHtml.replace(`"${fileName}"`, `"${fileName}?v=${revision}"`)
 }
@@ -142,6 +157,8 @@ const metadata = buildReleaseMetadata({
   bundledFiles: bundled.map((file) => file.archivePath),
 })
 metadata.buildID = buildID
+metadata.distribution = hasOptional ? 'full' : 'base'
+metadata.features = features
 await writeFile(releasePaths.metadataPath, stringifyJson(metadata))
 
 console.log(`Built ${releasePaths.artifactRelativePath}`)

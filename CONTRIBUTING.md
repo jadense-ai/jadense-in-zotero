@@ -64,7 +64,7 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 | --- | --- |
 | PR → `main` | 冻结安装、测试、发布边界测试、lint、build；`verify` 是合并必过检查 |
 | 推送到 `main` | 验证实际合并结果 |
-| 推送 `v*` 标签 | 验证稳定版本、标签来源，构建后创建草稿 Release |
+| 推送 `v*` 标签 | 验证稳定版本、标签来源，验证并构建基础制品，维护者另行组装完整发行草稿 |
 | `workflow_dispatch` | 只验证并上传 Actions 制品，即使选择标签也不创建 Release |
 
 `verify` 超时 20 分钟，Windows x64 的 `package-offline` 超时 90 分钟，`draft-release` 超时 30 分钟。PR/main 只生成普通预览 XPI；标签及手动运行构建完整离线套装，手动运行不创建 Release。新 PR 提交取消同 PR 旧检查；标签运行按标签串行，不取消已在进行的发布。Actions 制品保留 30 天。Node/pnpm 使用项目固定版本，Actions 固定完整 commit SHA；更新 Actions 时必须核验上游仓库的目标提交。
@@ -80,65 +80,16 @@ README 中英文、CHANGELOG、本文、SECURITY 和 `.github/` 在公开仓库�
 
 ## 发布正式版本
 
-本流程只接受稳定版本 `X.Y.Z` 和对应 `vX.Y.Z` 标签；不支持 beta/rc。插件在 `0.x` 开发阶段采用以下项目发布策略，不因每项新增界面功能自动增加次版本：
+官方安装包包含可选发行模块；公开源码可独立构建基础版。公开 CI 校验 PR/main/tag，并产出基础版与 Windows x64 引擎制品，不自动创建正式草稿，基础 XPI 不得用作官方附件。只分发已验证的完整 XPI、引擎、离线套装及元数据，不上传模块源文件、测试、source map、构建中间目录或运行数据。
 
-- `0.4.x`：日常修复、界面优化和兼容的小功能，延续当前版本系列；后续版本系列沿用这一补丁版本策略。
-- `0.5.0` 及后续次版本：计划中的功能里程碑，或涉及安装、数据、配置迁移的明显变化；发布说明列出兼容性影响和迁移要求。
-- 每个已发布版本保持不可变。修改安装包必须使用新版本号，不同 XPI 字节不得重复使用已公开版本号。
+1. 创建纯 `vX.Y.Z` 发布分支，通过 PR 更新版本、中英文 README、CHANGELOG 与用户指南；候选版本标记待发布。PR 与 main 的 `verify` 必须成功。
+2. 在已验证的 main 提交创建同名标签。标签必须与包版本一致、属于 main；已公开版本及其标签不可重用。仅当版本从未正式公开、旧草稿已废弃且维护者明确批准时，可纠正该未发布版本的标签：记录旧/新提交，先完成新提交 CI，仅临时排除该单一标签的保护，更新后立即恢复规则；不得扩大到已发布版本。
+3. 维护者准备完整正式 XPI（`distribution=full`、`buildMode=production`、features 含 `literature-tracking`），用经过 CI 校验的匹配引擎组装离线套装。套装内 XPI 必须与独立 XPI 字节一致，XPI 中的引擎清单与引擎摘要一致。
+4. 校验后创建草稿，仅上传八个附件：XPI、Windows x64 完整离线 ZIP、PDF 引擎 ZIP、OCR 引擎 ZIP、`release-metadata.json`、`SHA256SUMS`、`distribution-metadata.json`、`DISTRIBUTION-SHA256SUMS`。`.github/scripts/release.mjs` 拒绝基础版、测试包和缺失能力的正式附件；不能把这种拒绝视为绕过校验的理由。
+5. 从草稿重新下载制品核对摘要；对下载原件完成三次冷启动、研究工作台功能和从上一正式版的原位升级验收。使用临时 profile、合成资料与模拟接口，记录实际系统和 Zotero 版本及未测范围。
+6. 核对离线套装和两种引擎，在不依赖系统 Python/uv 的 Windows x64 环境验证导入与健康检查。补齐用户版 Release 正文并运行 `pnpm run release:notes:check -- <正文.md>`，全部完成后公开草稿。官网自动更新不随之改变。
 
-1. 创建发布 PR，集中修改 `package.json` 版本和相关版本说明。依赖发生变化时更新锁文件；清楚列出新增、修复、兼容范围及升级注意事项。完成下方「README 与指南发布清单」，不能只更新 CHANGELOG 或 Release 草稿。
-2. 正常合并发布 PR，并确认 `main` CI 成功。维护者在最新 `main` 的预定提交创建并推送标签；以下 `0.4.1` 仅为示例，必须替换为发布 PR 中的实际版本：
-
-   ```powershell
-   git switch main
-   git pull --ff-only
-   git tag -a v0.4.1 -m "Jadense in Zotero v0.4.1"
-   git push origin refs/tags/v0.4.1
-   ```
-
-3. 工作流要求标签与包版本精确一致，且提交已包含在 `origin/main` 历史中。`verify` 完成源码检查后，`package-offline` 按锁文件构建两种独立 Python 引擎和模型，将本次引擎摘要及当前 Release 下载地址写入候选 XPI，随后组装完整套装。`draft-release` 只下载同次运行制品，重新检查全部摘要和版本后创建草稿，附以下文件：
-
-   - `jadense-in-zotero-vX.Y.Z.xpi`
-   - `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip`（内含同一 XPI、两个引擎 ZIP、安装指南和摘要）
-   - `jadense-pdf-engine-<引擎版本>-windows-x64.zip`
-   - `jadense-ocr-engine-<引擎版本>-windows-x64.zip`
-   - `distribution-metadata.json` 与 `DISTRIBUTION-SHA256SUMS`（上述四个二进制附件）
-   - `release-metadata.json`
-   - `SHA256SUMS`
-
-4. 从草稿下载这三个文件。使用标签对应的源码和测试脚本，先将 XPI 的 SHA-256 与 `SHA256SUMS` 核对，再对下载的 XPI 进行原生验收，不能重新构建后替代：
-
-   ```powershell
-   Get-FileHash ./candidate/jadense-in-zotero-v0.4.1.xpi -Algorithm SHA256
-   Get-Content ./candidate/SHA256SUMS
-   pnpm run smoke:installed -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi
-   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi
-   pnpm run smoke:research -- --zotero 'C:/Program Files/Zotero/zotero.exe' --xpi ./candidate/jadense-in-zotero-v0.4.1.xpi --upgrade-from ./previous/jadense-in-zotero-v0.4.0.xpi
-   ```
-
-   路径和版本均替换为实际值。升级测试只用于存在同插件身份的上一正式版时；首版或身份不同则在验收记录填写不适用及原因，不将冷启动当作升级验证。冒烟使用临时 profile、合成数据和模拟接口，不上传真实用户资料或凭据。
-
-5. 从同一草稿下载完整离线套装并核对 `DISTRIBUTION-SHA256SUMS`，在无系统 Python/uv 的 Windows x64 环境验证两种引擎导入及运行。按下方文案规范完善草稿，补齐实际 Zotero/操作系统版本、功能限制和升级注意事项，确认附件齐全。Manifest 兼容范围不能代替实测记录。运行 `pnpm run release:notes:check -- <Release正文.md>` 检查最终正文，所有验收项完成后在 GitHub 人工公开草稿。
-
-同名草稿或正式 Release 已存在时，工作流明确停止，不覆盖、删除或自动重新上传。只读查询或创建命令失败也不自动重试写入；网络中断可能已经留下部分草稿附件，应先检查远端状态。修复草稿只能补齐原 Actions 运行的已验证制品；若原制品已过期或无法确认一致性，使用新版本，不重打旧标签。公开后需要更换任何制品时必须增加版本号。
-
-创建草稿及公开 Release 都不会执行官网发布或修改自动更新配置。
-
-### 完整 ZIP 的构建约定
-
-标签发布必须成功生成普通 XPI、两个引擎 ZIP 和完整离线 ZIP；模型下载或构建失败、附件缺失、版本或摘要不匹配均停止草稿创建。单个附件必须小于 2 GiB，超限需先调整分发方案。草稿中的引擎链接在正式公开后可供普通插件在线下载；公开前通过离线导入验收。构建只临时更改引擎清单，结束或失败后恢复源码清单，不提交本次摘要。
-
-独立构建需要 Windows x64、项目固定 Node/pnpm、Python 3.12 和 uv 0.9.3，以及下载锁定依赖和模型的网络。Python/uv 是发布机依赖，用户安装完整套装不需要它们。每个引擎构建完成后清理本次独占临时目录；已压缩制品上传 Actions 时不重复压缩。
-
-```powershell
-pnpm install --frozen-lockfile
-python -m pip install uv==0.9.3
-$env:PYTHONUTF8 = "1"
-python .github/scripts/package-release.py --repository jadense-ai/jadense-in-zotero
-```
-
-使用全新 checkout 或空的对应版本输出目录执行；已有离线 ZIP 不覆盖。也可从 Actions 手动运行工作流获取同样的 `zotero-release` 附件。普通 `pnpm run build` 仍只构建 XPI。完整套装当前仅覆盖 Windows x64；全文 OCR 模型包含在包内，选文公式专用 CodeFormulaV2 仍需首次下载。AI 翻译仍需服务和网络。
-
+同名草稿存在时先检查状态，不自动覆盖；网络失败不能直接重试写入。只上传已校验的同一批制品。已发布附件不可变，更换制品使用新版本。完整套装仅覆盖 Windows x64；AI 翻译仍需要网络与服务，选文公式专用模型首次使用另行下载。
 
 ## Release 说明文案
 
@@ -152,7 +103,7 @@ python .github/scripts/package-release.py --repository jadense-ai/jadense-in-zot
 3. 发布 PR 更新 CHANGELOG 的中英文说明、README 安装包名和链接、操作/配置指南；候选版注明待发布，不提前宣称已可下载。公开后核对最新下载入口并移除该版本的未发布标记。
 4. Release 标题仅用 `vX.X.X`。从 v0.6.2 起，正文使用下方固定的五个二级标题，顺序、大小写及标点均不变；前两栏分别供中文、英文插件弹窗提取最新版本更新内容。
 5. 不以提交记录或内部开发过程代替用户文案，不公开私有来源、内部目录、凭据和商业决策。草稿占位符必须在公开前替换为真实信息；未实测范围如实说明。
-6. 运行测试、lint、build 和发布边界检查，PR 合并后确认 main CI，再打同名标签，由 CI 生成草稿；使用草稿原始安装包完成原生与升级验收后公开。不得跳过 CI 或重打旧版制品。
+6. 运行测试、lint、build 和发布边界检查，PR 合并后确认 main CI，再打同名标签，按完整发行流程组装并创建草稿；使用草稿原始安装包完成原生与升级验收后公开。不得跳过 CI 或重打旧版制品。
 
 操作图更新可复用现有冒烟与预览：
 
@@ -208,4 +159,4 @@ Release 面向插件用户，重点介绍功能和更新价值。以本次版本
 
 - 长期分支仅保留 `main`。发布准备分支、Git 标签和 GitHub Release 标题统一为 `vX.X.X`，例如 `v0.4.8`；三个数字段不得有多余前导零。禁止 `codex/`、`codex-`、`release-` 前缀、产品名、空格、功能描述以及 beta/rc 后缀。
 - 普通功能分支使用简短功能名，不能伪装成发布分支；发布 PR 修改 package.json 版本时，分支必须精确匹配该版本。合并后删除短期分支，保留不可变版本标签。
-- 已发布标签和附件不重写；源码同步不自动构成新版本发布，未发布改动标记为 Unreleased。
+- 已发布标签和附件不重写；从未正式公开的标签仅按上述维护者明确批准的例外纠正；源码同步不自动构成新版本发布，未发布改动标记为 Unreleased。

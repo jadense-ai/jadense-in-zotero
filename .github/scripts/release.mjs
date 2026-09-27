@@ -93,6 +93,10 @@ export function createDraftRelease({ directory, env = process.env, gh = runGh })
     throw new Error("Release metadata does not match the release XPI.")
   }
 
+  // Official asset integrity: a source-only base build cannot replace the complete distribution.
+  if (metadata.distribution !== 'full' || !metadata.features?.includes('literature-tracking') || metadata.buildMode !== 'production') {
+    throw new Error('Official releases require a production full distribution with literature-tracking.')
+  }
   const distribution = verifyDistribution(directory, version)
 
   // 分页包含所有草稿及正式版本；查询失败直接停止，不能误判为不存在。

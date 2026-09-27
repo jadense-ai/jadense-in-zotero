@@ -15,7 +15,7 @@ type NativeItem = {
 type NativeCollection = { id: number; key: string; libraryID: number; name: string; parentID?: number | false; deleted?: boolean }
 export type ClassificationItem = { id: number; key: string; libraryID: number; title: string; abstract: string; tags: string[]; collections: number[] }
 export type ClassificationFolder = { id: number; key: string; libraryID: number; path: string[] }
-export type ClassificationRow = { item: ClassificationItem; target: ClassificationFolder | null; confidence: number | null; remove: number[]; selected: boolean; error?: string; applied?: boolean }
+export type ClassificationRow = { item: ClassificationItem; target: ClassificationFolder | null; confidence: number | null; remove: number[]; selected: boolean; error?: string; warning?: string; applied?: boolean }
 type UndoEntry = { item: ClassificationItem; after: number[]; folders: ClassificationFolder[] }
 type SessionState = { busy: boolean; undo: Record<number, UndoEntry[]> }
 type ClassificationHost = ZoteroLike & { __jadenseClassification?: SessionState }
@@ -27,6 +27,7 @@ export function readTypesafeKey(host: ZoteroLike) {
 const failure = () => new Error(uiText('分类对象已改变或不可编辑，请重新生成预览。', 'Items or collections changed or are not editable. Generate a new preview.'))
 const sameIDs = (a: number[], b: number[]) => a.length === b.length && a.every(id => b.includes(id))
 class SafeTypesafeError extends Error {}
+export type ChoiceRequest = (content: unknown, criteria: Record<string, unknown>, signal?: AbortSignal) => Promise<{ choice: string; confidence: number | null; warning?: string }>
 
 /** 只收集用户明确选中的文献；附件、笔记和回收站条目不发送。 */
 export function selectedClassificationIDs(host: ZoteroLike): number[] {
@@ -106,26 +107,28 @@ export async function testTypesafeKey(key: string, signal?: AbortSignal, fetcher
 }
 
 /** 大候选集分组选择再比较胜者，避免超过 Choice 255 选项限制；低置信度不自动拒绝。 */
-export async function recommendClassification(item: ClassificationItem, folders: ClassificationFolder[], key: string, signal?: AbortSignal, fetcher?: typeof fetch): Promise<Pick<ClassificationRow, 'target' | 'confidence'>> {
+export async function recommendClassification(item: ClassificationItem, folders: ClassificationFolder[], key: string, signal?: AbortSignal, fetcher?: typeof fetch, request?: ChoiceRequest): Promise<Pick<ClassificationRow, 'target' | 'confidence' | 'warning'>> {
   let candidates = folders.filter(folder => folder.libraryID === item.libraryID)
   const grouped = candidates.length > 254
   let confidence: number | null = null
+  let warning: string | undefined
   while (candidates.length) {
     const winners: ClassificationFolder[] = []
     for (let offset = 0; offset < candidates.length; offset += 254) {
       if (signal?.aborted) throw new Error(uiText('已停止分类。', 'Classification stopped.'))
       const group = candidates.slice(offset, offset + 254)
       const criteria = Object.fromEntries(group.map(folder => [`collection_${folder.id}`, { folderHierarchy: folder.path }]))
-      const answer = await requestChoice(key, { title: item.title, abstract: item.abstract, tags: item.tags }, { ...criteria, none: 'No listed collection matches this paper' }, signal, fetcher)
+      const answer = await (request ?? ((content, criteria, signal) => requestChoice(key, content, criteria, signal, fetcher)))({ title: item.title, abstract: item.abstract, tags: item.tags }, { ...criteria, none: 'No listed collection matches this paper' }, signal)
+      warning = ('warning' in answer ? answer.warning as string | undefined : undefined) ?? warning
       confidence = answer.confidence
       const winner = group.find(folder => `collection_${folder.id}` === answer.choice)
       if (winner) winners.push(winner)
     }
-    if (candidates.length <= 254) return { target: winners[0] ?? null, confidence: grouped ? null : confidence }
-    if (winners.length === 1) return { target: winners[0], confidence: null }
+    if (candidates.length <= 254) return { target: winners[0] ?? null, confidence: grouped ? null : confidence, ...(warning ? { warning } : {}) }
+    if (winners.length === 1) return { target: winners[0], confidence: null, ...(warning ? { warning } : {}) }
     candidates = winners
   }
-  return { target: null, confidence: null }
+  return { target: null, confidence: null, ...(warning ? { warning } : {}) }
 }
 
 /** 应用和撤销只修改预览涉及的同库收藏夹，重新核对身份、权限与原集合。 */

@@ -13,6 +13,14 @@ measure = lambda text: (len(text) + 2) // 3
 
 
 class BatchingTests(unittest.TestCase):
+    def test_publisher_radical_fonts_are_formula_fonts_without_capturing_text_ligatures(self):
+        from batch_adapter import formula_font_pattern
+        from babeldoc.format.pdf.document_il.utils.formular_helper import is_formulas_font
+        names = ['ABCDEF+AdvP4C4E46', 'ABCDEF+AdvMacMthSyN', 'ABCDEF+AdvOT1ef757c0+fb', 'ABCDEF+CMEX10']
+        page = SimpleNamespace(pdf_font=[SimpleNamespace(name=name) for name in names], pdf_xobject=[])
+        pattern = formula_font_pattern(page, None)
+        self.assertEqual([is_formulas_font(name, pattern) for name in names], [True, True, False, True])
+
     def test_repairs_local_json_without_guessing_passage_identity_or_truncated_text(self):
         rows = [dict(id='a', text='First {v1}.'), dict(id='b', text='Second.'), dict(id='c', text='Third.')]
         fixtures = [
@@ -208,6 +216,102 @@ def document(paragraphs):
 
 
 class ResilienceTests(unittest.TestCase):
+    def test_confirmed_failed_batch_recovers_without_resending_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append((inputs, operation))
+                if len(calls) == 1: raise ProviderFailure('OUTPUT_FAILED', False)
+                return '\n'.join(json.dumps({row['id']: 'translated'}) for row in inputs)
+            adapter, _ = self.adapter(directory, request)
+            rows = [dict(id=str(i), text=f'Passage {i}.', label='text') for i in range(34)]
+            adapter.translate_batch(rows)
+            self.assertEqual([len(rows) for rows, _ in calls], [34, 17, 17])
+            self.assertEqual(len({operation for _, operation in calls}), 3)
+            self.assertTrue(all(row['id'] in adapter.cache for row in rows))
+
+    def test_unconfirmed_and_cancelled_requests_never_enter_content_repair(self):
+        for code, stop in [('RECOVERY_PENDING', False), ('STREAM_FAILED', False), ('OUTPUT_CANCELLED', False), ('OUTPUT_FAILED', True)]:
+            with self.subTest(code=code, stop=stop), tempfile.TemporaryDirectory() as directory:
+                calls = []
+                def request(text, llm, operation):
+                    calls.append((text, operation)); raise ProviderFailure(code, stop)
+                adapter, _ = self.adapter(directory, request)
+                rows = [dict(id='a', text='Source', label='text')]
+                with self.assertRaises(ProviderFailure): adapter.translate_batch(rows)
+                self.assertEqual(len(calls), 1)
+                adapter, _ = self.adapter(directory, request)
+                with self.assertRaises(ProviderFailure): adapter.translate_batch(rows)
+                self.assertEqual(calls[0], calls[1])
+
+    def test_confirmed_failure_exhaustion_is_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                calls.append(operation); raise ProviderFailure('OUTPUT_FAILED', False)
+            adapter, _ = self.adapter(directory, request)
+            adapter.translate_batch([dict(id='a', text='Source', label='text')])
+            self.assertEqual(len(calls), 3)
+            self.assertNotIn('a', adapter.cache)
+
+    def test_span_recovery_keeps_frozen_input_and_caches_only_complete_spans(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append((text, operation))
+                if len(calls) == 3: raise ProviderFailure('RECOVERY_PENDING', False)
+                return '\n'.join(json.dumps({row['id']: '译文'}) for row in inputs)
+            source = 'Before <b0>formula after.'
+            rows = [dict(id='a', text=source, label='text')]
+            adapter, _ = self.adapter(directory, request)
+            with self.assertRaises(ProviderFailure): adapter.translate_batch(rows)
+            self.assertNotIn('a', adapter.cache)
+            adapter, _ = self.adapter(directory, request)
+            adapter.stats['batchEndReasons'] = Counter()
+            for group in adapter.scheduled_batches(rows): adapter.translate_batch(group)
+            self.assertEqual(calls[2], calls[3])
+            self.assertTrue(valid_output(source, adapter.cache['a']))
+
+    def test_restart_only_requests_missing_spans(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append(inputs)
+                return json.dumps({inputs[0]['id']: '译文'})
+            source = 'Before <b0>after.'
+            row = dict(id='a', text=source, label='text')
+            adapter, _ = self.adapter(directory, request)
+            adapter.translate_batch([row])
+            self.assertNotIn('a', adapter.cache)
+            self.assertEqual(len(calls), 3)
+            adapter, _ = self.adapter(directory, request)
+            adapter.stats['batchEndReasons'] = Counter()
+            for group in adapter.scheduled_batches([row]): adapter.translate_batch(group)
+            self.assertEqual(len(calls), 4)
+            self.assertEqual([r['input'] for r in calls[-1]], ['after.'])
+            self.assertTrue(valid_output(source, adapter.cache['a']))
+
+    def test_less_than_text_is_not_a_generated_placeholder(self):
+        source = 'Bandwidth (<300 GHz) with <b0>phase matching</b0>.'
+        output = '带宽（<300 GHz），采用<b0>相位匹配</b0>。'
+        self.assertEqual(parse_outputs(json.dumps({'p1': output}), [dict(id='p1', text=source)]), {'p1': output})
+        self.assertFalse(valid_output('Formula <b1> and {v2}', '译文 <b1>'))
+
+    def test_final_repair_translates_spans_and_restores_formula_locally(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append((text, operation))
+                # 故意模拟总是丢弃标记的模型；最后一轮不再让模型回传标记。
+                return '\n'.join(json.dumps({row['id']: '译文'}) for row in inputs)
+            adapter, _ = self.adapter(directory, request)
+            source = 'Before <b0>formula and <b1>styled</b1> after.'
+            adapter.translate_batch([dict(id='a', text=source, label='text')])
+            self.assertTrue(valid_output(source, adapter.cache.get('a')))
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(len(set(text for text, _ in calls)), 3)
+            self.assertNotIn('<b0>', ''.join(row['input'] for row in json.loads(calls[-1][0].split('\n', 1)[1])))
+
     def test_compact_lines_salvage_complete_passages_and_retry_only_truncated_tail(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []

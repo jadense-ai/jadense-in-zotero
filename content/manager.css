@@ -1515,7 +1515,8 @@ textarea {
 .jdx-chat-source-panel { background: var(--jdx-surface-sunken); }
 
 .jdx-titlebar .jdx-manager-sidebar-toggle { padding: 4px; color: var(--jdx-muted); }
-.jdx-titlebar #jadense-home { padding: 3px; }
+.jdx-titlebar #jadense-home { display:inline-flex; flex:none; -moz-window-dragging:no-drag; }
+.jdx-titlebar #jadense-home button { padding:3px; }
 /* 翻译历史入口已并入文献解析；保留旧 DOM ID 供兼容路由使用。 */
 #jadense-manager-nav-translations { display: none !important; }
 

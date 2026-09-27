@@ -26,6 +26,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.6 is released:** It fixes the PDF engine guide link, UTF-8 BOM errors during offline checks, and extraction failures under deep Zotero profiles. The Windows x64 suite includes the XPI, PDF engine and local OCR engine. [Download v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP offline installation guide](docs/usage-guide.md#windows-x64-zip-offline-installation).
 
+**v0.6.7 pending release:** Literature Radar discovers arXiv papers by your interests, with relevance, optional AI reviews and saving papers/PDFs. This version supports arXiv only; multiple sources and a source-selection UI are planned for the next version. Official packages include Literature Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
+
 <!-- release-summary:start -->
 ## Recent releases
 

@@ -6,7 +6,7 @@ import { wireSelectionSettings } from './selection-settings'
 import { wireTranslationInterface } from './translation-interface'
 import { wireReferenceAISetting } from './reference-ai-settings'
 import { mountClassificationSettings } from './classification-ui'
-import { DOCUMENT_OCR_PREF, documentOCREnabled } from './document-extraction'
+import { DOCUMENT_OCR_PREF, MARKDOWN_OCR_PREF, ANALYSIS_OCR_PREF, documentOCREnabled, analysisOCREnabled } from './document-extraction'
 import { checkOCREngine } from './cloud-ocr'
 import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, ocrEngine } from './cloud-ocr-config'
 import { cachedOCR, OCR_READY_PREF, isLocalOCRPreparing, observeOCRProgress } from './local-ocr'
@@ -57,35 +57,52 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     try { observer = host.Prefs?.registerObserver?.(CHAT_DOCUMENT_MODE_PREF_KEY, sync, true) } catch { /* 设置页仍可手动保存。 */ }
     stops.push(() => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); select.destroy(); row.remove() })
   }
-  const section = root.querySelector<HTMLElement>('[data-document-ocr-host]')!
-  const label = make('label'), enabled = make('input'); enabled.type = 'checkbox'; enabled.dataset.ocrSetting = 'document'
-  label.className = 'jdx-manager-checkbox jdx-pref-checkbox'
-  label.append(enabled, make('span', uiText('全文提取 OCR 增强', 'Enhance document extraction with OCR')))
-  const help = make('p', uiText('用于后续全文 Markdown、文献解析和参考文献提取。默认使用文字层，OCR 失败时回退；扫描页需 OCR。翻译和对话可复用原文，已有成果不变。', 'Applies to future Markdown, analysis and reference extraction. Uses the text layer by default and on OCR failure; scanned pages need OCR. Translation and chat reuse the source; saved results stay unchanged.'))
-  help.className = 'jdx-manager-settings-note jdx-pref-card-note'
-  const status = make('p'); status.setAttribute('role', 'status')
-  const ocrRow = make('div'); ocrRow.className = 'jdx-feature-model-row'
-  const description = make('div'); description.append(make('h3', uiText('内容提取', 'Content extraction')))
-  const controls = make('div'); controls.append(label, help, status); controls.dataset.ocrSummaryHost = ''
-  ocrRow.append(description, controls); section.append(ocrRow)
-  let disposed = false, generation = 0
-  const syncEnabled = () => { enabled.checked = documentOCREnabled(host) }
-  enabled.addEventListener('change', () => { void (async () => {
-    const current = ++generation, requested = enabled.checked, engine = ocrEngine(host)
-    enabled.disabled = true
-    status.textContent = requested ? uiText('正在检查所选 OCR 引擎…', 'Checking the selected OCR engine…') : ''
-    try {
-      if (requested) await checkOCREngine(host)
-      if (disposed || current !== generation) return
-      if (engine !== ocrEngine(host)) { status.textContent = uiText('引擎已变更，请重新开启。', 'The engine changed. Enable again.'); return }
-      if (!host.Prefs?.set) throw new Error('Preferences unavailable')
-      host.Prefs.set(DOCUMENT_OCR_PREF, requested, true)
-      status.textContent = requested ? uiText('已开启，下次提取生效。', 'Enabled for the next extraction.') : ''
-    } catch { if (!disposed) status.textContent = uiText('未能开启或保存，请在 OCR 配置检查引擎后重试。', 'Could not enable or save. Check OCR configuration and retry.') }
-    finally { if (!disposed && current === generation) { enabled.disabled = false; syncEnabled() } }
-  })() })
+  const sections = [
+    { section: root.querySelector<HTMLElement>('[data-document-ocr-host]')!, key: MARKDOWN_OCR_PREF, name: 'document', read: documentOCREnabled,
+      label: uiText('全文 Markdown OCR 增强', 'Enhance full Markdown with OCR'),
+      help: uiText('仅控制新提取的全文 Markdown；对话和文本翻译可复用该原文。关闭时使用 PDF 文字层，开启后 OCR 失败仍回退文字层；扫描页需要 OCR。已有成果不变，不影响文献解析与 PDF 对照翻译。', 'Controls new full Markdown extraction; chat and text translation can reuse it. Uses the PDF text layer when off or when OCR fails; scanned pages need OCR. Saved results, literature analysis and bilingual PDF translation are unaffected.') },
+    { section: root.querySelector<HTMLElement>('[data-analysis-ocr-host]')!, key: ANALYSIS_OCR_PREF, name: 'analysis', read: analysisOCREnabled,
+      label: uiText('文献解析与参考文献识别 OCR 增强', 'Enhance analysis and reference extraction with OCR'),
+      help: uiText('统一控制文献解析与参考文献提取的原文识别，不影响全文 Markdown。关闭时使用文字层，OCR 失败时回退；定位批注还需要有效页坐标。参考文献核验无需 OCR；下方 AI 开关只控制未识别条目的模型补充识别。', 'Shares one OCR choice for literature analysis and reference extraction, independently of full Markdown. Uses the text layer when off or on OCR failure; annotations also require page coordinates. Reference verification needs no OCR; the AI switch below only controls model assistance for unresolved references.') },
+  ]
+  const syncControls: ((key?: string) => void)[] = []
+  let disposed = false
+  for (const config of sections) {
+    const { section } = config
+    const label = make('label'), enabled = make('input'); enabled.type = 'checkbox'; enabled.dataset.ocrSetting = config.name
+    label.className = 'jdx-manager-checkbox jdx-pref-checkbox'
+    label.append(enabled, make('span', config.label))
+    const help = make('p', config.help)
+    help.className = 'jdx-manager-settings-note jdx-pref-card-note'
+    const status = make('p'); status.setAttribute('role', 'status')
+    const ocrRow = make('div'); ocrRow.className = 'jdx-feature-model-row'
+    const description = make('div'); description.append(make('h3', uiText('内容提取', 'Content extraction')))
+    const controls = make('div'); controls.append(label, help, status); controls.dataset.ocrSummaryHost = ''
+    ocrRow.append(description, controls); section.append(ocrRow)
+    let generation = 0
+    const syncEnabled = () => { enabled.checked = config.read(host) }
+    syncControls.push(key => {
+      if (!enabled.disabled && (key === config.key || key === OCR_ENGINE_PREF)) status.textContent = ''
+      syncEnabled()
+    })
+    enabled.addEventListener('change', () => { void (async () => {
+      const current = ++generation, requested = enabled.checked, engine = ocrEngine(host)
+      enabled.disabled = true
+      status.textContent = requested ? uiText('正在检查所选 OCR 引擎…', 'Checking the selected OCR engine…') : ''
+      try {
+        if (requested) await checkOCREngine(host)
+        if (disposed || current !== generation) return
+        if (engine !== ocrEngine(host)) { status.textContent = uiText('引擎已变更，请重新开启。', 'The engine changed. Enable again.'); return }
+        if (!host.Prefs?.set) throw new Error('Preferences unavailable')
+        host.Prefs.set(config.key, requested, true)
+        status.textContent = requested ? uiText('已开启，下次提取生效。', 'Enabled for the next extraction.') : ''
+      } catch { if (!disposed) status.textContent = uiText('未能开启或保存，请在 OCR 配置检查引擎后重试。', 'Could not enable or save. Check OCR configuration and retry.') }
+      finally { if (!disposed && current === generation) { enabled.disabled = false; syncEnabled() } }
+    })() })
+    stops.push(() => { generation++; ocrRow.remove() })
+  }
   const summaries: HTMLElement[] = []
-  for (const parent of [root.querySelector<HTMLElement>('[data-selection-settings-host]')!, section]) {
+  for (const parent of [root.querySelector<HTMLElement>('[data-selection-settings-host]')!, ...sections.map(config => config.section)]) {
     const row = make('div'); row.className = 'jdx-ocr-summary'
     const summary = make('span'); summary.setAttribute('role', 'status'); summaries.push(summary)
     const button = make('button', uiText('配置 OCR', 'Configure OCR')); button.type = 'button'; button.className = 'jdx-button'
@@ -94,7 +111,7 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     stops.push(() => row.remove())
   }
   const syncSummary = () => {
-    const engine = ocrEngine(host), name = engine === 'local' ? uiText('本机', 'Local') : CLOUD_OCR_SERVICES[engine].name
+    const engine = ocrEngine(host), name = engine === 'local' ? uiText('本机', 'Local') : engine === 'jadense' ? uiText('攻玉学术', 'Jadense Academic') : CLOUD_OCR_SERVICES[engine].name
     const localState = ocrRoot.querySelector<HTMLElement>('[data-ocr-state]')
     const cloudState = ocrRoot.querySelector<HTMLElement>(`[data-ocr-engine="${engine}"]`)?.dataset.ocrSummaryState
     const cloudLabels: Record<string, string> = { configured: uiText('已配置 · 尚未测试', 'Configured · Not tested'), verified: uiText('测试通过', 'Test passed'), checking: uiText('正在检查', 'Checking'), error: uiText('检查失败', 'Check failed') }
@@ -104,8 +121,8 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     for (const summary of summaries) summary.textContent = `OCR：${name} · ${state}`
   }
   const observers: unknown[] = []
-  for (const key of [DOCUMENT_OCR_PREF, OCR_ENGINE_PREF, OCR_READY_PREF]) {
-    try { const id = host.Prefs?.registerObserver?.(key, () => { if (key === OCR_ENGINE_PREF && !enabled.disabled) status.textContent = ''; syncEnabled(); syncSummary() }, true); if (id !== undefined) observers.push(id) } catch { /* 可选同步不得阻断设置。 */ }
+  for (const key of [DOCUMENT_OCR_PREF, MARKDOWN_OCR_PREF, ANALYSIS_OCR_PREF, OCR_ENGINE_PREF, OCR_READY_PREF]) {
+    try { const id = host.Prefs?.registerObserver?.(key, () => { syncControls.forEach(sync => sync(key)); syncSummary() }, true); if (id !== undefined) observers.push(id) } catch { /* 可选同步不得阻断设置。 */ }
   }
   const Observer = doc.defaultView?.MutationObserver
   const observer = Observer ? new Observer(syncSummary) : null
@@ -128,6 +145,10 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     followRow.firstElementChild?.append(make('h3', uiText('模型跟随', 'Model defaults')))
   }
   const pdfScope = root.querySelector('[data-translation-scope="document"]')
+  const pdfExtractionNote = make('p', uiText('此功能读取 PDF 文字层，并由版面解析引擎生成保留版面的译文 PDF，不使用 OCR 增强设置。OCR 负责从图像识字，不能替代译文排版。当前未提供引擎失败后自动切换为纯文本对照的功能；扫描页保留原文。', 'This feature reads the PDF text layer and uses the layout engine to typeset a translated PDF. It does not use OCR enhancement settings. OCR recognizes image text and cannot replace typesetting. Automatic fallback to text-only comparison is not currently available; scanned pages retain the original.'))
+  pdfExtractionNote.className = 'jdx-manager-settings-note jdx-pref-card-note'
+  pdfScope?.append(pdfExtractionNote)
+  stops.push(() => pdfExtractionNote.remove())
   const capacity = pdfScope?.querySelector(':scope > details')
   if (capacity) pdfScope?.append(capacity)
   for (const note of Array.from(root.querySelectorAll<HTMLElement>('[data-model-follow]'))) {
@@ -138,10 +159,10 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     stops.push(() => change.remove())
   }
   stops.push(wireSettingsNavigation(root, '[data-settings-task]', 'chat'))
-  syncEnabled(); syncSummary()
+  syncControls.forEach(sync => sync()); syncSummary()
   return () => {
-    disposed = true; generation++; observer?.disconnect()
+    disposed = true; observer?.disconnect()
     for (const id of observers) host.Prefs?.unregisterObserver?.(id)
-    stops.forEach(stop => stop()); ocrRow.remove()
+    stops.forEach(stop => stop())
   }
 }

@@ -217,7 +217,6 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
   website.addEventListener("click", () => open("https://jadense.cn"))
   get("help-repository").addEventListener("click", () => open(REPOSITORY_URL))
   get("github").addEventListener("click", () => open(REPOSITORY_URL))
-  get("home").addEventListener("click", () => open("https://jadense.cn"))
   get("check-in").addEventListener("click", () => open(JADENSE_WORKBENCH_URL))
   get("help-close").addEventListener("click", () => dialog.close())
   dialog.addEventListener("close", () => { pending?.abort(); trigger.focus() })

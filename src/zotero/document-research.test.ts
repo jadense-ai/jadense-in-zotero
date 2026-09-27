@@ -16,6 +16,7 @@ import { referenceRow } from "./document-ui"
 import { referenceMetadataText } from "./reference-workspace"
 import { FONT_SIZE_PREF, readFontSize, saveFontSize, readTranslationStyle, saveTranslationStyle } from "./ui-preferences"
 import type { ZoteroLike } from "./runtime"
+import * as extractionPolicy from './document-extraction'
 
 function chars(lines: string[]) { return lines.flatMap(line => [...line].map((c, i) => ({ c, lineBreakAfter: i === line.length - 1, paragraphBreakAfter: i === line.length - 1, rect: [i, 10, i + 1, 20] }))) }
 const citation = "[1] Smith, J. (2020). Reliable scientific evidence. Research Journal. https://doi.org/10.1234/evidence"
@@ -40,6 +41,19 @@ function response(value: unknown) { return new Response(`data: ${JSON.stringify(
 
 
 describe("complete PDF and reference evidence", () => {
+  it.each([false, true])('dispatches reference extraction with shared analysis OCR %s, independently of Markdown', async analysis => {
+    const prefs = new Map<string, unknown>([[extractionPolicy.MARKDOWN_OCR_PREF, !analysis], [extractionPolicy.ANALYSIS_OCR_PREF, analysis]])
+    const fixture = host(undefined, prefs), memory = memoryStore()
+    const jobs = new DocumentJobs(fixture.zotero, vi.fn(async () => new Response('{}')), memory.store)
+    const read = vi.spyOn(extractionPolicy, 'readDocument').mockResolvedValue(document())
+    try {
+      await jobs.start('references', 11, true)
+      expect(read).toHaveBeenLastCalledWith(fixture.zotero, 11, expect.any(AbortSignal), expect.any(Function), analysis)
+      await jobs.start('extraction', 11, true)
+      expect(read).toHaveBeenLastCalledWith(fixture.zotero, 11, expect.any(AbortSignal), expect.any(Function), !analysis)
+    } finally { jobs.dispose(); read.mockRestore() }
+  })
+
   it("imports a matched reference by cancelling optional AI instead of waiting for its result", async () => {
     const fixture = host([['References', citation, '[2] Unknown fragment']], configured()), memory = memoryStore()
     const save = vi.fn(async () => {})

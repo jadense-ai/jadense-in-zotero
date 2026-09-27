@@ -47,6 +47,74 @@ beforeEach(() => {
 })
 
 describe('PDF jobs', () => {
+  it('freezes the formula policy per task and keeps legacy retry inputs unchanged', async () => {
+    const first = await new PDFTranslationJobs(host).start(1)
+    await vi.waitFor(() => expect(first.status).toBe('complete'))
+    expect(first.formulaPolicy).toBe('math-fonts-v1')
+    expect(vi.mocked(runPDFWorker).mock.calls[0][1].formulaPolicy).toBe('math-fonts-v1')
+    const manifest = path.posix.join(pdfTaskDirectory(first.id), 'task.json')
+    const saved = JSON.parse(files.get(manifest)!)
+    delete saved.formulaPolicy
+    saved.status = 'partial'
+    files.set(manifest, JSON.stringify(saved))
+    const jobs = new PDFTranslationJobs(host)
+    await jobs.loadHistory()
+    expect(jobs.get(first.id)?.formulaPolicy).toBeUndefined()
+    vi.mocked(runPDFWorker).mockClear()
+    jobs.retry(first.id)
+    await vi.waitFor(() => expect(vi.mocked(runPDFWorker)).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(runPDFWorker).mock.calls[0][1].formulaPolicy).toBeUndefined()
+    await vi.waitFor(() => expect(jobs.get(first.id)?.status).toBe('complete'))
+  })
+  it('persists recovery categories without confusing repeated attempts with final coverage', async () => {
+    const finish = vi.mocked(runPDFWorker).getMockImplementation()!
+    vi.mocked(runPDFWorker).mockImplementationOnce(async (...args) => {
+      await args[3]({ type: 'passage_failure', category: 'OUTPUT_FAILED', missing: 34, extra: true })
+      await args[3]({ type: 'passage_failure', category: 'placeholder_mismatch', missing: 6 })
+      await args[3]({ type: 'passage_failure', category: 'placeholder_mismatch', missing: 2 })
+      await args[3]({ type: 'passage_failure', category: 'invalid_output', missing: 'broken' })
+      await finish(...args)
+    })
+    const task = await new PDFTranslationJobs(host).start(1)
+    await vi.waitFor(() => expect(task.status).toBe('complete'))
+    expect(task.failureCounts).toEqual({ OUTPUT_FAILED: 34, PLACEHOLDER_MISMATCH: 8 })
+    expect(task.coverage?.failed).toBe(0)
+    const restored = await new PDFTranslationJobs(host).start(1)
+    expect(restored.failureCounts).toEqual(task.failureCounts)
+  })
+  it('opens saved output after configuration changes without consulting the provider or starting work', async () => {
+    const first = await new PDFTranslationJobs(host).start(1)
+    await vi.waitFor(() => expect(first.status).toBe('complete'))
+    service = 'bing'; vi.clearAllMocks()
+    const restored = new PDFTranslationJobs(host)
+    expect((await restored.openOrStart(1)).id).toBe(first.id)
+    expect(runPDFWorker).not.toHaveBeenCalled()
+    expect(preparePDFEngine).not.toHaveBeenCalled()
+    const fresh = await restored.start(1, 'concise', true)
+    expect(fresh.id).not.toBe(first.id)
+    await vi.waitFor(() => expect(fresh.status).toBe('complete'))
+    expect(restored.get(first.id)?.status).toBe('complete')
+  })
+  it('preserves both versions when explicitly retranslating with identical settings', async () => {
+    const jobs = new PDFTranslationJobs(host), first = await jobs.start(1)
+    await vi.waitFor(() => expect(first.status).toBe('complete'))
+    const second = await jobs.start(1, first.mode, true)
+    await vi.waitFor(() => expect(second.status).toBe('complete'))
+    expect(second.id).not.toBe(first.id)
+    expect((await new PDFTranslationJobs(host).openOrStart(1)).id).toBe(second.id)
+    expect(files.has(path.posix.join(pdfTaskDirectory(first.id), 'task.json'))).toBe(true)
+  })
+  it('does not reuse another attachment or an altered source PDF', async () => {
+    const jobs = new PDFTranslationJobs(host), first = await jobs.start(1)
+    await vi.waitFor(() => expect(first.status).toBe('complete'))
+    const other = await jobs.openOrStart(2)
+    expect(other.id).not.toBe(first.id)
+    await vi.waitFor(() => expect(other.status).toBe('complete'))
+    bytes = new Uint8Array([37, 80, 68, 70, 2])
+    const changed = await jobs.openOrStart(1)
+    expect(changed.id).not.toBe(first.id)
+    await vi.waitFor(() => expect(changed.status).toBe('complete'))
+  })
   it('publishes a readable intermediate artifact before completion and keeps it after engine failure', async () => {
     let release!: () => void
     vi.mocked(runPDFWorker).mockImplementation(async (_host, config, _signal, message) => {

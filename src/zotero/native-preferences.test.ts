@@ -8,6 +8,18 @@ import {
 import type { ZoteroLike } from "./runtime"
 
 describe("native Zotero preferences", () => {
+  it('versions native resources for a rebuilt package, including the CSS import owner', async () => {
+    vi.stubGlobal('__JADENSE_BUILD_ID__', 'same-version-rebuild')
+    const register = vi.fn().mockResolvedValue('pane')
+    try {
+      await registerPreferencesPane({ PreferencePanes: { register } } as ZoteroLike, { pluginID: 'fixture', rootURI: 'jar:file:///plugin/' })
+      expect(register).toHaveBeenCalledWith(expect.objectContaining({
+        src: 'jar:file:///plugin/content/preferences.xhtml?v=same-version-rebuild',
+        scripts: ['jar:file:///plugin/content/preferences.js?v=same-version-rebuild'],
+        stylesheets: ['jar:file:///plugin/content/preferences.css?v=same-version-rebuild'],
+      }))
+    } finally { vi.unstubAllGlobals() }
+  })
   it("registers the Jadense preferences pane", async () => {
     const register = vi.fn().mockResolvedValue("registered-pane")
     const zotero: ZoteroLike = {

@@ -68,6 +68,8 @@ def install_pipeline(high_level, config, emit, publish_snapshot):
         identity = dict(version=LAYOUT_VERSION, engine=config['engine'], source=config['fingerprint'],
                         attachment=config.get('layoutIdentity', config['directory']),
                         sourceLanguage=config['sourceLanguage'], targetLanguage=config['targetLanguage'])
+        # 新公式规则不复用旧版面；旧任务缺省仍使用原缓存和冻结的请求输入。
+        if config.get('formulaPolicy'): identity['formulaPolicy'] = config['formulaPolicy']
         key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         cache = Path(config['root']) / 'layouts' / key
         prepared = parameters.get_working_file_path('input.pdf')

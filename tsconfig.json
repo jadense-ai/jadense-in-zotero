@@ -19,6 +19,6 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "vitest.config.ts"],
-  "exclude": ["src/**/*.test.ts", "build", "release", "node_modules"]
+  "include": ["src", "private", "vitest.config.ts"],
+  "exclude": ["src/**/*.test.ts", "private/**/*.test.ts", "build", "release", "node_modules"]
 }

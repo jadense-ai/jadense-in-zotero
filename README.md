@@ -27,6 +27,8 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **v0.6.6 已发布：**修复版面解析引擎指南链接、PDF 离线检测的 UTF-8 BOM 错误，以及深层 profile 下两种引擎解压失败。Windows x64 完整套装同时包含 XPI、PDF 引擎与本机 OCR 引擎。[下载 v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) · [ZIP 离线安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)
 
+**v0.6.7 待发布：**新增文献雷达，可按兴趣发现 arXiv 论文、查看相关性与可选 AI 评价，并收藏文献/PDF。本版仅支持 arXiv；多文献源及来源选择 UI 将于下一版本开放。官方安装包包含文献雷达，公开源码独立构建的基础版不含该模块。[操作与配置](docs/usage-guide.md#literature-radar)
+
 <!-- release-summary:start -->
 ## 最近版本
 

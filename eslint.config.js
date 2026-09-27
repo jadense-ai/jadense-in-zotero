@@ -23,7 +23,7 @@ export default [
     },
   },
   {
-    files: ["scripts/**/*.{js,mjs,cjs}"],
+    files: ["scripts/**/*.{js,mjs,cjs}", "private/**/*.{js,mjs,cjs}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

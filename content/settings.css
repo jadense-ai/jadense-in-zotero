@@ -14,7 +14,7 @@
   background: var(--settings-surface); box-shadow: none; container-type: inline-size;
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row {
-  display: grid; grid-template-columns: minmax(130px, 34%) minmax(0, 1fr); gap: 8px 20px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
   align-items: start; padding-block: 10px; border: 0; min-width: 0;
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-feature-model-row, .jdx-manager-field, .jdx-pref-field) > * { min-width: 0; }
@@ -25,6 +25,13 @@
   margin: 4px 0 0; font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; color: var(--settings-muted); overflow-wrap: anywhere;
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-settings-controls, .jdx-manager-field, .jdx-pref-field) { gap: 8px; }
+/* 标题始终在配置组件上方；云 OCR、翻译容量和原生令牌也遵循同一纵向表单。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-cloud-ocr-field, .jdx-pref-token-row) {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-task [data-translation-scope] > details label {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
+}
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-actions, .jdx-pref-actions, .jdx-actions, .jdx-classification-actions) {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px;
 }
@@ -81,12 +88,6 @@
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-layout, .jdx-pref-byok-layout) { grid-template-columns: minmax(0, 1fr); }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) { border-right: 0; border-bottom: 1px solid var(--settings-line); padding: 0 0 12px; }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) { flex-wrap: wrap; gap: 8px; }
-}
-@container (max-width: 480px) {
-  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-}
-@media (max-width: 820px) {
-  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-feature-model-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
 
 #jadense-manager-section-settings #jadense-settings-tabs { flex-wrap: wrap; overflow: visible; gap: 4px 16px; padding: 0; }

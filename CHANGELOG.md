@@ -1,5 +1,15 @@
 # 更新说明 / Changelog
 
+## 0.6.7 — 待发布 / Pending release
+
+- 新增文献雷达：兴趣档案、arXiv 发现、相关性评分、可选 AI 评价、每日执行、历史与文献/PDF 收藏。仅支持 arXiv；多源及来源选择 UI 于下一版本开放。
+- 新增默认关闭的攻玉模式；文献雷达的真实追踪需要连接攻玉并开启该模式，关闭时可查看演示。
+- 本机 OCR 环境检查、安装与模型准备支持停止；PDF 翻译改进中断恢复与成果状态反馈。
+- Literature Radar adds research interests, arXiv discovery, relevance scores, optional AI reviews, daily runs, history and paper/PDF saving. Only arXiv is supported; multiple sources and their selector are planned for the next version.
+- Jadense mode is off by default. Live radar requires a Jadense connection and this mode; a demo is available while it is off.
+- Stop local OCR setup/model preparation and improve PDF translation recovery and result feedback.
+- 官方完整安装包包含文献雷达；公开源码基础构建不含该模块。Official complete packages include Literature Radar; public-source base builds do not.
+
 ## 0.6.6 — 2026-09-26
 
 - 修复设置页“GitHub 下载与手动安装指南”点击后不打开系统浏览器的问题。

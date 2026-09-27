@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest"
 import { JadenseApiClient, JadenseApiError, jadenseModelSubscriptionErrorMessage, parseJadenseChatModelCatalog, readJadenseApiError } from "./api"
 
 describe("JadenseApiClient", () => {
+  it("queries the original operation after uncertain dispatch without replaying POST", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ code: 'SPECIALIZED_OPERATION_ALREADY_SUBMITTED', message: 'duplicate' }, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({ status: 'reconciliation_required', billingStatus: 'reconciliation_required' }))
+    const client = new JadenseApiClient({ baseUrl: 'http://localhost:3000', token: 'synthetic', fetchImpl })
+    await expect(client.zoteroAiRequest('ocr', { operationId: 'original/page/3' })).rejects.toMatchObject({ code: 'SPECIALIZED_OPERATION_ALREADY_SUBMITTED' })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl.mock.calls[1][0]).toContain('operations?capability=ocr&operationId=original%2Fpage%2F3')
+    expect(fetchImpl.mock.calls[1][1].method).toBe('GET')
+  })
+  it("does not query or resubmit a revoked token", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json({ code: 'insufficient_scope', message: 'revoked' }, { status: 403 }))
+    const client = new JadenseApiClient({ baseUrl: 'http://localhost:3000', token: 'synthetic', fetchImpl })
+    await expect(client.zoteroAiRequest('decision', { operationId: 'stable' })).rejects.toMatchObject({ status: 403 })
+    expect(fetchImpl).toHaveBeenCalledOnce()
+  })
   it('distinguishes an empty HTTP rejection from a failed response-body read', async () => {
     const empty = await readJadenseApiError(new Response(null, { status: 400, headers: { 'x-request-id': 'test-request-400' } }), undefined, true)
     expect(empty.message).toContain('400'); expect(empty.message).toContain('响应正文为空')

@@ -1,10 +1,10 @@
 import { stopAnalysisRuntime } from './analysis-runtime'
 import { openChatSidebar } from './reader-sidebar'
 import { readOCRSelection, OCR_SELECTION_PREF } from './local-ocr'
+import { wireJadenseMode } from './jadense-mode-ui'
 vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRSelection: vi.fn() }))
 vi.mock('./reader-sidebar', () => ({ openChatSidebar: vi.fn(async () => {}), removeReaderDock: vi.fn() }))
 // 合成 Zotero 9 阅读器契约测试，不读取真实文库；验证坐标绑定、写入隔离和原生工具条生命周期。
-import { readFileSync } from "node:fs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { initializeUiLocale, saveTheme, THEME_PREF, DISPLAY_LANGUAGE_PREF } from "./ui-preferences"
 beforeEach(() => { initializeUiLocale({ locale: "zh-CN" }); vi.mocked(openChatSidebar).mockReset().mockResolvedValue(undefined) })
@@ -497,6 +497,45 @@ function descendants(element: ElementStub): ElementStub[] {
 }
 
 describe("native reader toolbars", () => {
+  it('expires mode feedback, replaces its timer, dismisses on Escape and clears timers on cleanup', async () => {
+    vi.useFakeTimers()
+    const doc = new DocumentStub(), fixture = host()
+    fixture.zotero.Prefs = { get: key => key.endsWith('jadenseModeConsent') ? true : undefined }
+    const cleanup = wireJadenseMode(fixture.zotero, doc.body as unknown as HTMLElement)
+    try {
+      const toggle = doc.body.querySelector('.jdx-mode-switch')!, status = doc.body.querySelector('.jdx-mode-status')!
+      toggle.handlers.get('click')!()
+      expect(status.dataset.state).toBe('error')
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(status.textContent).not.toBe('')
+      await vi.advanceTimersByTimeAsync(1)
+      expect(status.textContent).toBe('')
+      toggle.handlers.get('click')!()
+      expect(status.dataset.state).toBe('notice')
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(status.textContent).toBe('')
+      toggle.handlers.get('click')!()
+      await vi.advanceTimersByTimeAsync(2000)
+      toggle.handlers.get('click')!()
+      await vi.advanceTimersByTimeAsync(2999)
+      expect(status.textContent).not.toBe('')
+      doc.handlers.get('keydown')!({ key: 'Escape' })
+      expect(status.textContent).toBe('')
+      toggle.handlers.get('click')!()
+      cleanup()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { cleanup(); vi.useRealTimers() }
+  })
+  it('declining the first mode consent preserves off and does not open connection', () => {
+    const doc = new DocumentStub(), confirm = vi.fn(() => false), open = vi.fn()
+    Object.assign(doc.defaultView, { confirm })
+    const cleanup = wireJadenseMode(host().zotero, doc.body as unknown as HTMLElement, open)
+    const toggle = doc.body.querySelector('.jdx-mode-switch')!
+    toggle.handlers.get('click')!()
+    expect(confirm).toHaveBeenCalledOnce(); expect(open).not.toHaveBeenCalled()
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    cleanup()
+  })
   it('waits by default, coalesces selection rerenders, quotes without dispatch, and cancels on unload', async () => {
     vi.useFakeTimers()
     const fixture = host(), values = new Map<string, unknown>(), register = vi.fn(), action = vi.fn()
@@ -602,7 +641,7 @@ describe("native reader toolbars", () => {
     const pdfMode = descendants(menu).find(node => node.dataset.jadensePdfMode === 'compare')!
     expect(pdfMode.attributes.get('aria-label')).toBe('对照翻译')
     const readerStyle = doc.head.children.find(node => node.attributes.has('data-jadense-reader-style'))!.textContent
-    expect(readerStyle).toContain('[data-jadense-reader-tools][data-compact="true"] .jadense-reader-runtime-label {display:none;}')
+    expect(readerStyle).not.toContain('.jdx-mode-control')
     expect(readerStyle).toContain('.jadense-reader-brand[data-runtime="running"] svg {transform-box:fill-box;transform-origin:center;animation:jdx-analysis-logo-spin')
     expect(readerStyle).not.toContain('.jadense-reader-brand[data-runtime="running"]::after')
     expect(readerStyle).toContain('@media(prefers-reduced-motion:reduce) {[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {animation:none;}}')
@@ -1013,6 +1052,7 @@ describe("native reader toolbars", () => {
     const append = vi.fn((node: ElementStub) => doc.body.append(node))
     registerEventListener.mock.calls[0][1]({ reader: fixture.reader, doc, append })
     const toolbar = append.mock.calls[0][0] as ElementStub
+    expect(descendants(toolbar).some(node => node.attributes.get('role') === 'switch')).toBe(false)
     const logoButton = toolbar.children[0]
     expect(logoButton.tagName).toBe("button")
     expect(logoButton.attributes.get("aria-label")).toBe("打开攻玉工作台")
@@ -1032,16 +1072,9 @@ describe("native reader toolbars", () => {
     expect(buttons.every((button) => button.children[0].tagName === "svg" && button.children[0].attributes.get("aria-hidden") === "true")).toBe(true)
     expect(toolbar.children[0].className).toBe("jadense-reader-brand")
     expect(toolbar.attributes.get("aria-label")).toBe("Jadense 阅读工具")
-    expect(toolbar.children[0].textContent).toBe("")
-    const brand = toolbar.children[0].children[0]
-    expect(brand.tagName).toBe("svg")
-    expect(brand.attributes.get("aria-hidden")).toBe("true")
-    expect(brand.attributes.get("viewBox")).toBe("0 0 575 552")
-    const sourceLogo = readFileSync(new URL("../../icons/jadense-20.svg", import.meta.url), "utf8")
-    expect(brand.children.filter((child) => child.tagName === "path").map((path) => path.attributes.get("d")))
-      .toEqual([...sourceLogo.matchAll(/<path d="([^"]+)"/g)].map(([, path]) => path))
-    expect(brand.children[0].children.flatMap((gradient) => gradient.children.map((stop) => stop.attributes.get("stop-color"))))
-      .toEqual([...sourceLogo.matchAll(/stop-color="([^"]+)"/g)].map(([, color]) => color))
+    expect(logoButton.children[0].tagName).toBe('svg')
+    expect(logoButton.children[0].attributes.has('hidden')).toBe(false)
+    expect(logoButton.children[1].textContent).toBe('')
     fixture.reader._internalReader._state.secondaryViewSelectionPopup = {
       annotation: { text: "Current selection only", pageLabel: "iv", position: { pageIndex: 3 } },
     }

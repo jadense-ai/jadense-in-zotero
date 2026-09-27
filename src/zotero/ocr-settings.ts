@@ -1,7 +1,7 @@
 import { wireSettingsNavigation } from './settings-navigation'
 /** OCR 共用设置：自动读取本机状态，一个入口完成依赖和模型准备。 */
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
+import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, registerOCRSettingsOperation, cancelOCRSettingsOperations, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
 import { createJdxSelect } from './custom-select'
 import { uiText } from './ui-preferences'
 import { lifecycleTrace } from './lifecycle-diagnostics'
@@ -40,8 +40,9 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const check = make('button', uiText('重新检查', 'Check again')); check.type = 'button'; check.className = 'jdx-button'; check.dataset.ocrAction = 'check'
   const repair = make('button', uiText('修复识别组件', 'Repair recognition components')); repair.type = 'button'; repair.className = 'jdx-button'; repair.dataset.ocrAction = 'repair'
   const offline = make('button', uiText('导入离线包', 'Import offline package')); offline.type = 'button'; offline.className = 'jdx-button'; offline.dataset.ocrAction = 'import'
+  const stop = make('button', uiText('停止', 'Stop')); stop.type = 'button'; stop.className = 'jdx-button'; stop.dataset.ocrAction = 'stop'; stop.hidden = true
   repair.title = uiText('重新同步依赖并验证模型，保留已下载模型。', 'Synchronize dependencies and verify models, retaining downloaded models.')
-  announcement.append(state, status, stage); actions.append(install, check, repair, offline); panel.append(announcement, progressBar, metrics, elapsed, actions); overview.append(heading, panel)
+  announcement.append(state, status, stage); actions.append(install, check, repair, offline, stop); panel.append(announcement, progressBar, metrics, elapsed, actions); overview.append(heading, panel)
 
   const source = make('section'); source.className = 'jdx-ocr-section'
   const sourceTitle = make('h4', uiText('模型下载源', 'Model download source'))
@@ -153,8 +154,10 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const run = async (setup = false, repairing = false, force = false, archive?: string) => {
     if (busy || disposed) return
     const trace = lifecycleTrace(host, 'ocr-settings', repairing ? 'repair' : setup ? 'prepare' : 'check')
-    let currentStage = 'environment', outcome: 'success' | 'error' = 'success'
+    let currentStage = 'environment', outcome: 'success' | 'error' | 'cancelled' = 'success'
+    const controller = new AbortController(), unregister = registerOCRSettingsOperation(host, controller)
     busy = true; retryRead = false; install.disabled = true; check.disabled = true; repair.disabled = true; offline.disabled = true; sourceSelect.setDisabled(true)
+    stop.hidden = false; stop.disabled = false
     remove.disabled = true; confirmRemove.disabled = true; cancelRemove.disabled = true; removeModels.disabled = true; confirmation.hidden = true; remove.hidden = false
     const preparing = setup || isLocalOCRPreparing(host)
     errorDetails.hidden = true; errorDetails.textContent = ''
@@ -166,14 +169,24 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
     try {
       // 阶段由结构化订阅更新；说明行稳定保留后台运行提示。
       const progress = () => {}
-      if (repairing || archive) await installLocalOCR(host, progress, repairing, archive)
-      if (setup) await prepareLocalOCRModels(host, progress)
-      const value = await checkLocalOCR(host, force)
+      if (repairing || archive) await installLocalOCR(host, progress, repairing, archive, controller.signal)
+      if (setup) await prepareLocalOCRModels(host, progress, controller.signal)
+      if (controller.signal.aborted) throw new DOMException('OCR stopped', 'AbortError')
+      const value = await checkLocalOCR(host, force, controller.signal)
+      if (controller.signal.aborted) throw new DOMException('OCR stopped', 'AbortError')
       if (!disposed) render(value)
     } catch (error) {
-      outcome = 'error'; trace.fail(error, currentStage)
+      const cancelled = controller.signal.aborted || (error as Error)?.name === 'AbortError'
+      outcome = cancelled ? 'cancelled' : 'error'; trace.fail(error, currentStage)
       if (!disposed) {
         retryRead = !setup
+        if (cancelled) {
+          showState('missing', uiText('已停止 OCR 准备', 'OCR setup stopped'), uiText('已下载内容会保留；需要时可继续准备。', 'Downloaded content is retained. You can continue setup when needed.'))
+          install.hidden = false; install.textContent = setup ? uiText('继续准备', 'Continue setup') : uiText('重新读取状态', 'Read status again')
+          check.hidden = retryRead
+          if (doc.activeElement === stop) install.focus()
+          return
+        }
         const modelStage = ['models', 'download', 'verify', 'offline', 'cache'].includes(currentStage)
         const guidance = modelStage ? uiText('模型准备失败：检查模型下载源后继续准备，或重新验证已有模型。', 'Model setup failed: check the model source and continue, or verify existing models.') : uiText('组件准备失败：请查看当前阶段的错误详情并修复识别组件。模型下载源不影响 uv、Python 或依赖安装。', 'Component setup failed: inspect this stage and repair components. The model source does not affect uv, Python or dependency installation.')
         showState('error', setup ? uiText('准备未完成 · 已下载内容会保留', 'Setup incomplete · Downloads are retained') : uiText('暂时无法读取状态', 'Status temporarily unavailable'), setup ? guidance : uiText('请重新读取状态；此操作不会安装或下载。错误详情见“环境与故障排查”。', 'Read the status again; this will not install or download files. See Environment and troubleshooting for error details.'))
@@ -185,12 +198,20 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
       trace.end(outcome)
       clearInterval(timer)
       unobserve()
+      unregister()
       busy = false
+      if (!disposed) stop.hidden = true
       if (!disposed) { install.disabled = false; check.disabled = false; repair.disabled = false; offline.disabled = false; sourceSelect.setDisabled(false) }
       if (!disposed) { remove.disabled = false; confirmRemove.disabled = false; cancelRemove.disabled = false; removeModels.disabled = false }
     }
   }
   install.addEventListener('click', () => { void run(!retryRead) })
+  stop.addEventListener('click', () => {
+    if (!busy || disposed) return
+    stop.disabled = true
+    status.textContent = uiText('正在停止 OCR 准备，请稍候…', 'Stopping OCR setup…')
+    cancelOCRSettingsOperations(host)
+  })
   check.addEventListener('click', () => { void run(false, false, true) })
   repair.addEventListener('click', () => { void run(true, true) })
   offline.addEventListener('click', async () => {
