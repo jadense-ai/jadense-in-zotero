@@ -3,6 +3,7 @@ import type { ZoteroLike } from './runtime'
 import { openManagerWindow, type ZoteroManagerWindow } from './manager-window'
 import { copyTextToClipboard } from './connection-display'
 import { uiText } from './ui-preferences'
+import { show, type ToastAction } from './ui/toast'
 import { TranslationRateLimitError } from '@/chat/translation-queue'
 
 export type DocumentIssue = { id: string; code: string; message: string; stage: string; action?: 'ocr' | 'connection'; retryAt?: number }
@@ -39,20 +40,12 @@ export function notifyDocumentIssue(host: ZoteroLike, issue: DocumentIssue, retr
     const recent = (globalThis as unknown as { Services?: { wm?: { getMostRecentWindow(type: null): Window | null } } }).Services?.wm?.getMostRecentWindow(null)
     const win = recent && !recent.closed && String(recent.location?.href).includes('jadense-in-zotero') ? recent : host.getMainWindow?.(); if (!win || win.closed) return
     const doc = win.document
-    const make = (tag: string, text = '') => { const node = doc.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement; node.textContent = text; return node }
-    let stack = doc.getElementById('jadense-document-notices')
-    if (!stack) { stack = make('div'); stack.id = 'jadense-document-notices'; stack.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:2147483647;display:grid;gap:8px;max-width:min(440px,90vw)'; doc.documentElement.append(stack) }
-    const toast = make('div'); toast.setAttribute('role', 'alert'); toast.dataset.diagnosticId = issue.id
-    toast.style.cssText = 'padding:14px;background:light-dark(#fff,#202421);color:light-dark(#111510,#f1f5ef);border:1px solid #8886;border-radius:8px;box-shadow:0 4px 20px #0003;font:14px/1.5 system-ui;white-space:normal;overflow-wrap:anywhere'
-    toast.append(make('div', issue.message))
-    const button = (label: string, run: () => void) => { const node = make('button', label); node.style.cssText = 'margin:8px 8px 0 0;padding:4px 8px;cursor:pointer'; node.addEventListener('click', run); toast.append(node) }
-    if (issue.action) button(issue.action === 'ocr' ? uiText('前往 OCR 配置', 'Open OCR configuration') : uiText('账户 / 签到', 'Account / check in'), () => { openDocumentSettings(host, issue.action!); toast.remove() })
-    if (retry) button(uiText('重试', 'Retry'), () => { toast.remove(); retry() })
-    if (copy) button(uiText('复制内容', 'Copy content'), () => { void copy().then(text => copyTextToClipboard(host, text)).catch(() => {}) })
-    button(uiText('复制诊断编号', 'Copy diagnostic ID'), () => { void copyTextToClipboard(host, issue.id) })
-    button(uiText('关闭', 'Dismiss'), () => toast.remove())
-    stack.append(toast)
-    while (stack.children.length > 3) stack.firstElementChild?.remove()
+    const actions: ToastAction[] = []
+    if (issue.action) actions.push({ label: issue.action === 'ocr' ? uiText('前往 OCR 配置', 'Open OCR configuration') : uiText('账户 / 签到', 'Account / check in'), onClick: () => { openDocumentSettings(host, issue.action!) } })
+    if (retry) actions.push({ label: uiText('重试', 'Retry'), onClick: retry })
+    if (copy) actions.push({ label: uiText('复制内容', 'Copy content'), onClick: async () => { const text = await copy(); await copyTextToClipboard(host, text) }, closeOnClick: false })
+    actions.push({ label: uiText('复制诊断编号', 'Copy diagnostic ID'), onClick: () => { void copyTextToClipboard(host, issue.id) }, closeOnClick: false })
+    show({ document: doc, themeRoot: doc.getElementById('jadense-manager-shell') ?? doc.documentElement, type: 'error', message: issue.message, duration: 0, actions, diagnosticId: issue.id })
   } catch { /* 展示不阻止执行或错误保存。 */ }
 }
 

@@ -46,6 +46,9 @@ for (const directory of ["content", "locale", "_locales", "icons"]) {
     filter: source => (!source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh', 'bundles.json', 'install-bundle.ps1'].includes(path.basename(source)))
       && (!source.startsWith(path.join(projectRoot, 'content', 'pdf-translation') + path.sep) || ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-network.ps1', 'bundles.json', 'viewer.html', 'viewer.mjs', 'LICENSE'].includes(path.basename(source))) })
 }
+if (features.includes('literature-tracking')) {
+  await cp(path.join(projectRoot, 'private/literature-tracking/icons'), path.join(buildDir, 'content/source-icons'), { recursive: true })
+}
 
 // PDF 文字解析完全离线，模块、worker、CJK 字符表和标准字体随 XPI 分发。
 const pdfRoot = path.join(projectRoot, 'node_modules/pdfjs-dist')

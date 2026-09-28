@@ -389,23 +389,28 @@ Configure the translation service, model, target language and concise/full scope
 功能配置页移除“查看待恢复 AI 请求”按钮及其专用面板，无需替代配置。任务内部的错误恢复、部分译文和补译入口不变。升级保留已有设置和历史，已安装的版面解析引擎无需重装；离线安装继续使用 [v0.6.0 引擎 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.0)。
 
 
+<a id="jadense-mode"></a>
+## 攻玉模式 / Jadense mode（0.6.8）
+
+工作台顶栏的攻玉 logo 滑块控制此模式，初次使用默认关闭。先在「设置 → 连接攻玉」保存具备相应权限的插件令牌，再开启模式。开启后，文献分类的 Jev 判断走攻玉账号，无需单独配置 TypeSafe 密钥；本机 OCR 未就绪时可选择攻玉 OCR；前沿雷达可从 arXiv 扩展到 13 个公开来源。模式不会自动发送收费任务，实际使用模型时可能消耗积分。关闭后可继续用自备 TypeSafe 密钥进行文献分类和 arXiv 追踪；原有历史和收藏保留。
+
+Jadense mode is controlled by the logo switch in the workspace top bar and is off by default. Connect an account with the required plugin permissions under **Settings → Connect to Jadense** before enabling it. The mode routes Jev classification through your Jadense account, offers Jadense OCR when local OCR is unavailable, and unlocks 13 public literature sources in Frontier Radar. Switching it on does not itself start a paid request; actual model use may consume points. With the mode off, your own TypeSafe key can still power classification and arXiv tracking, while history and saved papers remain available.
+
 <a id="literature-radar"></a>
-## 文献雷达 / Literature Radar（0.6.7）
+## 前沿雷达 / Frontier Radar（0.6.8）
 
-官方完整安装包的工作台侧栏提供「文献雷达」。公开源码独立构建的基础版不包含此模块。0.6.7 仅检索 arXiv，没有来源选择控件；多文献源与选择 UI 留待下一版本。
+官方完整安装包在工作台侧栏提供「前沿雷达」；公开源码独立构建的基础版不含该模块。通用模式固定检索 arXiv，攻玉模式可在兴趣档案中选择 13 个公开来源。切换模式不会删除已有历史或改写档案中的来源选择。
 
-1. 在设置中连接攻玉账号，再开启默认关闭的「攻玉模式」。服务端需为账号提供相应模型能力；权限或积分不足时按提示处理。
-2. 打开「文献雷达 → 编辑兴趣档案」。输入关键词或完整短语后按 Enter 添加。建议英文关键词；中文会在运行时翻译。默认最近 1 天，也可指定日期区间；默认每轮最多 100 篇候选。
-3. AI 评价默认关闭；开启后可选择攻玉模型。关闭评价仍会使用 Jev 相关性初筛，中文翻译与模型调用可能消耗积分。相关性分数为 0–10，不代表论文质量；评价仅依据标题与摘要。
-4. 主动开始检索；需要自动执行时开启每日追踪并设置本机时间（默认 09:00）。自动执行需要 Zotero 运行、连接可用且攻玉模式开启。可停止执行；已提交的模型请求可能继续处理。
-5. 在历史中查看本轮入选论文，展开摘要或 AI 评价；「收藏到」选择文库或分类，「收藏并自动下载 PDF」额外尝试下载 PDF。批量操作先勾选文献。PDF 失败仍保留已收藏条目，可稍后重试。
-6. 未开启模式时可点击「查看演示」。演示展示示例论文；明确选择收藏操作才会写入文库。
+1. 打开「前沿雷达 → 编辑兴趣档案」，按 Enter 添加关键词或完整短语。默认检索最近 3 天、每轮最多 30 篇去重候选；也可指定起止日期。通用模式需要在「设置 → 功能配置 → 文献分类」保存 TypeSafe 密钥；攻玉模式需要连接和权限。中文关键词会调用所选文本模型翻译，建议优先输入英文词。
+2. 在「设置 → 功能配置 → 前沿雷达」选择独立文本模型；它用于中文关键词翻译和可选 AI 评价。AI 评价默认关闭；关闭后 Jev 初筛仍可能产生费用。相关性分数表示与兴趣的关联，不代表论文质量；评价仅基于标题与摘要。
+3. 点击开始追踪，或开启每日追踪并设置本机时间（默认 09:00）。自动运行需要 Zotero 保持运行且当前模式所需配置就绪。可停止执行；已提交的模型请求可能继续处理。
+4. 在历史中查看入选论文，展开摘要或结构化 AI 评价；「收藏到」选择文库或分类，「收藏并自动下载 PDF」额外尝试下载。PDF 失败仍保留已收藏条目。演示论文仅在明确收藏后写入文库。
 
-Official complete packages expose **Literature Radar** in the workspace sidebar; public-source base builds do not. Version 0.6.7 searches **arXiv only** and has no source selector. Multiple sources and their selection UI are planned for the next version.
+Official full packages show **Frontier Radar** in the workspace sidebar; independent base builds from public source omit it. Standard mode searches arXiv; Jadense mode lets you select from 13 public sources. Switching modes preserves prior runs and saved papers.
 
-Connect your Jadense account and enable **Jadense mode** (off by default), then open **Literature Radar → Research interests**. Add phrases with Enter; English terms are recommended and Chinese terms are translated at run time. The defaults are the last one day and up to 100 candidates; an explicit date range is available. Optional AI review is off by default and uses a selected Jadense model. Jev screening and keyword translation may use points even when review is off. Scores indicate relevance, not paper quality, and reviews use titles and abstracts only.
+Open **Frontier Radar → Research interests**, add phrases with Enter, and choose a source when Jadense mode is enabled. The defaults are the last three days and 30 deduplicated candidates. Standard mode needs a saved TypeSafe key under **Settings → Feature settings → Literature classification**; Jadense mode needs a connected account and permissions. Set a separate text model under **Feature settings → Frontier Radar** for Chinese keyword translation and optional AI reviews. Reviews are off by default, but Jev screening may still incur charges. Scores express relevance, not paper quality; reviews use titles and abstracts only.
 
-Start a run manually or enable daily runs (09:00 local time by default). Automatic runs require Zotero, an active connection and Jadense mode. History preserves results. Select a library/collection when saving; saving with PDF also attempts a download. PDF failures retain saved metadata and can be retried. Mode-off users can view the demo; only an explicit save action writes demo papers to their library.
+Start a manual run or schedule daily tracking (09:00 local time by default) while Zotero is running and the selected mode is configured. History keeps earlier results. Save a paper to a library or collection, optionally requesting its PDF; a failed PDF download leaves the saved item intact. Demo papers enter your library only after an explicit save action.
 
 
 离线套装随附 [PDF 详细安装指南](<jadense-in-zotero 离线安装详细流程.pdf>)，替代此前包内的 Markdown 安装指南。The offline suite includes this illustrated PDF guide in place of the previous generated Markdown guide.

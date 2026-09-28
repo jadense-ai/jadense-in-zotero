@@ -1,4 +1,5 @@
 import { mountOptionalFeatures } from './optional-features'
+import { createManagerNavigationIcon, initializeManagerNavigationIcons } from './manager-navigation-icons'
 import { wireFeatureSettings } from './feature-settings'
 import { wireJadenseMode } from './jadense-mode-ui'
 import { analysisRuntime } from './analysis-runtime'
@@ -92,7 +93,7 @@ import {
   type ByokModel,
   type ByokProvider,
 } from "./ai-settings"
-import { buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue } from "./ai-model-select"
+import { bindModelSelectToast, buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from "./ai-model-select"
 export { buildJadenseChatModelSelectOptions, jadenseChatModelSelectionIssue } from "./ai-model-select"
 import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-analysis-runner"
 import { formatJadenseSyncResult } from "./sync-result"
@@ -433,6 +434,7 @@ export const JADENSE_ACCOUNT_REQUEST_TIMEOUT_MS = 15_000
 let chatModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
 let chatModelCatalogStatus: "idle" | "loading" | "ready" | "error" = "idle"
 let chatModelCatalogError = ""
+let chatModelCatalogUpdatedAt = 0
 let chatModelCatalogGeneration = 0
 let chatModelCatalogController: AbortController | null = null
 // 草稿只在当前窗口按会话保留；阅读器新对话不能继承上一对话的未发送内容。
@@ -749,7 +751,7 @@ export function classifyJadenseAccountError(error: unknown): JadenseAccountError
 }
 
 function markConnectionInvalid(target: HTMLElement) {
-  const label = uiText("攻玉令牌无效或已过期，请在「设置 › 连接攻玉」中更新令牌", "Jadense token invalid or expired. Update it in Settings › Connect Jadense.")
+  const label = uiText("攻玉令牌无效或已过期，请在「设置」的「连接攻玉」中更新令牌", "Jadense token invalid or expired. Update it in Connect Jadense under Settings.")
   target.dataset.kind = "error"
   target.dataset.reason = "invalid-token"
   target.title = label
@@ -2338,6 +2340,7 @@ function clearJadenseChatModelCatalog(elements: ManagerElements, zotero: ZoteroL
   chatModelCatalog = { options: [], defaultSelection: null }
   chatModelCatalogStatus = "idle"
   chatModelCatalogError = ""
+  chatModelCatalogUpdatedAt = 0
   renderJadenseChatModel(elements, zotero)
   updateComposerState(elements, zotero)
 }
@@ -2357,7 +2360,7 @@ async function refreshJadenseChatModelCatalog(
   chatModelCatalogController?.abort()
   const controller = new AbortController()
   chatModelCatalogController = controller
-  if (reset) chatModelCatalog = { options: [], defaultSelection: null }
+  if (reset) { chatModelCatalog = { options: [], defaultSelection: null }; chatModelCatalogUpdatedAt = 0 }
   chatModelCatalogStatus = "loading"
   chatModelCatalogError = ""
   renderJadenseChatModel(elements, zotero)
@@ -2376,6 +2379,7 @@ async function refreshJadenseChatModelCatalog(
     if (generation !== chatModelCatalogGeneration || !sameConnection(zotero, snapshot)) return
     chatModelCatalog = catalog
     chatModelCatalogStatus = "ready"
+    chatModelCatalogUpdatedAt = Date.now()
   } catch (error) {
     if (generation !== chatModelCatalogGeneration || !sameConnection(zotero, snapshot)) return
     chatModelCatalogStatus = "error"
@@ -2728,6 +2732,14 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     }
   }
   for (const feature of AI_FEATURES) elements.featureModelSelects[feature].onChange(value => selectFeatureModel(feature, value))
+  for (const select of [...Object.values(elements.featureModelSelects), elements.chatModelSelect]) {
+    bindModelSelectToast(select)
+    select.onOpen(() => {
+      if (chatModelCatalogStatus !== "loading" && shouldRefreshModelCatalog(chatModelCatalogUpdatedAt) && readConnection(zotero).token) {
+        void refreshJadenseChatModelCatalog(elements, zotero)
+      }
+    })
+  }
   elements.autoFollowChatModel.addEventListener("change", () => {
     try { saveAutoFollowChatModel(zotero, elements.autoFollowChatModel.checked) } catch {
       renderJadenseChatModel(elements, zotero)
@@ -3106,6 +3118,8 @@ export function wireManagerAppearance(
 }
 
 export function initJadenseManagerPage() {
+  const cleanupNavigationIcons = initializeManagerNavigationIcons(document)
+  window.addEventListener("unload", cleanupNavigationIcons, { once: true })
   const zotero = resolveZoteroFromWindow()
   if (zotero) { initializeUiLocale(zotero); diagnostics(zotero) }
   localizeManagerStaticContent(document)
@@ -3116,21 +3130,26 @@ export function initJadenseManagerPage() {
   const section = initialSection()
   if (zotero) {
     try {
-    const cleanup = mountOptionalFeatures({ host: zotero, document, registerPage(id, label, icon) {
-      const section = document.createElementNS('http://www.w3.org/1999/xhtml', 'section') as HTMLElement
-      section.id = `jadense-manager-section-${id}`; section.className = 'jdx-manager-section'; section.dataset.optionalPage = id; section.hidden = true
-      const button = document.createElementNS('http://www.w3.org/1999/xhtml', 'button') as HTMLButtonElement
-      button.id = `jadense-manager-nav-${id}`; button.type = 'button'; button.dataset.optionalNav = id; button.title = label
-      button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', section.id); button.setAttribute('aria-label', label)
-      section.setAttribute('role', 'tabpanel'); section.setAttribute('aria-labelledby', button.id)
-      const glyph = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); glyph.className = 'jdx-manager-nav-icon'; glyph.textContent = icon; glyph.setAttribute('aria-hidden', 'true')
-      const text = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); text.className = 'jdx-manager-nav-label'; text.textContent = label
-      button.append(glyph, text); document.querySelector('.jdx-manager-nav')?.prepend(button); elements.chatSection.parentElement?.append(section)
-      const open = () => setActiveSection(elements, id)
-      button.addEventListener('click', open)
-      return { section, button, open }
-    } })
-    window.addEventListener('unload', cleanup, { once: true })
+      const cleanup = mountOptionalFeatures({
+        host: zotero,
+        document,
+        registerPage(id, label, icon) {
+          const section = document.createElementNS('http://www.w3.org/1999/xhtml', 'section') as HTMLElement
+          section.id = `jadense-manager-section-${id}`; section.className = 'jdx-manager-section'; section.dataset.optionalPage = id; section.hidden = true
+          const button = document.createElementNS('http://www.w3.org/1999/xhtml', 'button') as HTMLButtonElement
+          button.id = `jadense-manager-nav-${id}`; button.type = 'button'; button.dataset.optionalNav = id; button.title = label
+          button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', section.id); button.setAttribute('aria-label', label)
+          section.setAttribute('role', 'tabpanel'); section.setAttribute('aria-labelledby', button.id)
+          button.dataset.jdxAnimatedNav = "true"
+          const glyph = createManagerNavigationIcon(document, icon)
+          const text = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); text.className = 'jdx-manager-nav-label'; text.textContent = label
+          button.append(glyph, text); document.querySelector('.jdx-manager-nav')?.prepend(button); elements.chatSection.parentElement?.append(section)
+          const open = () => setActiveSection(elements, id)
+          button.addEventListener('click', open)
+          return { section, button, open }
+        },
+      })
+      window.addEventListener('unload', cleanup, { once: true })
     } catch { /* 可选发行页初始化失败不能阻断对话、阅读或设置。 */ }
   }
   setConnectionTab(elements, "account")

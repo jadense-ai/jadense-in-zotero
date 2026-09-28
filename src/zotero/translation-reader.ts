@@ -1,6 +1,7 @@
 import { translationSpeedText } from './translation-speed-settings'
 import { openDocumentSettings } from './document-notices'
 import { createJdxSelect } from "./ui/select"
+import { show, type ToastHandle } from "./ui/toast"
 /** 连续译文阅读器：Reader 原生侧栏、停靠栏和 Manager 历史共用；不拥有模型请求生命周期。 */
 import { updateChatMarkdown } from "@/chat/markdown"
 import { documentJobs } from "./document-jobs"
@@ -89,9 +90,8 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   modes.setAttribute("role", "group"); modes.setAttribute("aria-label", uiText("阅读模式", "Reading mode"))
   const body = element(doc, "div", "jdx-reading-body"), footer = element(doc, "footer", "jdx-reading-footer")
   body.tabIndex = 0; body.setAttribute("role", "document")
-  const toast = element(doc, "div", "jdx-notice jdx-result-toast"); toast.setAttribute("role", "status")
-  let toastTimer: ReturnType<typeof setTimeout> | undefined, previousStatus: string | undefined
-  const feedback = (message: string) => { clearTimeout(toastTimer); toast.textContent = message; toastTimer = setTimeout(() => { toast.textContent = "" }, 3500) }
+  let feedbackToast: ToastHandle | undefined, previousStatus: string | undefined
+  const feedback = (message: string) => { feedbackToast?.close(); feedbackToast = show({ document: doc, themeRoot: root, type: "success", message }) }
   const issueAction = action(doc, uiText('检查设置', 'Check settings'), () => { const action = jobs.get(taskID)?.issue?.action; if (action) openDocumentSettings(host, action) }); issueAction.hidden = true
   const issueCopy = action(doc, uiText('复制诊断编号', 'Copy diagnostic ID'), () => { const id = jobs.get(taskID)?.issue?.id; if (id) void copyTextToClipboard(host, id) }); issueCopy.hidden = true
   footer.append(issueAction, issueCopy)
@@ -169,7 +169,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   const diagnostics = element(doc, "p"); diagnostics.style.whiteSpace = "pre-wrap"; more.content.append(diagnostics)
   const pause = action(doc, uiText("暂停", "Pause"), () => { lastNotice = ""; if (jobs.get(taskID)?.status === "running") jobs.pause(taskID); else jobs.resume(taskID) })
   pause.dataset.translationPause = ""; footer.append(state, locations, pause)
-  toolbar.append(modes, outline.details, appearance.details, more.details, progress); root.append(toolbar, body, footer, toast)
+  toolbar.append(modes, outline.details, appearance.details, more.details, progress); root.append(toolbar, body, footer)
   const jump = async (id: string, locationIndex = 0) => {
     const row = rows.find(row => row.block.id === id), task = jobs.get(taskID)
     if (!row?.paragraph || !task || task.status === 'running' || row.draft) return
@@ -312,7 +312,7 @@ export function mountTranslationReader(root: HTMLElement, host: ZoteroLike, task
   return () => {
     locationSelect.destroy(); fontSelect.destroy(); lineSelect.destroy()
     if (disposed) return
-    disposed = true; clearTimeout(toastTimer); clearInterval(speedTimer); stop()
+    disposed = true; feedbackToast?.close(); clearInterval(speedTimer); stop()
     try { savePosition() } catch { /* 窗口已销毁时保留最后一次正常滚动锚点。 */ }
     for (const id of observers) host.Prefs?.unregisterObserver?.(id)
     stopTheme(); resize?.disconnect()

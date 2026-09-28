@@ -76,9 +76,9 @@ export function friendlyChatError(error: unknown) {
   const message = error instanceof Error ? error.message : uiText('对话生成失败，请稍后重试。', 'Chat failed. Please try again.')
   const subscription = jadenseModelSubscriptionErrorMessage(error)
   if (subscription) return subscription
-  if (error instanceof JadenseApiError && error.status === 401) return uiText('攻玉令牌无效或已过期，请在「设置 › 连接攻玉」中更新令牌。', 'Jadense token invalid or expired. Update it in Settings › Connect Jadense.')
-  if (error instanceof JadenseApiError && error.code?.toUpperCase() === 'POINTS_INSUFFICIENT') return uiText('当前可用积分不足。请在「连接攻玉 › 用户信息」打开签到页领取积分，或补充积分后重试。', 'Not enough available points. Open the check-in page from Connect Jadense › Your account, or add points and try again.')
-  if (error instanceof JadenseApiError && error.code?.toLowerCase() === 'insufficient_scope') return uiText('当前令牌缺少本地对话权限，请在「设置 › 连接攻玉」中重新生成 Zotero 令牌。', 'This token lacks local Chat permission. Generate a new Zotero token in Settings › Connect Jadense.')
+  if (error instanceof JadenseApiError && error.status === 401) return uiText('攻玉令牌无效或已过期，请在「设置」的「连接攻玉」中更新令牌。', 'Jadense token invalid or expired. Update it in Connect Jadense under Settings.')
+  if (error instanceof JadenseApiError && error.code?.toUpperCase() === 'POINTS_INSUFFICIENT') return uiText('当前可用积分不足。请在「连接攻玉」的「用户信息」打开签到页领取积分，或补充积分后重试。', 'Not enough available points. Open the check-in page from Your account under Connect Jadense, or add points and try again.')
+  if (error instanceof JadenseApiError && error.code?.toLowerCase() === 'insufficient_scope') return uiText('当前令牌缺少本地对话权限，请在「设置」的「连接攻玉」中重新生成 Zotero 令牌。', 'This token lacks local Chat permission. Generate a new Zotero token in Connect Jadense under Settings.')
   if (error instanceof JadenseApiError && error.status >= 500) return uiText('攻玉服务暂时不可用，请稍后重试。', 'Jadense is temporarily unavailable. Please try again later.')
   if ((error instanceof Error && error.name === 'AbortError') || /abort/i.test(message)) return uiText('已停止生成。', 'Generation stopped.')
   return redactChatImageDataUrls(message)

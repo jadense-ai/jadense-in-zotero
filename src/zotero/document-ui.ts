@@ -1,4 +1,5 @@
 /** 选文浮窗与翻译历史兼容入口：全文交给连续阅读组件，执行与存储归文档任务。 */
+import { createChevron } from './ui/chevron'
 import { updateChatMarkdown } from "@/chat/markdown"
 import { readTranslationHistory, TRANSLATION_HISTORY_PREF_KEY, type TranslationSource, type TranslationRecord } from "@/chat/translation-history"
 import { translationLanguageDisplayLabel as translationLanguageLabel } from "@/chat/translation-languages"
@@ -44,8 +45,8 @@ const CSS = `${READER_UI_THEME_CSS}
 .jdx-history-row {min-width:0;border:1px solid var(--jdx-reader-line);border-radius:8px;background:var(--jdx-reader-surface);overflow:hidden}
 .jdx-document .jdx-history-summary {display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 12px;align-items:start;cursor:pointer;width:100%;box-sizing:border-box;padding:14px 16px;border:0;border-radius:0;background:transparent;text-align:left;list-style:none}
 .jdx-history-summary::-webkit-details-marker {display:none}
-.jdx-history-summary::after {content:'›';grid-column:3;grid-row:1 / 4;align-self:center;color:var(--jdx-reader-muted);font-size:20px}
-.jdx-history-row[open]>.jdx-history-summary::after {transform:rotate(90deg)}
+.jdx-history-chevron {display:block;grid-column:3;grid-row:1 / 4;align-self:center;color:var(--jdx-reader-muted)}
+.jdx-history-row[open]>.jdx-history-summary>.jdx-history-chevron {transform:rotate(90deg)}
 .jdx-history-summary:hover {background:var(--jdx-reader-hover)}
 .jdx-history-summary>span {grid-column:1;grid-row:1 / 4;font-size:11px;padding:2px 6px;border-radius:4px;background:var(--jdx-reader-hover);color:var(--jdx-reader-muted)}
 .jdx-history-summary>strong {grid-column:2;font-size:1em;font-weight:600;line-height:1.5;min-width:0}
@@ -366,11 +367,13 @@ export function renderDocumentHistory(root: HTMLElement, host: ZoteroLike, openS
         const task = row.task, article = node(doc, "article", undefined, "jdx-history-row")
         const openButton = button(doc, "", () => open(task.id)); openButton.className = "jdx-history-summary"
         openButton.append(node(doc, "span", uiText("全文", "Full PDF")), node(doc, "strong", task.source.title), node(doc, "small", `${task.languages ? `${translationLanguageLabel(task.languages.sourceLanguage)} → ${translationLanguageLabel(task.languages.targetLanguage)} · ` : ""}${taskStatus(task)} · ${new Date(task.createdAt).toLocaleString()}`))
+        openButton.append(createChevron(doc, 'jdx-history-chevron', 'right'))
         article.append(openButton); list.append(article)
       } else if (row.selection) {
         const record = row.selection, article = node(doc, "details", undefined, "jdx-history-row"); article.dataset.record = record.id; article.open = expanded.has(record.id)
         const summary = node(doc, "summary", undefined, "jdx-history-summary")
         summary.append(node(doc, "span", uiText("选文", "Selection")), node(doc, "strong", record.source.title || "PDF"), node(doc, "small", `${record.result.sourceLanguage} → ${record.result.targetLanguage}${record.source.pageLabel ? uiText(` · 第 ${record.source.pageLabel} 页`, ` · Page ${record.source.pageLabel}`) : ""} · ${new Date(record.createdAt).toLocaleString()}`), node(doc, "div", record.source.text.replace(/\s+/gu, " ").slice(0, 180), "jdx-history-preview"))
+        summary.append(createChevron(doc, 'jdx-history-chevron', 'right'))
         const original = node(doc, "div", undefined, "jdx-document-original jdx-markdown"), result = node(doc, "div", undefined, "jdx-markdown")
         updateChatMarkdown(original, record.source.text)
         updateChatMarkdown(result, record.result.text)

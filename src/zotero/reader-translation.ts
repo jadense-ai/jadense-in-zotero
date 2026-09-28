@@ -5,7 +5,7 @@ import { literatureIdentity } from "./document-identity"
  * 上游接收本地选区，下游按独立翻译模型生成译文并写入独立翻译历史。
  */
 import { ReliableByokChatClient as ByokChatClient } from "@/chat/reliable-byok-chat"
-import { buildTranslationPrompt } from "@/chat/paper-analysis"
+import { buildTranslationPrompt, normalizeSelectionTranslation } from "@/chat/paper-analysis"
 import { normalizeTranslationLanguages, translationLanguageLabel } from "@/chat/translation-languages"
 import { ReliableTemporaryChatClient as TemporaryChatClient } from "@/chat/reliable-temporary-chat"
 import { JadenseApiError, jadenseModelSubscriptionErrorMessage } from "@/jadense/api"
@@ -102,9 +102,10 @@ export async function translateReaderSelection(input: {
             ...languages,
           }),
         }],
-        onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(accumulatedText),
+        onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(normalizeSelectionTranslation(accumulatedText)),
       })
       })
+      translatedText = normalizeSelectionTranslation(translatedText)
     }
   } catch (error) { diagnostics()?.record("reader-translation", "operation_error", error);
     throw new Error(friendlyTranslationError(error))

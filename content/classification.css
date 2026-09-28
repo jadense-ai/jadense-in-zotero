@@ -22,7 +22,7 @@
 .jdx-classification-folders > label { display: flex; gap: 10px; align-items: flex-start; padding: 7px 4px; cursor: pointer; }
 .jdx-classification-paths { display: flex; flex-direction: column; gap: 6px; }
 .jdx-classification-path { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; overflow-wrap: anywhere; }
-.jdx-classification-separator { opacity: .6; }
+.jdx-classification-separator { display: block; flex: 0 0 16px; align-self: center; opacity: .6; }
 .jdx-classification-leaf { font-weight: 600; }
 .jdx-classification-replace { display: flex; align-items: center; gap: 8px; }
 .jdx-classification-table-scroll { max-height: 48vh; overflow: auto; border: 1px solid var(--jdx-line-strong); border-radius: 8px; }

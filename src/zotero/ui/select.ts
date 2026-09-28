@@ -1,3 +1,4 @@
+import { createChevron } from "./chevron"
 import { uiText } from "@/zotero/ui-preferences"
 /**
  * Jadense 自研下拉组件。
@@ -13,6 +14,8 @@ export type JdxSelectOption = {
   group?: string
   meta?: string
   disabled?: boolean
+  /** 禁选行仍可点按；调用方可将此原因交给 Toast。 */
+  disabledReason?: string
   /** 本地静态图标路径，仅用于紧凑展示，不加载外部资源。 */
   iconPath?: string
   /** 随插件打包的品牌 Logo。 */
@@ -32,6 +35,8 @@ export type JdxSelect = {
   setDisabled(disabled: boolean): void
   /** 仅在用户主动选择且值发生变化时触发，对齐原生 select 的 change。 */
   onChange(listener: JdxSelectChangeListener): void
+  onOpen(listener: () => void): void
+  onDisabledSelect(listener: (option: JdxSelectOption) => void): void
   close(): void
   destroy(): void
 }
@@ -113,24 +118,6 @@ function createLogo(doc: Document, src: string, themed = false) {
   return image
 }
 
-function createChevron(doc: Document) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg")
-  svg.setAttribute("class", "jdx-select-chevron")
-  svg.setAttribute("viewBox", "0 0 16 16")
-  svg.setAttribute("width", "14")
-  svg.setAttribute("height", "14")
-  svg.setAttribute("aria-hidden", "true")
-  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path")
-  path.setAttribute("d", "M4 6.5 8 10.5 12 6.5")
-  path.setAttribute("fill", "none")
-  path.setAttribute("stroke", "currentColor")
-  path.setAttribute("stroke-width", "1.6")
-  path.setAttribute("stroke-linecap", "round")
-  path.setAttribute("stroke-linejoin", "round")
-  svg.append(path)
-  return svg
-}
-
 export function createJdxSelect(host: HTMLElement, input: {
   ariaLabel?: string
   popupWidth?: number
@@ -151,6 +138,8 @@ export function createJdxSelect(host: HTMLElement, input: {
     query: "",
   }
   const listeners = new Set<JdxSelectChangeListener>()
+  const openListeners = new Set<() => void>()
+  const disabledListeners = new Set<(option: JdxSelectOption) => void>()
   let anchorTop = 0, anchorLeft = 0
 
   host.classList.add("jdx-select")
@@ -168,7 +157,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   valueLabel.className = "jdx-select-value"
   const selectedIcon = input.showSelectedIcon ? htmlElement(doc, "span") : null
   if (selectedIcon) { selectedIcon.className = "jdx-select-leading-icon"; selectedIcon.setAttribute("aria-hidden", "true"); trigger.append(selectedIcon) }
-  trigger.append(valueLabel, createChevron(doc))
+  trigger.append(valueLabel, createChevron(doc, "jdx-select-chevron", "down", 14))
   if (input.iconPath) {
     trigger.replaceChildren(createOptionIcon(doc, input.iconPath))
     host.classList.add("jdx-select-icon-only")
@@ -244,6 +233,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       row.setAttribute("role", "option")
       row.setAttribute("aria-selected", String(option.value === state.value))
       row.setAttribute("aria-disabled", String(option.disabled === true))
+      if (option.disabled) row.tabIndex = 0
       row.dataset.active = String(index === state.activeIndex)
       if (input.compact) row.title = [option.label, option.description, option.meta].filter(Boolean).join("\n")
       const main = htmlElement(doc, "span")
@@ -260,7 +250,7 @@ export function createJdxSelect(host: HTMLElement, input: {
         meta.textContent = option.meta
         main.append(meta)
       }
-      if (input.compact) {
+      if (input.compact || option.disabled) {
         const status = createOptionIcon(doc, option.disabled
           ? "M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3"
           : option.value === state.value ? "m5 12 4 4L19 6" : "")
@@ -280,6 +270,10 @@ export function createJdxSelect(host: HTMLElement, input: {
       }
       row.addEventListener("mouseenter", () => setActiveIndex(index, false))
       row.addEventListener("click", () => selectIndex(index, true))
+      row.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectIndex(index, true) }
+        else if (event.key === "Escape") { event.preventDefault(); close(); trigger.focus() }
+      })
       list.append(row)
     })
   }
@@ -364,6 +358,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     doc.addEventListener("scroll", onDocumentScroll, true)
     doc.defaultView?.addEventListener("resize", close)
     search?.focus({ preventScroll: true })
+    for (const listener of openListeners) listener()
   }
 
   function close() {
@@ -379,7 +374,11 @@ export function createJdxSelect(host: HTMLElement, input: {
 
   function selectIndex(index: number, notify: boolean) {
     const option = filterSelectOptions(state.options, state.query)[index] ?? null
-    if (!option || option.disabled) return
+    if (!option) return
+    if (option.disabled) {
+      if (notify) for (const listener of disabledListeners) listener(option)
+      return
+    }
     close()
     const changed = option.value !== state.value
     state.value = option.value
@@ -451,7 +450,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   return {
     element: host,
     close,
-    destroy() { close(); listeners.clear(); trigger.remove(); popup.remove(); portal?.remove() },
+    destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); portal?.remove() },
     getValue: () => state.value,
     setValue(value: string) {
       if (!state.options.some((option) => option.value === value)) return
@@ -459,12 +458,12 @@ export function createJdxSelect(host: HTMLElement, input: {
       renderTrigger()
     },
     setOptions(options: JdxSelectOption[], selectedValue: string) {
-      close()
       state.options = options.slice()
       state.value = resolveSelectedValue(state.options, selectedValue)
-      state.activeIndex = -1
+      state.activeIndex = state.open ? filterSelectOptions(state.options, state.query).findIndex(option => option.value === state.value) : -1
       renderOptions()
       renderTrigger()
+      if (state.open) { positionPopup(); setActiveIndex(state.activeIndex, false) }
     },
     setDisabled(disabled: boolean) {
       state.disabled = disabled
@@ -474,5 +473,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     onChange(listener: JdxSelectChangeListener) {
       listeners.add(listener)
     },
+    onOpen(listener: () => void) { openListeners.add(listener) },
+    onDisabledSelect(listener: (option: JdxSelectOption) => void) { disabledListeners.add(listener) },
   }
 }

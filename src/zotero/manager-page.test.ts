@@ -638,7 +638,7 @@ describe("manager page state", () => {
 
     expect(xhtml).toContain('id="jadense-manager-sidebar-toggle"')
     expect(xhtml).toContain('aria-controls="jadense-manager-sidebar"')
-    expect(xhtml.match(/class="jdx-manager-nav-icon(?: [^"]+)?"/g)).toHaveLength(6)
+    expect(xhtml.match(/data-jdx-icon-id="(?:message-square-plus|history|clipboard-list|library|theme|settings)"/g)).toHaveLength(6)
     expect(xhtml.match(/class="jdx-manager-nav-label"/g)).toHaveLength(4)
     const helpMenu = xhtml.match(/<div id="jadense-help-menu"[\s\S]*?<\/div>/)?.[0]
     expect(helpMenu).toContain('id="jadense-manager-nav-guide"')
@@ -649,7 +649,7 @@ describe("manager page state", () => {
     expect(xhtml).toContain('id="jadense-manager-section-analysis"')
     const connectionNav = xhtml.match(/<button id="jadense-manager-nav-migrate"[\s\S]*?<\/button>/)?.[0] ?? ""
     expect(connectionNav).toContain("攻玉学术")
-    expect(connectionNav).toContain('<circle cx="8" cy="5.5" r="2.5"/>')
+    expect(connectionNav).toContain('data-jdx-icon-id="library"')
     expect(connectionNav).not.toContain(">上传<")
   })
 
@@ -838,14 +838,13 @@ describe("manager page state", () => {
     expect(footer).toContain('id="jadense-manager-connection-status"')
     expect(footer).toContain('role="status" tabindex="0"')
     expect(footer).toContain('id="jadense-manager-theme-toggle"')
-    expect(footer).toContain("jdx-manager-theme-icon-moon")
-    expect(footer).toContain("jdx-manager-theme-icon-sun")
+    expect(footer).toContain('data-jdx-icon-id="theme"')
     expect(footer).toContain('aria-label="切换主题"')
     expect(footer).toContain('title="切换为深色模式"')
     expect(footer).toContain('id="jadense-manager-nav-settings"')
     expect(footer).toContain('aria-label="设置"')
     expect(footer).toContain('title="设置"')
-    expect(footer).toContain("jdx-manager-settings-gear")
+    expect(footer).toContain('data-jdx-icon-id="settings"')
     expect(footer).not.toContain("jdx-manager-nav-label")
     expect(xhtml.match(/id="jadense-manager-nav-settings"/g)).toHaveLength(1)
   })

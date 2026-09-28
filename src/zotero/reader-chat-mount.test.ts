@@ -6,10 +6,10 @@ vi.mock('@/chat/local-chat-store', () => ({ readLocalChatState: () => ({ session
 vi.mock('./chat-runtime', () => ({ chatRuntime: () => ({ preferences: {}, feature: () => 'chat', subscribe: mocks.subscribe }) }))
 vi.mock('./chat-composer-ui', () => ({ mountChatComposer() {} }))
 vi.mock('./chat-message-ui', () => ({ nearLatest: () => false, updateLatestButton() {} }))
-vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ destroy: mocks.destroy, setOptions() {}, setValue() {}, onChange() {}, close() {} }) }))
+vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ destroy: mocks.destroy, setOptions() {}, setValue() {}, onChange() {}, onOpen() {}, close() {} }) }))
 vi.mock('./research-context', () => ({ collectSourceForItem: async () => null }))
 vi.mock('./ai-settings', () => ({ featureModelState: mocks.feature, effectiveFeatureModelSelection: () => ({}), featureModelSelectionKey: () => 'default' }))
-vi.mock('./ai-model-select', () => ({ buildFeatureModelSelectOptions: () => [] }))
+vi.mock('./ai-model-select', () => ({ buildFeatureModelSelectOptions: () => [], bindModelSelectToast() {}, shouldRefreshModelCatalog: () => false }))
 vi.mock('./runtime', () => ({ readConnection: () => ({ token: '' }) }))
 import { mountReaderChat } from './reader-chat'
 

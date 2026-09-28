@@ -6,6 +6,7 @@ import { TemporaryRequestStore, requestHash, type LocalTemporaryRequest } from '
 import { version } from '../../package.json'
 import { uiText } from '@/zotero/ui-preferences'
 import type { TranslationFetch } from './translation-queue'
+import { RESPONSE_FORMAT_HEADER, responseFormatMessages } from './response-format'
 
 const HEADER = 'x-jadense-temporary-protocol'
 // 只缓存翻译用途的成功能力探针；POST 仍执行服务端鉴权。
@@ -101,11 +102,13 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       clientContext: { version, feature: input.clientFeature ?? 'chat', ...(input.clientOperation ? { operation: input.clientOperation, taskId: input.taskId, chunkId: input.operationId, chunkIndex: input.chunkIndex, chunkTotal: input.chunkTotal } : {}) }, clientRequestId: input.clientRequestId,
       origin: this.base(), taskId: input.taskId ?? input.conversationId, operationId: input.operationId ?? input.clientRequestId,
       ...(input.previousRequestId ? { previousRequestId: input.previousRequestId } : {}),
-      messages: temporaryChatMessages(input.messages, input.sources, input.images), ...jadenseChatSelectionBody(this.options.selection) }
+      messages: temporaryChatMessages(responseFormatMessages(input.messages, input.responseFormat), input.sources, input.images),
+      ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}), ...jadenseChatSelectionBody(this.options.selection) }
     const account = await this.account()
     // UI 重新构造消息 UUID 不应使未完成的同一输入丢失身份；完成记录不会拦截主动再次执行。
     const fingerprint = await requestHash(JSON.stringify({ conversation: input.conversationId, feature: input.clientFeature ?? 'chat', selection: this.options.selection,
-      messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images }))
+      messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images,
+      ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}) }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
     const completed = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'completed' && row.fingerprint === fingerprint) : undefined
     if (completed) return completed.text ?? ''
@@ -122,8 +125,14 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       const capability = await diagnosticFetch(input.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat/temporary`, { method: 'HEAD', headers: this.headers(), signal: input.signal })
       if (!capability.ok) throw await readJadenseApiError(capability, uiText('请检查当前 Zotero 令牌与对话权限。', 'Check the current Zotero token and chat permissions.'))
       if (capability.headers.get(HEADER) !== '1') throw new Error(uiText('服务器尚不支持安全的 AI 请求，请先升级服务器。', 'Upgrade the server before using safe AI requests.'))
+      if (input.responseFormat && capability.headers.get(RESPONSE_FORMAT_HEADER) !== '1') {
+        if (input.responseFormat.fallback !== 'text') throw new Error(uiText('服务器不支持本次请求所需的结构化输出，请升级服务器。', 'Upgrade the server to support the structured output required by this request.'))
+        // 旧服务器仍接收同一完整 Schema 提示；已持久化的请求正文不得被能力变化改写。
+        delete body.responseFormat
+        input.diagnostic?.event('response_format_compatibility', { source: 'legacy_server' })
+      }
     }
-    if (input.clientFeature !== 'translation') await probe()
+    if (input.responseFormat || input.clientFeature !== 'translation') await probe()
     else {
       const cached = translationCapabilities.get(account)
       if (cached?.pending) await cached.pending

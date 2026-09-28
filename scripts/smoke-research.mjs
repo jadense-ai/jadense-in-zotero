@@ -1289,7 +1289,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     report.checks.push("reader-inline-brand-logo")
     assert(!readerDoc.querySelector('[data-jadense-article-languages], button[aria-label="文章翻译语言设置"]')
       && !toolbarButton("references") && !toolbarButton("translate"), "Reader still exposes removed language, selection translation or references toolbar entries")
-    assert(toolbarButton("fullTranslate")?.textContent.trim() === "全文翻译", "Full translation toolbar label is incorrect")
+    assert(readerDoc.querySelector('[data-jadense-pdf-mode="compare"]')?.textContent.trim().includes("对照翻译"), "Full translation toolbar label is incorrect")
     const changeLanguage = (select, value) => {
       select.value = value
       select.dispatchEvent(new reader._iframeWindow.Event("change", Components.utils.cloneInto({ bubbles: true }, reader._iframeWindow)))
@@ -1298,11 +1298,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await stage("empty-selection-hint")
     view._setSelectionRanges()
     toolbarButton("quote").click()
-    const notice = await waitFor(() => readerDoc.querySelector("[data-jadense-reader-notice]:not([hidden])"), "local missing-selection hint")
+    const notice = await waitFor(() => readerDoc.querySelector(".jdx-toast-stack[data-position=anchor] .jdx-toast"), "local missing-selection hint")
     assert(notice.textContent.includes("先选中") && notice.getAttribute("role") === "status", "Missing selection hint is not visible and accessible")
     assert(!findManager() && messages().length === 0, "Missing selection unexpectedly opened Manager or created a Chat message")
     pressKey(reader._iframeWindow, "Escape")
-    assert(notice.hidden, "Escape did not dismiss the local hint")
+    assert(!notice.isConnected, "Escape did not dismiss the local hint")
     report.checks.push("empty-selection-stays-in-reader", "reader-hint-keyboard-dismissal")
 
     await stage("reader-logo-opens-manager")
@@ -1325,6 +1325,56 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const logoSession = currentSession()
     assert(JSON.stringify(localState()) === beforeLogoChatState
       && (!logoSession || (logoSession.messages.length === 0 && logoSession.sources.length === 0)), "Reader logo changed Chat state or dispatched a paper action")
+    if (config.modelToastOnly) {
+      await stage('model-admission-toast')
+      const doc = manager.document, select = doc.getElementById('jadense-chat-model-select')
+      await waitFor(() => select?.dataset.status === 'ready', 'account model catalog')
+      const original = Zotero.Prefs.get('extensions.jadenseInZotero.chatModel')
+      select.querySelector('.jdx-select-trigger').click()
+      const locked = [...select.querySelectorAll('[role="option"]')].find(option => option.textContent.includes('受限模型'))
+      assert(locked?.getAttribute('aria-disabled') === 'true' && locked.tabIndex === 0
+        && locked.querySelector('.jdx-select-option-status'), 'Locked model is not visible, focusable, and marked')
+      locked.click()
+      assert(doc.querySelector('.jdx-toast[data-type="warning"]')?.textContent.includes('升级后可直接选择')
+        && Zotero.Prefs.get('extensions.jadenseInZotero.chatModel') === original, 'Locked click missed reason Toast or saved selection')
+      locked.focus()
+      locked.dispatchEvent(new manager.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      assert(doc.querySelectorAll('.jdx-toast[data-type="warning"]').length >= 2
+        && Zotero.Prefs.get('extensions.jadenseInZotero.chatModel') === original, 'Locked keyboard selection missed Toast or saved selection')
+      await Zotero.Promise.delay(300)
+      const toastCard = doc.querySelector('.jdx-toast[data-type="warning"]')
+      const toastStyle = manager.getComputedStyle(toastCard)
+      report.toastProbe = { rect: toastCard.getBoundingClientRect().toJSON(), display: toastStyle.display, visibility: toastStyle.visibility,
+        background: toastStyle.backgroundColor, stackRect: toastCard.parentElement.getBoundingClientRect().toJSON(), stylesheet: Boolean(doc.getElementById('jdx-toast-css')?.sheet) }
+      assert(toastCard.getBoundingClientRect().width > 0 && toastStyle.visibility !== 'hidden', 'Toast is present but not visually rendered')
+      await screenshot('manager-model-admission-toast', manager)
+      const unlocked = [...select.querySelectorAll('[role="option"]')].find(option => option.textContent.includes('Synthetic Research'))
+      unlocked.click()
+      assert(JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.chatModel')).selection?.modelId === 'synthetic-platform-model', 'Unlocked model did not save')
+      Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', '150', true)
+      manager.resizeTo(720, 800)
+      await Zotero.Promise.delay(300)
+      select.querySelector('.jdx-select-trigger').click()
+      ;[...select.querySelectorAll('[role="option"]')].find(option => option.textContent.includes('受限模型')).click()
+      const compactToast = doc.querySelector('.jdx-toast[data-type="warning"]:last-child')
+      await Zotero.Promise.delay(300)
+      assert(compactToast.getBoundingClientRect().left >= 0 && compactToast.getBoundingClientRect().right <= manager.innerWidth,
+        'Scaled compact Manager Toast overflows the viewport')
+      await screenshot('manager-model-admission-toast-compact-150', manager)
+      manager.close()
+      await waitFor(() => manager.closed, 'Manager close before host notification')
+      const host = Zotero.getMainWindow(), issue = Zotero.__jadenseDocumentJobs.fail({ code: 'STREAM_INCOMPLETE' }, 'generation')
+      const hostToast = await waitFor(() => host.document.querySelector(`.jdx-toast[data-diagnostic-id="${issue.id}"]`), 'host document error Toast')
+      assert(hostToast.getAttribute('role') === 'alert' && hostToast.querySelectorAll('.jdx-toast-actions button').length >= 1,
+        'Zotero host document error missed its persistent accessible Toast actions')
+      await Zotero.Promise.delay(300)
+      assert(hostToast.getBoundingClientRect().width > 0 && hostToast.getBoundingClientRect().right <= host.innerWidth, 'Host document Toast is outside the viewport')
+      await screenshot('zotero-host-document-toast', host)
+      hostToast.querySelector('.jdx-toast-close').click()
+      report.checks.push('native-model-lock-pointer-keyboard-toast-no-save', 'native-unlocked-model-save', 'native-model-toast-compact-150', 'native-zotero-host-document-error-toast')
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.selectionOnly) {
       const figureWindow = view._iframeWindow
       await view._ensureBasicPageData(0)
@@ -2479,6 +2529,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     lockedChatModel.click()
     assert(JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "deepseek-v4-flash-vision-exp",
       "Clicking a subscription-locked model changed the saved selection")
+    assert(manager.document.querySelector('.jdx-toast[data-type="warning"]')?.textContent.includes("升级后可直接选择"),
+      "Clicking a subscription-locked model did not show its Toast reason")
+    lockedChatModel.focus()
+    lockedChatModel.dispatchEvent(new manager.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    assert(manager.document.querySelectorAll('.jdx-toast[data-type="warning"]').length >= 2
+      && JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "deepseek-v4-flash-vision-exp",
+      "Keyboard selection of a locked model missed Toast or changed the saved selection")
     await screenshot("manager-model-subscription", manager)
     report.checks.push("jadense-model-subscription-lock")
     chatModelSearch.value = "Synthetic"
@@ -3158,7 +3215,7 @@ async function main() {
       sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'),
       classificationOnly: argv.includes('--classification-only'),
       chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'),
-      analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
+      analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), modelToastOnly: argv.includes('--model-toast-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
     await writeFile(path.join(profileDir, "user.js"), [

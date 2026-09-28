@@ -1,5 +1,6 @@
 import { JADENSE_BRAND_PARTS } from './jadense-brand'
 import { lifecycleTrace } from './lifecycle-diagnostics'
+import { show as showToast, type ToastHandle } from './ui/toast'
 import { analysisRuntime } from './analysis-runtime'
 import { analysisOCREnabled, readDocument } from './document-extraction'
 import { ocrEngine } from './cloud-ocr-config'
@@ -846,13 +847,6 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
   white-space:normal;line-height:1.3;
 }
 [data-jadense-reader-tools="renderTextSelectionPopup"] .jadense-reader-label {min-width:0;overflow-wrap:anywhere;}
-[data-jadense-reader-notice] {
-  position:fixed;z-index:10001;box-sizing:border-box;width:260px;max-width:calc(100vw - 16px);
-  padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
-  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
-  box-shadow:0 2px 8px rgba(0,0,0,.1);font:calc(12px * var(--jdx-font-scale,1))/1.6 system-ui,sans-serif;pointer-events:none;
-}
-[data-jadense-reader-notice][hidden] {display:none;}
 [data-jadense-translation-panel] {
   position:fixed;z-index:10000;top:56px;right:16px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
   box-sizing:border-box;width:min(430px,calc(100vw - 16px));min-width:min(300px,calc(100vw - 16px));min-height:min(220px,calc(100vh - 16px));max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:hidden;
@@ -874,6 +868,9 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-translation-panel] .jadense-translation-text,
 [data-jadense-translation-panel] .jadense-translation-text * {-moz-user-select:text;user-select:text;}
 .jadense-translation-result {margin-bottom:0;padding:10px;border-radius:7px;background:var(--jdx-reader-surface,rgba(17,21,16,.04));}
+.jadense-translation-source {margin-top:14px;border-top:1px solid var(--jdx-reader-line,rgba(17,21,16,.12));}
+.jadense-translation-source summary {cursor:pointer;padding:9px 0;color:var(--jdx-reader-muted,currentColor);font-size:calc(11px * var(--jdx-font-scale,1));font-weight:650;}
+.jadense-translation-source .jadense-translation-text {margin:0 0 4px;}
 .jadense-translation-result[data-error="true"] {color:var(--jdx-reader-error,#b42318);}
 .jadense-translation-markdown:not([data-error="true"]) {white-space:normal;}
 .jadense-translation-markdown:not([data-error="true"]) > :first-child {margin-top:0;}
@@ -1053,14 +1050,7 @@ export function registerReaderTools(
     style.textContent = READER_TOOLS_CSS
     const styleHost = doc.head || doc.documentElement
     styleHost.append(style)
-    const notice = doc.createElement("div")
-    notice.setAttribute("data-jadense-reader-notice", "")
-    notice.setAttribute("role", "status")
-    notice.setAttribute("aria-live", "polite")
-    notice.setAttribute("aria-atomic", "true")
-    notice.hidden = true
     const noticeHost = doc.body || doc.documentElement
-    noticeHost.append(notice)
     const translationPanel = doc.createElement("aside")
     translationPanel.setAttribute("data-jadense-translation-panel", "")
     translationPanel.setAttribute("role", "region")
@@ -1088,18 +1078,20 @@ export function registerReaderTools(
     translationHeader.append(sentenceLanguages.element, languageHint)
     const translationContent = doc.createElement("div")
     translationContent.className = "jadense-translation-content"
-    const sourceLabel = doc.createElement("p")
-    sourceLabel.className = "jadense-translation-label"
-    sourceLabel.textContent = uiText("原文", "Original")
-    const sourceText = doc.createElement("div")
-    sourceText.className = "jadense-translation-text jadense-translation-markdown"
     const resultLabel = doc.createElement("p")
     resultLabel.className = "jadense-translation-label"
     resultLabel.textContent = uiText("译文", "Translation")
     const resultText = doc.createElement("div")
     resultText.className = "jadense-translation-text jadense-translation-result jadense-translation-markdown"
     resultText.setAttribute("aria-live", "polite")
-    translationContent.append(sourceLabel, sourceText, resultLabel, resultText)
+    const sourceSection = doc.createElement("details")
+    sourceSection.className = "jadense-translation-source"
+    const sourceLabel = doc.createElement("summary")
+    sourceLabel.textContent = uiText("原文", "Original")
+    const sourceText = doc.createElement("div")
+    sourceText.className = "jadense-translation-text jadense-translation-markdown"
+    sourceSection.append(sourceLabel, sourceText)
+    translationContent.append(resultLabel, resultText, sourceSection)
     const translationActions = doc.createElement("footer")
     translationActions.className = "jadense-translation-actions"
     const copyTranslation = doc.createElement("button")
@@ -1128,28 +1120,27 @@ export function registerReaderTools(
     placementLabel.textContent = uiText('浮窗位置', 'Panel position')
     placementLabel.append(placement)
     appearance.element.querySelector('.jdx-window-appearance-menu')?.append(placementLabel)
-    themeRoot(notice)
     themeRoot(translationPanel)
     let translationRequestID = 0
     let translationError = false
     let translationMarkdown = ""
     let translationSelection: ReaderToolbarAction | undefined
-    let timer: ReturnType<typeof setTimeout> | undefined
+    let noticeHandle: ToastHandle | undefined
+    let noticeVisible = false
     const renderTranslationMarkdown = (text: string, target = resultText) => {
       try { updateChatMarkdown(target, text) } catch { target.textContent = text }
     }
     const hide = () => {
-      if (timer !== undefined) clearTimeout(timer)
-      timer = undefined
-      notice.hidden = true
-      notice.textContent = ""
+      noticeHandle?.close()
+      noticeHandle = undefined
+      noticeVisible = false
     }
     const closeTranslation = () => { markDiagnosticAbort(selectionJobs.get(doc)?.signal, "user_stop"); selectionJobs.get(doc)?.abort(); translationRequestID += 1; appearance.close(); translationPanel.hidden = true }
     const dismiss = () => {
       if (appearance.close()) return true
       for (const [node, menu] of toolbarMenus) if (node.ownerDocument === doc && menu.close()) return true
       if (!translationPanel.hidden) { closeTranslation(); return true }
-      if (!notice.hidden) { hide(); return true }
+      if (noticeVisible) { hide(); return true }
       return false
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1192,7 +1183,6 @@ export function registerReaderTools(
       doc.removeEventListener("keydown", onKeyDown)
       doc.defaultView?.removeEventListener("pagehide", remove)
       style.remove()
-      notice.remove()
       appearance.remove()
       interaction.remove()
       translationPanel.remove()
@@ -1212,6 +1202,7 @@ export function registerReaderTools(
       beginTranslation: (selection: ReaderToolbarAction) => {
         translationRequestID += 1
         translationSelection = selection
+        sourceSection.open = false
         renderTranslationMarkdown(selection.text ?? "", sourceText)
         sentenceLanguages.set(selection.languages ?? DEFAULT_TRANSLATION_LANGUAGES)
         sentenceLanguages.disable(true)
@@ -1257,13 +1248,8 @@ export function registerReaderTools(
       show: (anchor: HTMLElement, message: string) => {
         hide()
         const rect = anchor.getBoundingClientRect()
-        const width = doc.defaultView?.innerWidth || 800
-        const height = doc.defaultView?.innerHeight || 600
-        notice.style.left = `${Math.max(8, Math.min(rect.left, width - 268))}px`
-        notice.style.top = `${Math.max(8, Math.min(rect.bottom + 8, height - 72))}px`
-        notice.textContent = message
-        notice.hidden = false
-        timer = setTimeout(hide, 5000)
+        noticeHandle = showToast({ document: doc, themeRoot: translationPanel, message, duration: 5000, anchor: { left: rect.left, top: rect.top, height: rect.height }, onClose: () => { noticeVisible = false; noticeHandle = undefined } })
+        noticeVisible = true
       },
     }
     documents.set(doc, entry)

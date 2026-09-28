@@ -151,6 +151,10 @@ class DocumentStub extends EventTargetStub {
   }
 }
 
+function toastCard(doc: DocumentStub) {
+  return doc.body.children.find(node => node.className === "jdx-toast-stack")?.children.at(-1)
+}
+
 class EventBusStub {
   listeners = new Map<string, Set<Listener>>()
   on(name: string, listener: Listener) {
@@ -412,7 +416,6 @@ describe("native Reader figure overlay", () => {
     fixture.register.mock.calls[0][1]({ reader: fixture.reader, doc: fixture.outerDoc })
     await vi.waitFor(() => expect(findByAttribute(fixture.primary.doc, "data-jadense-figure-overlay")).toBeTruthy())
     const overlay = findByAttribute(fixture.primary.doc, "data-jadense-figure-overlay")!
-    const notice = findByAttribute(fixture.primary.doc, "data-jadense-figure-notice")!
     const buttons = overlay.children[0].children
     expect(buttons.map(button => button.textContent)).toEqual([
       "Interpret image (new chat)", "Interpret image (current chat)", "Exit",
@@ -420,11 +423,10 @@ describe("native Reader figure overlay", () => {
     expect(buttons[0].getAttribute("aria-label")).toBe("Interpret image (new chat)")
     expect(buttons[2].title).toBe("Exit image interpretation (Esc)")
     captureShortcut(fixture.primary)
-    expect(notice.textContent).toBe("Drag within a PDF page to select an image. Press Esc to exit.")
+    expect(toastCard(fixture.primary.doc)?.children[0].textContent).toBe("Drag within a PDF page to select an image. Press Esc to exit.")
     expect(overlay.dataset.theme).toBe("light")
     saveTheme(fixture.zotero, "dark")
     expect(overlay.dataset.theme).toBe("dark")
-    expect(notice.dataset.theme).toBe("dark")
     saveTheme(fixture.zotero, "system")
     prefs.set!("browser.theme.toolbar-theme", 1)
     expect(overlay.dataset.theme).toBe("light")
@@ -852,9 +854,7 @@ describe("native Reader figure overlay", () => {
     expect(overlay.hidden).toBe(true)
     fixture.primary.container.emit("click", { target: fixture.primary.page, clientX: 200, clientY: 200 })
     overlay.children[0].children[0].emit("click")
-    const notice = findByAttribute(fixture.primary.doc, "data-jadense-figure-notice")!
-    await vi.waitFor(() => expect(notice.hidden).toBe(false))
-    expect(notice.textContent).toBe("图片解读未完成，请稍后重试。")
+    await vi.waitFor(() => expect(toastCard(fixture.primary.doc)?.children[0].textContent).toBe("图片解读未完成，请稍后重试。"))
     cleanup()
   })
 

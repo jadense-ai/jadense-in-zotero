@@ -45,7 +45,7 @@ import {
   type ByokProvider,
 } from "./ai-settings"
 import { JadenseApiClient, type JadenseChatModelCatalog } from "@/jadense/api"
-import { buildFeatureModelSelectOptions } from "./ai-model-select"
+import { bindModelSelectToast, buildFeatureModelSelectOptions, shouldRefreshModelCatalog } from "./ai-model-select"
 import { createJdxSelect, type JdxSelect } from "./custom-select"
 import {
   applyStrings,
@@ -434,6 +434,9 @@ function placeByokModelEditor(elements: PreferenceElements, mode: ByokModelEdito
 
 let featureModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
 let featureCatalogGeneration = 0
+let featureCatalogUpdatedAt = 0
+let featureCatalogIdentity = ""
+let featureCatalogLoadingIdentity = ""
 
 function renderFeatureModels(elements: PreferenceElements) {
   const autoFollow = readAutoFollowChatModel(Zotero)
@@ -451,9 +454,12 @@ async function refreshFeatureModelCatalog(elements: PreferenceElements) {
   const strings = selectPreferencesStrings(getUiLocale())
   const connection = readConnection(Zotero)
   const generation = ++featureCatalogGeneration
-  featureModelCatalog = { options: [], defaultSelection: null }
+  const identity = `${connection.baseUrl}\n${connection.token}`
+  featureCatalogLoadingIdentity = identity
+  if (identity !== featureCatalogIdentity) { featureModelCatalog = { options: [], defaultSelection: null }; featureCatalogUpdatedAt = 0; featureCatalogIdentity = identity }
   renderFeatureModels(elements)
   if (!connection.token) {
+    featureCatalogLoadingIdentity = ""
     setStatus(elements.featureModelStatus, strings.featureModelConnect)
     return
   }
@@ -465,13 +471,14 @@ async function refreshFeatureModelCatalog(elements: PreferenceElements) {
     const catalog = await new JadenseApiClient({ ...connection, fetchImpl: ownerWindow?.fetch.bind(ownerWindow) }).getChatModels(controller.signal)
     if (generation !== featureCatalogGeneration) return
     featureModelCatalog = catalog
+    featureCatalogUpdatedAt = Date.now()
     setStatus(elements.featureModelStatus, strings.featureModelReady)
   } catch {
     if (generation !== featureCatalogGeneration) return
     setStatus(elements.featureModelStatus, strings.featureModelUnavailable)
   } finally {
     clearTimeout(timeout)
-    if (generation === featureCatalogGeneration) renderFeatureModels(elements)
+    if (generation === featureCatalogGeneration) { featureCatalogLoadingIdentity = ""; renderFeatureModels(elements) }
   }
 }
 
@@ -626,6 +633,13 @@ export function initJadensePreferencesPage() {
   })
 
   const elements = readElements()
+  for (const select of Object.values(elements.featureModels)) {
+    bindModelSelectToast(select)
+    select.onOpen(() => {
+      const connection = readConnection(Zotero)
+      if (shouldRefreshModelCatalog(featureCatalogUpdatedAt) && connection.token && featureCatalogLoadingIdentity !== `${connection.baseUrl}\n${connection.token}`) void refreshFeatureModelCatalog(elements)
+    })
+  }
   const modelObservers: unknown[] = []
   for (const key of [...Object.values(FEATURE_MODEL_PREF_KEYS), AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, 'extensions.jadenseInZotero.byokConfig']) {
     try { const id = Zotero.Prefs?.registerObserver?.(key, () => renderFeatureModels(elements)); if (id !== undefined) modelObservers.push(id) } catch { /* 可选跨窗显示。 */ }

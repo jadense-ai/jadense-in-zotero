@@ -8,6 +8,7 @@ import { buildSourceContext, type ChatSource } from "./research-context"
 import type { ChatImageInput } from "./image-input"
 import { readJadenseApiError, type JadenseChatSelection } from "@/jadense/api"
 import { version as clientVersion } from "../../package.json"
+import { responseFormatMessages, type ChatResponseFormat } from './response-format'
 
 export type { ChatImageInput } from "./image-input"
 
@@ -25,6 +26,7 @@ export type TemporaryChatClientOptions = {
 }
 
 export type TemporaryChatSendInput = {
+  responseFormat?: ChatResponseFormat
   clientOperation?: "full_translation" | "selection_translation" | "reference_identification"
   chunkIndex?: number
   chunkTotal?: number
@@ -222,7 +224,8 @@ export class TemporaryChatClient {
         clientContext: { version: clientVersion, feature: input.clientFeature ?? "chat", ...(input.clientOperation ? { operation: input.clientOperation, taskId: input.taskId, chunkId: input.operationId, chunkIndex: input.chunkIndex, chunkTotal: input.chunkTotal } : {}) },
         clientRequestId: input.clientRequestId,
         taskId: input.taskId, operationId: input.operationId,
-        messages: temporaryChatMessages(input.messages, input.sources, input.images),
+        messages: temporaryChatMessages(responseFormatMessages(input.messages, input.responseFormat), input.sources, input.images),
+        ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
         ...jadenseChatSelectionBody(this.selection),
       }),
       signal: input.signal,

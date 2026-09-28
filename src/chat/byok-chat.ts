@@ -6,6 +6,7 @@ import { uiText } from "@/zotero/ui-preferences"
  */
 import { localChatMessages, type TemporaryChatClientOptions, type TemporaryChatSendInput } from "./temporary-chat"
 import { redactChatImageDataUrls, type ChatImageInput } from "./image-input"
+import { responseFormatMessages, type ChatResponseFormat } from './response-format'
 
 export type ByokProtocol = "openai-chat-completions" | "anthropic-messages" | "openai-responses"
 
@@ -307,6 +308,8 @@ function request(
   config: ByokConfig,
   messages: ReturnType<typeof localChatMessages>,
   images: readonly ChatImageInput[] = [],
+  format?: ChatResponseFormat,
+  formatMode: 'schema' | 'json' | 'text' = 'schema',
 ): {
   headers: Record<string, string>
   body: Record<string, unknown>
@@ -315,19 +318,35 @@ function request(
   if (config.protocol === "openai-chat-completions") {
     return {
       headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
-      body: { model: config.model, messages: projected, stream: true, max_completion_tokens: config.maxOutputTokens },
+      body: { model: config.model, messages: projected, stream: true, max_completion_tokens: config.maxOutputTokens,
+        ...(format && formatMode !== 'text' ? { response_format: formatMode === 'json' ? { type: 'json_object' } : { type: 'json_schema', json_schema: { name: format.name, strict: true, schema: format.schema } } } : {}) },
     }
   }
   if (config.protocol === "anthropic-messages") {
     return {
       headers: { "x-api-key": config.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: { model: config.model, messages: projected, stream: true, max_tokens: config.maxOutputTokens },
+      body: { model: config.model, messages: projected, stream: true, max_tokens: config.maxOutputTokens,
+        ...(format && formatMode === 'schema' ? { output_config: { format: { type: 'json_schema', schema: format.schema } } } : {}) },
     }
   }
   return {
     headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
-    body: { model: config.model, input: projected, stream: true, store: false, max_output_tokens: config.maxOutputTokens },
+    body: { model: config.model, input: projected, stream: true, store: false, max_output_tokens: config.maxOutputTokens,
+      ...(format && formatMode !== 'text' ? { text: { format: formatMode === 'json' ? { type: 'json_object' } : { type: 'json_schema', name: format.name, strict: true, schema: format.schema } } } : {}) },
   }
+}
+
+/** 只有明确参数拒绝才可换格式；成功响应、未知错误、usage 或任何模型输出均不重派。 */
+async function rejectedResponseFormat(response: Response) {
+  if (![400, 422].includes(response.status)) return false
+  try {
+    const payload = object(await response.clone().json())
+    const error = object(payload?.error)
+    if (!error || [payload, error, object(payload?.response)].some(row => row?.usage || row?.choices || row?.output || row?.content)) return false
+    const message = [error.param, error.code, error.message].filter(value => typeof value === 'string').join(' ')
+    return /response_format|json_schema|json_object|output_config|text\.format/i.test(message)
+      && /not supported|unsupported|not support|unknown (?:parameter|field)|unrecognized (?:parameter|field)|unexpected (?:keyword|field|parameter)|extra inputs are not permitted/i.test(message)
+  } catch { return false }
 }
 
 export class ByokChatClient {
@@ -343,19 +362,25 @@ export class ByokChatClient {
     return traceRequest(input, { provider: 'byok', protocol: this.config.protocol, model: this.config.model }, value => this.sendRecorded(value))
   }
   private async sendRecorded(input: ByokSendInput) {
-    const messages = localChatMessages(input.messages, input.sources)
-    const outbound = request(this.config, messages, input.images)
-    let response: Response
-    try {
-      response = await diagnosticFetch(input.diagnostic, this.fetchImpl, byokEndpoint(this.config.protocol, this.config.baseUrl), {
-        method: "POST",
-        headers: outbound.headers,
-        body: JSON.stringify(outbound.body),
-        signal: input.signal,
-      })
-    } catch (error) {
-      if (input.signal?.aborted || object(error)?.name === "AbortError") throw error
-      throw redactedError(error instanceof Error ? error.message : "", this.config.apiKey, uiText("BYOK 网络请求失败。", "The BYOK network request failed."))
+    const messages = localChatMessages(responseFormatMessages(input.messages, input.responseFormat), input.sources)
+    const modes: ('schema' | 'json' | 'text')[] = !input.responseFormat ? ['text']
+      : this.config.protocol === 'anthropic-messages' ? ['schema'] : ['schema', 'json']
+    if (input.responseFormat?.fallback === 'text') modes.push('text')
+    let response!: Response
+    for (const [index, mode] of modes.entries()) {
+      input.signal?.throwIfAborted()
+      const outbound = request(this.config, messages, input.images, input.responseFormat, mode)
+      try {
+        response = await diagnosticFetch(input.diagnostic, this.fetchImpl, byokEndpoint(this.config.protocol, this.config.baseUrl), {
+          method: 'POST', headers: outbound.headers, body: JSON.stringify(outbound.body), signal: input.signal,
+        })
+      } catch (error) {
+        if (input.signal?.aborted || object(error)?.name === 'AbortError') throw error
+        throw redactedError(error instanceof Error ? error.message : '', this.config.apiKey, uiText('BYOK 网络请求失败。', 'The BYOK network request failed.'))
+      }
+      if (index === modes.length - 1 || !await rejectedResponseFormat(response)) break
+      await response.body?.cancel().catch(() => undefined)
+      input.diagnostic?.event('response_format_compatibility', { source: modes[index + 1] })
     }
     return consumeByokStream(
       response,

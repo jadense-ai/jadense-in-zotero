@@ -141,7 +141,143 @@ textarea {
 }
 
 .jdx-manager-nav-icon {
+  display: block;
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+}
+
+/* 导航 SVG 与攻玉 Webapp 共用 24×24 / 2px currentColor 图形规格。 */
+.jdx-manager-nav-icon [class*="jdx-icon-"] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.jdx-manager-nav-icon .jdx-icon-gear,
+.jdx-manager-nav-icon .jdx-icon-rewind-arc,
+.jdx-manager-nav-icon .jdx-icon-rewind-hand,
+.jdx-manager-nav-icon .jdx-icon-radar-halo,
+.jdx-manager-nav-icon .jdx-icon-radar-sweep {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+.jdx-manager-nav-icon .jdx-icon-lean-book {
+  transform-box: view-box;
+  transform-origin: 20px 20px;
+}
+
+.jdx-manager-theme-icon .jdx-icon-theme-primary {
+  transform-box: view-box;
+  transform-origin: 12px 16.25px;
+}
+
+.jdx-manager-theme-icon .jdx-icon-theme-secondary {
+  transform: scale(0);
+  opacity: 0;
+}
+
+.jdx-manager-theme-icon .jdx-icon-theme-sun-primary,
+.jdx-manager-theme-icon .jdx-icon-theme-moon-primary,
+.jdx-manager-theme-icon .jdx-icon-theme-sun-secondary,
+.jdx-manager-theme-icon .jdx-icon-theme-moon-secondary {
+  display: none;
+}
+
+:root:not([data-theme="dark"]) .jdx-manager-theme-icon .jdx-icon-theme-sun-primary,
+:root:not([data-theme="dark"]) .jdx-manager-theme-icon .jdx-icon-theme-moon-secondary,
+:root[data-theme="dark"] .jdx-manager-theme-icon .jdx-icon-theme-moon-primary,
+:root[data-theme="dark"] .jdx-manager-theme-icon .jdx-icon-theme-sun-secondary {
+  display: block;
+}
+
+.jdx-icon-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.jdx-icon-clip-line-1,
+.jdx-icon-clip-line-2 {
+  transform-origin: 0% 50%;
+}
+
+.jdx-icon-radar-halo { opacity: 0; }
+.jdx-icon-radar-haze { stroke-opacity: 0.22; }
+
+@keyframes jdx-nav-spin { to { transform: rotate(180deg); } }
+@keyframes jdx-nav-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes jdx-nav-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes jdx-nav-grow-x { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes jdx-nav-rewind-arc {
+  0%, 100% { transform: rotate(0deg); }
+  45% { transform: rotate(-16deg); }
+}
+@keyframes jdx-nav-rewind-hand {
+  0%, 100% { transform: rotate(0deg); }
+  45% { transform: rotate(-70deg); }
+}
+@keyframes jdx-nav-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-6deg); }
+  65% { transform: rotate(3.5deg); }
+}
+@keyframes jdx-nav-radar-scan { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes jdx-nav-radar-expand {
+  0% { transform: scale(0.08); opacity: 0; }
+  18% { opacity: 0.45; }
+  75% { opacity: 0.2; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .jdx-manager-theme-icon .jdx-icon-theme-primary {
+    transition: transform 0.6s cubic-bezier(0.34, 0.1, 0.2, 1);
+  }
+  .jdx-manager-theme-icon .jdx-icon-theme-secondary {
+    transition: transform 0.55s cubic-bezier(0.34, 0.1, 0.2, 1) 0.08s, opacity 0.35s ease-out 0.08s;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-gear {
+    animation: jdx-nav-spin 0.7s cubic-bezier(0.34, 0.1, 0.2, 1);
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-draw {
+    animation: jdx-nav-draw 0.7s ease-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-plus-late {
+    animation: jdx-nav-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s backwards;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-rewind-arc {
+    animation: jdx-nav-rewind-arc 0.8s ease-in-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-rewind-hand {
+    animation: jdx-nav-rewind-hand 0.8s ease-in-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-clip-line-1 {
+    animation: jdx-nav-grow-x 0.35s ease-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-clip-line-2 {
+    animation: jdx-nav-grow-x 0.35s ease-out 0.12s backwards;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-lean-book {
+    animation: jdx-nav-tilt 0.7s ease-in-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-radar-sweep {
+    animation: jdx-nav-radar-scan 1.1s linear;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-radar-halo {
+    animation: jdx-nav-radar-expand 1.1s ease-out;
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-theme-primary {
+    transform: rotate(90deg) scale(0.62);
+  }
+  .jdx-manager-sidebar button[data-jdx-animated-nav="true"]:is(:hover, :active, :focus-visible, [data-jdx-icon-press="true"]) .jdx-icon-theme-secondary {
+    transform: scale(0.5);
+    opacity: 1;
+  }
 }
 
 .jdx-manager-nav-label {
@@ -244,18 +380,6 @@ textarea {
 .jdx-manager-icon-button:hover {
   color: var(--jdx-text);
   background: var(--jdx-subtle);
-}
-
-.jdx-manager-theme-toggle .jdx-manager-theme-icon-sun {
-  display: none;
-}
-
-:root[data-theme="dark"] .jdx-manager-theme-toggle .jdx-manager-theme-icon-sun {
-  display: block;
-}
-
-:root[data-theme="dark"] .jdx-manager-theme-toggle .jdx-manager-theme-icon-moon {
-  display: none;
 }
 
 .jdx-manager-section {

@@ -12,7 +12,7 @@ import { element } from './ui/controls'
 import { uiText } from './ui-preferences'
 import { collectSourceForItem } from './research-context'
 import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, featureModelState, readAutoFollowChatModel, saveFeatureModelSelection } from './ai-settings'
-import { buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue } from './ai-model-select'
+import { bindModelSelectToast, buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from './ai-model-select'
 import { readConnection, type ZoteroLike } from './runtime'
 
 /** 每个 Reader 生命周期保留一份会话选择；功能页隐藏不销毁此视图。 */
@@ -37,6 +37,8 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   const sessions = createJdxSelect(selector, { compact: true, portal: true, ariaLabel: uiText('切换对话', 'Switch conversation'), popupWidth: 280 })
   cleanups.push(() => sessions.destroy())
   const models = createJdxSelect(get('model-select'), { compact: true, portal: true, showSelectedIcon: true, popupWidth: 320, ariaLabel: uiText('对话模型', 'Chat model'), searchPlaceholder: uiText('搜索模型', 'Search models') })
+  bindModelSelectToast(models)
+  models.onOpen(() => { void refreshCatalog() })
   cleanups.push(() => models.destroy())
   const drafts = new Map<string, { text: string; image?: ChatUploadInput; scroll: number }>()
   let sessionID = '', image: ChatUploadInput | undefined, creating = false, readingImage = false, newConversationDraft = false
@@ -196,19 +198,22 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     if (related && !newConversationDraft && !sessionID && !input.value) select(related.id)
     update()
   }).catch(error)
-  let catalogController = new AbortController(), catalogIdentity = ''
+  let catalogController = new AbortController(), catalogIdentity = '', catalogUpdatedAt = 0, catalogLoading = false
   cleanups.push(() => catalogController.abort())
   async function refreshCatalog() {
+    let controller: AbortController | undefined
     try {
     const connection = readConnection(host), identity = `${connection.baseUrl}\n${connection.token}`
-    if (identity === catalogIdentity || disposed) return
+    if (disposed || (catalogLoading && identity === catalogIdentity) || (identity === catalogIdentity && !shouldRefreshModelCatalog(catalogUpdatedAt))) return
+    catalogLoading = true
+    if (identity !== catalogIdentity) { catalogReady = false; catalog = { options: [], defaultSelection: null }; catalogUpdatedAt = 0 }
     catalogIdentity = identity; catalogController.abort(); catalogController = new AbortController()
-    const controller = catalogController
-    catalogReady = false; catalog = { options: [], defaultSelection: null }
-    if (!connection.token) return
+    controller = catalogController
+    if (!connection.token) { catalogLoading = false; update(); return }
       const value = await new JadenseApiClient({ ...connection, fetchImpl: win.fetch.bind(win) }).getChatModels(controller.signal)
-      if (!disposed && !controller.signal.aborted) { catalog = value; catalogReady = true; update() }
+      if (!disposed && !controller.signal.aborted) { catalog = value; catalogReady = true; catalogUpdatedAt = Date.now(); update() }
     } catch { /* 目录是可选展示，不阻断已有模型发送。 */ }
+    finally { if (controller === catalogController) catalogLoading = false }
   }
   update()
   void refreshCatalog()
