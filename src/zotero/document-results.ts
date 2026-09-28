@@ -15,6 +15,7 @@ import { copyTextToClipboard } from './connection-display'
 import { navigateDocument, type DocumentHost } from './pdf-document'
 import { actionIcon, element, action, notice } from './ui/controls'
 import { createJdxSelect } from './ui/select'
+import { show, type ToastHandle, type ToastType } from './ui/toast'
 import { uiText } from './ui-preferences'
 import type { ZoteroLike } from './runtime'
 import { translationLanguageDisplayLabel } from '@/chat/translation-languages'
@@ -42,10 +43,10 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   root.classList.add('jdx-document-results'); root.replaceChildren()
   const toolbar = element(doc, 'div', 'jdx-result-tools'), versionHost = element(doc, 'div', 'jdx-result-version'), message = notice(doc)
   const versions = createJdxSelect(versionHost, { compact: true, portal: true, ariaLabel: uiText('成果版本', 'Result version'), popupWidth: 300 })
-  const body = element(doc, 'div', 'jdx-result-content'), status = notice(doc)
+  const body = element(doc, 'div', 'jdx-result-content')
   toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', resultLabels()[mode]); root.dataset.resultMode = mode
   const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true
-  toolbar.append(versionHost); root.append(toolbar, message, issueActions, body, status)
+  toolbar.append(versionHost); root.append(toolbar, message, issueActions, body)
   if (mode === 'source') {
     const tip = notice(doc)
     tip.append(doc.createTextNode(uiText('默认使用文字层提取，也可在右侧选择使用已配置的 OCR。', 'Use the text layer by default, or select configured OCR on the right.')),
@@ -59,15 +60,14 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   let analysisRun: AnalysisRunView | undefined
   let useOCR = false
   const rows = () => jobs.list(mode === 'source' ? 'extraction' : 'translation').filter(task => sameAttachment(task.source, source))
-  let feedbackTimer: ReturnType<typeof setTimeout> | undefined
-  status.classList.add('jdx-result-toast')
+  let feedbackToast: ToastHandle | undefined
   // 普通操作反馈自动消失；风险与进行中提示保留在任务区域。
-  const feedback = (text: string) => {
+  const feedback = (text: string, type: ToastType = 'success') => {
     if (disposed) return
-    clearTimeout(feedbackTimer); status.textContent = text; status.dataset.kind = 'complete'
-    feedbackTimer = setTimeout(() => { status.textContent = '' }, 3500)
+    feedbackToast?.close()
+    feedbackToast = show({ document: doc, themeRoot: root, type, message: text })
   }
-  cleanups.push(() => clearTimeout(feedbackTimer))
+  cleanups.push(() => feedbackToast?.close())
   const report = (error: unknown) => { if (!disposed) { message.textContent = error instanceof Error ? error.message : String(error); message.dataset.kind = 'error' } }
   /** 读取失败局部恢复，不重放提取/翻译；迟到的磁盘读取不再进入渲染分支。 */
   const readResult = async <T,>(pending: Promise<T>): Promise<T> => {
@@ -88,7 +88,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   body.append(emptyResult(doc, uiText('正在读取成果…', 'Loading results…'), ''))
   const startExtraction = async (fresh: boolean) => {
     if (active) return
-    active = new AbortController(); extract.disabled = true; cancel.hidden = false; status.textContent = ''; message.dataset.kind = 'running'
+    active = new AbortController(); extract.disabled = true; cancel.hidden = false; feedbackToast?.close(); message.dataset.kind = 'running'
     try {
       const task = await jobs.start('extraction', source.itemID, fresh, { signal: active.signal, useOCR, onProgress: text => { if (!disposed) message.textContent = text } })
       selected = task.id; signature = ''; await refresh(); if (task.status === 'complete') feedback(uiText('原文提取完成', 'Source extracted'))
@@ -100,7 +100,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   extract.classList.add('jdx-result-extract')
   if (mode === 'source') {
     toolbar.append(cancel, action(doc, uiText('复制 Markdown', 'Copy Markdown'), () => {
-      if (selected) void jobs.store.extraction(selected).then(value => copyTextToClipboard(host, value?.markdown || '')).then(ok => { feedback(ok ? uiText('已复制', 'Copied') : uiText('复制失败', 'Copy failed')) }).catch(report)
+      if (selected) void jobs.store.extraction(selected).then(value => copyTextToClipboard(host, value?.markdown || '')).then(ok => { feedback(ok ? uiText('已复制', 'Copied') : uiText('复制失败', 'Copy failed'), ok ? 'success' : 'error') }).catch(report)
     }))
     extract.classList.add('jdx-button-primary')
     const ocrHost = element(doc, 'div', 'jdx-result-language')

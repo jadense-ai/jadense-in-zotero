@@ -1,0 +1,20 @@
+/* 跨 Manager/XUL/Reader 文档的轻量通知；所有选择器都限于插件生成的节点。 */
+.jdx-toast-stack{position:fixed;z-index:2147483647;display:grid;gap:8px;width:min(360px,calc(100vw - 16px));max-height:calc(100vh - 16px);pointer-events:none;box-sizing:border-box}
+.jdx-toast-stack[data-position^="top"]{top:12px}
+.jdx-toast-stack[data-position^="bottom"]{bottom:12px}
+.jdx-toast-stack[data-position$="left"]{left:12px}
+.jdx-toast-stack[data-position$="right"]{right:12px}
+.jdx-toast-stack[data-position$="center"]{left:50%;transform:translateX(-50%)}
+.jdx-toast-stack[data-position="anchor"]{width:min(280px,calc(100vw - 16px))}
+.jdx-toast{pointer-events:auto;position:relative;box-sizing:border-box;width:100%;padding:11px 38px 11px 13px;border:1px solid var(--jdx-toast-line,rgba(17,21,16,.14));border-radius:8px;background:var(--jdx-toast-surface,Canvas);color:var(--jdx-toast-text,CanvasText);box-shadow:0 6px 22px rgba(0,0,0,.12);font:calc(13px * var(--jdx-toast-font-scale,1))/1.5 system-ui,sans-serif;overflow-wrap:anywhere;animation:jdx-toast-enter .18s ease-out}
+.jdx-toast[data-type="success"]{border-inline-start:3px solid var(--jdx-toast-green,#0f9b6b)}
+.jdx-toast[data-type="warning"]{border-inline-start:3px solid #c37d0d}
+.jdx-toast[data-type="error"]{border-inline-start:3px solid #d45656}
+.jdx-toast-message{white-space:pre-wrap}
+.jdx-toast-close{position:absolute;top:5px;right:6px;width:28px;height:28px;border:0;border-radius:5px;background:transparent;color:var(--jdx-toast-muted,currentColor);font:20px/1 system-ui;cursor:pointer}
+.jdx-toast-close:hover,.jdx-toast-actions button:hover{background:color-mix(in srgb,var(--jdx-toast-text,currentColor) 8%,transparent)}
+.jdx-toast button:focus-visible{outline:2px solid var(--jdx-toast-green,#0f9b6b);outline-offset:1px}
+.jdx-toast-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.jdx-toast-actions button{border:0;border-radius:5px;padding:5px 7px;background:transparent;color:var(--jdx-toast-text,currentColor);font:600 12px/1.4 system-ui;cursor:pointer;text-align:start}
+@keyframes jdx-toast-enter{from{transform:translateY(5px)}to{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.jdx-toast{animation:none}}

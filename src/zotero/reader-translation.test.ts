@@ -146,6 +146,17 @@ describe("reader translation runtime", () => {
     expect(values.has("extensions.jadenseInZotero.localChatState")).toBe(false)
   })
 
+  it("drops a redundant AI translation label from streamed text and saved history", async () => {
+    const zotero = zoteroWithPreferences(new Map([["extensions.jadenseInZotero.token", "test-token"]]), readerSourceItems())
+    const fetchImpl = vi.fn(async () => new Response(
+      'data: {"type":"text-delta","delta":"译文：\\n图 8 展示结果。"}\n\ndata: {"type":"finish"}\n\n', { status: 200 }))
+    const onTextDelta = vi.fn()
+    const record = await translateReaderSelection({ zotero, fetchImpl, onTextDelta, action: { kind: "translate", itemID: 17, text: "Figure 8 shows the result." } })
+    expect(onTextDelta).toHaveBeenLastCalledWith("图 8 展示结果。")
+    expect(record.result.text).toBe("图 8 展示结果。")
+    expect(readTranslationHistory(zotero.Prefs!).records[0].result.text).toBe("图 8 展示结果。")
+  })
+
   it.each(["jadense", "byok"] as const)("applies article defaults and sentence overrides to %s without changing article preferences", async (route) => {
     const values = new Map<string, unknown>([["extensions.jadenseInZotero.token", "test-token"]])
     const zotero = zoteroWithPreferences(values, readerSourceItems())

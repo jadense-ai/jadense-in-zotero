@@ -49,7 +49,9 @@ export async function verifyClassification({ Zotero, manager, assert, waitFor, s
     const dialog = await waitFor(() => doc.querySelector('#jadense-classification-dialog'), 'classification window')
     assert(doc.title === '文献分类' && !doc.querySelector('#jadense-manager-shell'), 'Classification is not independent or incorrectly named')
     await waitFor(() => [...dialog.querySelectorAll('.jdx-classification-folders label')].some(label => label.textContent.includes('AERONET')), 'nested collections')
-    assert(dialog.textContent.includes('Aerosol') && dialog.textContent.includes('›'), 'Missing folder breadcrumb')
+    const separators = [...dialog.querySelectorAll('.jdx-classification-separator')]
+    assert(dialog.textContent.includes('Aerosol') && separators.length > 0 && separators.every(icon => icon.namespaceURI === 'http://www.w3.org/2000/svg' && icon.querySelector('path') && icon.getAttribute('aria-hidden') === 'true'), 'Missing SVG folder breadcrumb')
+    assert(separators.every(icon => !icon.textContent.trim()), 'Folder breadcrumb must not use character chevrons')
     const assertFooter = () => {
       const footer = dialog.querySelector('.jdx-classification-footer').getBoundingClientRect()
       const padding = parseFloat(manager.getComputedStyle(dialog).paddingBottom)

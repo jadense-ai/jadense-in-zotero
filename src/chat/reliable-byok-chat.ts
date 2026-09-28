@@ -13,7 +13,7 @@ export class ReliableByokChatClient extends ByokChatClient {
     if (input.acceptTruncated) return super.send(input)
     // BYOK 的本地执行身份不随密钥轮换失效；配置属于冻结指纹，不能借换 Key 重发旧执行。
     const account = await requestHash('jadense-profile-byok-executions')
-    const fingerprint = await requestHash(JSON.stringify({ config: this.options.config, conversation: input.conversationId, messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images }))
+    const fingerprint = await requestHash(JSON.stringify({ config: this.options.config, conversation: input.conversationId, messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images, ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}) }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
     const completed = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'completed' && row.fingerprint === fingerprint) : undefined
     if (completed) return completed.text ?? ''

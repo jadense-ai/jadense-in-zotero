@@ -2,6 +2,7 @@
 export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, screenshot, report, config, findManager }) {
   const main = Zotero.getMainWindow(), previous = main.fetch
   const doc = reader._iframeWindow.document, nativeWindow = reader._internalReader._primaryView._iframeWindow
+  const control = (root, id) => root.querySelector(`[data-pdf-control="${id}"]`)
   const native = nativeWindow.PDFViewerApplication.pdfViewer
   const original = nativeWindow.frameElement, oldWidth = original.style.width, oldVisibility = original.style.visibility
   if (config.pdfEngineArchive || config.pdfEngineSettingsCheck) {
@@ -101,6 +102,12 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     compare.click()
     let panel = await waitFor(() => doc.querySelector('.jdx-pdf-translation'), 'PDF translation panel')
     const homePanel = panel
+    const toolbar = panel.querySelector('.jdx-pdf-translation-toolbar')
+    assert(toolbar && toolbar.getBoundingClientRect().height <= 52, 'PDF primary toolbar must fit on one row')
+    control(panel, 'more-toggle').click()
+    assert(!panel.querySelector('.jdx-pdf-translation-popover').hidden && control(panel, 'scope')?.querySelector('.jdx-select-trigger'), 'Grouped actions or shared translation selector missing')
+    panel.querySelector('.jdx-pdf-translation-popover').dispatchEvent(new panel.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    assert(panel.querySelector('.jdx-pdf-translation-popover').hidden, 'PDF overflow panel failed to close')
     const label = () => panel.querySelector('.jdx-pdf-translation-status').textContent
     const deadline = Date.now() + 12 * 60_000
     let pdf, previousStatus = ''
@@ -112,7 +119,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       const frameWindow = panel.querySelector('iframe')?.contentWindow
       pdf = (frameWindow?.wrappedJSObject ?? frameWindow)?.JadensePDFView
       if (pdf && !panel.querySelector('iframe').hidden) break
-      const retry = [...panel.querySelectorAll('button')].find(button => /^(重试|Retry)$/u.test(button.textContent))
+      const retry = control(panel, 'retry')
       if (retry && !retry.hidden && /失败|failed|Error|Cannot|unavailable|未完成|Permission denied|dead object/u.test(label())) {
         const errors = globalThis.Services.console.getMessageArray().map(row => row.message).filter(message => /pdf|viewer|SecurityError|SyntaxError|TypeError/iu.test(message)).slice(-15)
         throw new Error('PDF translation failed: ' + label() + '\n' + errors.join('\n'))
@@ -121,6 +128,22 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     }
     assert(pdf && !panel.querySelector('iframe').hidden, 'PDF viewer did not load: ' + label())
     await waitFor(() => panel.querySelector('iframe')?.contentDocument?.querySelector('.textLayer span'), 'translated PDF text layer')
+    if (config.pdfViewerFixture) {
+      control(panel, 'more-toggle').click()
+      const scope = control(panel, 'scope'), trigger = scope.querySelector('.jdx-select-trigger')
+      trigger.click()
+      const other = scope.querySelector('.jdx-select-option[aria-selected="false"]')
+      assert(other && scope.dataset.open === 'true', 'Translation scope options did not open')
+      const selected = other.textContent.trim(); other.click()
+      assert(trigger.textContent.includes(selected) && fixtureStarts === 1, 'Changing translation scope restarted the fixture task')
+      await screenshot('pdf-translation-actions', reader._iframeWindow)
+      control(panel, 'more-toggle').click()
+      control(panel, 'search-toggle').click()
+      assert(!panel.querySelector('.jdx-pdf-translation-search').hidden, 'Search popover did not open')
+      panel.querySelector('.jdx-pdf-translation-search').dispatchEvent(new panel.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      assert(panel.querySelector('.jdx-pdf-translation-search').hidden, 'Search popover did not close with Escape')
+      report.checks.push('pdf-scope-select-no-implicit-start-and-popover-keyboard')
+    }
     if (fixtureTask && config.pdfStatusOnly) {
       const status = panel.querySelector('.jdx-pdf-translation-status')
       Object.assign(fixtureTask, { status: 'running', stage: 'translation', completed: 86, total: 120, error: 'Synthetic temporary warning', retrying: { batch: { attempt: 1, until: Date.now() + 20000 } } })
@@ -140,7 +163,19 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
       await new Promise(resolve => main.setTimeout(resolve, 500))
       assert(status.scrollWidth <= status.clientWidth + 1, 'Status overflows the narrow reader')
+      assert(toolbar.getBoundingClientRect().height <= 52, '640px PDF toolbar wrapped')
       await screenshot('pdf-translation-auto-retry-narrow-light', reader._iframeWindow)
+      panel.style.width = '320px'
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 150, true)
+      await new Promise(resolve => main.setTimeout(resolve, 300))
+      assert(toolbar.getBoundingClientRect().height <= 52 && toolbar.scrollWidth <= toolbar.clientWidth + 1, '320px / 150% PDF toolbar overflows')
+      await screenshot('pdf-translation-auto-retry-320-light', reader._iframeWindow)
+      control(panel, 'more-toggle').click()
+      assert(control(panel, 'page').closest('[data-pdf-section="reading"]') && control(panel, 'page').getBoundingClientRect().width > 0, 'Compact page control missing from reading actions')
+      await screenshot('pdf-translation-actions-320-light', reader._iframeWindow)
+      control(panel, 'more-toggle').click()
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
+      panel.style.width = '640px'
       Object.assign(fixtureTask, { stage: 'parse', total: undefined, retrying: {} }); notifyFixture()
       assert(!status.querySelector('progress').hasAttribute('value'), 'Unknown progress must be indeterminate')
       Object.assign(fixtureTask, { status: 'partial', error: undefined, diagnosticId: 'synthetic-diagnostic-123', failureCounts: { OUTPUT_FAILED: 34, PLACEHOLDER_MISMATCH: 6 } }); notifyFixture()
@@ -148,6 +183,12 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       assert(status.textContent.includes('synthetic-diagnostic-123') && status.textContent.includes('OUTPUT_FAILED') && status.textContent.includes('PLACEHOLDER_MISMATCH'), 'Failure details lack identity or recovery categories')
       status.querySelector('details').open = true
       await screenshot('pdf-translation-failure-details', reader._iframeWindow)
+      panel.style.width = '320px'
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 150, true)
+      await new Promise(resolve => main.setTimeout(resolve, 200))
+      assert(toolbar.scrollWidth <= toolbar.clientWidth + 1 && toolbar.getBoundingClientRect().height <= 52, 'Partial retry overflows compact PDF toolbar')
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
+      panel.style.width = '640px'
       Object.assign(fixtureTask, { status: 'complete' }); notifyFixture()
       report.checks.push('pdf-working-animation-countdown-progress-details-partial-state')
       return
@@ -181,12 +222,12 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     const details = panel.querySelector('.jdx-pdf-translation-status'), oldDetails = details.textContent, oldHidden = details.hidden
     const longError = 'Synthetic PDF error\n' + 'C:/synthetic/long-path/'.repeat(50) + '\nPermission denied (synthetic end)'
     details.textContent = longError; details.hidden = false
-    const expandDetails = await waitFor(() => [...panel.querySelectorAll('button')].find(button => /^(展开提示|Expand details)$/u.test(button.textContent) && !button.hidden), 'expand PDF error')
+    const expandDetails = await waitFor(() => control(panel, 'expand-status'), 'expand PDF error')
     expandDetails.click()
     await waitFor(() => details.classList.contains('jdx-pdf-status-expanded'), 'expanded PDF error')
     details.scrollTop = details.scrollHeight
     assert(details.textContent.endsWith('Permission denied (synthetic end)') && details.clientHeight > 0 && details.scrollWidth <= details.clientWidth + 1, 'PDF error tail lost or horizontally clipped')
-    assert([...panel.querySelectorAll('button')].some(button => /^(复制提示|Copy details)$/u.test(button.textContent) && !button.hidden), 'PDF error copy action missing')
+    assert(control(panel, 'copy-status'), 'PDF error copy action missing')
     await screenshot('pdf-translation-expanded-error', reader._iframeWindow)
     expandDetails.click(); details.textContent = oldDetails; details.hidden = oldHidden
     await waitFor(() => Math.abs(original.getBoundingClientRect().top - panel.querySelector('iframe').getBoundingClientRect().top) < 2, 'PDF view alignment after collapsing details')
@@ -202,11 +243,11 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     if (config?.pdfPartial) {
       const jobs = Zotero.__jadensePDFTranslationJobs, task = jobs.get(panel.dataset.pdfTaskId)
       assert(task.status === 'partial' && task.coverage.failed === 1 && task.coverage.translated > 0, 'Partial task did not retain successful translations')
-      assert([...panel.querySelectorAll('button')].filter(button => /保存|Save/u.test(button.textContent)).every(button => !button.disabled), 'Partial exports disabled')
+      assert(!control(panel, 'save-pdf').disabled && !control(panel, 'save-bilingual').disabled, 'Partial exports disabled')
       // 值拷贝到测试 compartment；旧 iframe 销毁后不能再读取其对象。
       const revision = task.artifact.revision, position = JSON.parse(pdf.stateJSON()), beforeRepair = requests
       injectFailure = false
-      const repair = [...panel.querySelectorAll('button')].find(button => /补译未完成部分|Translate remaining passages/u.test(button.textContent))
+      const repair = control(panel, 'retry')
       assert(repair && !repair.disabled, 'Missing partial retry action'); repair.click()
       assert(jobs.hasOutput(task), 'Retry hid the existing artifact')
       await waitFor(() => task.status === 'complete' && panel.dataset.pdfArtifactRevision === task.artifact.revision && task.artifact.revision !== revision, 'repaired PDF revision', 600000)
@@ -227,10 +268,10 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     const scale = native.currentScale * 1.1
     native.currentScale = scale
     await waitFor(() => Math.abs(pdf.state().scale - scale) < .002, 'native-to-translation zoom sync')
-    const plus = [...panel.querySelectorAll('button')].find(button => button.textContent === '+')
+    const plus = control(panel, 'zoom-in')
     plus.click()
     await waitFor(() => native.currentScale > scale && Math.abs(pdf.state().scale - native.currentScale) < .002, 'shared zoom control')
-    const rotate = [...panel.querySelectorAll('button')].find(button => /^(旋转|Rotate)$/u.test(button.textContent))
+    const rotate = control(panel, 'rotate')
     rotate.click()
     await waitFor(() => native.pagesRotation === 90 && pdf.state().rotation === 90, 'shared rotation control')
     // 实际滚动译文窗口，验证反向页面同步，不调用被设计为静默的 set 接口。
@@ -243,7 +284,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     rotate.click(); rotate.click(); rotate.click()
     await waitFor(() => native.pagesRotation === 0 && pdf.state().rotation === 0, 'reset rotation')
     report.checks.push('pdf-bidirectional-page-zoom-rotation-sync')
-    const sync = [...panel.querySelectorAll('button')].find(button => /^(同步滚动|Sync scroll)$/u.test(button.textContent))
+    const sync = control(panel, 'sync')
     assert(sync?.getAttribute('aria-pressed') === 'true', 'Linked scrolling control missing')
     const settle = () => new Promise(resolve => main.setTimeout(resolve, 250))
     const scroll = async (window, container, top) => {
@@ -276,10 +317,10 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     picker.init(main, 'PDF export regression', picker.modeSave)
     picker.defaultExtension = 'pdf'; picker.appendFilter('PDF', '*.pdf')
     report.checks.push('pdf-native-filepicker-init')
-    const inplace = [...panel.querySelectorAll('button')].find(button => /^(仅显示译文|Translation only)$/u.test(button.textContent))
+    const inplace = control(panel, 'mode')
     assert(inplace, 'Translation-only control missing'); inplace.click()
     await waitFor(() => original.style.visibility === 'hidden', 'in-place translated PDF')
-    const toggle = [...panel.querySelectorAll('button')].find(button => /查看原文|Show original/u.test(button.textContent))
+    const toggle = control(panel, 'original')
     assert(toggle, 'Original toggle missing')
     for (const fraction of [.2, .3, .4]) {
       const translatedPage = panel.querySelector('iframe').contentDocument.querySelector('.page')
@@ -301,7 +342,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     report.checks.push('pdf-inplace-repeated-toggle-preserves-page-and-fraction')
     inplace.click()
     assert(original.style.width === '50%' && original.style.visibility === oldVisibility, 'Translation-only toggle did not restore comparison')
-    const multiScreen = [...panel.querySelectorAll('button')].find(button => /^(多屏模式|Multi-screen)$/u.test(button.textContent))
+    const multiScreen = control(panel, 'multi-screen')
     assert(multiScreen, 'Multi-screen control missing')
     const windowStatus = new doc.defaultView.MutationObserver(() => {
       const message = homePanel.querySelector('.jdx-pdf-translation-status').textContent
@@ -323,6 +364,18 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     })
     const detachedWindow = [...globalThis.Services.wm.getEnumerator(null)].find(window => window.document.getElementById('translation-host')?.contentDocument === panel.ownerDocument)
     assert(detachedWindow, 'Detached native window missing')
+    assert(control(panel, 'mode').hidden && control(panel, 'multi-screen').getBoundingClientRect().width > 0, 'Detached return action missing')
+    if (config.pdfViewerFixture) {
+      control(panel, 'more-toggle').click()
+      const detachedScope = control(panel, 'scope'), detachedTrigger = detachedScope.querySelector('.jdx-select-trigger')
+      detachedTrigger.click()
+      const other = detachedScope.querySelector('.jdx-select-option[aria-selected="false"]')
+      assert(other && detachedScope.dataset.open === 'true', 'Detached scope selector did not open')
+      const selected = other.textContent.trim(); other.click()
+      assert(control(homePanel, 'scope').querySelector('.jdx-select-trigger').textContent.includes(selected) && fixtureStarts === 1, 'Detached scope did not synchronize without starting a task')
+      await screenshot('pdf-translation-multiscreen-actions', panel.ownerDocument.defaultView)
+      control(panel, 'more-toggle').click()
+    }
     assert(!panel.ownerDocument.nodePrincipal.isSystemPrincipal && !panel.querySelector('iframe').contentDocument.nodePrincipal.isSystemPrincipal, 'Detached PDF must remain unprivileged')
     assert(original.style.width === oldWidth && original.style.visibility === oldVisibility, 'Multi-screen mode did not restore full-width original')
     pdf = (panel.querySelector('iframe').contentWindow.wrappedJSObject ?? panel.querySelector('iframe').contentWindow).JadensePDFView
@@ -333,7 +386,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     detachedFrame.dispatchEvent(new detachedFrame.Event('wheel'))
     panel.querySelector('iframe').contentDocument.getElementById('viewerContainer').scrollTop = 300
     await waitFor(() => native.container.scrollTop > 200, 'detached translation-to-original sync')
-    const detachedSync = [...panel.querySelectorAll('button')].find(button => /^(同步滚动|Sync scroll)$/u.test(button.textContent))
+    const detachedSync = control(panel, 'sync')
     detachedSync.click()
     await waitFor(() => detachedSync.getAttribute('aria-pressed') === 'false', 'detached sync control state')
     const detachedNativeTop = native.container.scrollTop
@@ -341,9 +394,9 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     assert(native.container.scrollTop === detachedNativeTop, 'Detached unlinked scroll moved original')
     detachedSync.click()
     const detachedScale = pdf.state().scale
-    ;[...panel.querySelectorAll('button')].find(button => button.textContent === '+').click()
+    control(panel, 'zoom-in').click()
     await waitFor(() => pdf.state().scale > detachedScale, 'detached zoom control')
-    const detachedSearch = panel.querySelector('input[type="search"]')
+    const detachedSearch = control(panel, 'find')
     detachedSearch.value = config.pdfViewerFixture ? 'method' : '科学'; detachedSearch.dispatchEvent(new panel.ownerDocument.defaultView.Event('input'))
     await waitFor(() => panel.querySelector('iframe').contentDocument.querySelector('.textLayer .highlight'), 'detached search control')
     detachedWindow.resizeTo(680, 600)
@@ -351,7 +404,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     detachedWindow.document.getElementById('translation-host').style.maxWidth = '640px'
     await waitFor(() => panel.getBoundingClientRect().width <= 640, 'detached 640px content viewport')
     const detachedBounds = panel.getBoundingClientRect()
-    assert([...panel.querySelectorAll('button')].filter(button => !button.hidden).every(button => { const rect = button.getBoundingClientRect(); return rect.left >= detachedBounds.left - 1 && rect.right <= detachedBounds.right + 1 }), 'Detached narrow controls overflow')
+    assert([...panel.querySelector('.jdx-pdf-translation-toolbar').querySelectorAll('button')].filter(button => !button.hidden).every(button => { const rect = button.getBoundingClientRect(); return rect.left >= detachedBounds.left - 1 && rect.right <= detachedBounds.right + 1 }), 'Detached narrow controls overflow')
     await screenshot('pdf-translation-multiscreen', panel.ownerDocument.defaultView)
     const detachedState = JSON.parse(JSON.stringify(pdf.state()))
     detachedWindow.close()
@@ -362,23 +415,23 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     assert(pdf.state().page === detachedState.page && Math.abs(pdf.state().fraction - detachedState.fraction) < .05, 'Detached close lost reading position')
     multiScreen.click()
     await waitFor(detachedPanelReady, 'reopen detached translated PDF')
-    const returnButton = [...panel.querySelectorAll('button')].find(button => /^(返回对照阅读|Return to comparison)$/u.test(button.textContent))
+    const returnButton = control(panel, 'multi-screen')
     assert(returnButton, 'Return control missing'); returnButton.click(); panel = homePanel
     await waitFor(() => panel.ownerDocument === doc && panel.querySelector('iframe')?.contentDocument?.querySelector('.textLayer span'), 'return-to-comparison button')
     assert(requests === translatedRequests, 'Multi-screen transitions dispatched translation again')
     if (config?.pdfViewerFixture) assert(fixtureStarts === 1, 'Reading mode changes restarted the translation task')
     report.checks.push('pdf-multiscreen-sync-position-narrow-close-return-no-extra-requests')
     windowStatus.disconnect()
-    const save = [...panel.querySelectorAll('button')].filter(button => /保存|Save/u.test(button.textContent))
+    const save = [control(panel, 'save-pdf'), control(panel, 'save-bilingual')]
     assert(save.length === 2 && save.every(button => !button.disabled), 'PDF export controls unavailable')
-    const close = [...panel.querySelectorAll('button')].find(button => /^(关闭|Close)$/u.test(button.textContent)); close.click()
+    const close = control(panel, 'close-main'); close.click()
     assert(original.style.width === oldWidth && original.style.visibility === oldVisibility && !doc.querySelector('.jdx-pdf-translation'), 'Closing did not restore native PDF')
     compare.click()
     await waitFor(() => doc.querySelector('.jdx-pdf-translation iframe')?.contentDocument?.querySelector('.textLayer span'), 'reopen cached PDF')
     assert(requests === translatedRequests, 'Reopening did not reuse PDF result')
     report.checks.push(config?.pdfViewerFixture ? 'pdf-export-controls-close-restore-and-fixture-reopen' : 'pdf-export-controls-close-restore-and-cache')
     const cachedPanel = doc.querySelector('.jdx-pdf-translation')
-    const search = cachedPanel.querySelector('input[type="search"]')
+    const search = control(cachedPanel, 'find')
     search.value = config.pdfViewerFixture ? 'method' : '科学'; search.dispatchEvent(new reader._iframeWindow.Event('input', { bubbles: true }))
     await waitFor(() => cachedPanel.querySelector('iframe').contentDocument.querySelector('.textLayer .highlight'), 'PDF translated text search')
     Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'dark', true)
@@ -400,9 +453,9 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     separatePanel.style.maxWidth = '640px'
     await waitFor(() => separatePanel.getBoundingClientRect().width <= 640, 'independent constrained controls')
     const bounds = separatePanel.getBoundingClientRect()
-    assert([...separatePanel.querySelectorAll('button')].filter(button => !button.hidden).every(button => { const rect = button.getBoundingClientRect(); return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 }), 'Narrow PDF controls overflow')
+    assert([...separatePanel.querySelector('.jdx-pdf-translation-toolbar').querySelectorAll('button')].filter(button => !button.hidden).every(button => { const rect = button.getBoundingClientRect(); return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 }), 'Narrow PDF controls overflow')
     await screenshot('pdf-translation-independent-narrow', separate._iframeWindow)
-    const separateMultiScreen = [...separatePanel.querySelectorAll('button')].find(button => /^(多屏模式|Multi-screen)$/u.test(button.textContent))
+    const separateMultiScreen = control(separatePanel, 'multi-screen')
     separateMultiScreen.click()
     const companion = await waitFor(() => [...globalThis.Services.wm.getEnumerator(null)].find(window => window.document.getElementById('translation-host')?.contentDocument?.querySelector('.jdx-pdf-translation iframe')?.contentDocument?.querySelector('.textLayer span')), 'independent source multi-screen window')
     separate._window.close()

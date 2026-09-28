@@ -92,3 +92,36 @@ export function bindReaderActionMenu(group: HTMLElement, actions: HTMLElement, t
     },
   }
 }
+
+/** 带输入控件的 Reader 弹层沿用工具条菜单的视口定位和关闭规则，不赋予输入项 menuitem 语义。 */
+export function bindReaderControlPopover(toggle: HTMLButtonElement, popup: HTMLElement, container: HTMLElement, onClose?: () => void) {
+  const doc = toggle.ownerDocument, win = doc.defaultView
+  const position = () => {
+    const anchor = toggle.getBoundingClientRect(), bounds = container.getBoundingClientRect()
+    const width = popup.getBoundingClientRect().width
+    popup.style.left = `${Math.max(8, Math.min(anchor.right - bounds.left - width, bounds.width - width - 8))}px`
+    popup.style.top = `${Math.max(8, anchor.bottom - bounds.top + 4)}px`
+  }
+  const close = (restore = false) => {
+    if (popup.hidden) return
+    popup.hidden = true; toggle.setAttribute('aria-expanded', 'false'); onClose?.()
+    if (restore) toggle.focus()
+  }
+  const open = (focus = true) => {
+    popup.hidden = false; toggle.setAttribute('aria-expanded', 'true'); position()
+    if (focus) popup.querySelector<HTMLElement>('input:not(:disabled),button:not(:disabled),[tabindex="0"]')?.focus()
+  }
+  const click = (event: MouseEvent) => { if (popup.hidden) open(!event.detail); else close() }
+  const keydown = (event: KeyboardEvent) => {
+    if (popup.hidden) return
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true) }
+    else if (event.key === 'Tab') close()
+  }
+  const outside = (event: Event) => { if (!popup.hidden && !popup.contains(event.target as Node) && !toggle.contains(event.target as Node)) close() }
+  const resize = () => { if (!popup.hidden) position() }
+  const preserveSelection = (event: MouseEvent) => event.preventDefault()
+  toggle.setAttribute('aria-haspopup', 'dialog'); toggle.setAttribute('aria-expanded', 'false')
+  toggle.addEventListener('mousedown', preserveSelection); toggle.addEventListener('click', click); popup.addEventListener('keydown', keydown)
+  doc.addEventListener('pointerdown', outside, true); win?.addEventListener('resize', resize)
+  return { close, remove() { close(); toggle.removeEventListener('mousedown', preserveSelection); toggle.removeEventListener('click', click); popup.removeEventListener('keydown', keydown); doc.removeEventListener('pointerdown', outside, true); win?.removeEventListener('resize', resize) } }
+}

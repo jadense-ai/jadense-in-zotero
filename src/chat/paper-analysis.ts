@@ -109,7 +109,8 @@ export function buildTranslationPrompt(input: {
     "selectedText 中已有的 Unicode 上下标（如 S₁、x²）是原文格式证据，不得扁平化为 S1、x2；在译文公式中保留其语义，并优先规范为 `$S_1$`、`$x^2$`。",
     "公式保持原有 LaTeX 语义，不翻译命令、变量、上下标或运算符：行内公式统一写成 `$...$`，分隔符内侧不要加空格；独立公式统一写成 `$$`、公式内容、`$$` 三行。",
     "不要把公式放进反引号或 ``` 代码围栏，不要省略公式分隔符；公式外的说明正常翻译，非公式的美元符号写成 `\\$`。",
-    "先给出完整译文；确有帮助时追加不超过 5 条术语对照与简短歧义说明，说明不确定之处，不编造术语定义。",
+    "输出从译文正文的第一个字直接开始，不写“译文：”“翻译结果：”或 Translation: 等标题、前言、分隔线，也不要重复原文。译文区由客户端标注。",
+    "先给出完整译文；确有帮助时在译文后另起“术语说明”小节，追加不超过 5 条术语对照与简短歧义说明，说明不确定之处，不编造术语定义；没有必要时省略整个小节。",
     "若选文为空，说明未收到选文。若无法一次翻译完毕，明确已翻译范围和未完成部分，不要冒充完整译文。",
     "不输出 HTML、脚本或 JSON。",
     "",
@@ -121,6 +122,11 @@ export function buildTranslationPrompt(input: {
       selectedText: input.text,
     }),
   ].join("\n")
+}
+
+/** 只移除模型在译文开头重复生成的展示标签，保留正文 Markdown 与后续术语说明。 */
+export function normalizeSelectionTranslation(text: string): string {
+  return text.replace(/^\s*(?:#{1,6}\s*)?(?:\*\*|__)?(?:译文|翻译结果|Translation)\s*[：:](?:\*\*|__)?\s*/iu, "")
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {

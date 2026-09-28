@@ -1,4 +1,5 @@
 /** 独立文献分类界面与工作台密钥配置：密钥配置、目录选择和可核对预览；只用本地 DOM，不解析模型 HTML。 */
+import { createChevron } from './ui/chevron'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { modeEnabled, observeJadenseMode } from './jadense-mode-state'
@@ -24,7 +25,7 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
       line.setAttribute('aria-label', parts.join(uiText('，子文件夹：', ', subfolder: ')))
       const icon = make('span', '📁'); icon.setAttribute('aria-hidden', 'true'); line.append(icon)
       parts.forEach((part, index) => {
-        if (index) { const separator = make('span', '›', 'jdx-classification-separator'); separator.setAttribute('aria-hidden', 'true'); line.append(separator) }
+        if (index) line.append(createChevron(doc, 'jdx-classification-separator', 'right'))
         line.append(make('span', part, index === parts.length - 1 ? 'jdx-classification-leaf' : ''))
       })
       list.append(line)
@@ -42,7 +43,7 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
   const replaceLabel = make('label', '', 'jdx-classification-replace'); replaceLabel.append(replace, doc.createTextNode(replace.getAttribute('aria-label')!))
   const collectionActions = make('div', '', 'jdx-classification-actions')
   collectionActions.append(search, button(uiText('全选', 'Select all'), () => { folders.forEach(folder => candidateIDs.add(folder.id)); renderFolders() }), button(uiText('清空选择', 'Clear selection'), () => { candidateIDs.clear(); renderFolders() }))
-  choose.append(make('h3', uiText('选择候选收藏夹', 'Choose candidate collections')), make('p', uiText('分类即 Zotero 收藏夹。📁 父文件夹 › 子文件夹；可只选部分目录，模型不会创建新目录。', 'Categories are Zotero collections. 📁 Parent › Child. Choose any folders; the model will not create new ones.')), collectionActions, collectionList, replaceLabel)
+  choose.append(make('h3', uiText('选择候选收藏夹', 'Choose candidate collections')), make('p', uiText('分类即 Zotero 收藏夹。父文件夹中的子文件夹；可只选部分目录，模型不会创建新目录。', 'Categories are Zotero collections. Child folders within their parent. Choose any folders; the model will not create new ones.')), collectionActions, collectionList, replaceLabel)
   const preview = make('div', '', 'jdx-classification-preview'); preview.hidden = true
   const tableScroll = make('div', '', 'jdx-classification-table-scroll'), table = make('table'), thead = make('thead'), tbody = make('tbody'), header = make('tr')
   for (const label of [uiText('应用', 'Apply'), uiText('文献', 'Paper'), uiText('原分类', 'Current'), uiText('推荐分类', 'Recommended'), uiText('将移除的分类', 'To remove'), uiText('置信度', 'Confidence')]) { const cell = make('th', label); cell.scope = 'col'; header.append(cell) }
@@ -67,7 +68,7 @@ export function mountClassification(doc: Document, host: ZoteroLike, openSetting
     collectionList.replaceChildren()
     const term = search.value.toLocaleLowerCase()
     for (const folder of folders.filter(folder => folder.path.join(' ').toLocaleLowerCase().includes(term))) {
-      const label = make('label'), input = checkbox(folder.path.join(' › '), candidateIDs.has(folder.id))
+      const label = make('label'), input = checkbox(folder.path.join(uiText('，子文件夹：', ', subfolder: ')), candidateIDs.has(folder.id))
       input.addEventListener('change', () => { if (input.checked) candidateIDs.add(folder.id); else candidateIDs.delete(folder.id); updateActions() })
       label.append(input, paths([folder.path])); collectionList.append(label)
     }

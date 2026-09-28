@@ -6,6 +6,7 @@ import type { FigureInterpretationAction } from "./reader-tools"
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
 import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
 import { READER_UI_THEME_CSS } from "./reader-ui-theme"
+import { show as showToast, type ToastHandle } from "./ui/toast"
 
 export type { ChatImageInput } from "@/chat/image-input"
 export type { FigureInterpretationAction } from "./reader-tools"
@@ -141,13 +142,6 @@ const FIGURE_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-figure-actions] > button:hover:not(:disabled) {filter:brightness(.96);}
 [data-jadense-figure-actions] > button:focus-visible {outline:2px solid var(--jdx-reader-text,CanvasText);outline-offset:2px;}
 [data-jadense-figure-actions] > button:disabled {cursor:default;opacity:.7;}
-[data-jadense-figure-notice] {
-  position:fixed;z-index:9999;top:12px;right:12px;box-sizing:border-box;width:280px;max-width:calc(100vw - 24px);
-  padding:9px 11px;border:1px solid var(--jdx-reader-border,rgba(17,21,16,.16));border-radius:6px;
-  color:var(--jdx-reader-text,CanvasText);background:var(--jdx-reader-background,Canvas);
-  box-shadow:0 2px 8px rgba(0,0,0,.12);font:calc(12px * var(--jdx-font-scale,1))/1.6 system-ui,sans-serif;
-}
-[data-jadense-figure-notice][hidden] {display:none;}
 `
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -462,7 +456,7 @@ class FigureViewController {
   private readonly actionBar: HTMLElement
   private readonly buttons: HTMLButtonElement[]
   private readonly exitButton: HTMLButtonElement
-  private readonly notice: HTMLElement
+  private noticeHandle?: ToastHandle
   private readonly style: HTMLStyleElement
   private readonly themeCleanups: Array<() => void> = []
   private readonly byPage = new Map<number, SDTFigure[]>()
@@ -475,7 +469,6 @@ class FigureViewController {
   private dragged = false
   private busy = false
   private disposed = false
-  private noticeTimer?: ReturnType<typeof setTimeout>
   private animationFrame?: number
   private toolObserver?: MutationObserver
 
@@ -530,16 +523,9 @@ class FigureViewController {
     this.exitButton.textContent = uiText("退出", "Exit")
     this.actionBar.append(this.exitButton)
     this.overlay.append(this.actionBar)
-    this.notice = this.doc.createElement("div")
-    this.notice.setAttribute("data-jadense-figure-notice", "")
-    this.notice.setAttribute("role", "status")
-    this.notice.setAttribute("aria-live", "polite")
-    this.notice.hidden = true
-    this.doc.body.append(this.captureSurface, this.overlay, this.notice)
-    for (const root of [this.overlay, this.notice]) {
-      root.setAttribute("data-jadense-reader-theme", "")
-      this.themeCleanups.push(observeTheme(zotero, root))
-    }
+    this.doc.body.append(this.captureSurface, this.overlay)
+    this.overlay.setAttribute("data-jadense-reader-theme", "")
+    this.themeCleanups.push(observeTheme(zotero, this.overlay))
 
     this.container.addEventListener("pointerdown", this.handlePointerDown, true)
     this.container.addEventListener("pointermove", this.handlePointerMove, true)
@@ -739,7 +725,7 @@ class FigureViewController {
     this.captureStart = { pageIndex, x: event.clientX, y: event.clientY }
     this.locked = undefined
     this.overlay.hidden = true
-    this.notice.hidden = true
+    this.noticeHandle?.close()
   }
 
   private handleCaptureMove = (event: PointerEvent) => {
@@ -841,7 +827,7 @@ class FigureViewController {
     event.stopPropagation()
     // Gecko 事件 currentTarget 可与创建节点的 wrapper 不同；与解读按钮一致按动作属性识别。
     const button = event.currentTarget as HTMLButtonElement | null
-    if (button?.getAttribute("data-jadense-action") === "exitFigure") { this.notice.hidden = true; this.clearSelection(); return }
+    if (button?.getAttribute("data-jadense-action") === "exitFigure") { this.noticeHandle?.close(); this.clearSelection(); return }
     const conversationTarget = button?.getAttribute("data-jadense-conversation-target")
     if (!this.busy && this.locked && (conversationTarget === "new" || conversationTarget === "current")) {
       void this.submit(this.locked, conversationTarget)
@@ -898,15 +884,13 @@ class FigureViewController {
   }
 
   private showNotice(message: string) {
-    if (this.noticeTimer) clearTimeout(this.noticeTimer)
-    this.notice.textContent = message
-    this.notice.hidden = false
-    this.noticeTimer = setTimeout(() => { this.notice.hidden = true }, 5_000)
+    this.noticeHandle?.close()
+    this.noticeHandle = showToast({ document: this.doc, themeRoot: this.overlay, message, position: "top-right", duration: 5000 })
   }
 
   private handleKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return
-    this.notice.hidden = true
+    this.noticeHandle?.close()
     this.clearSelection()
   }
 
@@ -973,7 +957,7 @@ class FigureViewController {
   destroy() {
     if (this.disposed) return
     this.disposed = true
-    if (this.noticeTimer) clearTimeout(this.noticeTimer)
+    this.noticeHandle?.close()
     if (this.animationFrame !== undefined) this.doc.defaultView?.cancelAnimationFrame?.(this.animationFrame)
     this.container.removeEventListener("pointerdown", this.handlePointerDown, true)
     this.container.removeEventListener("pointermove", this.handlePointerMove, true)
@@ -1003,7 +987,6 @@ class FigureViewController {
     this.overlay.remove()
     this.captureSurface.remove()
     this.container.removeAttribute("data-jadense-capture")
-    this.notice.remove()
     this.style.remove()
   }
 }

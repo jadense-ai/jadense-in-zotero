@@ -1,5 +1,14 @@
 # 更新说明 / Changelog
 
+## 0.6.8 — 待发布 / Pending release
+
+- 前沿雷达开放双模式：通用模式追踪 arXiv，攻玉模式可选择 13 个公开文献来源；两种模式均可手动或每日追踪、查看历史和收藏。
+- 前沿雷达新增独立模型配置与结构化 AI 预评阅读，兴趣档案默认最近 3 天、最多 30 篇候选。攻玉模式还为文献分类提供账号 Jev 判断，并在本机 OCR 未就绪时提供攻玉 OCR 选择。
+- 改进模型选择反馈、阅读器工具栏与 PDF 翻译交互。官方完整 XPI 包含前沿雷达；公开源码基础构建不含该模块。
+- Frontier Radar now runs in both modes: arXiv in standard mode and a choice of 13 public sources in Jadense mode, with manual or daily runs, history and saving in either mode.
+- Add separate radar model settings and structured optional AI reviews; research interests default to the last three days and 30 candidates. Jadense mode also provides account based Jev classification and an OCR option when local OCR is unavailable.
+- Improve model selection feedback, reader toolbar and PDF translation interactions. The official full XPI includes Frontier Radar; public source builds omit this optional module.
+
 ## 0.6.7 — 2026-09-27
 
 - 新增文献雷达：兴趣档案、arXiv 发现、相关性评分、可选 AI 评价、每日执行、历史与文献/PDF 收藏。仅支持 arXiv；多源及来源选择 UI 于下一版本开放。

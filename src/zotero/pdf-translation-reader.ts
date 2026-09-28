@@ -10,6 +10,9 @@ import { chromeContentUrl } from './chrome-registration'
 import type { ZoteroManagerWindow } from './manager-window'
 import { copyTextToClipboard } from './connection-display'
 import { validateDocument, type DocumentIdentity } from './pdf-document'
+import { createJdxSelect, type JdxSelect } from './ui/select'
+import { actionIcon } from './ui/controls'
+import { bindReaderControlPopover } from './reader-toolbar-menu'
 
 export type PDFReadingState = { page: number; fraction: number; scale: number; rotation: number }
 type NativePDF = { pagesCount: number; currentPageNumber: number; currentScale: number; pagesRotation: number; container: HTMLElement; getPageView(index: number): { div: HTMLElement }; eventBus: { on(name: string, callback: () => void): void; off(name: string, callback: () => void): void } }
@@ -58,26 +61,54 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
   panel.setAttribute('data-jadense-reader-theme', '')
   panel.setAttribute('aria-label', uiText('PDF 译文', 'Translated PDF')); status.setAttribute('role', 'status')
   style.textContent = `${READER_UI_THEME_CSS}
-.jdx-pdf-translation{position:absolute;inset:0;z-index:3;pointer-events:none;color:var(--jdx-reader-text,#222);display:flex;align-items:flex-end;flex-direction:column;font:13px system-ui;min-width:0}
-.jdx-pdf-translation-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--jdx-reader-line);flex:none;box-sizing:border-box;width:100%;background:var(--jdx-reader-background,#fff);pointer-events:auto}
-.jdx-pdf-translation-group{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0}
-.jdx-pdf-translation-actions{margin-left:auto}
-.jdx-pdf-translation button,.jdx-pdf-translation input,.jdx-pdf-translation select{box-sizing:border-box;font:inherit;color:inherit;border:1px solid transparent;border-radius:6px;min-height:30px}
+.jdx-pdf-translation{position:absolute;inset:0;z-index:3;pointer-events:none;color:var(--jdx-reader-text,#222);display:flex;align-items:flex-end;flex-direction:column;font:calc(13px * var(--jdx-font-scale,1)) system-ui;min-width:0;container-type:inline-size;--jdx-green:#16cf8c;--jdx-text:var(--jdx-reader-text);--jdx-muted:var(--jdx-reader-muted);--jdx-line:var(--jdx-reader-line);--jdx-line-strong:var(--jdx-reader-border);--jdx-surface:var(--jdx-reader-background);--jdx-subtle:var(--jdx-reader-surface);--jdx-active-bg:var(--jdx-reader-active);--jdx-green-deep:var(--jdx-green)}
+.jdx-pdf-translation-toolbar{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--jdx-reader-line);flex:none;box-sizing:border-box;width:100%;min-height:42px;background:var(--jdx-reader-background,#fff);pointer-events:auto;white-space:nowrap;overflow:hidden}
+.jdx-pdf-translation-group{display:flex;align-items:center;gap:4px;min-width:0}
+.jdx-pdf-translation-primary{width:100%}
+.jdx-pdf-translation-primary .jdx-pdf-task{margin-inline-start:auto}
+.jdx-pdf-translation button,.jdx-pdf-translation input{box-sizing:border-box;font:inherit;color:inherit;border:1px solid transparent;border-radius:6px;min-height:32px}
 .jdx-pdf-translation button{padding:4px 9px;background:transparent;cursor:pointer;white-space:nowrap}
 .jdx-pdf-translation button:hover{background:var(--jdx-reader-hover)}
 .jdx-pdf-translation button:disabled{opacity:.45;cursor:default}
-.jdx-pdf-translation button:focus-visible,.jdx-pdf-translation input:focus-visible,.jdx-pdf-translation select:focus-visible{outline:2px solid #16d78f;outline-offset:1px}
+.jdx-pdf-translation button:focus-visible,.jdx-pdf-translation input:focus-visible{outline:2px solid var(--jdx-green);outline-offset:1px}
 .jdx-pdf-translation input{padding:4px 8px;width:58px;background:var(--jdx-reader-surface);border-color:var(--jdx-reader-line)}
-.jdx-pdf-translation select{padding:4px 8px;background:var(--jdx-reader-surface);border-color:var(--jdx-reader-line);max-width:100%}
-.jdx-pdf-translation input[type=search]{width:150px;max-width:100%}
-.jdx-pdf-translation button[aria-pressed=true]{background:var(--jdx-reader-surface);border-color:#16d78f;color:var(--jdx-reader-text)}
+.jdx-pdf-translation input[type=search]{width:100%;max-width:100%}
+.jdx-pdf-translation button[aria-pressed=true]{background:var(--jdx-reader-surface);border-color:var(--jdx-green);color:var(--jdx-reader-text)}
 .jdx-pdf-translation .jdx-pdf-save{background:var(--jdx-reader-surface);border-color:var(--jdx-reader-line)}
-.jdx-pdf-translation-page-count{color:var(--jdx-reader-muted);padding:0 6px;font-variant-numeric:tabular-nums}
+.jdx-pdf-translation-page-count{color:var(--jdx-reader-muted);padding:0 4px;font-variant-numeric:tabular-nums}
+.jdx-pdf-page-box{display:flex;align-items:center;gap:2px;flex:none}
+.jdx-pdf-translation .jdx-icon-action{display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;min-width:32px;padding:0;font-size:0}
+.jdx-pdf-translation .jdx-icon-action::before{content:"";width:18px;height:18px;background:currentColor;mask:var(--jdx-action-icon) center/contain no-repeat}
+.jdx-pdf-translation .jdx-pdf-mode{width:auto;min-width:32px;padding:4px 9px;gap:6px;font-size:inherit}
+.jdx-pdf-translation .jdx-pdf-return{width:auto;min-width:32px;padding:4px 9px;gap:6px;font-size:inherit}
+.jdx-pdf-translation-popover{position:absolute;z-index:5;top:44px;box-sizing:border-box;min-width:220px;max-width:min(320px,calc(100% - 16px));max-height:calc(100% - 52px);overflow:auto;padding:8px;border:1px solid var(--jdx-reader-border);border-radius:8px;background:var(--jdx-reader-background);box-shadow:0 10px 24px rgba(0,0,0,.16);pointer-events:auto;white-space:normal}
+.jdx-pdf-translation-popover[hidden]{display:none!important}
+.jdx-pdf-translation-popover .jdx-pdf-translation-group{display:flex;align-items:stretch;flex-direction:column;gap:2px;padding:5px 0;border-bottom:1px solid var(--jdx-reader-line)}
+.jdx-pdf-translation-popover .jdx-pdf-translation-group:last-child{border:0}
+.jdx-pdf-translation-popover .jdx-pdf-translation-group::before{content:attr(aria-label);padding:2px 8px;color:var(--jdx-reader-muted);font-size:calc(11px * var(--jdx-font-scale,1));font-weight:600}
+.jdx-pdf-translation-popover .jdx-pdf-translation-group>button{text-align:start;width:100%}
+.jdx-pdf-translation-search{min-width:210px}
+.jdx-pdf-scope{width:100%;padding:4px 0}
+.jdx-pdf-scope .jdx-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:32px;padding:4px 8px;border:1px solid var(--jdx-reader-border);background:var(--jdx-reader-surface);text-align:start}
+.jdx-pdf-scope .jdx-select-chevron{flex:none;width:14px;height:14px}
+.jdx-pdf-scope .jdx-select-popup{position:fixed;z-index:10;display:none;overflow:auto;border:1px solid var(--jdx-reader-border);border-radius:8px;padding:4px;background:var(--jdx-reader-background);box-shadow:0 10px 24px rgba(0,0,0,.16)}
+.jdx-pdf-scope[data-open=true] .jdx-select-popup{display:block}
+.jdx-pdf-scope .jdx-select-list{list-style:none;margin:0;padding:0}
+.jdx-pdf-scope .jdx-select-option{min-height:32px;padding:6px 8px;border-radius:5px;cursor:pointer}
+.jdx-pdf-scope .jdx-select-option[data-active=true]{background:var(--jdx-reader-hover)}
+.jdx-pdf-scope .jdx-select-option[aria-selected=true]{color:var(--jdx-green-deep)}
+.jdx-pdf-scope .jdx-select-option-description{display:none}
+@container (max-width:580px){.jdx-pdf-translation .jdx-pdf-wide{display:none}}
+@container (max-width:390px){.jdx-pdf-translation .jdx-pdf-mode,.jdx-pdf-translation .jdx-pdf-return{width:32px;padding:0;font-size:0}}
 .jdx-pdf-translation iframe{width:50%;flex:1;min-height:0;border:0;border-left:1px solid var(--jdx-reader-line);box-sizing:border-box;pointer-events:auto}
-.jdx-pdf-translation-status{box-sizing:border-box;width:100%;flex:none;user-select:text;background:var(--jdx-reader-background,#fff);color:var(--jdx-reader-muted);pointer-events:auto;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:25%;overflow:auto;border-bottom:1px solid var(--jdx-reader-line)}
-.jdx-pdf-translation-status.jdx-pdf-status-expanded{max-height:60%}
-.jdx-pdf-translation-status.is-working::before{content:"";display:inline-block;width:12px;height:12px;margin-inline-end:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:jdx-pdf-working 1s linear infinite}
-.jdx-pdf-translation-status progress{display:block;width:100%;height:5px;margin:8px 0;accent-color:#16d78f}
+.jdx-pdf-translation-status{position:relative;box-sizing:border-box;width:100%;flex:none;user-select:text;background:var(--jdx-reader-background,#fff);color:var(--jdx-reader-muted);pointer-events:auto;padding:5px 10px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;max-height:96px;overflow:hidden;border-bottom:1px solid var(--jdx-reader-line)}
+.jdx-pdf-translation-status.jdx-pdf-status-expanded{max-height:60%;overflow:auto}
+.jdx-pdf-status-summary{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.jdx-pdf-status-extra{display:none;margin-top:4px}
+.jdx-pdf-status-expanded .jdx-pdf-status-summary{display:block;overflow:visible}
+.jdx-pdf-status-expanded .jdx-pdf-status-extra{display:block}
+.jdx-pdf-translation-status.is-working::before{content:"";position:absolute;inset-inline-end:10px;top:22px;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jdx-pdf-working 1s linear infinite}
+.jdx-pdf-translation-status progress{display:block;width:100%;height:4px;margin:5px 0;accent-color:var(--jdx-green)}
 .jdx-pdf-translation-status details{font-size:12px;margin-top:6px}
 .jdx-pdf-translation-status summary{cursor:pointer}
 @keyframes jdx-pdf-working{to{transform:rotate(360deg)}}
@@ -88,7 +119,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
   original.style.position = 'absolute'
   let currentMode = mode, showingOriginal = false, removed = false, task: PDFTranslationTask | undefined, api: PDFView | undefined, loadedID = '', loadingID = '', renderEpoch = 0
   let detached: Window | undefined, detachedPanel: HTMLElement | undefined, openingWindow = false, restoredAnchor: PDFReadingState | undefined, lastReadingState: PDFReadingState | undefined
-  let stopDetachedTheme: (() => void) | undefined, detachedObserver: MutationObserver | undefined
+  let stopDetachedTheme: (() => void) | undefined, detachedObserver: MutationObserver | undefined, detachedObserverCleanup: (() => void) | undefined
   let stopFrameIntent: (() => void) | undefined
   let windowError = ''
   let pendingWindow: Window | undefined
@@ -104,10 +135,18 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     return () => { try { for (const name of names) target.removeEventListener(name, activate, true) } catch { /* 已关闭的内容窗口已自动释放监听。 */ } }
   }
   cleanups.push(trackIntent(nativeWindow!, 'native'))
-  const group = (label: string, actions = false) => { const node = element('div'); node.className = `jdx-pdf-translation-group${actions ? ' jdx-pdf-translation-actions' : ''}`; node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); toolbar.append(node); return node }
-  const navigation = group(uiText('阅读控制', 'Reading controls')), searchGroup = group(uiText('译文搜索', 'Translation search')), actions = group(uiText('文件操作', 'File actions'), true)
+  const control = <T extends HTMLElement>(node: T, id: string) => { node.dataset.pdfControl = id; return node }
+  const primary = element('div'), overflow = element('div'), searchPanel = element('div')
+  primary.className = 'jdx-pdf-translation-group jdx-pdf-translation-primary'; primary.setAttribute('role', 'group'); primary.setAttribute('aria-label', uiText('对照翻译主要操作', 'PDF translation primary actions'))
+  overflow.className = 'jdx-pdf-translation-popover'; overflow.hidden = true; overflow.setAttribute('role', 'dialog'); overflow.setAttribute('aria-label', uiText('对照翻译操作', 'PDF translation actions'))
+  searchPanel.className = 'jdx-pdf-translation-popover jdx-pdf-translation-search'; searchPanel.hidden = true; searchPanel.setAttribute('role', 'search'); searchPanel.setAttribute('aria-label', uiText('译文搜索', 'Translation search'))
+  toolbar.append(primary)
+  const group = (label: string, parent = overflow) => { const node = element('div'); node.className = 'jdx-pdf-translation-group'; node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); parent.append(node); return node }
+  const navigation = group(uiText('阅读与视图', 'Reading and view')), saveGroup = group(uiText('保存', 'Save')), configGroup = group(uiText('翻译设置', 'Translation settings')), diagnosticGroup = group(uiText('诊断', 'Diagnostics'))
+  navigation.dataset.pdfSection = 'reading'
+  diagnosticGroup.dataset.pdfSection = 'diagnostic'
   let buttonGroup = navigation
-  const button = (label: string, callback: () => void) => { const node = element('button'); node.type = 'button'; node.textContent = label; node.addEventListener('click', callback); buttonGroup.append(node); return node }
+  const button = (label: string, callback: () => void, id: string) => { const node = control(element('button'), id); node.type = 'button'; node.textContent = label; node.addEventListener('click', callback); buttonGroup.append(node); return node }
   const error = (value: unknown) => { if (!removed) { status.hidden = false; status.textContent = value instanceof Error ? value.message : String(value) } }
   const nativeState = (): PDFReadingState => {
     let index = Math.max(0, native.currentPageNumber - 1)
@@ -148,77 +187,112 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     multiScreen.setAttribute('aria-pressed', String(Boolean(detached)))
     multiScreen.disabled = !api || openingWindow
     multiScreen.textContent = detached ? uiText('返回对照阅读', 'Return to comparison') : uiText('多屏模式', 'Multi-screen')
+    multiScreen.title = detached ? uiText('关闭独立译文窗口，返回双栏对照阅读。', 'Close the separate translation window and return to comparison.') : uiText('在独立窗口阅读译文，可拖到另一块屏幕。', 'Read the translated PDF in a separate window that can be moved to another screen.')
     alignHeader(); setNative(anchor); api?.set(anchor)
   }
   const translationOnly = button(uiText('仅显示译文', 'Translation only'), () => {
     const anchor = showingOriginal ? nativeState() : api!.state()
     currentMode = currentMode === 'inplace' ? 'compare' : 'inplace'; showingOriginal = false; applyMode(anchor)
-  })
+  }, 'mode'); primary.append(translationOnly)
+  actionIcon(translationOnly, 'workbench', translationOnly.textContent || '')
+  translationOnly.classList.add('jdx-pdf-mode')
   translationOnly.title = uiText('切换为整页译文，再次点击恢复对照阅读。', 'Show the translation full-width; click again to restore comparison.')
-  const multiScreen = button(uiText('多屏模式', 'Multi-screen'), () => { if (detached) restorePanel(); else void detachPanel().catch(error) })
+  const multiScreen = button(uiText('多屏模式', 'Multi-screen'), () => { if (detached) restorePanel(); else void detachPanel().catch(error) }, 'multi-screen')
   multiScreen.title = uiText('在独立窗口阅读译文，可拖到另一块屏幕。', 'Read the translated PDF in a separate window that can be moved to another screen.')
-  const toggle = button(uiText('查看原文', 'Show original'), () => { const anchor = showingOriginal ? nativeState() : api!.state(); showingOriginal = !showingOriginal; applyMode(anchor) })
+  const toggle = button(uiText('查看原文', 'Show original'), () => { const anchor = showingOriginal ? nativeState() : api!.state(); showingOriginal = !showingOriginal; applyMode(anchor) }, 'original')
   const link = button(uiText('同步滚动', 'Sync scroll'), () => {
     linked = !linked; link.setAttribute('aria-pressed', String(linked))
     host.Prefs?.set('extensions.jadenseInZotero.pdfLinkedScroll', linked, true)
     if (linked && api) { if (activeSide === 'translation') setNative(api.state()); else api.set(nativeState()) }
-  })
+  }, 'sync')
   link.setAttribute('aria-pressed', String(linked)); link.title = uiText('开启后，两侧按页码和页内高度同步；关闭后可独立阅读。', 'Link page and relative vertical position, or scroll each PDF independently.')
-  const pageInput = element('input'); pageInput.type = 'number'; pageInput.min = '1'; pageInput.setAttribute('aria-label', uiText('译文页码', 'Translation page')); navigation.append(pageInput)
-  const pageCount = element('span'); pageCount.className = 'jdx-pdf-translation-page-count'; pageCount.textContent = '/ —'; navigation.append(pageCount)
+  const pageBox = element('div'); pageBox.className = 'jdx-pdf-page-box'
+  const pageInput = control(element('input'), 'page'); pageInput.type = 'number'; pageInput.min = '1'; pageInput.setAttribute('aria-label', uiText('译文页码', 'Translation page')); pageBox.append(pageInput)
+  const pageCount = control(element('span'), 'page-count'); pageCount.className = 'jdx-pdf-translation-page-count'; pageCount.textContent = '/ —'; pageBox.append(pageCount); primary.append(pageBox)
   pageInput.addEventListener('change', () => { if (api) { const next = { ...api.state(), page: Math.min(task?.pages || 1, Math.max(1, Number(pageInput.value) || 1)), fraction: 0 }; api.set(next); setNative(next) } })
-  const zoomOut = button('−', () => { if (api) { const next = { ...api.state(), scale: Math.max(.1, api.state().scale / 1.2) }; api.set(next); setNative(next) } })
+  const zoomOut = button('−', () => { if (api) { const next = { ...api.state(), scale: Math.max(.1, api.state().scale / 1.2) }; api.set(next); setNative(next) } }, 'zoom-out')
   zoomOut.setAttribute('aria-label', uiText('缩小', 'Zoom out')); zoomOut.title = zoomOut.getAttribute('aria-label')!
-  const zoomIn = button('+', () => { if (api) { const next = { ...api.state(), scale: Math.min(10, api.state().scale * 1.2) }; api.set(next); setNative(next) } })
+  const zoomIn = button('+', () => { if (api) { const next = { ...api.state(), scale: Math.min(10, api.state().scale * 1.2) }; api.set(next); setNative(next) } }, 'zoom-in')
   zoomIn.setAttribute('aria-label', uiText('放大', 'Zoom in')); zoomIn.title = zoomIn.getAttribute('aria-label')!
-  button(uiText('适宽', 'Fit width'), fit)
-  button(uiText('旋转', 'Rotate'), () => { if (api) { const next = { ...api.state(), rotation: (api.state().rotation + 90) % 360 }; api.set(next); setNative(next) } })
-  const find = element('input'); find.type = 'search'; find.placeholder = uiText('搜索译文', 'Find'); find.setAttribute('aria-label', find.placeholder); searchGroup.append(find)
+  button(uiText('适宽', 'Fit width'), fit, 'fit')
+  button(uiText('旋转', 'Rotate'), () => { if (api) { const next = { ...api.state(), rotation: (api.state().rotation + 90) % 360 }; api.set(next); setNative(next) } }, 'rotate')
+  const find = control(element('input'), 'find'); find.type = 'search'; find.placeholder = uiText('搜索译文', 'Find'); find.setAttribute('aria-label', find.placeholder); searchPanel.append(find)
   find.addEventListener('input', () => { activeSide = 'translation'; api?.find(find.value) }); find.addEventListener('keydown', event => { if (event.key === 'Enter') api?.find(find.value, true) })
-  buttonGroup = actions
-  const mono = button(uiText('保存译文', 'Save PDF'), () => { if (task) void jobs.export(task.id, 'mono', win).catch(error) })
-  const dual = button(uiText('保存对照', 'Save bilingual'), () => { if (task) void jobs.export(task.id, 'dual', win).catch(error) })
+  buttonGroup = saveGroup
+  const mono = button(uiText('保存译文', 'Save PDF'), () => { if (task) void jobs.export(task.id, 'mono', win).catch(error) }, 'save-pdf')
+  const dual = button(uiText('保存对照', 'Save bilingual'), () => { if (task) void jobs.export(task.id, 'dual', win).catch(error) }, 'save-bilingual')
   mono.className = dual.className = 'jdx-pdf-save'
+  buttonGroup = configGroup
   let translationMode: PDFTranslationMode = savedTaskID ? jobs.get(savedTaskID)?.mode ?? 'full' : readPDFTranslationMode(host)
-  const scope = element('select'); scope.setAttribute('aria-label', uiText('翻译范围', 'Translation scope'))
-  for (const value of ['concise', 'full'] as const) { const option = element('option'); option.value = value; option.textContent = pdfModeLabel(value); scope.append(option) }
-  scope.value = translationMode; actions.append(scope)
-  scope.addEventListener('change', () => { translationMode = scope.value as PDFTranslationMode })
-  const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), () => { savedTaskID = undefined; void start(true) })
-  const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (task) jobs.retry(task.id); else void start() })
-  const cancel = button(uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id); preparation.abort() })
+  const scopeHost = control(element('div'), 'scope'); scopeHost.className = 'jdx-pdf-scope'; configGroup.append(scopeHost)
+  const scopeOptions = (['concise', 'full'] as const).map(value => ({ value, label: pdfModeLabel(value) }))
+  const scope = createJdxSelect(scopeHost, { ariaLabel: uiText('翻译范围', 'Translation scope') })
+  let detachedScope: JdxSelect | undefined
+  scope.setOptions(scopeOptions, translationMode)
+  scope.onChange(value => { translationMode = value as PDFTranslationMode; detachedScope?.setValue(value) })
+  const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), () => { savedTaskID = undefined; void start(true) }, 'regenerate')
+  const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (task) jobs.retry(task.id); else void start() }, 'retry')
+  const cancel = button(uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id); preparation.abort() }, 'cancel')
+  buttonGroup = diagnosticGroup
   const expandStatus = button(uiText('展开提示', 'Expand details'), () => {
     const expanded = status.classList.toggle('jdx-pdf-status-expanded')
     expandStatus.textContent = expanded ? uiText('收起提示', 'Collapse details') : uiText('展开提示', 'Expand details')
     expandStatus.setAttribute('aria-pressed', String(expanded))
-  })
+  }, 'expand-status')
   expandStatus.setAttribute('aria-pressed', 'false')
   const copyStatus = button(uiText('复制提示', 'Copy details'), () => {
     void copyTextToClipboard(host, status.textContent ?? '').then(copied => {
       copyStatus.textContent = copied ? uiText('已复制提示', 'Details copied') : uiText('复制失败，请选择提示文字复制', 'Copy failed; select the details to copy')
     })
-  })
+  }, 'copy-status')
   const repair = button(uiText('修复引擎', 'Repair engine'), () => {
     if (task?.status === 'running' || task?.status === 'queued') { status.textContent = uiText('请先取消当前任务，再修复引擎。', 'Cancel the current task before repairing the engine.'); return }
     preparation = new AbortController()
     void jobs.prepare(preparation.signal, stage => { status.textContent = stage === 'assets' ? uiText('准备模型和字体…', 'Preparing models and fonts…') : uiText('安装引擎…', 'Installing engine…') }, true).then(() => { status.textContent = uiText('引擎已准备，请点击重试。', 'Engine ready. Click Retry.') }).catch(error)
-  })
-  button(uiText('关闭', 'Close'), () => remove())
+  }, 'repair')
+  const closeMenu = button(uiText('退出对照翻译', 'Exit PDF translation'), () => remove(), 'exit'); closeMenu.hidden = true
+  const searchToggle = control(element('button'), 'search-toggle'); searchToggle.type = 'button'; searchToggle.textContent = uiText('搜索译文', 'Find translation'); actionIcon(searchToggle, 'search', searchToggle.textContent); primary.append(searchToggle)
+  const taskAction = control(element('button'), 'task-action'); taskAction.type = 'button'; taskAction.className = 'jdx-pdf-task'; taskAction.addEventListener('click', () => { if (!cancel.hidden) cancel.click(); else if (!retry.hidden) retry.click(); else mono.click() }); primary.append(taskAction)
+  const moreToggle = control(element('button'), 'more-toggle'); moreToggle.type = 'button'; moreToggle.textContent = uiText('更多操作', 'More actions'); actionIcon(moreToggle, 'more', moreToggle.textContent); primary.append(moreToggle)
+  const closeMain = control(element('button'), 'close-main'); closeMain.type = 'button'; closeMain.textContent = uiText('关闭', 'Close'); actionIcon(closeMain, 'close', closeMain.textContent); closeMain.addEventListener('click', () => remove()); primary.append(closeMain)
+  const bindPopovers = (root: HTMLElement, select: JdxSelect) => {
+    const more = root.querySelector<HTMLButtonElement>('[data-pdf-control="more-toggle"]')!
+    const search = root.querySelector<HTMLButtonElement>('[data-pdf-control="search-toggle"]')!
+    const menu = root.querySelector<HTMLElement>('.jdx-pdf-translation-popover:not(.jdx-pdf-translation-search)')!
+    const searchBox = root.querySelector<HTMLElement>('.jdx-pdf-translation-search')!
+    const menuBinding = bindReaderControlPopover(more, menu, root, () => select.close()), searchBinding = bindReaderControlPopover(search, searchBox, root)
+    const dismiss = (event: Event) => { if ((event.target as HTMLElement).closest('button[data-pdf-control]')) menuBinding.close() }
+    const moreClick = () => searchBinding.close(), searchClick = () => menuBinding.close()
+    more.addEventListener('click', moreClick); search.addEventListener('click', searchClick)
+    menu.addEventListener('click', dismiss)
+    return () => { menuBinding.remove(); searchBinding.remove(); menu.removeEventListener('click', dismiss); more.removeEventListener('click', moreClick); search.removeEventListener('click', searchClick) }
+  }
+  const placePageControl = (root: HTMLElement) => {
+    const box = root.querySelector<HTMLElement>('.jdx-pdf-page-box')!, main = root.querySelector<HTMLElement>('.jdx-pdf-translation-primary')!
+    const reading = root.querySelector<HTMLElement>('[data-pdf-section="reading"]')!
+    if (root.getBoundingClientRect().width <= 390) { if (box.parentElement !== reading) reading.prepend(box) }
+    else if (box.parentElement !== main) main.insertBefore(box, root.querySelector('[data-pdf-control="search-toggle"]'))
+  }
   const stopTheme = observeTheme(host, panel)
   // 原控件始终留在来源文档，独立窗口使用副本，避免 Gecko 关闭窗口时销毁被跨文档移动的节点。
   const syncDetached = () => {
     if (!detachedPanel || detached?.closed) return
-    const source = Array.from(toolbar.querySelectorAll('button,input,select,span')), target = Array.from(detachedPanel.querySelectorAll('.jdx-pdf-translation-toolbar button,.jdx-pdf-translation-toolbar input,.jdx-pdf-translation-toolbar span,.jdx-pdf-translation-toolbar select'))
-    source.forEach((node, index) => {
-      const copy = target[index] as HTMLInputElement | HTMLButtonElement
-      copy.hidden = (node as HTMLElement).hidden
-      if (node.localName !== 'select') copy.textContent = node.textContent
-      for (const name of ['disabled', 'aria-pressed', 'min', 'max']) {
-        const value = node.getAttribute(name)
+    for (const source of Array.from(panel.querySelectorAll<HTMLElement>('[data-pdf-control]'))) {
+      const id = source.dataset.pdfControl!
+      const copy = detachedPanel.querySelector<HTMLElement>(`[data-pdf-control="${id}"]`)
+      if (!copy || id === 'scope') continue
+      copy.hidden = id === 'exit' ? false : source.hidden || id === 'close-main' || id === 'mode'
+      if (source.localName === 'button' || source.localName === 'span') copy.textContent = source.textContent
+      for (const name of ['disabled', 'aria-pressed', 'aria-label', 'title', 'min', 'max']) {
+        const value = source.getAttribute(name)
         if (value === null) copy.removeAttribute(name); else copy.setAttribute(name, value)
       }
-      if (node.localName === 'input' || node.localName === 'select') (copy as HTMLInputElement).value = (node as HTMLInputElement).value
-    })
+      if (source.localName === 'input') (copy as HTMLInputElement).value = (source as HTMLInputElement).value
+    }
+    const detachedReturn = detachedPanel.querySelector<HTMLButtonElement>('[data-pdf-control="multi-screen"]')
+    if (detachedReturn) { detachedReturn.setAttribute('aria-label', detachedReturn.textContent || ''); detachedReturn.title = detachedReturn.textContent || '' }
+    detachedPanel.querySelector<HTMLElement>('[data-pdf-section="diagnostic"]')!.hidden = false
+    detachedScope?.setValue(scope.getValue()); detachedScope?.setDisabled(task?.status === 'queued' || task?.status === 'running')
     const copyStatus = detachedPanel.querySelector<HTMLElement>('.jdx-pdf-translation-status')!
     const detailsOpen = copyStatus.querySelector('details')?.open
     copyStatus.replaceChildren(...Array.from(status.childNodes, node => node.cloneNode(true))); copyStatus.hidden = status.hidden; copyStatus.className = status.className
@@ -239,7 +313,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     const closing = detached
     if (!closing) return
     closing.removeEventListener('unload', onDetachedClose)
-    detachedObserver?.disconnect(); detachedObserver = undefined; stopDetachedTheme?.(); stopDetachedTheme = undefined
+    detachedObserver?.disconnect(); detachedObserver = undefined; detachedObserverCleanup?.(); detachedObserverCleanup = undefined; stopDetachedTheme?.(); stopDetachedTheme = undefined
     detachedPanel = undefined
     detached = undefined; currentMode = 'compare'; showingOriginal = false
     panel.style.display = ''
@@ -272,24 +346,40 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
       opened.document.title = uiText('PDF 译文', 'Translated PDF')
       detached = opened; currentMode = 'compare'; showingOriginal = false
       opened.addEventListener('unload', onDetachedClose)
-      detachedPanel = body.ownerDocument.importNode(panel, true)
+       detachedPanel = body.ownerDocument.importNode(panel, true)
+       const detachedPrimary = detachedPanel.querySelector<HTMLElement>('.jdx-pdf-translation-primary')!
+       const detachedReturn = detachedPanel.querySelector<HTMLButtonElement>('[data-pdf-control="multi-screen"]')!
+       detachedPrimary.insertBefore(detachedReturn, detachedPrimary.firstChild)
+       actionIcon(detachedReturn, 'back', uiText('返回对照阅读', 'Return to comparison'))
+       detachedReturn.classList.add('jdx-pdf-return')
       const detachedFrame = detachedPanel.querySelector('iframe')!
       detachedFrame.removeAttribute('srcdoc'); detachedFrame.hidden = true
-      const controls = Array.from(toolbar.querySelectorAll('button,input,select'))
-      const cloneControlOptions = <T,>(value: T) => (globalThis as unknown as { Components: { utils: { cloneInto<T>(value: T, target: Window): T } } }).Components.utils.cloneInto(value, win)
-      detachedPanel.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button,input,select').forEach((copy, index) => {
-        const source = controls[index] as HTMLButtonElement | HTMLInputElement
-        if (copy.localName === 'button') copy.addEventListener('click', () => source.click())
-        else for (const name of ['input', 'change', 'keydown']) copy.addEventListener(name, event => {
-          source.value = copy.value
-          source.dispatchEvent(name === 'keydown' ? new win.KeyboardEvent(name, cloneControlOptions({ key: (event as KeyboardEvent).key })) : new win.Event(name))
-        })
-      })
-      body.append(detachedPanel); stopDetachedTheme = observeTheme(host, detachedPanel)
+       const controls = new Map(Array.from(panel.querySelectorAll<HTMLElement>('[data-pdf-control]')).map(node => [node.dataset.pdfControl!, node]))
+       const cloneControlOptions = <T,>(value: T) => (globalThis as unknown as { Components: { utils: { cloneInto<T>(value: T, target: Window): T } } }).Components.utils.cloneInto(value, win)
+       detachedPanel.querySelectorAll<HTMLElement>('[data-pdf-control]').forEach(copy => {
+         const id = copy.dataset.pdfControl!, source = controls.get(id)
+         if (!source || id === 'scope' || id === 'more-toggle' || id === 'search-toggle' || id === 'close-main') return
+         if (copy.localName === 'button') copy.addEventListener('click', () => source.click())
+         else if (copy.localName === 'input') for (const name of ['input', 'change', 'keydown']) copy.addEventListener(name, event => {
+           (source as HTMLInputElement).value = (copy as HTMLInputElement).value
+           source.dispatchEvent(name === 'keydown' ? new win.KeyboardEvent(name, cloneControlOptions({ key: (event as KeyboardEvent).key })) : new win.Event(name))
+         })
+       })
+       const detachedScopeHost = detachedPanel.querySelector<HTMLElement>('[data-pdf-control="scope"]')!
+       detachedScopeHost.replaceChildren()
+       detachedScope = createJdxSelect(detachedScopeHost, { ariaLabel: uiText('翻译范围', 'Translation scope') })
+       detachedScope.setOptions(scopeOptions, scope.getValue())
+       detachedScope.onChange(value => { scope.setValue(value); translationMode = value as PDFTranslationMode })
+       const unbindDetachedPopovers = bindPopovers(detachedPanel, detachedScope)
+       body.append(detachedPanel); stopDetachedTheme = observeTheme(host, detachedPanel)
+       const detachedResize = new detachedPanel.ownerDocument.defaultView!.ResizeObserver(() => placePageControl(detachedPanel!))
+       detachedResize.observe(detachedPanel)
+       detachedObserverCleanup = () => { unbindDetachedPopovers(); detachedScope?.destroy(); detachedScope = undefined }
+       const previousDetachedCleanup = detachedObserverCleanup
+       detachedObserverCleanup = () => { detachedResize.disconnect(); previousDetachedCleanup() }
       detachedObserver = new win.MutationObserver(syncDetached)
       const observerOptions = cloneControlOptions({ subtree: true, attributes: true, childList: true, characterData: true })
-      detachedObserver.observe(toolbar, observerOptions)
-      detachedObserver.observe(status, observerOptions)
+       detachedObserver.observe(panel, observerOptions)
       panel.style.display = 'none'; reloadView(detachedFrame); opened.focus()
     } catch (value) { windowError = value instanceof Error ? value.message : String(value); if (opened && !opened.closed) opened.close(); throw value }
     finally { pendingWindow = undefined; openingWindow = false; if (!removed) applyMode() }
@@ -298,7 +388,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     const detailsOpen = status.querySelector('details')?.open
     if (!task || removed) return
     const busy = task.status === 'queued' || task.status === 'running'
-    scope.disabled = regenerate.disabled = busy; repair.hidden = jobs.hasOutput(task); cancel.hidden = !busy; retry.hidden = busy || task.status === 'complete'; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !jobs.hasOutput(task)
+    scope.setDisabled(busy); regenerate.disabled = busy; repair.hidden = jobs.hasOutput(task); cancel.hidden = !busy; retry.hidden = busy || task.status === 'complete'; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !jobs.hasOutput(task)
     retry.textContent = jobs.hasOutput(task) && task.status !== 'complete' ? uiText('补译未完成部分', 'Translate remaining passages') : uiText('重试', 'Retry')
     const stages: Record<string, string> = { parse_missing: uiText('建立 PDF 版面缓存', 'Building PDF layout cache'), parse_invalid: uiText('版面缓存不可用，重新解析 PDF', 'Layout cache unavailable; parsing PDF again'), preparing_pdf: uiText('检查 PDF 与版面缓存', 'Checking PDF and layout cache'), finishing: uiText('正在保存已完成译文', 'Saving completed translations'), layout_cached: uiText('已复用 PDF 版面', 'Reusing PDF layout'), queued: uiText('等待其他 PDF 任务', 'Waiting for another PDF task'), dependencies: uiText('安装 PDF 翻译引擎', 'Installing PDF translation engine'), assets: uiText('准备模型和字体', 'Preparing models and fonts'), download: uiText('下载完整引擎包', 'Downloading engine package'), retry: uiText('下载中断，正在续传重试', 'Retrying interrupted download'), verify: uiText('校验引擎包', 'Verifying engine package'), extract: uiText('解压引擎', 'Extracting engine'), check: uiText('离线检测引擎', 'Checking engine offline'), installed: uiText('引擎已安装', 'Engine installed'), parse: uiText('解析 PDF', 'Parsing PDF') }
     const stage = stages[task.stage] || (/translat/iu.test(task.stage) ? uiText('翻译正文', 'Translating text') : /typeset|render|save|generate|write/iu.test(task.stage) ? uiText('生成译文 PDF', 'Typesetting translated PDF') : uiText('解析 PDF 版面', 'Parsing PDF layout'))
@@ -326,14 +416,30 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     if (busy) {
       const meter = element('progress'); meter.setAttribute('aria-label', uiText('翻译进度', 'Translation progress'))
       if (/translat/iu.test(task.stage) && task.total && task.completed !== undefined) { meter.max = task.total; meter.value = task.completed }
-      status.append(meter)
+      status.prepend(meter)
     }
+    const visibleMessage = status.textContent || ''
     const technical = [windowError, task.error, pdfFailureDetails(task), busy && jobs.speed(task.id) ? translationSpeedText(jobs.speed(task.id)!) : ''].filter(Boolean).join('\n')
     if (technical) {
       const details = element('details'), summary = element('summary'), body = element('div')
       details.open = Boolean(detailsOpen); summary.textContent = uiText('详细信息', 'Details'); body.textContent = technical; details.append(summary, body); status.append(details)
     }
-    status.hidden = !status.textContent; alignHeader()
+    const lines = visibleMessage.split('\n').filter(Boolean)
+    const recovery = busy ? lines.find(line => /自动继续|自动恢复|automatically|continuing|等待翻译服务|Waiting for the translation service/u.test(line)) : undefined
+    const preview = recovery || lines.slice(0, 2).join('\n')
+    const remaining = recovery ? lines.filter(line => line !== recovery).join('\n') : lines.slice(2).join('\n')
+    const summary = element('div'); summary.className = 'jdx-pdf-status-summary'; summary.textContent = preview
+    const extra = element('div'); extra.className = 'jdx-pdf-status-extra'; extra.textContent = remaining ? `\n${remaining}\n` : '\n'
+    const meter = status.querySelector('progress'), details = status.querySelector('details')
+    status.replaceChildren(...(meter ? [meter] : []), summary, extra)
+    if (details) extra.append(details)
+    taskAction.hidden = !busy && retry.hidden && mono.disabled
+    taskAction.textContent = busy ? uiText('取消', 'Cancel') : !retry.hidden ? jobs.hasOutput(task) ? uiText('补译', 'Resume') : uiText('重试', 'Retry') : uiText('保存译文', 'Save PDF')
+    taskAction.title = busy ? uiText('取消翻译', 'Cancel translation') : !retry.hidden ? retry.textContent || '' : uiText('保存译文', 'Save PDF')
+    taskAction.setAttribute('aria-label', taskAction.title)
+    taskAction.disabled = busy ? cancel.disabled : !retry.hidden ? retry.disabled : mono.disabled
+    status.hidden = !visibleMessage; alignHeader()
+    diagnosticGroup.hidden = repair.hidden && status.hidden
     const artifactID = `${task.id}:${task.artifact?.revision ?? 'legacy'}`
     if (!jobs.hasOutput(task) || loadedID === artifactID || Boolean(loadingID)) return
     if (api) restoredAnchor = api.state()
@@ -402,7 +508,7 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
       if (!next || (savedTaskID && next.source.itemID !== reader.itemID)) throw new Error(uiText('翻译记录不可用。', 'Translation record unavailable.'))
       if (removed) return
       if (task && task.id !== next.id) { renderEpoch++; void api?.destroy(); api = undefined; loadedID = loadingID = ''; frame.hidden = true }
-      task = next; translationMode = task.mode ?? 'full'; scope.value = translationMode; panel.dataset.pdfTaskId = next.id; applyMode(); await render()
+      task = next; translationMode = task.mode ?? 'full'; scope.setValue(translationMode); panel.dataset.pdfTaskId = next.id; applyMode(); await render()
     } catch (value) { error(value); retry.hidden = false }
     finally { starting = false; if (!removed) regenerate.disabled = Boolean(task && jobs.isActive(task.id)) }
   }
@@ -417,7 +523,10 @@ export async function openPDFTranslation(host: ZoteroLike, reader: Reader, mode:
     headerObserver.disconnect(); disposeView(); panel.remove(); original.style.width = previousWidth; original.style.visibility = previousVisibility; original.style.top = previousTop; original.style.height = previousHeight; original.style.position = previousFramePosition; parent.style.position = previousPosition
   }
   frame.title = uiText('PDF 译文', 'Translated PDF'); frame.hidden = true
-  panel.append(style, toolbar, status, frame); parent.append(panel)
+  panel.append(style, toolbar, overflow, searchPanel, status, frame); parent.append(panel)
+  cleanups.push(bindPopovers(panel, scope), () => scope.destroy())
+  const pageResize = new win.ResizeObserver(() => placePageControl(panel)); pageResize.observe(panel)
+  cleanups.push(() => pageResize.disconnect())
   const headerObserver = new win.ResizeObserver(() => { expandStatus.hidden = copyStatus.hidden = status.hidden || !status.textContent; alignHeader() }); headerObserver.observe(toolbar); headerObserver.observe(status)
   for (const name of ['updateviewarea', 'scalechanging', 'rotationchanging']) native.eventBus.on(name, fromNative)
   win.addEventListener('pagehide', remove, { once: true })

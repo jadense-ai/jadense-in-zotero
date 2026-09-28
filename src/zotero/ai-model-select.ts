@@ -2,10 +2,15 @@
 import type { JadenseChatModelCatalog, JadenseChatModelOption, JadenseChatSelection } from "@/jadense/api"
 import { jadenseChatSelectionKey, normalizeJadenseChatSelection, readByokSettings, featureModelSelectionKey, type FeatureModelSelection } from "./ai-settings"
 import type { ZoteroLike } from "./runtime"
-import type { JdxSelectOption } from "./custom-select"
+import type { JdxSelect, JdxSelectOption } from "./custom-select"
+import { show } from "./ui/toast"
 import { getUiLocale, uiText } from "./ui-preferences"
 
 import modelLogos from "../../model-logos/catalog.json"
+
+export function shouldRefreshModelCatalog(updatedAt: number, now = Date.now()) {
+  return now - updatedAt >= 60_000
+}
 
 /** 根据实际模型 ID 匹配共享品牌素材；未知品牌保留现有后备图标。 */
 function modelLogo(modelID: string) {
@@ -27,6 +32,27 @@ function capabilityLabels(capabilities: readonly string[], english: boolean) {
   return capabilities.flatMap(capability => labels[capability] ?? []).join(english ? ", " : "、")
 }
 
+function modelLockReason(option: JadenseChatModelOption, english: boolean) {
+  if (option.lockReason?.trim()) return option.lockReason.trim()
+  const plan = option.minimumPlanCode?.trim().toUpperCase()
+  if (english) return plan && plan !== "FREE"
+    ? `Upgrade to ${plan} or higher to select this model or route.`
+    : "Your subscription does not include this model or route."
+  return plan && plan !== "FREE" ? `当前订阅不支持此模型或路由；升级到 ${plan} 或更高计划后可选择。` : "当前订阅不支持此模型或路由。"
+}
+
+/** 禁选反馈绑定在共享选择器，Manager、Reader、偏好和私有功能保持一致。 */
+export function bindModelSelectToast(select: JdxSelect) {
+  select.onDisabledSelect(option => {
+    show({
+      document: select.element.ownerDocument,
+      themeRoot: select.element,
+      type: "warning",
+      message: option.disabledReason || uiText("当前模型不可选择。", "This model cannot be selected."),
+    })
+  })
+}
+
 export function buildJadenseChatModelSelectOptions(
   catalog: JadenseChatModelCatalog,
   selection?: JadenseChatSelection,
@@ -37,7 +63,7 @@ export function buildJadenseChatModelSelectOptions(
     const plan = option.minimumPlanCode?.trim().toUpperCase()
     const minimumPlan = plan && plan !== "FREE" ? plan : null
     const subscription = option.locked
-      ? option.lockReason || (english ? "Your subscription does not include this model or route." : "当前订阅不支持此模型或路由。")
+      ? modelLockReason(option, english)
       : minimumPlan ? (english ? `Minimum subscription: ${minimumPlan}` : `最低订阅：${minimumPlan}`) : ""
     const meta = [
       option.locked ? (minimumPlan ? (english ? `Requires ${minimumPlan}` : `需 ${minimumPlan}`) : (english ? "Upgrade required" : "需升级订阅")) : "",
@@ -55,6 +81,7 @@ export function buildJadenseChatModelSelectOptions(
       group: option.kind === "route" ? (english ? "Jadense routes" : "攻玉智能路由") : (english ? "Jadense models" : "攻玉内置模型"),
       ...(meta ? { meta } : {}),
       disabled: option.locked,
+      ...(option.locked ? { disabledReason: subscription } : {}),
     }
   })
   if (!selection) return options
@@ -67,6 +94,7 @@ export function buildJadenseChatModelSelectOptions(
       description: english ? "Saved selection; refresh the catalog to check availability." : "当前选择；加载模型目录后可查看可用状态。",
       group: english ? "Current selection" : "当前选择",
       disabled: true,
+      disabledReason: english ? "This saved model or route is unavailable. Choose another one." : "此前选择的攻玉模型或路由已不可用，请重新选择。",
     })
   }
   return options
@@ -79,7 +107,7 @@ export function jadenseChatModelSelectionIssue(
   const option = catalog.options.find(item => jadenseModelOptionKey(item) === jadenseChatSelectionKey(selection))
   if (!option) return uiText("此前选择的攻玉模型或路由已不可用，请重新选择。", "The saved Jadense model or route is unavailable. Select another one.")
   return option.locked
-    ? `${option.lockReason || uiText("当前订阅不支持所选模型或路由。", "Your subscription does not include this model or route.")} ${uiText("请更换可用模型，或升级订阅后重试。", "Choose an available model, or upgrade your subscription and retry.")}`
+    ? `${modelLockReason(option, getUiLocale() === "en-US")} ${uiText("请更换可用模型，或升级订阅后重试。", "Choose an available model, or upgrade your subscription and retry.")}`
     : ""
 }
 
@@ -97,6 +125,6 @@ export function buildFeatureModelSelectOptions(zotero: ZoteroLike, catalog: Jade
   })))
   const key = featureModelSelectionKey(selection)
   if (!key) return options
-  if (!options.some(option => option.value === key)) options.push({ value: key, label: english ? "Unavailable BYOK model" : "已失效的 BYOK 模型", group: english ? "Current selection" : "当前选择", disabled: true })
+  if (!options.some(option => option.value === key)) options.push({ value: key, label: english ? "Unavailable BYOK model" : "已失效的 BYOK 模型", group: english ? "Current selection" : "当前选择", disabled: true, disabledReason: english ? "This BYOK model is unavailable." : "此 BYOK 模型已不可用。" })
   return options
 }

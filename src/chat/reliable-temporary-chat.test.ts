@@ -11,6 +11,53 @@ function store() {
 }
 const input = { clientRequestId: 'request-1', operationId: 'operation-1', conversationId: 'conversation', messages: [{ id: 'message', role: 'user' as const, text: 'example' }] }
 const headers = { 'x-jadense-temporary-protocol': '1' }
+const format = { type: 'json_schema' as const, name: 'review', schema: { type: 'object', properties: { overview: { type: 'string' } } }, fallback: 'text' as const }
+it.each([true, false])('negotiates native format=%s while preserving the full schema prompt and cached execution', async supported => {
+  const disk = store(), fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
+    ? new Response(null, { headers: { ...headers, ...(supported ? { 'x-jadense-response-format': '1' } : {}) } })
+    : Response.json({ complete: true, state: 'completed', text: '{"overview":"review"}' }, { headers }))
+  const options = { baseUrl: 'https://format.test', token: 'synthetic', fetchImpl }
+  const request = { ...input, responseFormat: format, reuseCompletedOperation: true }
+  expect(await new ReliableTemporaryChatClient(options, disk).send(request)).toContain('review')
+  expect(await new ReliableTemporaryChatClient(options, disk).send(request)).toContain('review')
+  const posts = fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')
+  expect(posts).toHaveLength(1)
+  const body = JSON.parse(String(posts[0][1]?.body))
+  expect(body.responseFormat).toEqual(supported ? format : undefined)
+  expect(body.messages[0].parts[0].text).toContain(JSON.stringify(format.schema))
+  await expect(new ReliableTemporaryChatClient(options, disk).send({ ...request, responseFormat: { ...format, name: 'new_contract' } })).rejects.toThrow(/不同输入|different input/)
+  expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+})
+it('requires explicit legacy-server compatibility before dispatching a structured request', async () => {
+  const fetchImpl = vi.fn(async () => new Response(null, { headers }))
+  const client = new ReliableTemporaryChatClient({ baseUrl: 'https://strict.test', token: 'synthetic', fetchImpl }, store())
+  await expect(client.send({ ...input, responseFormat: { ...format, fallback: undefined } })).rejects.toThrow(/结构化输出|structured output/)
+  expect(fetchImpl).toHaveBeenCalledOnce()
+})
+it('recovers a structured response through GET after disconnect without another generation', async () => {
+  const disk = store(), output = '{"overview":"recovered"}'
+  const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'HEAD') return new Response(null, { headers: { ...headers, 'x-jadense-response-format': '1' } })
+    if (init?.method === 'POST') throw new TypeError('connection lost')
+    return Response.json({ complete: true, state: 'completed', text: output }, { headers })
+  })
+  const options = { baseUrl: 'https://recovery-format.test', token: 'synthetic', fetchImpl }
+  await expect(new ReliableTemporaryChatClient(options, disk).send({ ...input, responseFormat: format })).rejects.toThrow('connection lost')
+  const restored = new ReliableTemporaryChatClient(options, disk)
+  const [pending] = await restored.pending()
+  expect(pending.body.responseFormat).toEqual(format)
+  expect(await restored.recover(pending)).toBe(output)
+  expect(await restored.send({ ...input, responseFormat: format })).toBe(output)
+  expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+})
+it('fences BYOK execution identity against changed response schemas', async () => {
+  const fetchImpl = vi.fn(async () => new Response('data: {"choices":[{"delta":{"content":"review"},"finish_reason":"stop"}]}\n\n'))
+  const options = { config: { protocol: 'openai-chat-completions' as const, baseUrl: 'https://format.test/v1', apiKey: 'synthetic', model: 'fixture', maxOutputTokens: 8000 }, fetchImpl }
+  const disk = store(), request = { ...input, responseFormat: format, reuseCompletedOperation: true }
+  await new ReliableByokChatClient(options, disk).send(request)
+  await expect(new ReliableByokChatClient(options, disk).send({ ...request, responseFormat: { ...format, schema: { type: 'object', properties: { changed: { type: 'string' } } } } })).rejects.toThrow('different input')
+  expect(fetchImpl).toHaveBeenCalledTimes(1)
+})
 it('exposes authoritative partial text for local PDF repair without marking execution completed', async () => {
   const disk = store(), partialText = '[{"id":"p1","output":"translated"},'
   const fetchImpl = vi.fn(async () => Response.json({ state: 'partial', complete: false, text: partialText, finishReason: 'length', executionId: 'fixture' }, { headers }))

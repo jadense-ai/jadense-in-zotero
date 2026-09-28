@@ -295,11 +295,7 @@
 /* 文献详情占满宿主 panel；仅内容保留紧凑内边距，反馈不占阅读行。 */
 .jdx-manager-section.jdx-analysis-section[data-detail=true]{padding:12px}
 .jdx-literature-detail .jdx-analysis-detail,.jdx-literature-detail .jdx-reading-body,.jdx-literature-detail .jdx-reading-block{max-width:none;margin-inline:0}
-.jdx-document-results>.jdx-result-toast:not(:empty),.jdx-translation-reader>.jdx-result-toast:not(:empty){position:absolute;z-index:10;inset-inline-end:12px;bottom:12px;max-width:calc(100% - 48px);border:1px solid var(--jdx-line);border-radius:6px;background:var(--jdx-surface);box-shadow:0 4px 16px rgb(0 0 0 / .1);pointer-events:none}
-
 .jdx-translation-reader{position:relative}
-.jdx-translation-reader>.jdx-result-toast:empty{display:none}
-.jdx-translation-reader>.jdx-result-toast:not(:empty){padding:9px 16px;font-size:12px}
 .jdx-reading-footer:has(>.jdx-reading-state:empty):not(:has(>button:not([hidden]),>.jdx-reading-location:not([hidden]))){display:none}
 
 /* 图标操作保留原生 title 提示及 aria-label；胶囊作为不可拆分的语言与翻译操作。 */
