@@ -1,6 +1,6 @@
 # 更新说明 / Changelog
 
-## 0.6.8 — 待发布 / Pending release
+## 0.6.8 — 2026-09-29
 
 - 前沿雷达开放双模式：通用模式追踪 arXiv，攻玉模式可选择 13 个公开文献来源；两种模式均可手动或每日追踪、查看历史和收藏。
 - 前沿雷达新增独立模型配置与结构化 AI 预评阅读，兴趣档案默认最近 3 天、最多 30 篇候选。攻玉模式还为文献分类提供账号 Jev 判断，并在本机 OCR 未就绪时提供攻玉 OCR 选择。
@@ -8,6 +8,8 @@
 - Frontier Radar now runs in both modes: arXiv in standard mode and a choice of 13 public sources in Jadense mode, with manual or daily runs, history and saving in either mode.
 - Add separate radar model settings and structured optional AI reviews; research interests default to the last three days and 30 candidates. Jadense mode also provides account based Jev classification and an OCR option when local OCR is unavailable.
 - Improve model selection feedback, reader toolbar and PDF translation interactions. The official full XPI includes Frontier Radar; public source builds omit this optional module.
+- 已正式公开发布；Windows 11 / Zotero 10.0.3 上，草稿原包通过三次冷启动、0.6.7 原位升级、雷达原生专项及两种引擎的离线安装检查。其他系统、Zotero 8/9 和真实付费服务未实测。
+- Released publicly. On Windows 11 / Zotero 10.0.3, the original draft assets passed three cold starts, in-place upgrade from 0.6.7, native radar checks and offline installation checks for both engines. Other systems, Zotero 8/9 and live paid services were not tested.
 
 ## 0.6.7 — 2026-09-27
 

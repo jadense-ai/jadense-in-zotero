@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.8 is pending release:** Frontier Radar tracks arXiv in standard mode or lets you choose among 13 public literature sources in Jadense mode. Both modes support manual and daily runs, history, relevance screening and saving papers. This update adds structured optional AI reviews and a separate radar model setting. Official packages include Frontier Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
+**v0.6.8 is released:** Frontier Radar (formerly Literature Radar) tracks arXiv in standard mode or lets you choose among 13 public literature sources in Jadense mode. Both modes support manual and daily runs, history, relevance screening and saving papers. This update adds structured optional AI reviews and a separate radar model setting. Official packages include Frontier Radar; base builds from public source do not include that module. [Usage and configuration](docs/usage-guide.md#literature-radar)
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 
@@ -33,11 +33,11 @@ The offline suite includes the new [PDF installation guide](<docs/jadense-in-zot
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — Frontier Radar adds standard arXiv and 13-source Jadense tracking, structured AI reviews and separate model settings; Jadense mode also supports Jev classification and OCR.
 - [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — Add arXiv-only Literature Radar, Jadense mode and an illustrated PDF offline guide; improve OCR setup cancellation and PDF translation recovery.
 - [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — Fix offline installation BOM and deep-path extraction errors; open the PDF engine guide from settings.
 - [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Complete Windows x64 offline ZIP with the plugin, PDF engine and local OCR engine, plus more reliable engine setup.
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — Select relevant passages from long linked PDFs by default, make full summaries opt-in, and improve no-output and stop feedback.
-- [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — Show release highlights in update dialogs, unify the Parallel translation entry, and improve sidebar collapse.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
