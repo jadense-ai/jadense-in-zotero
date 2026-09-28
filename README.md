@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.8 待发布：**前沿雷达在通用模式可追踪 arXiv；开启攻玉模式后可选择 13 个公开文献来源。两种模式都支持手动与每日追踪、历史、相关性初筛和收藏；新版提供结构化 AI 预评及独立模型设置。官方安装包包含前沿雷达，公开源码独立构建的基础版不含该模块。[操作与配置](docs/usage-guide.md#literature-radar)
+**v0.6.8 已发布：**前沿雷达（原文献雷达）在通用模式可追踪 arXiv；开启攻玉模式后可选择 13 个公开文献来源。两种模式都支持手动与每日追踪、历史、相关性初筛和收藏；新版提供结构化 AI 预评及独立模型设置。官方安装包包含前沿雷达，公开源码独立构建的基础版不含该模块。[操作与配置](docs/usage-guide.md#literature-radar)
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -34,11 +34,11 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — 前沿雷达支持通用 arXiv 与攻玉 13 来源追踪，新增结构化 AI 预评和独立模型设置；攻玉模式可接力 Jev 分类与 OCR。
 - [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — 新增仅支持 arXiv 的文献雷达、攻玉模式及新版 PDF 离线安装指南，改进 OCR 准备停止与 PDF 翻译恢复。
 - [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — 修复离线安装的 BOM 和深路径解压错误，版面引擎指南可从设置页打开。
 - [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Windows x64 完整离线 ZIP 同时提供插件、PDF 引擎与本机 OCR 引擎，并改进引擎安装恢复。
 - [v0.6.3](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.3) — 关联长 PDF 默认截取相关原文，全文分批概括改为主动开启，并改进无输出等待与停止反馈。
-- [v0.6.2](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.2) — 更新弹窗显示版本要点，统一对照翻译入口并改进侧栏收起行为。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
