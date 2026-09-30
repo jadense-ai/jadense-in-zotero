@@ -194,7 +194,7 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-provider-list button,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list button {
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -207,20 +207,24 @@
   cursor: pointer;
 }
 
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item {
+  min-height: 44px;
+}
+
 #jadense-in-zotero-preferences-pane .jdx-pref-provider-list button:hover,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list button:hover {
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item:hover {
   background: var(--jdx-pref-subtle);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-provider-list button[aria-selected="true"],
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list button[aria-selected="true"] {
+#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item[aria-current="true"] {
   border-color: rgb(22 207 140 / 0.4);
   color: var(--jdx-pref-green-text);
   background: var(--jdx-pref-active);
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-provider-list button strong,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list button strong {
+#jadense-in-zotero-preferences-pane .jdx-pref-model-item-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -228,7 +232,7 @@
 }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-provider-list button small,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list button small {
+#jadense-in-zotero-preferences-pane .jdx-pref-model-item-meta {
   overflow: hidden;
   color: var(--jdx-pref-muted);
   font-size: .88em;

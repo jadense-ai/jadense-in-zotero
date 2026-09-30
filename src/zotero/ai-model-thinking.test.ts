@@ -5,7 +5,7 @@ import { parseJadenseChatModelCatalog } from '@/jadense/api'
 import { TemporaryChatClient, jadenseChatSelectionBody } from '@/chat/temporary-chat'
 import { createJdxSelect } from './ui/select'
 import { buildFeatureModelSelectOptions, configureFeatureModelThinking } from './ai-model-select'
-import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, saveFeatureModelSelection, saveAutoFollowChatModel } from './ai-settings'
+import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, saveFeatureModelSelection, saveAutoFollowChatModel, saveByokModel, saveByokProvider, featureModelState } from './ai-settings'
 import { chatDocumentCapacity } from './chat-document-request'
 import { rememberModelCatalog } from './model-catalog'
 import type { ZoteroLike } from './runtime'
@@ -34,6 +34,30 @@ function fixture(follow = false) {
 }
 
 describe('model thinking and metadata', () => {
+  it('selects a sole BYOK effort and returns to provider default', () => {
+    const prefs = new Map<string, unknown>()
+    const host = { Prefs: { get: (key: string) => prefs.get(key), set: (key: string, value: unknown) => prefs.set(key, value) } } as ZoteroLike
+    saveByokProvider(host, { id: 'p', name: 'P', protocol: 'openai-chat-completions', baseUrl: 'https://provider.test/v1', apiKey: 'synthetic' })
+    saveByokModel(host, { id: 'm', providerId: 'p', name: 'M', model: 'model', thinkingEfforts: ['ultra'] })
+    saveFeatureModelSelection(host, 'chat', { route: 'byok', modelId: 'm' })
+    const dom = new JSDOM('<main><div id="models"></div></main>')
+    const root = dom.window.document.getElementById('models')!
+    const select = createJdxSelect(root, { compact: true })
+    const catalog = { options: [], defaultSelection: null }
+    const selection = effectiveFeatureModelSelection(host, 'chat')
+    select.setOptions(buildFeatureModelSelectOptions(host, catalog, selection), featureModelSelectionKey(selection))
+    configureFeatureModelThinking(select, host, 'chat', catalog)
+    root.querySelector<HTMLButtonElement>('.jdx-select-trigger')!.click()
+    const only = root.querySelector<HTMLButtonElement>('.jdx-model-single-effort')!
+    expect(only.disabled).toBe(false)
+    only.click()
+    expect(effectiveFeatureModelSelection(host, 'chat')).toMatchObject({ thinkingEffort: 'ultra' })
+    expect(featureModelState(host, 'chat')).toMatchObject({ config: { thinkingEffort: 'ultra' } })
+    root.querySelectorAll<HTMLButtonElement>('.jdx-model-header button')[2].click()
+    expect(effectiveFeatureModelSelection(host, 'chat')).toEqual({ route: 'byok', modelId: 'm' })
+    select.destroy(); dom.window.close()
+  })
+
   it('preserves declared metadata and uses real platform capacity for document budgeting', () => {
     const f = fixture()
     expect(f.catalog.options[1]).toMatchObject({ contextWindow: 262144, maxOutputTokens: 32768, reasoningConfig: { reasoningEfforts: ['none', 'low', 'medium', 'high', 'future-effort'] } })

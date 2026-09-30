@@ -416,6 +416,17 @@ Open **Frontier Radar → Research interests**, add phrases with Enter, and choo
 Start a manual run or schedule daily tracking (09:00 local time by default) while Zotero is running and the selected mode is configured. History keeps earlier results. Save a paper to a library or collection, optionally requesting its PDF; a failed PDF download leaves the saved item intact. Demo papers enter your library only after an explicit save action.
 
 
+<a id="update-0610"></a>
+## 0.6.10 引擎存储、BYOK 档位与升级 / Engine storage, BYOK levels and upgrade
+
+在「设置 → 外置依赖配置」分别为 PDF 版面引擎与本机 OCR 选择存储父目录。保存已有安装的位置变更时，等待文件复制、校验与健康检查完成；失败时继续使用原位置。迁移期间不要关闭 Zotero 或手动移动引擎文件。两种引擎各自独立，未设置自定义位置时继续使用原来的默认位置。
+
+在「设置 → BYOK」编辑模型的思考档位列表，再到「设置 → 功能配置」为对话、翻译等功能选择可用档位。未明确选择时，由提供商使用其默认值；不同模型支持的档位可能不同，若服务商拒绝档位，请回到功能配置更换。首次启动 0.6.10 时，已选择攻玉模型的对话目的地会一次性改为 `qwen-3.8-flash`；已选择 BYOK 的对话目的地及独立翻译模型不变。若解析或图片解读原先设置为跟随对话，它们会按原有跟随规则使用新对话模型。之后你在「功能配置 → AI 对话」作出的选择会保留，重启或后续版本不会再次替换。
+
+**English:** Under **Settings → External dependencies**, choose separate parent folders for the PDF layout and local OCR engines. When moving an installed engine, wait for copying, verification and health checks; a failed move keeps the former location. Leave Zotero open and avoid moving engine files manually during migration. Unchanged locations retain their previous defaults.
+
+Edit a BYOK model's supported thinking levels under **Settings → BYOK**, then choose a level per feature under **Settings → Feature settings**. With no explicit choice, the provider uses its default. If a provider rejects a level, choose another in feature settings. On the first 0.6.10 launch, a Jadense chat selection changes once to `qwen-3.8-flash`; BYOK chat and independent translation choices stay intact. Analysis and figure interpretation follow the new chat model only when their existing follow setting is enabled. Later manual chat choices persist across restarts and subsequent versions.
+
 <a id="simple-reading-069"></a>
 ## 0.6.9 简阅、模型与翻译反馈 / Reading mode, models and translation progress
 

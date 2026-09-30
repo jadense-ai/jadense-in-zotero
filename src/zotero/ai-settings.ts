@@ -27,7 +27,7 @@ export type AiRoute = "jadense" | "byok"
 
 export type FeatureModelSelection =
   | { route: "jadense"; selection?: JadenseChatSelection }
-  | { route: "byok"; modelId: string }
+  | { route: "byok"; modelId: string; thinkingEffort?: string }
 
 export type PaperAnalysisModelSelection = FeatureModelSelection
 
@@ -64,6 +64,21 @@ export type ByokModel = {
   model: string
   contextWindow?: number
   maxOutputTokens?: number
+  thinkingEfforts?: string[]
+}
+
+export const DEFAULT_BYOK_THINKING_EFFORTS = ["low", "medium", "high"] as const
+export const BYOK_THINKING_PRESETS = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const
+
+/** 自定义项只影响可选档位；空值恢复默认，未知但有效的 Provider 值原样保留。 */
+export function normalizeByokThinkingEfforts(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const values = [...new Set(value.filter((item): item is string => typeof item === "string").map(item => item.trim()).filter(item => item && item !== "auto"))]
+  return values.length ? values : undefined
+}
+
+export function byokModelThinkingEfforts(model?: ByokModel): string[] {
+  return model?.thinkingEfforts?.length ? [...model.thinkingEfforts] : [...DEFAULT_BYOK_THINKING_EFFORTS]
 }
 
 export type ByokSettings = {
@@ -133,6 +148,7 @@ function normalizeModel(value: unknown, providerIds: Set<string>): ByokModel | n
   const model = text(row.model)
   const contextWindow = positiveInteger(row.contextWindow)
   const maxOutputTokens = positiveInteger(row.maxOutputTokens)
+  const thinkingEfforts = normalizeByokThinkingEfforts(row.thinkingEfforts)
   return {
     id,
     providerId,
@@ -140,6 +156,7 @@ function normalizeModel(value: unknown, providerIds: Set<string>): ByokModel | n
     model,
     ...(contextWindow ? { contextWindow } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),
+    ...(thinkingEfforts ? { thinkingEfforts } : {}),
   }
 }
 
@@ -262,7 +279,9 @@ export function normalizeFeatureModelSelection(value: unknown): FeatureModelSele
     return { route: "jadense", selection }
   }
   // 保留升级时尚未配置模型的 BYOK 目的地，不自动改发攻玉。
-  return row.route === "byok" ? { route: "byok", modelId: text(row.modelId) } : null
+  if (row.route !== "byok") return null
+  const thinkingEffort = text(row.thinkingEffort)
+  return { route: "byok", modelId: text(row.modelId), ...(thinkingEffort && thinkingEffort !== "auto" ? { thinkingEffort } : {}) }
 }
 
 export const LEGACY_TRANSLATION_MODEL_PREF = "extensions.jadenseInZotero.translationModel"
@@ -294,7 +313,7 @@ function readLegacyFeatureModelSelection(zotero: ZoteroLike): FeatureModelSelect
 }
 
 type ModelSlot = Exclude<AiFeature, 'fullTranslation'>
-type AiModelSettings = { version: 1; followChatModel: boolean; models: Record<ModelSlot, FeatureModelSelection> }
+type AiModelSettings = { version: 1; followChatModel: boolean; models: Record<ModelSlot, FeatureModelSelection>; chatDefaultMigration0610?: true }
 const slot = (feature: AiFeature): ModelSlot => feature === 'fullTranslation' ? 'translation' : feature
 const modelCatalogs = new WeakMap<ZoteroLike, { identity: string; catalog: JadenseChatModelCatalog }>()
 const migrationFailures = new WeakSet<ZoteroLike>()
@@ -334,7 +353,7 @@ function storedAiModelSettings(zotero: ZoteroLike): AiModelSettings | undefined 
     const row = JSON.parse(String(zotero.Prefs?.get(AI_MODEL_SETTINGS_PREF_KEY, true) ?? 'null'))
     if (!row || row.version !== 1 || !row.models || typeof row.models !== 'object') return
     const fallback = legacyAiModelSettings(zotero)
-    return { version: 1, followChatModel: row.followChatModel !== false, models: Object.fromEntries(
+    return { version: 1, followChatModel: row.followChatModel !== false, ...(row.chatDefaultMigration0610 === true ? { chatDefaultMigration0610: true as const } : {}), models: Object.fromEntries(
       (['chat', 'translation', 'analysis', 'figure'] as const).map(feature => [feature, normalizeFeatureModelSelection(row.models[feature]) ?? fallback.models[feature]]),
     ) as AiModelSettings['models'] }
   } catch { return }
@@ -363,6 +382,21 @@ export function initializeFeatureModelSelections(zotero: ZoteroLike) {
   return { ...settings.models, fullTranslation: settings.models.translation }
 }
 
+/** 仅 0.6.10 首次启动时改一次攻玉对话模型；完成标记和选择原子地写入同一偏好。 */
+export function migrateChatDefault0610(zotero: ZoteroLike, buildId: string): boolean {
+  if (!/^0\.6\.10(?:-|$)/.test(buildId)) return false
+  const settings = readAiModelSettings(zotero)
+  if (settings.chatDefaultMigration0610) return true
+  const chat = settings.models.chat
+  const models = chat.route === 'jadense'
+    ? { ...settings.models, chat: { route: 'jadense' as const, selection: { kind: 'model' as const, modelId: 'qwen-3.8-flash' } } }
+    : settings.models
+  try {
+    writeAiModelSettings(zotero, { ...settings, models, chatDefaultMigration0610: true })
+    return true
+  } catch { return false }
+}
+
 /** 新记录为 global 路径；跨窗通知与持久化采用完全相同的物理地址。 */
 export function observeAiModelSettings(host: ZoteroLike, changed: () => void) {
   let observer: unknown
@@ -373,7 +407,11 @@ export function observeAiModelSettings(host: ZoteroLike, changed: () => void) {
 /** 面向用户的当前模型摘要，不包含凭据；传统翻译入口由调用方展示服务名称。 */
 export function featureModelDescription(host: ZoteroLike, feature: AiFeature) {
   const value = effectiveFeatureModelSelection(host, feature)
-  if (value.route === 'byok') return `BYOK · ${readByokSettings(host).models.find(model => model.id === value.modelId)?.name ?? value.modelId} · ${uiText('提供商默认', 'Provider default')}`
+  if (value.route === 'byok') {
+    const model = readByokSettings(host).models.find(model => model.id === value.modelId)
+    const valid = Boolean(value.thinkingEffort && byokModelThinkingEfforts(model).includes(value.thinkingEffort))
+    return `BYOK · ${model?.name ?? value.modelId} · ${valid ? value.thinkingEffort : uiText('提供商默认', 'Provider default')}`
+  }
   if (!value.selection) return uiText('未选择模型', 'No model selected')
   if (value.selection.kind === 'route') return `${value.selection.routeTier} · ${uiText('由实际路由决定', 'Determined by the selected route')}`
   if (value.selection.kind !== 'model') return uiText('模型默认', 'Model default')
@@ -443,7 +481,7 @@ export function featureModelState(zotero: ZoteroLike, feature: AiFeature, invali
       ? invalid ? uiText("攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。", "Your Jadense token is invalid or expired. Update it in Connect Jadense.") : ""
       : uiText("请先在「连接攻玉」中配置攻玉令牌。", "Configure a token in Connect Jadense first.") }
   }
-  const config = readByokConfigForModel(zotero, selection.modelId)
+  const config = readByokConfigForSelection(zotero, selection)
   return { selection, route: selection.route, ready: Boolean(config), label: config ? `BYOK · ${config.model}` : uiText("BYOK · 已失效模型", "BYOK · Unavailable model"),
     issue: config ? "" : uiText(`已选择的 BYOK 模型已删除或配置不完整；请在「设置 → 功能配置」中重新选择${AI_FEATURE_LABELS[feature]}模型，或前往 BYOK 修复。`, `The selected BYOK model was deleted or is incomplete. Select a ${AI_FEATURE_LABELS[feature]} model in Settings → Feature settings, or repair it in BYOK.`),
     ...(config ? { config } : {}) }
@@ -488,6 +526,15 @@ export function readByokConfigForModel(zotero: ZoteroLike, modelId: string): Byo
   const provider = settings.providers.find((item) => item.id === model.providerId)
   const config = provider ? byokConfig(provider, model) : null
   return config && !byokConfigurationIssue(config) ? config : null
+}
+
+/** 只有仍属于模型可选枚举的显式档位进入真实请求；过期偏好局部退回 Provider 默认。 */
+export function readByokConfigForSelection(zotero: ZoteroLike, selection: { modelId: string; thinkingEffort?: string }): ByokConfig | null {
+  const config = readByokConfigForModel(zotero, selection.modelId)
+  if (!config) return null
+  const model = readByokSettings(zotero).models.find(item => item.id === selection.modelId)
+  const thinkingEffort = selection.thinkingEffort && byokModelThinkingEfforts(model).includes(selection.thinkingEffort) ? selection.thinkingEffort : undefined
+  return { ...config, ...(thinkingEffort ? { thinkingEffort } : {}) }
 }
 
 export function readByokConfig(zotero: ZoteroLike): ByokConfig {
@@ -594,6 +641,7 @@ export function saveByokConfig(zotero: ZoteroLike, input: ByokConfig) {
     name: existingModel?.name || input.model.trim() || "未命名模型",
     model: input.model,
     ...(existingModel?.contextWindow ? { contextWindow: existingModel.contextWindow } : {}),
+    ...(existingModel?.thinkingEfforts ? { thinkingEfforts: existingModel.thinkingEfforts } : {}),
     maxOutputTokens: positiveInteger(input.maxOutputTokens) ?? DEFAULT_BYOK_MAX_OUTPUT_TOKENS,
   })
   return readByokConfig(zotero)

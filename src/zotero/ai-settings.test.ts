@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import { defaultByokConfig } from "@/chat/byok-chat"
 import {
   clearByokConfig,
+  byokModelThinkingEfforts,
+  DEFAULT_BYOK_THINKING_EFFORTS,
   deleteByokProvider,
   JADENSE_CHAT_MODEL_PREF_KEY,
   jadenseChatSelectionFromKey,
@@ -11,6 +13,7 @@ import {
   readAiRoute,
   readByokConfig,
   readByokConfigForModel,
+  readByokConfigForSelection,
   readByokSettings,
   readJadenseChatSelection,
   readPaperAnalysisModelSelection,
@@ -20,6 +23,10 @@ import {
   saveByokProvider,
   saveJadenseChatSelection,
   savePaperAnalysisModelSelection,
+  saveFeatureModelSelection,
+  effectiveFeatureModelSelection,
+  featureModelSelectionFromKey,
+  featureModelState,
   selectByokModel,
 } from "./ai-settings"
 import type { ZoteroLike } from "./runtime"
@@ -172,6 +179,38 @@ describe("paper analysis model settings", () => {
 })
 
 describe("BYOK profile settings", () => {
+  it("uses low, medium, high for old models and keeps explicit efforts independent by feature", () => {
+    const zotero = fakeZotero()
+    saveByokProvider(zotero, { id: "p", name: "P", protocol: "openai-responses", baseUrl: "https://provider.test/v1", apiKey: "fixture-key" })
+    saveByokModel(zotero, { id: "m", providerId: "p", name: "M", model: "model" })
+    expect(byokModelThinkingEfforts(readByokSettings(zotero).models[0])).toEqual([...DEFAULT_BYOK_THINKING_EFFORTS])
+    expect(readByokConfigForSelection(zotero, { modelId: "m" })).not.toHaveProperty("thinkingEffort")
+    saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "m", thinkingEffort: "low" })
+    saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "m", thinkingEffort: "high" })
+    expect(featureModelState(zotero, "chat")).toMatchObject({ config: { thinkingEffort: "low" } })
+    expect(featureModelState(zotero, "translation")).toMatchObject({ config: { thinkingEffort: "high" } })
+    expect(effectiveFeatureModelSelection(zotero, "chat")).toEqual({ route: "byok", modelId: "m", thinkingEffort: "low" })
+    saveByokModel(zotero, { id: "other", providerId: "p", name: "Other", model: "other-model" })
+    saveFeatureModelSelection(zotero, "chat", featureModelSelectionFromKey("byok:other"))
+    expect(effectiveFeatureModelSelection(zotero, "chat")).toEqual({ route: "byok", modelId: "other" })
+    expect(featureModelState(zotero, "chat").config).not.toHaveProperty("thinkingEffort")
+  })
+
+  it("saves custom values, drops malformed entries, and omits a removed selected effort", () => {
+    const zotero = fakeZotero()
+    saveByokProvider(zotero, { id: "p", name: "P", protocol: "anthropic-messages", baseUrl: "https://provider.test/v1", apiKey: "fixture-key" })
+    saveByokModel(zotero, { id: "m", providerId: "p", name: "M", model: "model", thinkingEfforts: [" low ", "low", "ultra", " custom-level ", "auto", ""] })
+    expect(readByokSettings(zotero).models[0].thinkingEfforts).toEqual(["low", "ultra", "custom-level"])
+    saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "m", thinkingEffort: "ultra" })
+    expect(readByokConfigForSelection(zotero, { modelId: "m", thinkingEffort: "ultra" })).toMatchObject({ thinkingEffort: "ultra" })
+    saveByokModel(zotero, { id: "m", providerId: "p", name: "M", model: "model", thinkingEfforts: ["low"] })
+    expect(featureModelState(zotero, "chat").selection).toMatchObject({ thinkingEffort: "ultra" })
+    expect(featureModelState(zotero, "chat").config).not.toHaveProperty("thinkingEffort")
+    saveByokModel(zotero, { id: "m", providerId: "p", name: "M", model: "model", thinkingEfforts: [] })
+    expect(readByokSettings(zotero).models[0]).not.toHaveProperty("thinkingEfforts")
+    expect(byokModelThinkingEfforts(readByokSettings(zotero).models[0])).toEqual(["low", "medium", "high"])
+  })
+
   it("uses the canonical initial defaults", () => {
     expect(readByokConfig(fakeZotero())).toEqual(defaultByokConfig())
     expect(defaultByokConfig().baseUrl).toBe("")

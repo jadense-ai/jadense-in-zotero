@@ -1,6 +1,6 @@
 /** 功能模型选择器的共同展示：合并攻玉目录与本地 BYOK，供 Manager 和原生设置使用。 */
 import type { JadenseChatModelCatalog, JadenseChatModelOption, JadenseChatSelection } from "@/jadense/api"
-import { jadenseChatSelectionKey, normalizeJadenseChatSelection, readByokSettings, featureModelSelectionKey, effectiveFeatureModelSelection, featureFollowsChat, saveFeatureModelSelection, type AiFeature, type FeatureModelSelection } from "./ai-settings"
+import { jadenseChatSelectionKey, normalizeJadenseChatSelection, readByokSettings, byokModelThinkingEfforts, featureModelSelectionKey, effectiveFeatureModelSelection, featureFollowsChat, saveFeatureModelSelection, type AiFeature, type FeatureModelSelection } from "./ai-settings"
 import type { ZoteroLike } from "./runtime"
 import type { JdxSelect, JdxSelectOption } from "./custom-select"
 import { show } from "./ui/toast"
@@ -34,42 +34,51 @@ function capabilityLabels(capabilities: readonly string[], english: boolean) {
 
 /** 同 Webapp 档位术语；服务端新增档位保留原值，不缩减目录能力。 */
 export function modelThinkingLabel(value: string, english = getUiLocale() === "en-US") {
-  const labels: Record<string, [string, string]> = { none: ["关闭", "Off"], minimal: ["最低", "Minimal"], low: ["低", "Low"], medium: ["中", "Medium"], high: ["高", "High"], xhigh: ["极高", "Extra high"], max: ["最高", "Max"], auto: ["自动", "Auto"] }
+  const labels: Record<string, [string, string]> = { none: ["关闭", "Off"], minimal: ["最低", "Minimal"], low: ["低", "Low"], medium: ["中", "Medium"], high: ["高", "High"], xhigh: ["极高", "Extra high"], max: ["最高", "Max"], ultra: ["超高", "Ultra"], auto: ["自动", "Auto"] }
   return labels[value]?.[english ? 1 : 0] ?? value
 }
 
 /** 为已有选择器接入功能偏好；自动跟随时写对话设置，独立功能互不覆盖。 */
 export function configureFeatureModelThinking(select: JdxSelect, zotero: ZoteroLike, feature: AiFeature, catalog: JadenseChatModelCatalog) {
-  configureModelThinking(select, catalog, () => effectiveFeatureModelSelection(zotero, feature), selection => {
+  configureModelThinking(select, zotero, catalog, () => effectiveFeatureModelSelection(zotero, feature), selection => {
     saveFeatureModelSelection(zotero, featureFollowsChat(zotero, feature) ? "chat" : feature, selection, catalog)
   })
 }
 
 /** 私有功能也复用展示和手势，偏好所有权仍由各自宿主保留。 */
-export function configureModelThinking(select: JdxSelect, catalog: JadenseChatModelCatalog, read: () => FeatureModelSelection, save: (selection: FeatureModelSelection) => void) {
+export function configureModelThinking(select: JdxSelect, zotero: ZoteroLike, catalog: JadenseChatModelCatalog, read: () => FeatureModelSelection, save: (selection: FeatureModelSelection) => void) {
   const selection = read()
   const selected = selection.route === "jadense" ? selection.selection : undefined
   const option = catalog.options.find(option => selected?.kind === "model" && option.kind === "model" && option.modelId === selected.modelId)
-  const value = selected?.kind === "model" ? selected.thinkingEffort ?? option?.defaultThinkingEffort ?? "auto" : "auto"
   const efforts = option?.reasoningConfig?.reasoningEfforts ?? []
-  const levels = [...new Set([...efforts.filter(value => value !== 'none'), ...(option?.reasoningConfig?.reasoningRequired === false ? ['none'] : []), ...(efforts.length ? ['auto'] : [])])].map(value => ({ value, label: modelThinkingLabel(value) }))
+  const byokModel = selection.route === "byok" ? readByokSettings(zotero).models.find(model => model.id === selection.modelId) : undefined
+  const byokEfforts = byokModelThinkingEfforts(byokModel)
+  const staleByokEffort = selection.route === "byok" && Boolean(selection.thinkingEffort && !byokEfforts.includes(selection.thinkingEffort))
+  const value = selection.route === "byok" ? staleByokEffort ? "auto" : selection.thinkingEffort ?? "auto"
+    : selected?.kind === "model" ? selected.thinkingEffort ?? option?.defaultThinkingEffort ?? "auto" : "auto"
+  const levels = (selection.route === "byok" ? byokModel ? byokEfforts : []
+    : [...new Set([...efforts.filter(value => value !== 'none'), ...(option?.reasoningConfig?.reasoningRequired === false ? ['none'] : []), ...(efforts.length ? ['auto'] : [])])])
+    .map(value => ({ value, label: modelThinkingLabel(value) }))
   const warning = uiText('服务端尚未确认支持思考设置', 'The server has not confirmed thinking settings support')
   let notice = select.element.parentElement?.querySelector<HTMLElement>('[data-thinking-contract-notice]')
   if (!notice) { notice = select.element.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p'); notice.setAttribute('data-thinking-contract-notice', ''); notice.className = 'jdx-setting-description'; select.element.after(notice) }
-  notice.hidden = selection.route !== 'jadense' || selected?.kind !== 'model' || catalog.thinkingContractVersion === 1
-  notice.textContent = notice.hidden ? '' : warning
-  const label = selection.route === 'byok' ? uiText('提供商默认', 'Provider default') : selected?.kind === 'route' ? uiText('由实际路由决定', 'Route default') : !efforts.length ? uiText('提供商默认', 'Provider default') : modelThinkingLabel(value)
+  notice.hidden = !staleByokEffort && (selection.route !== 'jadense' || selected?.kind !== 'model' || catalog.thinkingContractVersion === 1)
+  notice.textContent = notice.hidden ? '' : staleByokEffort
+    ? uiText('此前选定的思考档位已不在此模型配置中，本次使用提供商默认；请重新选择。', 'The saved thinking effort is no longer configured for this model. Requests use the provider default until you choose another.') : warning
+  const label = selection.route === 'byok' ? value === 'auto' ? uiText('提供商默认', 'Provider default') : modelThinkingLabel(value)
+    : selected?.kind === 'route' ? uiText('由实际路由决定', 'Route default') : !efforts.length ? uiText('提供商默认', 'Provider default') : modelThinkingLabel(value)
   select.setModelControl({ selectionKey: featureModelSelectionKey(selection), levels, value, label,
-    ...(selected?.kind === "model" && option && !option.locked && levels.length ? { onCommit: (thinkingEffort: string) => {
+    ...((selection.route === "byok" && byokModel || selected?.kind === "model" && option && !option.locked) && levels.length ? { onCommit: (thinkingEffort: string) => {
       try {
         // 目录刷新/跨窗换模型之后，旧手势不能覆盖新选择。
         const current = read()
         if (featureModelSelectionKey(current) !== featureModelSelectionKey(selection)) return
-        save({ route: "jadense", selection: { ...selected, thinkingEffort } })
-        configureModelThinking(select, catalog, read, save)
+        if (selection.route === "byok") save({ route: "byok", modelId: selection.modelId, ...(thinkingEffort !== "auto" ? { thinkingEffort } : {}) })
+        else if (selected?.kind === "model") save({ route: "jadense", selection: { ...selected, thinkingEffort } })
+        configureModelThinking(select, zotero, catalog, read, save)
       } catch {
         show({ document: select.element.ownerDocument, themeRoot: select.element, type: "error", message: uiText("思考档位保存失败，请重试。", "Could not save thinking effort. Retry.") })
-        configureModelThinking(select, catalog, read, save)
+        configureModelThinking(select, zotero, catalog, read, save)
       }
     } } : {}),
   })

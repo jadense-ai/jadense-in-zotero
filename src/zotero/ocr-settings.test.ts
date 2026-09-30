@@ -8,6 +8,7 @@ vi.mock('./local-ocr', () => ({
   checkLocalOCR: mocks.check,
   installLocalOCR: vi.fn(), prepareLocalOCRModels: vi.fn(), removeLocalOCR: vi.fn(),
   observeOCRProgress: () => () => {}, isLocalOCRPreparing: () => false,
+  cachedOCR: () => undefined, ocrStorageBusyReason: () => undefined, stopIdleOCRForStorage: vi.fn(), rebindOCRReady: vi.fn(), movedOCRNeedsHealthCheck: vi.fn(), validateMovedOCREngine: vi.fn(),
   registerOCRSettingsOperation: (_host: unknown, controller: AbortController) => { mocks.operations.add(controller); return () => mocks.operations.delete(controller) },
   cancelOCRSettingsOperations: () => { for (const controller of mocks.operations) controller.abort() },
   OCR_MODEL_SOURCE_PREF: 'source', readOCRModelSource: () => 'default',
@@ -47,6 +48,7 @@ class TestElement extends EventTarget {
 }
 
 it('shows Stop during a stalled OCR check and restores the action after cancellation', async () => {
+  vi.stubGlobal('PathUtils', { profileDir: '/profile', join: (...parts: string[]) => parts.join('/'), normalize: (value: string) => value, parent: (value: string) => value.slice(0, value.lastIndexOf('/')), filename: (value: string) => value.split('/').at(-1) })
   mocks.check.mockImplementation((_host: unknown, _force: unknown, signal: AbortSignal) => new Promise((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError')), { once: true })
   }))

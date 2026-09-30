@@ -59,6 +59,7 @@ describe("preferences pane markup", () => {
     expect(xhtml).toContain('id="jadense-in-zotero-byok-provider-save"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-model-select"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-model-name"')
+    expect(xhtml).toContain('id="jadense-in-zotero-byok-thinking-levels"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-context-window"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-save"')
     expect(xhtml).toContain('id="jadense-in-zotero-byok-test"')

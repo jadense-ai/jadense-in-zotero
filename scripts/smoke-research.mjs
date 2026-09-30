@@ -1,5 +1,6 @@
 import { verifyTranslationFiles } from './smoke-translation-files.mjs'
 import { verifyFeatureSettings, verifyFeatureSettingsRestart } from './smoke-feature-settings.mjs'
+import { verifyEngineStorage } from './smoke-engine-storage.mjs'
 import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
 import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
@@ -985,6 +986,11 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     if (config.featureSettingsOnly) {
       await stage('feature-settings')
       await verifyFeatureSettings({ Zotero, assert, waitFor, screenshot, report, findManager, findWindowContaining, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.engineStorageOnly) {
+      await stage('engine-storage')
+      await verifyEngineStorage({ Zotero, assert, waitFor, screenshot, report, findManager, findWindowContaining, config })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.jadenseModeOnly && !config.jadenseModeResume) {
@@ -3110,6 +3116,7 @@ async function writeCompanion(extensionsDir, config) {
     verifySimpleReadingRestart.toString(),
     verifyPDFTranslationRestart.toString(),
     verifyFeatureSettings.toString(),
+    verifyEngineStorage.toString(),
     verifyFeatureSettingsRestart.toString(),
     verifyLiteratureWorkspace.toString(),
     verifyAnalysisDetails.toString(),
@@ -3237,7 +3244,7 @@ async function main() {
       translationFilesOnly: argv.includes('--translation-files-only'), pdfTranslationOnly: argv.includes('--pdf-translation-only'), pdfStatusOnly: argv.includes('--pdf-status-only'), pdfAI: argv.includes('--pdf-ai'), pdfPartial: argv.includes('--pdf-partial'), pdfViewerFixture: argValue(argv, '--pdf-viewer-fixture') ? path.resolve(argValue(argv, '--pdf-viewer-fixture')) : undefined, pdfEngineArchive: argValue(argv, '--pdf-engine-archive') ? path.resolve(argValue(argv, '--pdf-engine-archive')) : undefined, pdfEngineSettingsCheck: argv.includes('--pdf-engine-settings-check'), pdfEngineOnly: argv.includes('--pdf-engine-only'), pdfEngineSetupOnly: argv.includes('--pdf-engine-setup-only'),
       sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'),
       classificationOnly: argv.includes('--classification-only'),
-      chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'),
+      chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), featureSettingsOnly: argv.includes('--feature-settings-only'), engineStorageOnly: argv.includes('--engine-storage-only'), engineStorageParent: argValue(argv, '--engine-storage-parent'),
       analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), modelToastOnly: argv.includes('--model-toast-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
     }
     await writeCompanion(extensionsDir, companionConfig)
@@ -3367,11 +3374,11 @@ async function main() {
       if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
       report.checks.push('no-generation-or-upload-request')
     }
-    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1

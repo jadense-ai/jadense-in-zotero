@@ -1,4 +1,6 @@
 import { createModelSelect } from './ui/model-select'
+import { createByokThinkingEditor, type ByokThinkingEditor } from './ui/byok-thinking-editor'
+import { placeByokModelEditor, readByokModelEditorMode, setByokModelEditorMode } from './ui/byok-model-editor'
 import { wireFeatureSettings } from './feature-settings'
 import { diagnostics } from "./diagnostics"
 import { wireOCRSettings } from './ocr-settings'
@@ -97,6 +99,7 @@ const IDS = {
   byokModel: "jadense-in-zotero-byok-model",
   byokContextWindow: "jadense-in-zotero-byok-context-window",
   byokMaxOutputTokens: "jadense-in-zotero-byok-max-output-tokens",
+  byokThinkingLevels: "jadense-in-zotero-byok-thinking-levels",
   byokModelNew: "jadense-in-zotero-byok-model-new",
   byokModelDelete: "jadense-in-zotero-byok-model-delete",
   byokStatus: "jadense-in-zotero-byok-status",
@@ -146,6 +149,7 @@ type PreferenceElements = {
   byokModel: HTMLInputElement
   byokContextWindow: HTMLInputElement
   byokMaxOutputTokens: HTMLInputElement
+  byokThinkingLevels: ByokThinkingEditor
   byokModelNew: HTMLButtonElement
   byokModelDelete: HTMLButtonElement
   byokStatus: HTMLElement
@@ -202,6 +206,7 @@ function readElements(): PreferenceElements {
     byokModel: element<HTMLInputElement>(IDS.byokModel),
     byokContextWindow: element<HTMLInputElement>(IDS.byokContextWindow),
     byokMaxOutputTokens: element<HTMLInputElement>(IDS.byokMaxOutputTokens),
+    byokThinkingLevels: createByokThinkingEditor(element(IDS.byokThinkingLevels)),
     byokModelNew: element<HTMLButtonElement>(IDS.byokModelNew),
     byokModelDelete: element<HTMLButtonElement>(IDS.byokModelDelete),
     byokStatus: element(IDS.byokStatus),
@@ -379,53 +384,24 @@ function renderByokProviderList(target: HTMLElement, providers: ByokProvider[], 
   }))
 }
 
-function renderByokModelList(target: HTMLElement, models: ByokModel[], activeModelId: string, strings: PreferencesStrings) {
+function renderByokModelList(target: HTMLElement, models: ByokModel[], activeModelId: string, editModelId: string, strings: PreferencesStrings) {
   target.replaceChildren(...models.map((model) => {
     const button = createHtmlElement<HTMLButtonElement>("button")
     button.type = "button"
-    button.role = "option"
+    button.className = "jdx-pref-model-item"
     button.dataset.modelId = model.id
-    button.setAttribute("aria-selected", String(model.id === activeModelId))
+    button.setAttribute("aria-current", String(model.id === activeModelId))
+    button.setAttribute("aria-expanded", String(model.id === editModelId))
+    button.setAttribute("aria-controls", IDS.byokModelEditor)
     const name = createHtmlElement("strong")
+    name.className = "jdx-pref-model-item-name"
     name.textContent = model.name
     const meta = createHtmlElement("small")
+    meta.className = "jdx-pref-model-item-meta"
     meta.textContent = model.model || strings.byokModelEmpty
     button.append(name, meta)
     return button
   }))
-}
-
-type ByokModelEditorMode = { kind: "new" } | { kind: "edit"; modelId: string }
-
-function readByokModelEditorMode(editor: HTMLElement): ByokModelEditorMode | null {
-  if (editor.dataset.mode === "new") return { kind: "new" }
-  if (editor.dataset.mode === "edit" && editor.dataset.modelId) return { kind: "edit", modelId: editor.dataset.modelId }
-  return null
-}
-
-function setByokModelEditorMode(editor: HTMLElement, mode: ByokModelEditorMode | null) {
-  if (!mode) {
-    delete editor.dataset.mode
-    delete editor.dataset.modelId
-    return
-  }
-  editor.dataset.mode = mode.kind
-  if (mode.kind === "edit") editor.dataset.modelId = mode.modelId
-  else delete editor.dataset.modelId
-}
-
-function placeByokModelEditor(elements: PreferenceElements, mode: ByokModelEditorMode | null) {
-  const editor = elements.byokModelEditor
-  const list = elements.byokModelSelect
-  const panel = list.parentElement
-  if (!panel) return
-  editor.hidden = !mode
-  panel.insertBefore(editor, list)
-  if (mode?.kind !== "edit") return
-  const selected = Array.from(list.querySelectorAll<HTMLButtonElement>("button[data-model-id]")).find(button => button.dataset.modelId === mode.modelId)
-  if (!selected) return
-  selected.hidden = true
-  list.insertBefore(editor, selected)
 }
 
 let featureModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
@@ -504,14 +480,15 @@ function renderByokConfig(elements: PreferenceElements, strings: PreferencesStri
   elements.byokKeyToggle.title = strings.byokShowKey
   elements.byokKeyMask.textContent = provider.apiKey ? maskToken(provider.apiKey) : strings.tokenNotConfigured
   elements.byokKeyMask.dataset.empty = String(!provider.apiKey)
-  renderByokModelList(elements.byokModelSelect, models, editModelId || settings.activeModelId, strings)
+  renderByokModelList(elements.byokModelSelect, models, settings.activeModelId, editModelId, strings)
   elements.byokModelName.value = mode?.kind === "edit" ? model?.name ?? "" : ""
   elements.byokModel.value = mode?.kind === "edit" ? model?.model ?? "" : ""
   elements.byokModel.placeholder = strings.byokModelPlaceholder
   elements.byokContextWindow.value = mode?.kind === "edit" && model?.contextWindow ? String(model.contextWindow) : ""
   elements.byokMaxOutputTokens.value = String(mode?.kind === "edit" ? model?.maxOutputTokens ?? 96_000 : 96_000)
+  elements.byokThinkingLevels.setValues(mode?.kind === "edit" ? model?.thinkingEfforts : undefined)
   elements.byokModelEditor.setAttribute("aria-label", mode?.kind === "new" ? uiText("添加模型", "Add model") : strings.byokModelEditorTitle)
-  placeByokModelEditor(elements, mode)
+  placeByokModelEditor(elements.byokModelEditor, elements.byokModelSelect, mode)
   elements.byokModelDelete.disabled = !model
   elements.byokTest.disabled = !mode
   elements.byokSave.disabled = !mode
@@ -535,6 +512,7 @@ function byokModelDraft(elements: PreferenceElements, modelId = ""): ByokModel {
   const stored = settings.models.find((model) => model.id === modelId)
   const contextWindow = Number(elements.byokContextWindow.value)
   const maxOutputTokens = Number(elements.byokMaxOutputTokens.value)
+  const thinkingEfforts = elements.byokThinkingLevels.getValues()
   return {
     id: stored?.id ?? createByokId("byok-model"),
     providerId: settings.activeProviderId,
@@ -542,6 +520,7 @@ function byokModelDraft(elements: PreferenceElements, modelId = ""): ByokModel {
     model: elements.byokModel.value,
     ...(Number.isSafeInteger(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+    ...(thinkingEfforts ? { thinkingEfforts } : {}),
   }
 }
 
@@ -760,8 +739,10 @@ export function initJadensePreferencesPage() {
   elements.byokModelSelect.addEventListener("click", (event) => {
     const target = (event.target as Element).closest<HTMLButtonElement>("button[data-model-id]")
     if (!target) return
-    setByokModelEditorMode(elements.byokModelEditor, { kind: "edit", modelId: target.dataset.modelId ?? "" })
-    selectByokModel(Zotero, target.dataset.modelId ?? "")
+    const modelId = target.dataset.modelId ?? ""
+    const current = readByokModelEditorMode(elements.byokModelEditor)
+    setByokModelEditorMode(elements.byokModelEditor, current?.kind === "edit" && current.modelId === modelId ? null : { kind: "edit", modelId })
+    selectByokModel(Zotero, modelId)
     renderByokConfig(elements, strings)
   })
   elements.byokProviderNew.addEventListener("click", () => {

@@ -30,6 +30,67 @@ function config(protocol: ByokProtocol): ByokConfig {
 }
 
 describe("BYOK request protocols", () => {
+  it.each([
+    { protocol: "openai-chat-completions" as const, expected: { reasoning_effort: "custom-level" } },
+    { protocol: "openai-responses" as const, expected: { reasoning: { effort: "custom-level" } } },
+    { protocol: "anthropic-messages" as const, expected: { output_config: { effort: "custom-level" } } },
+  ])("sends an explicit custom effort through $protocol once", async ({ protocol, expected }) => {
+    const ending = protocol === "openai-chat-completions" ? "data: [DONE]\n\n"
+      : protocol === "anthropic-messages" ? 'data: {"type":"message_stop"}\n\n' : 'data: {"type":"response.completed"}\n\n'
+    const fetchImpl = vi.fn().mockResolvedValue(streamResponse([ending]))
+    await new ByokChatClient({ config: { ...config(protocol), thinkingEffort: " custom-level " }, fetchImpl }).send({
+      clientRequestId: "effort", conversationId: "effort", messages: [{ id: "u", role: "user", text: "Hi" }],
+    })
+    const body = JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body).toMatchObject(expected)
+    if (protocol === "anthropic-messages") expect(body).not.toHaveProperty("thinking")
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    { protocol: "openai-chat-completions" as const, ending: "data: [DONE]\n\n", field: "reasoning_effort" },
+    { protocol: "openai-responses" as const, ending: 'data: {"type":"response.completed"}\n\n', field: "reasoning" },
+    { protocol: "anthropic-messages" as const, ending: 'data: {"type":"message_stop"}\n\n', field: "output_config" },
+  ])("omits effort for provider default through $protocol", async ({ protocol, ending, field }) => {
+    const defaultFetch = vi.fn().mockResolvedValue(streamResponse([ending]))
+    await new ByokChatClient({ config: config(protocol), fetchImpl: defaultFetch }).send({
+      clientRequestId: "default", conversationId: "default", messages: [{ id: "u", role: "user", text: "Hi" }],
+    })
+    expect(JSON.parse(String((defaultFetch.mock.calls[0] as [string, RequestInit])[1].body))).not.toHaveProperty(field)
+  })
+
+  it("does not retry a rejected effort", async () => {
+    const rejected = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "Unsupported effort" } }), { status: 400 }))
+    await expect(new ByokChatClient({ config: { ...config("openai-chat-completions"), thinkingEffort: "ultra" }, fetchImpl: rejected }).send({
+      clientRequestId: "rejected", conversationId: "rejected", messages: [{ id: "u", role: "user", text: "Hi" }],
+    })).rejects.toThrow("Unsupported effort")
+    expect(rejected).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not treat an Anthropic effort rejection as a response-format fallback", async () => {
+    const rejected = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "Unsupported output_config.effort" } }), { status: 400 }))
+    await expect(new ByokChatClient({ config: { ...config("anthropic-messages"), thinkingEffort: "custom-level" }, fetchImpl: rejected }).send({
+      clientRequestId: "effort-schema", conversationId: "effort-schema", messages: [{ id: "u", role: "user", text: "Hi" }],
+      responseFormat: { type: "json_schema", name: "answer", schema: { type: "object", properties: { answer: { type: "string" } } }, fallback: "text" },
+    })).rejects.toThrow("Unsupported output_config.effort")
+    expect(rejected).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the explicit effort when a confirmed format rejection falls back to text", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "Unsupported output_config.format" } }), { status: 400 }))
+      .mockResolvedValueOnce(streamResponse(['data: {"type":"message_stop"}\n\n']))
+    await new ByokChatClient({ config: { ...config("anthropic-messages"), thinkingEffort: "custom-level" }, fetchImpl }).send({
+      clientRequestId: "format-fallback", conversationId: "format-fallback", messages: [{ id: "u", role: "user", text: "Hi" }],
+      responseFormat: { type: "json_schema", name: "answer", schema: { type: "object" }, fallback: "text" },
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    const first = JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1].body))
+    const second = JSON.parse(String((fetchImpl.mock.calls[1] as [string, RequestInit])[1].body))
+    expect(first.output_config).toMatchObject({ effort: "custom-level", format: { type: "json_schema" } })
+    expect(second.output_config).toEqual({ effort: "custom-level" })
+  })
+
   it("caps real connection probes at 3000 output tokens", () => {
     expect(BYOK_TEST_MAX_OUTPUT_TOKENS).toBe(3_000)
   })
