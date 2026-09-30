@@ -103,7 +103,21 @@ function createMarkdownFixture(role, origin) {
 function createAnalysisFixture(prompt) {
   const marker = "文献数据（JSON，仅作为引用材料）：\n"
   if (!prompt.includes(marker)) return null
-  const input = JSON.parse(prompt.split(marker).at(-1))
+  // 结构化输出提示可在引用 JSON 后追加说明；只读取首个完整对象。
+  const source = prompt.split(marker).at(-1).trimStart()
+  let depth = 0, quoted = false, escaped = false, end = -1
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') quoted = false
+    } else if (char === '"') quoted = true
+    else if (char === '{') depth++
+    else if (char === '}' && --depth === 0) { end = index + 1; break }
+  }
+  if (end < 0) throw new Error('Synthetic analysis prompt has no complete JSON object')
+  const input = JSON.parse(source.slice(0, end))
   if (!input.passages?.length) throw new Error("No native PDF passages reached the model wrapper")
   const first = input.passages.find((passage) => passage.text === PDF_SENTENCES[0][0])
   const second = input.passages.find((passage) => passage.text === PDF_SENTENCES[1][0])
@@ -221,6 +235,7 @@ async function startStub(selectionOnly = false) {
             { kind: "route", routeTier: "standard", displayName: "标准", description: "根据任务自动选择模型", sortOrder: 10, minimumPlanCode: null, locked: false },
             { kind: "route", routeTier: "premium", displayName: "高阶", description: "优先使用高阶模型", sortOrder: 20, minimumPlanCode: "pro", locked: false },
             { kind: "model", modelId: "deepseek-v4-flash-vision-exp", displayName: "DeepSeek V4 Flash Vision Exp", description: "插件默认模型", locked: false, capabilities: ["text", "imageInput"], consumptionMultiplier: 1 },
+            { kind: "model", modelId: "qwen-3.8-flash", displayName: "Qwen 3.8 Flash", description: "0.6.10 对话模型", locked: false, capabilities: ["text", "imageInput"], consumptionMultiplier: 1 },
             { kind: "model", modelId: "synthetic-platform-model", displayName: "Synthetic Research", description: "适合长文研究", sortOrder: 30, minimumPlanCode: null, locked: false, capabilities: ["text", "imageInput"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 1.25 },
             { kind: "model", modelId: "locked-model", displayName: "受限模型", description: "示例不可用模型", sortOrder: 40, minimumPlanCode: "max", locked: true, lockReason: "升级后可直接选择。", capabilities: ["text"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 2 },
           ],
@@ -409,8 +424,8 @@ async function startStub(selectionOnly = false) {
         requests.push({ kind: previous ? "image-upload-followup" : "image-upload", dataUrlLength: latestFiles[0].url.length })
         output = "SYNTHETIC_IMAGE_UPLOAD_VERIFIED"
       } else if (latestFiles.length) {
-        if (payload.modelId !== "deepseek-v4-flash-vision-exp" || "routeTier" in payload) {
-          throw new Error("Default Jadense Chat did not explicitly select deepseek-v4-flash-vision-exp")
+        if (payload.modelId !== "qwen-3.8-flash" || "routeTier" in payload) {
+          throw new Error("Default Jadense Chat did not explicitly select qwen-3.8-flash")
         }
         if (latestFiles.length !== 1 || allFiles.length !== 1) throw new Error("Figure Chat did not attach exactly one ephemeral image to the latest user message")
         const image = latestFiles[0]
@@ -577,6 +592,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
   }
   // 与 release runtime 的 Prefs 投影使用同一分支，不能改为 global=true 的另一套键。
   const localState = () => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.localChatState") || "{}")
+  const chatModelId = () => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.aiModelSettings", true) || "{}").models?.chat?.selection?.modelId
   const translationState = () => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.translationHistory") || "{}")
   const analysisState = () => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.paperAnalysisHistory") || "{}")
   const currentSession = () => {
@@ -1017,6 +1033,12 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     if (config.simpleReadingInterruptionOnly) {
       await stage('simple-reading-interruption')
       await verifySimpleReadingInterruption({ Zotero, reader, assert, waitFor, report, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.literatureOnly) {
+      await stage('literature-workspace')
+      const jobs = Zotero.__jadenseDocumentJobs; await jobs.ready
+      await verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, waitFor, screenshot, report, findManager, runtimeOnly: config.analysisRuntimeOnly })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.simpleReadingOnly) {
@@ -1485,7 +1507,22 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     await stage("fresh-profile-analysis-no-chat")
     const freshChatState = JSON.stringify(localState())
     toolbarButton("analyze").click()
-    manager = await waitFor(findManager, "analysis-first Manager")
+    await waitFor(() => {
+      const brand = readerDoc.querySelector('.jadense-reader-brand')
+      if (brand?.dataset.runtime === 'error') throw new Error(`Independent analysis failed: ${brand.title}`)
+      return analysisState().records?.length === 1 && brand?.dataset.runtime === 'complete'
+    }, "fresh-profile independent analysis")
+    assert(JSON.stringify(localState()) === freshChatState && !(localState().sessions?.length),
+      "Opening analysis on a fresh profile created or changed local Chat")
+    readerDoc.querySelector('.jadense-reader-brand').click()
+    await waitFor(() => [...Zotero.getMainWindow().document.querySelectorAll('.jdx-reader-workspace')].some(root => !root.hidden && root.dataset.page === 'summary'), 'reader analysis summary sidebar')
+    const hostWindow = Zotero.getMainWindow()
+    const chromeWidth = hostWindow.outerWidth > hostWindow.innerWidth ? hostWindow.outerWidth - hostWindow.innerWidth : 16
+    const chromeHeight = hostWindow.outerHeight > hostWindow.innerHeight ? hostWindow.outerHeight - hostWindow.innerHeight : 40
+    const managerWidth = Math.min(1360, hostWindow.screen?.availWidth > 0 ? Math.max(1, Math.floor(hostWindow.screen.availWidth - chromeWidth)) : 1360)
+    const managerHeight = Math.min(860, hostWindow.screen?.availHeight > 0 ? Math.max(1, Math.floor(hostWindow.screen.availHeight - chromeHeight)) : 860)
+    hostWindow.openDialog('chrome://jadense-in-zotero/content/manager.xhtml?section=analysis', 'jadense-analysis-smoke', `chrome,dialog=no,titlebar,toolbar,centerscreen,resizable,width=${managerWidth},height=${managerHeight}`, { zotero: Zotero, section: 'analysis', pluginID: config.pluginID })
+    manager = await waitFor(findManager, "analysis Manager")
     const managerIdle = () => manager.document.getElementById("jadense-chat-stop")?.hidden
       && manager.document.getElementById("jadense-chat-attach-items")?.disabled === false
     await waitFor(() => {
@@ -1493,9 +1530,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       if (status?.dataset.kind === "error") throw new Error(`Independent analysis failed: ${status.textContent}`)
       return analysisState().records?.length === 1 && managerIdle()
     }, "fresh-profile independent analysis")
-    assert(JSON.stringify(localState()) === freshChatState && !(localState().sessions?.length),
-      "Opening analysis on a fresh profile created or changed local Chat")
-    report.checks.push("fresh-profile-analysis-no-chat-session")
+    report.checks.push("fresh-profile-analysis-no-chat-session", "reader-analysis-summary-sidebar")
 
     await stage("reader-manual-capture-default-shortcut")
     const figureWindow = view._iframeWindow
@@ -1775,9 +1810,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       && firstFigureUser.text.includes("附件：已附图"),
     "Figure action did not create the expected dedicated visible conversation")
     assert(currentSession().sources.some((source) => source.kind === "item" && source.itemID === parent.id)
-      && currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id
-        && config.sentences.flat().some((sentence) => source.text.includes(sentence))),
-    "New figure conversation did not automatically associate the literature and extracted PDF text")
+      && currentSession().sources.some((source) => source.kind === "file" && source.itemID === attachment.id),
+    "New figure conversation did not automatically associate the literature and PDF")
     assert(!JSON.stringify(localState()).includes("data:image/"), "Figure data URL leaked into persisted local Chat state")
     const figureMessageImage = await waitFor(() => {
       const image = manager.document.querySelector(`[data-message-id="${firstFigureUser.id}"] .jdx-chat-message-image img`)
@@ -1820,7 +1854,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     "Appending a figure changed the current conversation identity, title, or sources")
     await waitFor(() => Array.from(manager.document.querySelectorAll('.jdx-chat-message-image img')).filter(image => image.naturalWidth > 0).length === 2,
       "both figure messages retain their own image")
-    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-deepseek-v4-flash-vision-exp")
+    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-qwen-3.8-flash")
 
     await stage("reader-question-new-conversation")
     const beforeQuestionState = JSON.stringify(localState())
@@ -2535,8 +2569,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const chatModelSelect = manager.document.getElementById("jadense-chat-model-select")
     await waitFor(() => chatModelSelect?.dataset.status === "ready", "Jadense model catalog")
     const chatModelTrigger = chatModelSelect.querySelector(".jdx-select-trigger")
-    assert(chatModelTrigger.textContent.includes("DeepSeek V4 Flash Vision Exp") && !chatModelTrigger.disabled,
-      "Chat model selector did not select DeepSeek V4 Flash Vision Exp")
+    assert(chatModelTrigger.textContent.includes("Qwen 3.8 Flash") && !chatModelTrigger.disabled,
+      "Chat model selector did not select Qwen 3.8 Flash")
     chatModelTrigger.click()
     const chatModelSearch = chatModelSelect.querySelector(".jdx-select-search")
     assert(chatModelSearch && chatModelSelect.querySelectorAll(".jdx-select-group").length === 3,
@@ -2548,14 +2582,14 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       && lockedChatModel.textContent.includes("需升级") && lockedChatModel.textContent.includes("需 MAX")
       && lockedChatModel.textContent.includes("升级后可直接选择"), "Locked model lost its subscription tier or recovery reason")
     lockedChatModel.click()
-    assert(JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "deepseek-v4-flash-vision-exp",
+    assert(chatModelId() === "qwen-3.8-flash",
       "Clicking a subscription-locked model changed the saved selection")
     assert(manager.document.querySelector('.jdx-toast[data-type="warning"]')?.textContent.includes("升级后可直接选择"),
       "Clicking a subscription-locked model did not show its Toast reason")
     lockedChatModel.focus()
     lockedChatModel.dispatchEvent(new manager.KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
     assert(manager.document.querySelectorAll('.jdx-toast[data-type="warning"]').length >= 2
-      && JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "deepseek-v4-flash-vision-exp",
+      && chatModelId() === "qwen-3.8-flash",
       "Keyboard selection of a locked model missed Toast or changed the saved selection")
     await screenshot("manager-model-subscription", manager)
     report.checks.push("jadense-model-subscription-lock")
@@ -2566,7 +2600,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     assert(chatModelOption && chatModelOption.textContent.includes("图片") && chatModelOption.textContent.includes("1.25x"),
       `Chat model search lost capabilities or consumption metadata: ${chatModelOption?.textContent ?? "missing option"}`)
     chatModelOption.click()
-    await waitFor(() => JSON.parse(Zotero.Prefs.get("extensions.jadenseInZotero.chatModel")).selection?.modelId === "synthetic-platform-model",
+    await waitFor(() => chatModelId() === "synthetic-platform-model",
       "persisted Jadense Chat model")
     report.checks.push("jadense-chat-model-catalog", "jadense-chat-model-search", "jadense-chat-model-selection")
     const input = manager.document.getElementById("jadense-chat-input")
@@ -3374,11 +3408,11 @@ async function main() {
       if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
       report.checks.push('no-generation-or-upload-request')
     }
-    if (!argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1

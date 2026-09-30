@@ -24,9 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.9 is released:** The PDF reader adds Reading mode, with clearer model thinking controls, translation progress, and bilingual PDF actions. Reading mode depends on the installed Zotero reader's structure extraction; translation starts only when you choose it. The official full package continues to include Frontier Radar; base builds from public source omit it. [Reading mode and settings](docs/usage-guide.md#simple-reading-069). [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9).
-
-**v0.6.10 release candidate:** Choose separate storage locations for the PDF layout and local OCR engines, and set thinking levels for BYOK models. The first launch of 0.6.10 sets the Jadense chat model to `qwen-3.8-flash` once; BYOK choices remain intact, and later manual changes are preserved. Download the official package from [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) after validation. [Setup and upgrade notes](docs/usage-guide.md#update-0610).
+**v0.6.10 is released:** Choose separate storage locations for the PDF layout and local OCR engines, and set thinking levels for BYOK models. The first launch of 0.6.10 sets the Jadense chat model to `qwen-3.8-flash` once; BYOK choices remain intact, and later manual changes are preserved. The official full package includes Frontier Radar; base builds from public source omit it. [Setup and upgrade notes](docs/usage-guide.md#update-0610) · [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10).
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 
@@ -35,11 +33,11 @@ The offline suite includes the new [PDF installation guide](<docs/jadense-in-zot
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) — Set separate PDF and OCR engine locations, choose BYOK thinking levels per feature, and set Jadense chat to `qwen-3.8-flash` once.
 - [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) — Add Reading mode with on-demand translation; improve model thinking controls, translation progress and the bilingual PDF toolbar.
 - [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — Frontier Radar adds standard arXiv and 13-source Jadense tracking, structured AI reviews and separate model settings; Jadense mode also supports Jev classification and OCR.
 - [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — Add arXiv-only Literature Radar, Jadense mode and an illustrated PDF offline guide; improve OCR setup cancellation and PDF translation recovery.
 - [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — Fix offline installation BOM and deep-path extraction errors; open the PDF engine guide from settings.
-- [v0.6.5](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.5) — Complete Windows x64 offline ZIP with the plugin, PDF engine and local OCR engine, plus more reliable engine setup.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
@@ -108,9 +106,9 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current official XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest official release is [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9), with metadata and SHA-256 checksums |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current official XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest official release is [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.9/jadense-in-zotero-v0.6.9.xpi` | The current public source builds the base distribution; Frontier Radar is available in official full packages |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.10/jadense-in-zotero-v0.6.10.xpi` | The current public source builds the base distribution; Frontier Radar is available in official full packages |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -179,7 +177,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### 1. Install and open the workbench
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.9**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.10**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 
@@ -347,7 +345,7 @@ Local history does not mean offline AI. Extractable text from an attached PDF ca
 
 ### Which versions are supported? What are the reading limits?
 
-The manifest declares compatibility with **Zotero 8.0 through 10.0.\***. Some older screenshots use the local 0.4.4 build on Windows 11 / Zotero 10.0.2; the 0.6.9 Reading mode screenshot uses an isolated Windows 11 / Zotero 10.0.3 profile. All use synthetic data and mocked services. The downloaded [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) XPI passed three cold starts, Reading mode, bilingual PDF and an in-place upgrade from 0.6.8 on Windows 11 / Zotero 10.0.3. Other platforms, Zotero 8/9, Zotero 10.0.4 and live paid providers were not tested.
+The manifest declares compatibility with **Zotero 8.0 through 10.0.\***. Some older screenshots use the local 0.4.4 build on Windows 11 / Zotero 10.0.2; the 0.6.9 Reading mode screenshot uses an isolated Windows 11 / Zotero 10.0.3 profile. All use synthetic data and mocked services. The downloaded [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) draft XPI passed three cold starts, Reading mode, engine storage and BYOK thinking checks, and an in-place upgrade from 0.6.9 on Windows 11 / Zotero 10.0.3. Other platforms, Zotero 8/9, Zotero 10.0.4 and live paid providers were not tested.
 
 Scanned PDFs need OCR before operations that depend on extracted text. Analysis depends on the extractable text and model output; check the results against the paper. If generation is interrupted or some annotations cannot be saved, the plugin attempts to retain the generated notes and reports the outcome. Each message can include one new image. Images that were not saved by older versions cannot be recovered automatically.
 
@@ -355,11 +353,11 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-Install the current v0.6.9 release over an older GitHub version with the same `.cn` plugin ID. An in-place upgrade from 0.6.8 passed on Windows 11 / Zotero 10.0.3. Settings and local history are preserved. Existing translations are not regenerated automatically.
+Install the current v0.6.10 release over an older GitHub version with the same `.cn` plugin ID. An in-place upgrade from 0.6.9 passed on Windows 11 / Zotero 10.0.3. Settings and local history are preserved. Existing translations are not regenerated automatically. The first 0.6.10 launch sets Jadense chat to `qwen-3.8-flash` once; BYOK chat stays unchanged, and later manual choices remain intact.
 
 If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install the latest published XPI**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 
-The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved explicit models, routes, and BYOK selections are preserved. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-042-en) for version differences.
+The new version retains the existing preference namespace and history location. Do not delete your Zotero profile. Saved models, routes, and BYOK choices are preserved except for the one-time Jadense chat model switch above. The plugin still reads the [official Jadense update feed](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); a GitHub release does not automatically change that feed. See the [release notes (Chinese and English)](CHANGELOG.md#release-042-en) for version differences.
 
 <a id="support"></a>
 
