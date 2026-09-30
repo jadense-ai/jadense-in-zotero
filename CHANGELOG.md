@@ -2,12 +2,14 @@
 
 ## 0.6.10 — 2026-09-30
 
-- 待发布：PDF 版面引擎与本机 OCR 可分别选择存储位置；移动已有安装时先复制、校验并检查健康状态，失败保留原位置。
+- PDF 版面引擎与本机 OCR 可分别选择存储位置；移动已有安装时先复制、校验并检查健康状态，失败保留原位置。
 - BYOK 模型可配置并按功能选择思考档位；未明确选择时由提供商决定，已有配置继续可用。
 - 首次启动 0.6.10 时，攻玉对话模型一次性改为 `qwen-3.8-flash`。BYOK 对话目的地、翻译等独立模型不变；之后的手动选择不会在重启或后续更新时再次被覆盖。
-- Pending release: PDF layout and local OCR engines can use separate storage locations. Moving an installation copies and verifies files and checks engine health before switching; failures keep the old location.
+- PDF layout and local OCR engines can use separate storage locations. Moving an installation copies and verifies files and checks engine health before switching; failures keep the old location.
 - BYOK models now support configurable thinking levels per feature. Without an explicit level, the provider decides; existing configurations remain usable.
 - The first 0.6.10 launch sets Jadense chat to `qwen-3.8-flash` once. BYOK chat and independent feature models stay unchanged, and later manual choices are preserved across restarts and subsequent updates.
+- 已正式公开发布；Windows 11 / Zotero 10.0.3 上，草稿原包通过三次冷启动、0.6.9 原位升级、简阅、引擎存储、BYOK 思考档位和原生解析侧栏专项，两种引擎通过离线安装检查。其他系统、Zotero 8/9、Zotero 10.0.4 和真实付费服务未实测。
+- Released publicly. On Windows 11 / Zotero 10.0.3, the original draft assets passed three cold starts, an in-place upgrade from 0.6.9, Reading mode, engine storage, BYOK thinking and native analysis sidebar checks. Both engines passed offline installation checks. Other systems, Zotero 8/9, Zotero 10.0.4 and live paid services were not tested.
 
 
 ## 0.6.9 — 2026-09-30
