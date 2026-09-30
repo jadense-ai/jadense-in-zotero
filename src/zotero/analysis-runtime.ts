@@ -7,6 +7,7 @@ import type { AnalysisRunView } from './analysis-workspace'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { markDiagnosticAbort } from './diagnostics'
+import { analysisStage } from './analysis-stage'
 import { FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
 
 export class AnalysisRuntime {
@@ -51,11 +52,8 @@ export class AnalysisRuntime {
       else try { if (this.host.Prefs) appendPaperAnalysisRecord(this.host.Prefs, linked) } catch { /* 可选关联不影响完整结果。 */ }
     }
     try {
-      const source = await new Promise<Awaited<ReturnType<typeof collectSourceForItem>>>((resolve, reject) => {
-        const abort = () => reject(new DOMException('Aborted', 'AbortError'))
-        signal.addEventListener('abort', abort, { once: true })
-        collectSourceForItem(this.host, itemID, { includeText: false }).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
-      })
+      const source = await analysisStage(signal, uiText('准备文献', 'Preparing document'), 120_000,
+        () => collectSourceForItem(this.host, itemID, { includeText: false }))
       signal.throwIfAborted()
       if (source?.kind === 'file') view.source = { ...source, title: source.parentItem?.title || source.title, authors: [] }
       const jobs = documentJobs(this.host)
@@ -70,16 +68,17 @@ export class AnalysisRuntime {
       const win = this.host.getMainWindow?.()
       const result = await this.run({ zotero: this.host, itemID, signal, fetchImpl: win?.fetch.bind(win) ?? globalThis.fetch.bind(globalThis),
         onProgress: message => { if (!signal.aborted) { view.message = message; this.emit() } },
+        onRetry: retrying => { view.retrying = retrying; this.emit() },
       })
       view.source = result.record.source
       if (!result.historySaved || result.historyError) this.retained.set(result.record.id, result.record)
       resultID = result.record.id; linkReferences()
       view.error = !result.historySaved || Boolean(result.historyError) || Boolean(result.annotationError) || Boolean(result.record.warnings?.length) || signal.aborted
-      view.message = result.historyError || (view.error ? uiText('解析内容已保留，请查看结果提示。', 'Analysis retained; review the result notices.') : uiText('解析完成，总结与笔记已保存。', 'Analysis complete. Summary and notes saved.'))
+      view.message = result.historyError || result.annotationError || result.record.warnings?.[0] || (view.error ? uiText('解析内容已保留，请查看结果提示。', 'Analysis retained; review the result notices.') : uiText('解析完成，总结与笔记已保存。', 'Analysis complete. Summary and notes saved.'))
     } catch (error) {
       view.error = true
       view.message = signal.aborted ? uiText('解析已停止，已有结果仍可阅读。', 'Analysis stopped. Existing results remain readable.') : error instanceof Error ? error.message : String(error)
-    } finally { view.busy = false; this.controllers.delete(itemID); this.emit() }
+    } finally { view.busy = false; view.retrying = false; this.controllers.delete(itemID); this.emit() }
   }
   dispose() { for (const id of this.controllers.keys()) this.stop(id); for (const id of this.observers) this.host.Prefs?.unregisterObserver?.(id); this.listeners.clear() }
 }

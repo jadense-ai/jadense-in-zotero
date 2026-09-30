@@ -1,3 +1,4 @@
+import { createModelSelect } from './ui/model-select'
 /** OCR 服务设置：草稿不影响运行任务，保存时显式选择服务并确认上传范围。 */
 import type { ZoteroLike } from './runtime'
 import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, cloudOCRConfig, cloudEndpoint, ocrEngine, saveCloudOCRConfig, type CloudOCREngine, type OCREngine } from './cloud-ocr-config'
@@ -31,7 +32,7 @@ export function wireCloudOCRSettings(host: ZoteroLike, root: HTMLElement, onEngi
   for (const b of [save, test, stop]) { b.type = 'button'; b.className = 'jdx-button' }
   stop.hidden = true
   const status = make('p'); status.setAttribute('role', 'status'); status.dataset.ocrSummaryState = 'unchecked'
-  const preset = make('div'), models = createJdxSelect(preset, { ariaLabel: uiText('预置模型', 'Model preset') })
+  const preset = make('div'), models = createModelSelect(preset, { ariaLabel: uiText('预置模型', 'Model preset') })
   models.setOptions([{ value: 'deepseek-ai/DeepSeek-OCR', label: 'DeepSeek-OCR' }, { value: 'PaddlePaddle/PaddleOCR-VL', label: 'PaddleOCR-VL' }], 'deepseek-ai/DeepSeek-OCR')
   models.onChange(value => { model.value = value; status.dataset.ocrSummaryState = 'unchecked' })
   for (const field of [endpoint, model, key, consent]) field.addEventListener('input', () => { status.dataset.ocrSummaryState = 'unchecked' })

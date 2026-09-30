@@ -110,6 +110,29 @@ describe("paper analysis wrapper", () => {
     expect(result.warnings.join(" ")).toContain("修复")
   })
 
+  it("closes missing JSON containers after complete values instead of losing an object-shaped section", () => {
+    const response = '{"summary":"完整总结","sections":{"methods":"完整方法"'
+    const result = parsePaperAnalysis(response, passages)
+    expect(result.summary).toBe("完整总结")
+    expect(result.sections).toEqual([{ category: "methods", summary: "完整方法" }])
+    expect(result.warnings.join(" ")).toContain("已修复 AI 返回的 JSON 格式")
+    expect(result.warnings.join(" ")).not.toContain("结构不完整")
+  })
+
+  it("closes an outer container after an already complete annotation entry", () => {
+    const response = '{"summary":"完整总结","annotations":[{"passageId":"p1-s1","category":"claim","comment":"完整解释"}]'
+    const result = parsePaperAnalysis(response, passages)
+    expect(result.annotations.map(({ comment }) => comment)).toEqual(["完整解释"])
+    expect(result.warnings.join(" ")).toContain("已修复 AI 返回的 JSON 格式")
+  })
+
+  it("recovers a complete section entry whose closing containers were omitted", () => {
+    const response = '{"sections":[{"category":"methods","summary":"完整方法"'
+    const result = parsePaperAnalysis(response, passages)
+    expect(result.sections).toEqual([{ category: "methods", summary: "完整方法" }])
+    expect(result.warnings.join(" ")).toContain("已修复 AI 返回的 JSON 格式")
+  })
+
   it.each([
     '{"summary":"完整总结","sections":[{"category":"methods","summary":"完整方法"}],"annotations":[{"passageId":"p1-s1","category":"claim","comment":"完整批注"},{"passageId":"p5-s2","comment":"未完成',
     '{"summary":"完整总结","sections":[{"category":"methods","summary":"完整方法"}],"annotations":[{"passageId":"p1-s1","category":"claim","comment":"完整批注"},{"comment":broken},{"passageId":"p5-s2","category":"evidence","comment":"后续完整批注"}]}',

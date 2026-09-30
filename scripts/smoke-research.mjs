@@ -12,6 +12,7 @@ import { verifyOCRTranslation } from './smoke-ocr-translation.mjs'
 import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
 import { verifyJadenseMode } from './smoke-jadense-mode.mjs'
 import { verifyPDFTranslation, verifyPDFTranslationRestart } from './smoke-pdf-translation.mjs'
+import { verifySimpleReading, verifySimpleReadingInterruption, verifySimpleReadingRestart } from './smoke-simple-reading.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -618,6 +619,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    if (config.simpleReadingResume) {
+      await verifySimpleReadingRestart({ Zotero, waitFor, assert, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.pdfTranslationResume) {
       await verifyPDFTranslationRestart({ Zotero, waitFor, assert, report })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
@@ -1001,6 +1006,16 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     if (config.pdfTranslationOnly) {
       await stage('pdf-translation')
       await verifyPDFTranslation({ Zotero, reader, assert, waitFor, screenshot, report, config, findManager })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.simpleReadingInterruptionOnly) {
+      await stage('simple-reading-interruption')
+      await verifySimpleReadingInterruption({ Zotero, reader, assert, waitFor, report, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
+    if (config.simpleReadingOnly) {
+      await stage('simple-reading')
+      await verifySimpleReading({ Zotero, reader, assert, waitFor, screenshot, report, config })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.cloudOCROnly) {
@@ -3090,6 +3105,9 @@ async function writeCompanion(extensionsDir, config) {
     verifyJadenseMode.toString(),
     verifyTranslationFiles.toString(),
     verifyPDFTranslation.toString(),
+    verifySimpleReading.toString(),
+    verifySimpleReadingInterruption.toString(),
+    verifySimpleReadingRestart.toString(),
     verifyPDFTranslationRestart.toString(),
     verifyFeatureSettings.toString(),
     verifyFeatureSettingsRestart.toString(),
@@ -3156,6 +3174,7 @@ async function main() {
   const dataDir = path.join(smokeRoot, "data")
   const reportPath = path.join(smokeRoot, "research-report.json")
   const pdfPath = path.join(smokeRoot, "synthetic-research.pdf")
+  const secondPdfPath = path.join(smokeRoot, 'second-research.pdf')
   const referencePdfPath = path.join(smokeRoot, "synthetic-references.pdf")
   const translationPdfPath = path.join(smokeRoot, "synthetic-translation.pdf")
   const extensionsDir = path.join(profileDir, "extensions")
@@ -3184,7 +3203,9 @@ async function main() {
       await mkdir(path.join(profileDir, 'jadense-ocr'), { recursive: true })
       await symlink(runtime, path.join(profileDir, 'jadense-ocr', 'v1'), process.platform === 'win32' ? 'junction' : 'dir')
     }
-    await writeFile(pdfPath, createResearchFixturePdf())
+    if ((argv.includes('--simple-reading-only') || argv.includes('--simple-reading-interruption-only')) && argValue(argv, '--simple-reading-pdf')) await copyFile(path.resolve(argValue(argv, '--simple-reading-pdf')), pdfPath)
+    else await writeFile(pdfPath, createResearchFixturePdf())
+    if (argv.includes('--simple-reading-interruption-only')) await copyFile(path.resolve(argValue(argv, '--simple-reading-second-pdf')), secondPdfPath)
     await writeFile(referencePdfPath, createResearchFixturePdf(true))
     await writeFile(translationPdfPath, createResearchFixturePdf(false, true))
     const longPdfPath = path.join(smokeRoot, 'synthetic-long.pdf')
@@ -3194,6 +3215,8 @@ async function main() {
     if (upgradeXpi) await copyFile(artifact, upgradeXpi)
     const wordFixture = new JSZip().file('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Synthetic Word evidence</w:t></w:r></w:p></w:body></w:document>')
     const companionConfig = {
+      simpleReadingOnly: argv.includes('--simple-reading-only'),
+      simpleReadingInterruptionOnly: argv.includes('--simple-reading-interruption-only'), closeBeforePanel: argv.includes('--simple-reading-close-before-panel'), closeDelayMs: Number(argValue(argv, '--simple-reading-close-delay-ms') ?? 0), secondPdfPath,
       longPdfOnly: argv.includes('--long-pdf-only'), longPdfPath,
       wordBytes: argv.includes('--chat-files-only') ? Array.from(await wordFixture.generateAsync({ type: 'uint8array' })) : undefined,
       pluginID, profileDir, dataDir, pdfPath, referencePdfPath, translationPdfPath, reportPath, origin: stub.origin, upgradeXpi,
@@ -3255,6 +3278,22 @@ async function main() {
       await delay(250)
     }
     if (report?.state !== "passed") throw new Error(`Research smoke timed out at ${report?.stage ?? "companion startup"}`)
+    if (argv.includes('--simple-reading-only')) {
+      await stopIsolatedProcess(child, profileDir); child = undefined
+      const restartReport = path.join(smokeRoot, 'simple-reading-restart-report.json')
+      await writeCompanion(extensionsDir, { ...companionConfig, simpleReadingResume: true, reportPath: restartReport })
+      child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
+      const until = Date.now() + timeoutMs
+      let restored
+      while (Date.now() < until) {
+        restored = await readFile(restartReport, 'utf8').then(JSON.parse).catch(() => undefined)
+        if (restored?.state === 'failed') throw new Error(restored.error)
+        if (restored?.state === 'passed') break
+        await delay(250)
+      }
+      if (restored?.state !== 'passed') throw new Error('Simple reading cold restart timed out')
+      report.checks.push(...restored.checks)
+    }
     if (argv.includes('--long-pdf-only')) {
       const summariesBefore = stub.requests.filter(row => row.kind === 'long-pdf-summary').length
       await stopIsolatedProcess(child, profileDir); child = undefined
@@ -3328,11 +3367,11 @@ async function main() {
       if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
       report.checks.push('no-generation-or-upload-request')
     }
-    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -3349,7 +3388,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

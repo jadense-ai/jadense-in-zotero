@@ -1,3 +1,4 @@
+import { reportProgress, requestError, requestIssue, type RequestProgressListener } from './request-feedback'
 import { traceRequest, diagnosticFetch, type RequestDiagnostic } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 /**
@@ -12,7 +13,7 @@ export type ByokProtocol = "openai-chat-completions" | "anthropic-messages" | "o
 
 /** 保留可信 HTTP 状态供调度区分明确拒绝与结果不确定；正文仍使用原脱敏逻辑。 */
 export class ByokResponseError extends Error {
-  constructor(readonly status: number, message: string, readonly retryAfter: string | null = null) { super(message) }
+  constructor(readonly status: number, message: string, readonly retryAfter: string | null = null) { super(message); this.name = 'ByokResponseError' }
 }
 
 export type ByokConfig = {
@@ -122,13 +123,14 @@ function redactedError(message: string, apiKey: string, fallback: string) {
 }
 
 async function responseError(response: Response, apiKey: string) {
-  let message = ""
+  let message = "", detail: unknown
   try {
-    message = providerErrorMessage(JSON.parse(await response.text()))
+    detail = JSON.parse(await response.text())
+    message = providerErrorMessage(detail)
   } catch {
     // 不显示未知原始响应，避免 Provider 回显凭据或私有请求内容。
   }
-  return new ByokResponseError(response.status, redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`)).message, response.headers.get('Retry-After'))
+  return Object.assign(new ByokResponseError(response.status, redactedError(message, apiKey, uiText(`BYOK 请求失败（${response.status}）。`, `BYOK request failed (${response.status}).`)).message, response.headers.get('Retry-After')), requestIssue(object(detail)?.error ?? detail, { code: 'BYOK_HTTP_ERROR', stage: 'http', requestId: response.headers.get('x-request-id') ?? undefined }))
 }
 
 export async function consumeByokStream(
@@ -139,6 +141,7 @@ export async function consumeByokStream(
   requireComplete = false,
   acceptTruncated = false,
   diagnostic?: RequestDiagnostic,
+  onProgress?: RequestProgressListener,
 ) {
   if (!response.ok) throw await responseError(response, apiKey)
   if (!response.body) throw new Error(uiText("BYOK 响应缺少数据流。", "The BYOK response has no stream."))
@@ -148,19 +151,22 @@ export async function consumeByokStream(
   let pending = ""
   let accumulatedText = ""
   let complete = false
+  let reasoning = false
+  reportProgress(onProgress, { stage: 'sent', thinking: { version: 1, thinkingSource: 'provider_default' } })
 
-  const incompleteError = (kind: "truncated" | "eof") => new Error(requireComplete
+  const incompleteError = (kind: "truncated" | "eof") => requestError(requireComplete
     ? kind === "truncated"
       ? uiText("BYOK 输出未完整结束，未写入 PDF 批注。请重试。", "BYOK output was incomplete. No PDF annotations were written. Please retry.")
       : uiText("BYOK 连接意外结束，未写入 PDF 批注。请重试。", "The BYOK connection ended unexpectedly. No PDF annotations were written. Please retry.")
     : kind === "truncated"
       ? uiText("BYOK 输出因提供商限制被截断。请提高输出上限后重试。", "The provider truncated the BYOK output. Increase the output limit and retry.")
-      : uiText("BYOK 连接在成功结束事件前意外中断。请重试。", "The BYOK connection ended before completion. Please retry."))
+      : uiText("BYOK 连接在成功结束事件前意外中断。请重试。", "The BYOK connection ended before completion. Please retry."), {}, { code: kind === "truncated" ? "STREAM_INCOMPLETE" : "STREAM_EARLY_EOF", stage: "stream" })
 
   const append = (delta: unknown) => {
     if (typeof delta !== "string" || !delta) return
     accumulatedText += delta
     diagnostic?.text(delta.length)
+    reportProgress(onProgress, { stage: 'receiving', receivedCharacters: accumulatedText.length })
     try { onTextDelta?.(delta, accumulatedText) } catch (error) { diagnostic?.fail(error, "callback_error"); throw error }
   }
 
@@ -184,13 +190,19 @@ export async function consumeByokStream(
       if (!object(parsed)) return
       event = parsed as JsonObject
     } catch {
-      throw new Error(uiText("BYOK 提供商返回了无法解析的流事件。", "The BYOK provider returned an unreadable stream event."))
+      throw requestError(uiText("BYOK 提供商返回了无法解析的流事件。", "The BYOK provider returned an unreadable stream event."), {}, { code: "STREAM_PARSE_FAILED", stage: "stream" })
     }
 
     if (["error", "response.failed", "response.completed", "response.incomplete", "message_stop"].includes(String(event.type))) diagnostic?.event(String(event.type))
+    const choices = Array.isArray(event.choices) ? event.choices : []
+    if (String(event.type).includes('reasoning') || object(event.delta)?.type === 'thinking_delta' || choices.some(c => typeof object(object(c)?.delta)?.reasoning_content === 'string')) {
+      diagnostic?.reasoning()
+      reasoning = true
+      if (!accumulatedText) reportProgress(onProgress, { stage: 'reasoning', receivedCharacters: 0 })
+    }
     const errorMessage = providerErrorMessage(event)
     if (protocol === "openai-chat-completions") {
-      if (event.error) throw redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed."))
+      if (event.error) throw Object.assign(redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
       const choices = Array.isArray(event.choices) ? event.choices : []
       for (const choiceValue of choices) {
         const choice = object(choiceValue)
@@ -205,7 +217,7 @@ export async function consumeByokStream(
     }
 
     if (protocol === "anthropic-messages") {
-      if (event.type === "error") throw redactedError(errorMessage, apiKey, uiText("Anthropic Messages 生成失败。", "Anthropic Messages failed."))
+      if (event.type === "error") throw Object.assign(redactedError(errorMessage, apiKey, uiText("Anthropic Messages 生成失败。", "Anthropic Messages failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
       if (event.type === "content_block_delta") append(object(event.delta)?.text)
       if (event.type === "message_delta") {
         const stopReason = object(event.delta)?.stop_reason
@@ -221,7 +233,7 @@ export async function consumeByokStream(
 
     if (event.type === "error" || event.type === "response.failed") {
       const nested = providerErrorMessage(event.response)
-      throw redactedError(errorMessage || nested, apiKey, uiText("OpenAI Responses 生成失败。", "OpenAI Responses failed."))
+      throw Object.assign(redactedError(errorMessage || nested, apiKey, uiText("OpenAI Responses 生成失败。", "OpenAI Responses failed.")), requestIssue(event.error ?? object(event.response)?.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
     }
     if (event.type === "response.output_text.delta") append(event.delta)
     if (event.type === "response.completed") complete = true
@@ -248,13 +260,14 @@ export async function consumeByokStream(
     if (pending.trim()) consumeBlock(pending)
     if (!complete) diagnostic?.event("early_eof")
     if (!complete) throw incompleteError("eof")
+    if (requireComplete && !accumulatedText.trim()) throw requestError(uiText('模型未返回译文。', 'The model returned no translation.'), {}, { code: reasoning ? 'REASONING_ONLY' : 'EMPTY_OUTPUT', stage: 'stream' })
     return accumulatedText
   } catch (error) {
     diagnostic?.fail(error, "stream_error")
     diagnostic?.event("cleanup_cancel", { source: "stream_cleanup" })
     await reader.cancel().catch(() => undefined)
     if (object(error)?.name === "AbortError") throw error
-    throw redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream."))
+    throw Object.assign(redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream.")), requestIssue(error, { code: "NETWORK_ERROR", stage: "stream" }))
   } finally {
     reader.releaseLock()
   }
@@ -376,7 +389,7 @@ export class ByokChatClient {
         })
       } catch (error) {
         if (input.signal?.aborted || object(error)?.name === 'AbortError') throw error
-        throw redactedError(error instanceof Error ? error.message : '', this.config.apiKey, uiText('BYOK 网络请求失败。', 'The BYOK network request failed.'))
+        throw Object.assign(redactedError(error instanceof Error ? error.message : '', this.config.apiKey, uiText('BYOK 网络请求失败。', 'The BYOK network request failed.')), requestIssue(error, { code: 'NETWORK_ERROR', stage: 'dispatch' }))
       }
       if (index === modes.length - 1 || !await rejectedResponseFormat(response)) break
       await response.body?.cancel().catch(() => undefined)
@@ -390,6 +403,7 @@ export class ByokChatClient {
       input.requireComplete,
       input.acceptTruncated,
       input.diagnostic,
+      input.onProgress,
     )
   }
 }

@@ -11,7 +11,32 @@ function store() {
 }
 const input = { clientRequestId: 'request-1', operationId: 'operation-1', conversationId: 'conversation', messages: [{ id: 'message', role: 'user' as const, text: 'example' }] }
 const headers = { 'x-jadense-temporary-protocol': '1' }
+it('freezes translation effort in the durable request and never reuses its identity with a different effort', async () => {
+  const disk = store()
+  const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
+    ? new Response(null, { headers }) : Response.json({ complete: true, state: 'completed', text: 'translated' }, { headers }))
+  const options = { baseUrl: 'https://thinking.test', token: 'synthetic', fetchImpl, selection: { kind: 'model' as const, modelId: 'translation', thinkingEffort: 'low' } }
+  await new ReliableTemporaryChatClient(options, disk).send({ ...input, reuseCompletedOperation: true })
+  const posts = () => fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')
+  expect(JSON.parse(String(posts()[0][1]?.body))).toMatchObject({ modelId: 'translation', thinkingEffort: 'low' })
+  expect((await disk.list())[0].body.thinkingEffort).toBe('low')
+  await expect(new ReliableTemporaryChatClient({ ...options, selection: { ...options.selection, thinkingEffort: 'high' } }, disk)
+    .send({ ...input, reuseCompletedOperation: true })).rejects.toThrow(/不同输入|different input/)
+  expect(posts()).toHaveLength(1)
+})
 const format = { type: 'json_schema' as const, name: 'review', schema: { type: 'object', properties: { overview: { type: 'string' } } }, fallback: 'text' as const }
+it('lets the new gateway own prompt injection and persists the exact request for recovery', async () => {
+  const disk = store()
+  const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
+    ? new Response(null, { headers: { ...headers, 'x-jadense-response-format': '1', 'x-jadense-response-format-prompt': 'gateway' } })
+    : Response.json({ complete: true, state: 'completed', text: '{"overview":"review"}' }, { headers }))
+  const client = new ReliableTemporaryChatClient({ baseUrl: 'https://format.test', token: 'synthetic', fetchImpl }, disk)
+  await client.send({ ...input, responseFormat: format })
+  const post = fetchImpl.mock.calls.find(([, init]) => init?.method === 'POST')!
+  const body = JSON.parse(String(post[1]?.body))
+  expect(body.responseFormat).toEqual(format)
+  expect(body.messages[0].parts[0].text).not.toContain(JSON.stringify(format.schema))
+})
 it.each([true, false])('negotiates native format=%s while preserving the full schema prompt and cached execution', async supported => {
   const disk = store(), fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
     ? new Response(null, { headers: { ...headers, ...(supported ? { 'x-jadense-response-format': '1' } : {}) } })

@@ -130,7 +130,7 @@ describe.each(["jadense", "byok"] as const)("paper analysis recovery through %s 
       : { choices: [{ delta: { content: structured } }] }
     let response: Response | undefined
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.signal).toBe(abort.signal)
+      expect(init?.signal?.aborted).toBe(false)
       response = new Response(new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(delta)}\n\n`))

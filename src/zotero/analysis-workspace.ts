@@ -11,7 +11,7 @@ import { getUiLocale, uiText } from "./ui-preferences"
 import { actionIcon, action, badge, bindTabs, element, notice } from "./ui/controls"
 
 export type AnalysisDetailTab = "summary" | "notes" | "references"
-export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; error?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
+export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; error?: boolean; retrying?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
 const timeText = (value: string) => new Date(value).toLocaleString(getUiLocale(), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 const metadataText = (source: PaperAnalysisSource) => [source.authors.join("、"), source.date || source.year, source.publicationTitle].filter(Boolean).join(" · ")
 /** 翻译固定展示标题，不改写已保存的模型正文或笔记备份。 */

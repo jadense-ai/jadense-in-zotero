@@ -1,3 +1,4 @@
+import { createModelSelect } from './ui/model-select'
 import { mountOptionalFeatures } from './optional-features'
 import { createManagerNavigationIcon, initializeManagerNavigationIcons } from './manager-navigation-icons'
 import { wireFeatureSettings } from './feature-settings'
@@ -69,7 +70,7 @@ import {
 } from "./runtime"
 import { copyTextToClipboard, maskToken } from "./connection-display"
 import {
-  AI_FEATURES,
+  AI_SETTINGS_FEATURES as AI_FEATURES, AI_MODEL_SETTINGS_PREF_KEY, featureFollowsChat,
   AI_FEATURE_LABELS,
   FEATURE_MODEL_PREF_KEYS,
   AUTO_FOLLOW_CHAT_MODEL_PREF_KEY,
@@ -93,7 +94,8 @@ import {
   type ByokModel,
   type ByokProvider,
 } from "./ai-settings"
-import { bindModelSelectToast, buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from "./ai-model-select"
+import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureModelThinking, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from "./ai-model-select"
+import { rememberModelCatalog } from "./model-catalog"
 export { buildJadenseChatModelSelectOptions, jadenseChatModelSelectionIssue } from "./ai-model-select"
 import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-analysis-runner"
 import { formatJadenseSyncResult } from "./sync-result"
@@ -457,6 +459,7 @@ let analysisWorkspace: ReturnType<typeof mountLiteratureWorkspace> | undefined
 let preparingAnalysisItemID: number | undefined
 const analysisSessions = new Map<number, { controller: AbortController; recordID: string; view: AnalysisRunView }>()
 export const MANAGER_OPERATION_PREF_KEYS = [
+  AI_MODEL_SETTINGS_PREF_KEY,
   "extensions.jadenseInZotero.baseUrl",
   "extensions.jadenseInZotero.token",
   AUTO_FOLLOW_CHAT_MODEL_PREF_KEY,
@@ -472,7 +475,7 @@ export function observeManagerOperationPreferences(zotero: ZoteroLike, onChange:
   const observerIDs: unknown[] = []
   for (const key of MANAGER_OPERATION_PREF_KEYS) {
     try {
-      observerIDs.push(prefs.registerObserver(key, () => onChange(key)))
+      observerIDs.push(prefs.registerObserver(key, () => onChange(key), key === AI_MODEL_SETTINGS_PREF_KEY))
     } catch {
       // 单个可选 observer 不可用时继续注册其余键，任务自身仍保留取消控制。
     }
@@ -606,13 +609,7 @@ function readElements(): ManagerElements {
     displayTheme: createJdxSelect(element(IDS.displayTheme), { ariaLabel: uiText("主题设置", "Theme") }),
     generalStatus: element(IDS.generalStatus),
     settingsTabs: element(IDS.settingsTabs),
-    featureModelSelects: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-feature-${feature}-model`), {
-      showSelectedIcon: true,
-      popupWidth: 304,
-      compact: true,
-      searchPlaceholder: uiText("搜索路由、模型或能力", "Search routes, models, or capabilities"),
-      ariaLabel: uiText(`${AI_FEATURE_LABELS[feature]}模型`, `${AI_FEATURE_LABELS[feature]} model`),
-    })])) as Record<AiFeature, JdxSelect>,
+    featureModelSelects: Object.fromEntries(AI_FEATURES.map(feature => [feature, createModelSelect(element(`jadense-feature-${feature}-model`), { ariaLabel: uiText(`${AI_FEATURE_LABELS[feature]}模型`, `${AI_FEATURE_LABELS[feature]} model`) })])) as Record<AiFeature, JdxSelect>,
     autoFollowChatModel: element<HTMLInputElement>(IDS.autoFollowChatModel),
     featureModelStatus: element(IDS.featureModelStatus),
     settingsTabFeatures: element(IDS.settingsTabFeatures),
@@ -640,13 +637,7 @@ function readElements(): ManagerElements {
     chatStop: element(IDS.chatStop),
     chatLatest: element(IDS.chatLatest),
     chatDock: element(IDS.chatDock),
-    chatModelSelect: createJdxSelect(element(IDS.chatModelSelect), {
-      showSelectedIcon: true,
-      ariaLabel: uiText("选择对话模型", "Choose a Chat model"),
-      popupWidth: 304,
-      compact: true,
-      searchPlaceholder: uiText("搜索路由、模型或能力", "Search routes, models, or capabilities"),
-    }),
+    chatModelSelect: createModelSelect(element(IDS.chatModelSelect), { ariaLabel: uiText("选择对话模型", "Choose a Chat model") }),
     chatComposeHint: element(IDS.chatComposeHint),
     sourcePanel: element(IDS.sourcePanel),
     sourceCount: element(IDS.sourceCount),
@@ -1389,6 +1380,7 @@ function renderFeatureModelSelect(select: JdxSelect, zotero: ZoteroLike, feature
   const issue = state.issue || (selection.route === "jadense" && chatModelCatalogStatus === "ready"
     ? jadenseChatModelSelectionIssue(chatModelCatalog, selection.selection ?? { kind: "default" }) : "")
   select.setOptions(buildFeatureModelSelectOptions(zotero, chatModelCatalog, selection), featureModelSelectionKey(selection))
+  configureFeatureModelThinking(select, zotero, feature, chatModelCatalog)
   select.setDisabled(chatBusy)
   select.element.dataset.status = chatModelCatalogStatus
   select.element.title = issue || uiText(`选择${AI_FEATURE_LABELS[feature]}模型`, `Choose a ${AI_FEATURE_LABELS[feature]} model`)
@@ -1406,13 +1398,13 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
   renderFeatureModelSelect(elements.chatModelSelect, zotero, activeChatFeature(zotero))
   for (const feature of AI_FEATURES) {
     renderFeatureModelSelect(elements.featureModelSelects[feature], zotero, feature)
-    elements.featureModelSelects[feature].setDisabled(chatBusy || (autoFollow && feature !== "chat"))
+    elements.featureModelSelects[feature].setDisabled(chatBusy || featureFollowsChat(zotero, feature))
   }
   setStatus(elements.featureModelStatus, chatModelCatalogStatus === "loading"
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
     : !readConnection(zotero).token ? uiText("连接攻玉后可加载内置模型；BYOK 模型可独立使用。", "Connect Jadense to load built-in models. BYOK models work independently.")
-      : autoFollow ? uiText("翻译、解析和图片解读自动跟随对话模型；关闭上方开关后可逐项配置。翻译接口和 Jev 文献分类独立使用。", "Translation, analysis and image interpretation follow the Chat model. Turn off the switch above to configure them separately. Translation services and Jev classification are independent.")
+      : autoFollow ? uiText("文献解析和图片解读跟随对话模型；翻译模型独立保存。", "Analysis and image interpretation follow Chat. Translation is configured independently.")
       : uiText("选择后自动保存，各功能可独立配置。", "Choices save automatically and features can be configured independently."))
 }
 
@@ -2378,6 +2370,7 @@ async function refreshJadenseChatModelCatalog(
     const catalog = await client.getChatModels(controller.signal)
     if (generation !== chatModelCatalogGeneration || !sameConnection(zotero, snapshot)) return
     chatModelCatalog = catalog
+    rememberModelCatalog(zotero, catalog)
     chatModelCatalogStatus = "ready"
     chatModelCatalogUpdatedAt = Date.now()
   } catch (error) {
@@ -2722,7 +2715,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   const selectFeatureModel = (feature: AiFeature, value: string) => {
     if (chatBusy) return
     try {
-      saveFeatureModelSelection(zotero, feature, featureModelSelectionFromKey(value))
+      saveFeatureModelSelection(zotero, feature, featureModelSelectionFromKey(value), chatModelCatalog)
       refreshManagerState(elements, zotero)
       renderChat(elements, zotero)
       setStatus(elements.featureModelStatus, uiText(`${AI_FEATURE_LABELS[feature]}模型已保存。`, `${AI_FEATURE_LABELS[feature]} model saved.`), "success")
@@ -2844,7 +2837,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     saveCollectionUploadIncludePdfDefault(zotero, elements.includePdf.checked)
     setStatus(elements.uploadStatus, uiText("PDF 上传选项已保存。", "PDF upload preference saved."), "success")
   })
-  elements.chatModelSelect.onChange(value => selectFeatureModel(readAutoFollowChatModel(zotero) ? "chat" : activeChatFeature(zotero), value))
+  elements.chatModelSelect.onChange(value => selectFeatureModel(featureFollowsChat(zotero, activeChatFeature(zotero)) ? "chat" : activeChatFeature(zotero), value))
   elements.byokProtocol.onChange((value) => {
     if (!BYOK_PROTOCOL_OPTIONS.some((option) => option.value === value)) return
     updateByokEndpoint(elements)
@@ -3227,7 +3220,7 @@ export function initJadenseManagerPage() {
   for (const feature of AI_FEATURES) readFeatureModelSelection(zotero, feature)
   const stopObservingOperationPreferences = observeManagerOperationPreferences(zotero, (key) => {
     const feature = AI_FEATURES.find(feature => FEATURE_MODEL_PREF_KEYS[feature] === key)
-    if (!feature || feature === (activeOperation === "analysis" ? "analysis" : activeChatFeature(zotero))) {
+    if (key !== AI_MODEL_SETTINGS_PREF_KEY && (!feature || feature === (activeOperation === "analysis" ? "analysis" : activeChatFeature(zotero)))) {
       readerActionQueue.length = 0
       markDiagnosticAbort(activeChatAbort?.signal, `preference:${key}`); activeChatAbort?.abort()
     }

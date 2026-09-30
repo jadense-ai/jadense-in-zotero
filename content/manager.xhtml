@@ -450,7 +450,7 @@
           </section>
           <section id="jadense-settings-panel-features" class="jdx-manager-settings-card" role="tabpanel" aria-labelledby="jadense-settings-tab-features" hidden="hidden">
             <section class="jdx-settings-task" data-settings-task="chat">
-              <h3 data-ui-en="Paper chat and model defaults">文献对话与模型默认值</h3>
+              <h3 data-ui-en="General settings">常规设置</h3>
               <div class="jdx-feature-model-row">
                 <div><h3 id="jadense-feature-chat-label" data-ui-en="AI Chat">AI 对话</h3><p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Reuses saved document extraction; linking papers does not start OCR.">可复用已有全文提取成果；关联文献不会自动启动 OCR。</p></div>
                 <div>
@@ -460,10 +460,22 @@
                   </p>
                 </div>
               </div>
-              <div class="jdx-feature-model-row"><div><label class="jdx-manager-checkbox jdx-pref-checkbox">
+
+                <div class="jdx-feature-model-row">
+                  <div><h3 id="jadense-feature-translation-label" data-ui-en="Translation model">翻译模型</h3></div>
+                  <div>
+                    <div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label">
+                    </div>
+                    <p id="jadense-feature-translation-model-status" role="status">
+                    </p>
+
+                  </div>
+                </div>
+              <p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Applies to selection, reading mode, bilingual PDF and full Markdown AI translation. Independent of Chat; translation services are configured below.">适用于选文、简阅、PDF 对照及 Markdown 全文 AI 翻译；独立于对话模型，传统翻译服务在下方配置。</p>
+<div class="jdx-feature-model-row"><div><label class="jdx-manager-checkbox jdx-pref-checkbox">
                 <input id="jadense-auto-follow-chat-model" type="checkbox" checked="checked" />
-                <span data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</span>
-              </label><p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="When enabled, both AI translation modes, analysis and image interpretation follow Chat. Translation services and Jev remain independent.">开启后，两种 AI 翻译、文献解析和图片解读跟随对话模型；翻译接口与 Jev 分类独立配置。</p></div><div></div></div>
+                <span data-ui-en="Analysis and images follow the Chat model">解析和图片解读跟随对话模型</span>
+              </label><p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Only analysis and image interpretation follow Chat. Translation always uses the independent model above.">仅文献解析和图片解读跟随对话模型；翻译始终使用上方独立设置。</p></div><div></div></div>
               <div id="jadense-feature-model-status" role="status">
               </div>
             </section>
@@ -471,18 +483,7 @@
               <h3 data-ui-en="Selection translation">选文翻译</h3>
               <div data-selection-settings-host="">
               </div>
-              <section data-translation-scope="selection">
-                <div class="jdx-feature-model-row">
-                  <div><h3 id="jadense-feature-translation-label" data-ui-en="AI model">AI 模型</h3></div>
-                  <div>
-                    <div id="jadense-feature-translation-model" aria-labelledby="jadense-feature-translation-label">
-                    </div>
-                    <p id="jadense-feature-translation-model-status" role="status">
-                    </p>
-                    <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
-                  </div>
-                </div>
-              </section>
+              <section data-translation-scope="selection"></section>
             </section>
             <section class="jdx-settings-task" data-settings-task="figure">
               <h3 data-ui-en="Image interpretation">图片解读</h3>
@@ -499,18 +500,7 @@
             </section>
             <section class="jdx-settings-task" data-settings-task="pdf-translation">
               <h3 data-ui-en="Bilingual PDF translation">对照翻译</h3>
-              <section data-translation-scope="document">
-                <div class="jdx-feature-model-row">
-                  <div><h3 id="jadense-feature-fullTranslation-label" data-ui-en="AI model">AI 模型</h3></div>
-                  <div>
-                    <div id="jadense-feature-fullTranslation-model" aria-labelledby="jadense-feature-fullTranslation-label">
-                    </div>
-                    <p id="jadense-feature-fullTranslation-model-status" role="status">
-                    </p>
-                    <p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</p>
-                  </div>
-                </div>
-              </section>
+              <section data-translation-scope="document"></section>
               <p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Preserves PDF layout. Choose source and target languages in the paper’s translation toolbar; language settings are saved per paper. Scanned pages retain the original.">保留 PDF 版面。源语言与目标语言在文献翻译工具栏中选择，按文献保存；扫描页保留原文。</p>
             </section>
             <section class="jdx-settings-task" data-settings-task="document">

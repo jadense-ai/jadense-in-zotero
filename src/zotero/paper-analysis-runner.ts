@@ -1,3 +1,4 @@
+import { PAPER_ANALYSIS_RESPONSE_FORMAT } from '@/chat/paper-analysis'
 import { diagnostics } from "./diagnostics"
 import { literatureIdentity } from "./document-identity"
 import { uiText } from "@/zotero/ui-preferences"
@@ -19,6 +20,8 @@ import { ReliableTemporaryChatClient as TemporaryChatClient } from "@/chat/relia
 import { featureModelState, type PaperAnalysisModelSelection } from "./ai-settings"
 import { readPdfForAnalysis, saveAnalysisAnnotations, type PdfAnalysisSnapshot, type SavedAnalysisAnnotations, type ZoteroReaderHost } from "./reader-tools"
 import { readConnection, type ZoteroLike } from "./runtime"
+import { analysisStage } from './analysis-stage'
+import { generateAnalysis } from './analysis-generation'
 
 export const PAPER_ANALYSIS_MISSING_SUMMARY = "本次解析未返回总结。"
 
@@ -44,6 +47,7 @@ export type PaperAnalysisRunResult = {
 type PaperAnalysisRunnerServices = {
   readPdf: typeof readPdfForAnalysis
   send(input: TemporaryChatSendInput, model: PaperAnalysisModelState): Promise<string>
+  recover(input: TemporaryChatSendInput, model: PaperAnalysisModelState, error: unknown): Promise<string>
   appendHistory(store: PaperAnalysisHistoryPreferenceStore, record: PaperAnalysisRecord): PaperAnalysisRecord
   saveAnnotations: typeof saveAnalysisAnnotations
 }
@@ -89,6 +93,13 @@ function defaultServices(zotero: PaperAnalysisZotero, fetchImpl: typeof fetch): 
     readPdf: readPdfForAnalysis,
     appendHistory: appendPaperAnalysisRecord,
     saveAnnotations: saveAnalysisAnnotations,
+    async recover(input, _model, error) {
+      const connection = readConnection(zotero)
+      const client = new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, fetchImpl })
+      const row = (await client.pending()).find(row => row.body.temporaryConversationId === input.conversationId && row.body.operationId === input.operationId)
+      if (!row) throw new Error(error instanceof Error ? error.message : String(error))
+      return client.recover(row, input)
+    },
     async send(input, model) {
       if (model.selection.route === "byok") {
         return new ByokChatClient({ config: model.config!, fetchImpl }).send(input)
@@ -99,7 +110,7 @@ function defaultServices(zotero: PaperAnalysisZotero, fetchImpl: typeof fetch): 
   }
 }
 
-/** 先备份可读结果，再独立写原生批注；未完成流只保留文字，不触发写入或额外 AI 请求。 */
+/** 先备份可读结果，再独立写原生批注；未完成流有界恢复，最终部分结果不写批注。 */
 export async function runIndependentPaperAnalysis(input: {
   zotero: PaperAnalysisZotero
   itemID: number
@@ -107,6 +118,7 @@ export async function runIndependentPaperAnalysis(input: {
   signal: AbortSignal
   invalidJadenseToken?: string | null
   onProgress?: (message: string) => void
+  onRetry?: (retrying: boolean) => void
   recordID?: string
   createdAt?: string
   referenceTaskID?: string
@@ -118,11 +130,11 @@ export async function runIndependentPaperAnalysis(input: {
   const services = { ...defaults, ...input.services }
 
   notify(input.onProgress, uiText("正在读取 PDF 原文与句子位置…", "Reading PDF text and sentence positions…"))
-  const snapshot = await services.readPdf(input.zotero, input.itemID, {
-    signal: input.signal,
-    onNotice: message => notify(input.onProgress, message),
-    onProgress: ({ pagesRead, totalPages }) => notify(input.onProgress, uiText(`正在读取 PDF：${pagesRead} / ${totalPages} 页…`, `Reading PDF: ${pagesRead} / ${totalPages} pages…`)),
-  })
+  const snapshot = await analysisStage(input.signal, uiText('读取 PDF', 'Reading PDF'), 180_000, (signal, progress) => services.readPdf(input.zotero, input.itemID, {
+    signal,
+    onNotice: message => { if (!signal.aborted) notify(input.onProgress, message) },
+    onProgress: ({ pagesRead, totalPages }) => { if (!signal.aborted) { progress(); notify(input.onProgress, uiText(`正在读取 PDF：${pagesRead} / ${totalPages} 页…`, `Reading PDF: ${pagesRead} / ${totalPages} pages…`)) } },
+  }), 1_800_000)
   input.signal.throwIfAborted()
   const coverage = coverageText(snapshot)
   const requestID = input.recordID ?? taskId("analysis")
@@ -138,34 +150,43 @@ export async function runIndependentPaperAnalysis(input: {
   let partialText = ""
   let lastProgress = 0
   let generationWarning: string | undefined
+  let generationFinished = false
   try {
-    response = await services.send({
+    const request = (signal: AbortSignal, progress: () => void): TemporaryChatSendInput => ({
       clientRequestId: taskId("analysis-request"),
       conversationId: requestID,
       taskId: requestID,
       operationId: requestID,
       messages: [{ id: taskId("analysis-prompt"), role: "user", text: prompt }],
       sources: [],
-      signal: input.signal,
+      signal,
       requireComplete: true,
+      ...(model.selection.route !== 'byok' ? { responseFormat: PAPER_ANALYSIS_RESPONSE_FORMAT } : {}),
       onTextDelta: (_delta, accumulatedText) => {
+        if (generationFinished || (signal.aborted && !input.signal.aborted)) return
+        if (accumulatedText.length > partialText.length) progress()
         partialText = accumulatedText.slice(0, 256_000)
-        if (Date.now() - lastProgress >= 1000) {
+        if (!signal.aborted && Date.now() - lastProgress >= 1000) {
           lastProgress = Date.now()
           notify(input.onProgress, uiText(`AI 正在解析 · 已收到 ${accumulatedText.length.toLocaleString()} 字符`, `AI analyzing · ${accumulatedText.length.toLocaleString()} characters received`))
         }
       },
-    }, model)
+    })
+    response = await generateAnalysis({ signal: input.signal, route: model.selection.route,
+      send: async (signal, progress) => { const text = await services.send(request(signal, progress), model); if (!generationFinished && (!signal.aborted || input.signal.aborted)) partialText = text.slice(0, 256_000); return text },
+      recover: (signal, progress, error) => services.recover(request(signal, progress), model, error),
+      onProgress: message => notify(input.onProgress, message), onRetry: input.onRetry,
+    })
     input.signal.throwIfAborted()
   } catch (error) { diagnostics()?.record("paper-analysis-runner", "operation_error", error);
     response ||= partialText
     if (!response.trim()) throw error
     generationWarning = input.signal.aborted
       ? uiText("生成已停止；已保留收到的部分内容供核对，未写入 PDF 批注。", "Generation stopped. Received content was retained for review; no PDF annotations were written.")
-      : uiText("AI 响应未完整结束；已保留收到的部分内容供核对，未写入 PDF 批注。", "The AI response was incomplete. Received content was retained for review; no PDF annotations were written.")
-  }
+      : uiText("AI 响应未完整结束；已保留收到的部分内容供核对，未写入 PDF 批注。", "The AI response was incomplete. Received content was retained for review; no PDF annotations were written.") + ' ' + (error instanceof Error ? error.message : String(error))
+  } finally { generationFinished = true }
   const analysis = parsePaperAnalysis(response, snapshot.passages)
-  const warnings = [...snapshot.coverage.warnings, ...(generationWarning ? [generationWarning] : []), ...analysis.warnings]
+  const warnings = [...(generationWarning ? [generationWarning] : []), ...snapshot.coverage.warnings, ...analysis.warnings]
   if (analysis.skipped) warnings.push(uiText(`有 ${analysis.skipped} 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。`, `${analysis.skipped} entries were not used as PDF annotations. Recoverable notes were retained for review.`))
 
   const record: PaperAnalysisRecord = {
@@ -211,13 +232,14 @@ export async function runIndependentPaperAnalysis(input: {
   let annotations = emptyAnnotations
   let annotationError: string | undefined
   try {
-    annotations = await services.saveAnnotations(input.zotero, snapshot, analysis.annotations, { signal: input.signal })
+    annotations = await analysisStage(input.signal, uiText('保存 PDF 批注', 'Saving PDF annotations'), 120_000,
+      signal => services.saveAnnotations(input.zotero, snapshot, analysis.annotations, { signal }))
   } catch (error) {
     diagnostics()?.record("analysis", "annotation_save", error)
     annotations = { ...emptyAnnotations, unprocessed: analysis.annotations.length }
     annotationError = input.signal.aborted
       ? uiText("已停止写入；此前成功保存的批注予以保留，可展开笔记查看解析内容。", "Writing stopped. Previously saved annotations were retained; expand the notes to review the analysis.")
-      : uiText("原生批注未能全部写入；解析笔记已保留，可展开查看和复制。", "Some native annotations could not be written. Expand the retained analysis notes to review or copy them.")
+      : uiText("原生批注未能全部写入；解析笔记已保留，可展开查看和复制。", "Some native annotations could not be written. Expand the retained analysis notes to review or copy them.") + ' ' + (error instanceof Error ? error.message : String(error))
   }
   const writeSummary = annotationError
     ?? uiText(`PDF 批注：新增 ${annotations.created} 条，跳过 ${annotations.skipped} 条，失败 ${annotations.failed} 条，未执行 ${annotations.unprocessed} 条。`, `PDF annotations: ${annotations.created} created, ${annotations.skipped} skipped, ${annotations.failed} failed, ${annotations.unprocessed} unprocessed.`)

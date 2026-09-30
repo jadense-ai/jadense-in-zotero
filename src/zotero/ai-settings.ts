@@ -13,7 +13,7 @@ import {
   type ByokConfig,
   type ByokProtocol,
 } from "@/chat/byok-chat"
-import type { JadenseChatSelection } from "@/jadense/api"
+import type { JadenseChatSelection, JadenseChatModelCatalog } from "@/jadense/api"
 import { AI_INITIAL_MODEL_PREF_KEY, readConnection, type ZoteroLike } from "./runtime"
 
 const PREF_AI_ROUTE = "extensions.jadenseInZotero.aiRoute"
@@ -21,6 +21,7 @@ const PREF_BYOK_CONFIG = "extensions.jadenseInZotero.byokConfig"
 export const JADENSE_CHAT_MODEL_PREF_KEY = "extensions.jadenseInZotero.jadenseChatModel"
 export const PAPER_ANALYSIS_MODEL_PREF_KEY = "extensions.jadenseInZotero.paperAnalysisModel"
 export const AUTO_FOLLOW_CHAT_MODEL_PREF_KEY = "extensions.jadenseInZotero.autoFollowChatModel"
+export const AI_MODEL_SETTINGS_PREF_KEY = "extensions.jadenseInZotero.aiModelSettings"
 
 export type AiRoute = "jadense" | "byok"
 
@@ -31,11 +32,12 @@ export type FeatureModelSelection =
 export type PaperAnalysisModelSelection = FeatureModelSelection
 
 export const AI_FEATURES = ["chat", "translation", "fullTranslation", "analysis", "figure"] as const
+export const AI_SETTINGS_FEATURES = ["chat", "translation", "analysis", "figure"] as const
 export type AiFeature = typeof AI_FEATURES[number]
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   get chat() { return uiText("AI 对话", "AI Chat") },
-  get translation() { return uiText("选文翻译", "Selection translation") },
-  get fullTranslation() { return uiText("对照翻译", "Bilingual PDF translation") },
+  get translation() { return uiText("翻译", "Translation") },
+  get fullTranslation() { return uiText("翻译", "Translation") },
   get analysis() { return uiText("文献解析", "Literature analysis") },
   get figure() { return uiText("图片解读", "Image interpretation") },
 }
@@ -208,7 +210,7 @@ export function normalizeJadenseChatSelection(value: unknown): Exclude<JadenseCh
   const routeTier = text(row.routeTier)
   const modelId = text(row.modelId)
   if (row.kind === "route" && routeTier) return { kind: "route", routeTier }
-  if (row.kind === "model" && modelId) return { kind: "model", modelId }
+  if (row.kind === "model" && modelId) return { kind: "model", modelId, ...(text(row.thinkingEffort) ? { thinkingEffort: text(row.thinkingEffort) } : {}) }
   return DEFAULT_JADENSE_MODEL
 }
 
@@ -230,11 +232,11 @@ export function saveJadenseChatSelection(zotero: ZoteroLike, selection: JadenseC
 
 /** 功能配置默认跟随对话模型；只有明确保存 false 时才启用逐功能模型。 */
 export function readAutoFollowChatModel(zotero: ZoteroLike) {
-  return zotero.Prefs?.get(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY) !== false
+  return readAiModelSettings(zotero).followChatModel
 }
 
 export function saveAutoFollowChatModel(zotero: ZoteroLike, enabled: boolean) {
-  zotero.Prefs?.set(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, enabled)
+  writeAiModelSettings(zotero, { ...readAiModelSettings(zotero), followChatModel: enabled })
   return enabled
 }
 
@@ -266,7 +268,7 @@ export function normalizeFeatureModelSelection(value: unknown): FeatureModelSele
 export const LEGACY_TRANSLATION_MODEL_PREF = "extensions.jadenseInZotero.translationModel"
 
 function storedFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature) {
-  try { return normalizeFeatureModelSelection(JSON.parse(prefString(zotero, FEATURE_MODEL_PREF_KEYS[feature]) || ((feature === "translation" || feature === "fullTranslation") ? prefString(zotero, LEGACY_TRANSLATION_MODEL_PREF) : ""))) }
+  try { return normalizeFeatureModelSelection(JSON.parse(prefString(zotero, FEATURE_MODEL_PREF_KEYS[feature]) || String(zotero.Prefs?.get(FEATURE_MODEL_PREF_KEYS[feature], true) ?? '') || ((feature === "translation" || feature === "fullTranslation") ? prefString(zotero, LEGACY_TRANSLATION_MODEL_PREF) : ""))) }
   catch { return null }
 }
 
@@ -291,12 +293,22 @@ function readLegacyFeatureModelSelection(zotero: ZoteroLike): FeatureModelSelect
   return null
 }
 
-function isUnconfiguredFeatureModelSelection(selection: FeatureModelSelection) {
-  return selection.route === "jadense" && !selection.selection
+type ModelSlot = Exclude<AiFeature, 'fullTranslation'>
+type AiModelSettings = { version: 1; followChatModel: boolean; models: Record<ModelSlot, FeatureModelSelection> }
+const slot = (feature: AiFeature): ModelSlot => feature === 'fullTranslation' ? 'translation' : feature
+const modelCatalogs = new WeakMap<ZoteroLike, { identity: string; catalog: JadenseChatModelCatalog }>()
+const migrationFailures = new WeakSet<ZoteroLike>()
+
+/** 目录只用于显式保存时的默认值；缺目录不阻断调用，也不在展示时偷偷改偏好。 */
+function catalogIdentity(host: ZoteroLike) { const { baseUrl, token } = readConnection(host); return JSON.stringify([baseUrl, token]) }
+function currentModelCatalog(host: ZoteroLike) { const cache = modelCatalogs.get(host); return cache?.identity === catalogIdentity(host) ? cache.catalog : undefined }
+export function rememberAiModelCapabilities(host: ZoteroLike, catalog: JadenseChatModelCatalog) { modelCatalogs.set(host, { identity: catalogIdentity(host), catalog }) }
+export function aiModelMigrationFailed(host: ZoteroLike) { return migrationFailures.has(host) }
+export function featureFollowsChat(host: ZoteroLike, feature: AiFeature) {
+  return (feature === 'analysis' || feature === 'figure') && readAutoFollowChatModel(host)
 }
 
-/** 在首次读取或目录编辑前固定旧配置；迁移保存失败不影响原有请求能力。 */
-export function initializeFeatureModelSelections(zotero: ZoteroLike) {
+function legacyAiModelSettings(zotero: ZoteroLike): AiModelSettings {
   const hasLegacyChatSelection = Boolean(prefString(zotero, JADENSE_CHAT_MODEL_PREF_KEY))
   const initial = readInitialFeatureModelSelection(zotero)
   const legacy = initial ? null : readLegacyFeatureModelSelection(zotero)
@@ -308,30 +320,96 @@ export function initializeFeatureModelSelections(zotero: ZoteroLike) {
       ? { route: "jadense" as const }
       : inherited
     selections[feature] = stored ?? normalizeFeatureModelSelection(fallback)!
-    if (!stored && !isUnconfiguredFeatureModelSelection(selections[feature])) {
-      try { zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(selections[feature])) }
-      catch { /* 旧偏好仍可在本次请求中使用。 */ }
-    }
   }
-  return selections
+  const followChatModel = zotero.Prefs?.get(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY) !== false
+  const configured = (value: FeatureModelSelection | null | undefined) => value && (value.route === 'byok' || value.selection) ? value : undefined
+  const translation = (followChatModel ? configured(selections.chat) : undefined)
+    ?? configured(storedFeatureModelSelection(zotero, 'fullTranslation'))
+    ?? configured(storedFeatureModelSelection(zotero, 'translation')) ?? initial ?? configured(selections.fullTranslation) ?? { route: 'jadense' }
+  return { version: 1, followChatModel, models: { chat: selections.chat, translation, analysis: selections.analysis, figure: selections.figure } }
+}
+
+function storedAiModelSettings(zotero: ZoteroLike): AiModelSettings | undefined {
+  try {
+    const row = JSON.parse(String(zotero.Prefs?.get(AI_MODEL_SETTINGS_PREF_KEY, true) ?? 'null'))
+    if (!row || row.version !== 1 || !row.models || typeof row.models !== 'object') return
+    const fallback = legacyAiModelSettings(zotero)
+    return { version: 1, followChatModel: row.followChatModel !== false, models: Object.fromEntries(
+      (['chat', 'translation', 'analysis', 'figure'] as const).map(feature => [feature, normalizeFeatureModelSelection(row.models[feature]) ?? fallback.models[feature]]),
+    ) as AiModelSettings['models'] }
+  } catch { return }
+}
+
+/** 读取纯函数；迁移失败时仍使用同一旧配置投影，不能重置用户的目的地。 */
+function readAiModelSettings(zotero: ZoteroLike) { return storedAiModelSettings(zotero) ?? legacyAiModelSettings(zotero) }
+function writeAiModelSettings(zotero: ZoteroLike, settings: AiModelSettings) {
+  if (!zotero.Prefs?.set) throw new Error(uiText('模型设置无法保存。', 'Model settings could not be saved.'))
+  zotero.Prefs.set(AI_MODEL_SETTINGS_PREF_KEY, JSON.stringify(settings), true)
+  migrationFailures.delete(zotero)
+}
+
+/** 显式启动迁移；空 profile 留待首次连接，旧键不清除、不再双写。 */
+export function initializeFeatureModelSelections(zotero: ZoteroLike) {
+  const saved = storedAiModelSettings(zotero), settings = saved ?? legacyAiModelSettings(zotero)
+  const initial = readInitialFeatureModelSelection(zotero)
+  let initialized = false
+  if (saved && initial) for (const feature of AI_SETTINGS_FEATURES) {
+    const previous = settings.models[feature]
+    if (previous.route === 'jadense' && !previous.selection) { settings.models[feature] = initial; initialized = true }
+  }
+  if (initialized || !saved && Object.values(settings.models).some(value => value.route === 'byok' || value.selection)) {
+    try { writeAiModelSettings(zotero, settings) } catch { migrationFailures.add(zotero) }
+  }
+  return { ...settings.models, fullTranslation: settings.models.translation }
+}
+
+/** 新记录为 global 路径；跨窗通知与持久化采用完全相同的物理地址。 */
+export function observeAiModelSettings(host: ZoteroLike, changed: () => void) {
+  let observer: unknown
+  try { observer = host.Prefs?.registerObserver?.(AI_MODEL_SETTINGS_PREF_KEY, changed, true) } catch { /* 可选通知不影响保存。 */ }
+  return () => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer) }
+}
+
+/** 面向用户的当前模型摘要，不包含凭据；传统翻译入口由调用方展示服务名称。 */
+export function featureModelDescription(host: ZoteroLike, feature: AiFeature) {
+  const value = effectiveFeatureModelSelection(host, feature)
+  if (value.route === 'byok') return `BYOK · ${readByokSettings(host).models.find(model => model.id === value.modelId)?.name ?? value.modelId} · ${uiText('提供商默认', 'Provider default')}`
+  if (!value.selection) return uiText('未选择模型', 'No model selected')
+  if (value.selection.kind === 'route') return `${value.selection.routeTier} · ${uiText('由实际路由决定', 'Determined by the selected route')}`
+  if (value.selection.kind !== 'model') return uiText('模型默认', 'Model default')
+  const catalog = currentModelCatalog(host)
+  const effort = value.selection.thinkingEffort ?? uiText('模型默认', 'Model default')
+  return `${value.selection.modelId} · ${uiText('已选', 'Selected')} ${effort}${catalog?.thinkingContractVersion === 1 ? '' : ' · ' + uiText('服务端尚未确认支持思考设置', 'Server thinking support unconfirmed')}`
 }
 
 export function readFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
-  return storedFeatureModelSelection(zotero, feature) ?? initializeFeatureModelSelections(zotero)[feature]
+  return readAiModelSettings(zotero).models[slot(feature)]
 }
 
-/** 自动跟随时，所有功能共用 AI 对话模型；关闭后恢复各功能已保存的模型。 */
+/** 翻译始终独立；只有解析和图片解读可以跟随对话模型。 */
 export function effectiveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
-  return readAutoFollowChatModel(zotero) ? readFeatureModelSelection(zotero, "chat") : readFeatureModelSelection(zotero, feature)
+  return readFeatureModelSelection(zotero, featureFollowsChat(zotero, feature) ? 'chat' : feature)
 }
 
 /** 选择只写所属功能；不改变 BYOK 编辑器当前项或其他功能。 */
-export function saveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature, selection: FeatureModelSelection) {
-  const normalized = normalizeFeatureModelSelection(selection)
+export function saveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature, selection: FeatureModelSelection, catalog = currentModelCatalog(zotero)) {
+  let normalized = normalizeFeatureModelSelection(selection)
   // 目的地完整性：不能把不完整的显式选择默认成另一个提供商。
   if (!normalized || (normalized.route === "byok" && !normalized.modelId)) throw new Error(uiText("BYOK 模型不能为空。", "Select a BYOK model."))
-  initializeFeatureModelSelections(zotero)
-  zotero.Prefs?.set(FEATURE_MODEL_PREF_KEYS[feature], JSON.stringify(normalized))
+  if (normalized.route === 'jadense' && normalized.selection?.kind === 'model' && !normalized.selection.thinkingEffort) {
+    const selected = normalized.selection
+    const option = catalog?.options.find(option => option.kind === 'model' && option.modelId === selected.modelId)
+    {
+      const efforts = option?.reasoningConfig?.reasoningEfforts ?? []
+      const fallback = option?.defaultThinkingEffort
+      const supportedDefault = fallback && (fallback !== 'none' || option?.reasoningConfig?.reasoningRequired === false)
+        && (fallback === 'auto' || efforts.includes(fallback)) ? fallback : 'auto'
+      const thinkingEffort = slot(feature) === 'translation' ? ['low', 'minimal'].find(value => efforts.includes(value)) ?? supportedDefault : supportedDefault
+      normalized = { route: 'jadense', selection: { ...selected, thinkingEffort } }
+    }
+  }
+  const settings = readAiModelSettings(zotero)
+  writeAiModelSettings(zotero, { ...settings, models: { ...settings.models, [slot(feature)]: normalized } })
   return normalized
 }
 

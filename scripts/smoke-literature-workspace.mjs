@@ -58,7 +58,7 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
       readerDoc.querySelector('[data-jadense-action="analyze"]').click()
       await waitFor(() => finishAnalysis, 'second analysis')
       brand.click()
-      await waitFor(() => doc.querySelector('.jdx-analysis-summary')?.textContent.includes('结果准备好'), 'running replaces empty summary')
+      await waitFor(() => /结果准备好|results will appear/.test(doc.querySelector('.jdx-analysis-summary')?.textContent || ''), 'running replaces empty summary')
       assert(!doc.querySelector('.jdx-analysis-summary').textContent.includes('尚无解析'), 'Contradictory empty summary')
       await screenshot('analysis-runtime-pending', main)
       readerDoc.querySelector('.jadense-reader-runtime-stop').click(); finishAnalysis()
@@ -68,21 +68,39 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
       runtime.run = async () => { throw new Error('Synthetic provider unavailable') }
       readerDoc.querySelector('[data-jadense-action="analyze"]').click()
       await waitFor(() => runtime.get(reader.itemID)?.message.includes('Synthetic provider unavailable'), 'failed analysis')
+      assert(reader._iframeWindow.getComputedStyle(brand.querySelector('svg')).animationName === 'none', 'Failed analysis logo still spinning')
+      assert(reader._iframeWindow.getComputedStyle(brand).boxShadow.includes('2px'), 'Failed analysis lacks error outline')
       await screenshot('analysis-runtime-error', main)
+      Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
+      await Zotero.Promise.delay(200)
+      await screenshot('analysis-runtime-error-light', main)
+      Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'dark', true)
+      let finishRetry
+      runtime.run = async input => {
+        input.onRetry(true); input.onProgress('AI 暂未完成，自动重试（1/2）')
+        await new Promise(resolve => { finishRetry = resolve })
+        input.onRetry(false)
+        throw new Error('Synthetic retry exhausted')
+      }
+      readerDoc.querySelector('[data-jadense-action="analyze"]').click()
+      await waitFor(() => brand.dataset.runtime === 'retrying', 'retry toolbar state')
+      assert(reader._iframeWindow.getComputedStyle(brand.querySelector('svg')).animationName === 'none', 'Retry wait logo still spinning')
+      await screenshot('analysis-runtime-retry', main)
+      finishRetry(); await waitFor(() => brand.dataset.runtime === 'error', 'retry exhausted')
       Zotero.Prefs.set(pref, saved)
-      report.checks.push('analysis-pending-no-empty-copy', 'analysis-stop', 'analysis-failure')
+      report.checks.push('analysis-pending-no-empty-copy', 'analysis-stop', 'analysis-failure', 'analysis-error-outline-no-spin', 'analysis-retry-status')
     }
   } finally { runtime.run = originalRun; jobs.start = originalStart }
   if (runtimeOnly) return
 
-  reader._iframeWindow.document.querySelector('[data-jadense-action="fullTranslate"]').click()
+  reader._iframeWindow.document.querySelector('[data-jadense-action="attach"]').click()
   const root = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), 'literature sidebar')
   const choose = async label => {
     root.querySelector('.jdx-reader-header-left button').click()
     const option = await waitFor(() => [...doc.querySelectorAll('[role="option"]')].find(row => row.getBoundingClientRect().height > 0 && row.textContent.includes(label)), `sidebar option ${label}`)
     option.click(); await Zotero.Promise.delay(120)
   }
-  const isEnglish = root.textContent.includes('Full translation'), labels = isEnglish ? ['Chat', 'Full Markdown', 'Full translation', 'Selection translations', 'Summary', 'Analysis notes', 'References'] : ['对话', '全文 Markdown', '全文翻译', '选中翻译历史', '解析总结', '解析笔记', '参考文献']
+  const isEnglish = root.querySelector('.jdx-reader-header-left').textContent.includes('Chat'), labels = isEnglish ? ['Chat', 'Full Markdown', 'Full translation', 'Selection translations', 'Summary', 'Analysis notes', 'References'] : ['对话', '全文 Markdown', '全文翻译', '选中翻译历史', '解析总结', '解析笔记', '参考文献']
   root.querySelector('.jdx-reader-header-left button').click()
   assert(labels.every(label => [...doc.querySelectorAll('[role="option"]')].some(row => row.textContent.includes(label))), 'Seven sidebar pages missing')
   root.querySelector('.jdx-reader-header-left button').click()
@@ -112,10 +130,10 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   await choose(labels[4])
   await screenshot('literature-sidebar-analysis', main)
   await choose(labels[0]); assert(root.querySelector('.jadense-reader-chat') || !root.querySelector('.jdx-reader-workspace-content').hidden, 'Chat unreachable')
-  await choose(labels[1])
-  const translate = [...currentPanel().querySelectorAll('button')].find(button => /^(全文翻译|Translate full text)$/u.test(button.textContent.trim()))
-  assert(translate && !translate.disabled, 'Explicit translation action unavailable'); translate.click()
-  const translation = await waitFor(() => jobs.list('translation')[0], 'explicit Markdown translation')
+  await choose(labels[2])
+  assert(currentPanel().textContent.includes(isEnglish ? 'has been retired' : '已停用'), 'Legacy translation retirement notice missing')
+  // 新建入口已停用；直接调用真实任务层，验收旧任务兼容链路和成果界面。
+  const translation = await jobs.start('translation', reader.itemID, false, { extractionID })
   await waitFor(() => { if (translation.status === 'error') throw new Error(translation.error); return translation.status === 'complete' }, 'Markdown translation completion')
   assert(translation.extractionID === extractionID, 'Translation lost source version')
   await waitFor(() => currentPanel()?.textContent.includes('OCR_STREAM'), 'sidebar translation')
@@ -127,7 +145,7 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   typography.click(); assert(typography.getAttribute('aria-expanded') === 'true', 'Custom menu did not open')
   typography.dispatchEvent(new main.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   assert(typography.getAttribute('aria-expanded') === 'false', 'Custom menu Escape did not close')
-  assert(!readerView.querySelector('.jdx-reading-state').textContent, 'Translation completion banner persists')
+  await waitFor(() => [...readerView.querySelectorAll('.jdx-reading-state')].every(node => !node.textContent), 'translation completion status cleared')
   const originalState = { status: translation.status, error: translation.error, storageWarning: translation.storageWarning, completed: translation.completed }
   for (const state of ['running', 'paused', 'partial', 'error', 'unsaved']) {
     Object.assign(translation, originalState, { status: state === 'unsaved' ? 'complete' : state, error: state === 'error' ? (isEnglish ? 'Translation service unavailable. Completed text is preserved.' : '翻译服务暂不可用，已完成的正文已保留。') : undefined, storageWarning: state === 'unsaved', completed: state === 'unsaved' ? originalState.completed : 0 })
@@ -159,7 +177,7 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   assert(![...sourcePanel.querySelectorAll(':scope > .jdx-notice')].some(node => node.textContent.includes(isEnglish ? 'Complete' : '已完成')), 'Saved completion status persists')
   assert(manager.getComputedStyle(sourcePanel.querySelector('.jdx-result-tools')).backgroundColor === 'rgba(0, 0, 0, 0)', 'Source toolbar has a separate fill')
   const capsule = sourcePanel.querySelector('.jdx-translation-capsule')
-  assert(capsule && capsule.firstElementChild.classList.contains('jdx-result-language') && capsule.lastElementChild.textContent === (isEnglish ? 'Translate full text' : '全文翻译'), 'Translation capsule order')
+  assert(capsule && capsule.firstElementChild.classList.contains('jdx-result-language') && capsule.lastElementChild.textContent === (isEnglish ? 'Extract again' : '重新提取'), 'Extraction capsule order')
   const iconActions = sourcePanel.querySelectorAll('.jdx-result-tools > button')
   assert(iconActions.length >= 2 && [...iconActions].every(button => button.classList.contains('jdx-icon-action') && button.title && button.getAttribute('aria-label') === button.title), 'Source actions lack icons/tooltips')
   assert(manager.getComputedStyle(capsule).borderRadius === '999px', 'Translation capsule is not rounded')
@@ -226,7 +244,7 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   assert(md.querySelectorAll('#jadense-analysis-history .jdx-analysis-list>.jdx-analysis-record').length === 1, 'Same parent was not grouped into one paper')
   await screenshot('literature-paper-list', manager)
   const siblingReader = await Zotero.Reader.open(sibling.id); await siblingReader._initPromise; await siblingReader._internalReader._primaryView.initializedPromise
-  const siblingTrigger = await waitFor(() => siblingReader._iframeWindow.document.querySelector('[data-jadense-action="fullTranslate"]'), 'sibling Reader toolbar')
+  const siblingTrigger = await waitFor(() => siblingReader._iframeWindow.document.querySelector('[data-jadense-action="attach"]'), 'sibling Reader toolbar')
   siblingTrigger.click()
   const siblingRoot = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${sibling.id}"]`), 'sibling sidebar binding')
   const switchSibling = async label => {
@@ -239,16 +257,15 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   await waitFor(() => siblingPanel()?.textContent.includes('SIBLING_PDF_ONLY'), 'sibling selection history')
   assert(!siblingPanel().textContent.includes('CURRENT_PDF_SELECTION'), 'Primary PDF leaked after switching PDF')
   await switchSibling(labels[2])
-  const translateWithoutSource = await waitFor(() => siblingPanel()?.querySelector('.jdx-translation-capsule .jdx-button-primary'), 'translation without source')
-  assert(!translateWithoutSource.disabled, 'Missing Markdown disabled full translation')
-  assert(!siblingPanel().textContent.includes(isEnglish ? 'Extract the source in Full Markdown' : '请先在'), 'Translation still requires a manual extraction step')
+  await waitFor(() => siblingPanel()?.textContent.includes(isEnglish ? 'has been retired' : '已停用'), 'legacy translation empty state')
+  assert(!siblingPanel().querySelector('.jdx-translation-capsule .jdx-button-primary'), 'Retired translation entry returned')
   assert(!jobs.list('extraction').some(task => task.source.itemID === sibling.id), 'Browsing translation started OCR')
   await screenshot('literature-translation-without-source', main)
-  report.checks.push('translation-enabled-without-source', 'translation-browse-no-ocr')
+  report.checks.push('legacy-translation-retired-entry', 'translation-browse-no-ocr')
   await switchSibling(labels[1])
   await waitFor(() => siblingPanel()?.textContent.includes(isEnglish ? 'Extract the source' : '先提取原文'), 'empty source page')
   assert(!jobs.list('extraction').some(task => task.source.itemID === sibling.id), 'Empty source view started OCR')
   await screenshot('literature-sibling-empty', main)
   report.checks.push('switch-pdf-history-isolation', 'empty-source-no-dispatch')
-  report.checks.push('seven-sidebar-pages', 'source-markdown-local-images', 'no-translation-on-browse', 'current-pdf-isolation', 'analysis-sidebar', 'all-chat-reachable', 'explicit-markdown-translation', 'fixed-extraction-version', 'workbench-deep-link', 'paper-history-all-attachments', 'parent-paper-grouping', 'compact-light-dark-workbench')
+  report.checks.push('seven-sidebar-pages', 'source-markdown-local-images', 'no-translation-on-browse', 'current-pdf-isolation', 'analysis-sidebar', 'all-chat-reachable', 'legacy-markdown-task-translation', 'fixed-extraction-version', 'workbench-deep-link', 'paper-history-all-attachments', 'parent-paper-grouping', 'compact-light-dark-workbench')
 }

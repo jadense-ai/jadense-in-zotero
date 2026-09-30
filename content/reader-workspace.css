@@ -123,8 +123,8 @@
 /* 以面板实际宽度收缩，不使用整个 Zotero 窗口宽度判断紧凑模式。 */
 .jdx-reader-chat { container-type:inline-size; container-name:reader-chat; }
 @container reader-chat (max-width:380px) {
-  .jdx-reader-chat .jdx-chat-model-select { flex:0 0 32px; width:32px; max-width:32px; }
-  .jdx-reader-chat .jdx-chat-model-select .jdx-select-trigger { width:32px; min-width:32px; padding:0; justify-content:center; gap:0; }
+  .jdx-reader-chat .jdx-chat-model-select { flex:0 1 auto; width:auto; max-width:100%; }
+  .jdx-reader-chat .jdx-chat-model-select .jdx-select-trigger { width:auto; min-width:32px; padding:0 6px; justify-content:center; gap:6px; }
   .jdx-reader-chat .jdx-chat-model-select :is(.jdx-select-value,.jdx-select-chevron) { display:none; }
 }
 

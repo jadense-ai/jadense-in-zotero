@@ -404,6 +404,7 @@ async function startup(data: BootstrapData = {}) {
           action,
           fetchImpl: win.fetch.bind(win),
           onTextDelta: hooks?.onTranslationText,
+          onProgress: hooks?.onTranslationProgress, signal: hooks?.signal,
         }).then((record) => ({ translation: record.result.text }))
       }
       openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)

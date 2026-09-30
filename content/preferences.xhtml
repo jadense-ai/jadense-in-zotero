@@ -23,7 +23,7 @@
             <html:h3 class="jdx-pref-card-title" data-i18n-key="featureConfigTitle">
             </html:h3>
             <html:section class="jdx-settings-task" data-settings-task="chat">
-              <html:h3 data-ui-en="Paper chat and model defaults">文献对话与模型默认值</html:h3>
+              <html:h3 data-ui-en="General settings">常规设置</html:h3>
               <html:div class="jdx-feature-model-row jdx-pref-field">
                 <html:div><html:h3 id="jadense-in-zotero-feature-chat-label" data-ui-en="AI Chat">AI 对话</html:h3><html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Reuses saved document extraction; linking papers does not start OCR.">可复用已有全文提取成果；关联文献不会自动启动 OCR。</html:p></html:div>
                 <html:div>
@@ -33,10 +33,22 @@
                   </html:p>
                 </html:div>
               </html:div>
-              <html:div class="jdx-feature-model-row jdx-pref-field"><html:div><html:label class="jdx-manager-checkbox jdx-pref-checkbox">
+
+                <html:div class="jdx-feature-model-row jdx-pref-field">
+                  <html:div><html:h3 id="jadense-in-zotero-feature-translation-label" data-ui-en="Translation model">翻译模型</html:h3></html:div>
+                  <html:div>
+                    <html:div id="jadense-in-zotero-feature-translation-model" aria-labelledby="jadense-in-zotero-feature-translation-label">
+                    </html:div>
+                    <html:p id="jadense-in-zotero-feature-translation-model-status" role="status">
+                    </html:p>
+
+                  </html:div>
+                </html:div>
+              <html:p class="jdx-pref-card-note" data-ui-en="Applies to selection, reading mode, bilingual PDF and full Markdown AI translation. Independent of Chat.">适用于选文、简阅、PDF 对照及 Markdown 全文 AI 翻译；独立于对话模型。</html:p>
+<html:div class="jdx-feature-model-row jdx-pref-field"><html:div><html:label class="jdx-manager-checkbox jdx-pref-checkbox">
                 <html:input id="jadense-in-zotero-auto-follow-chat-model" type="checkbox" checked="checked" />
-                <html:span data-ui-en="Automatically follow the current Chat model">自动跟随当前对话模型</html:span>
-              </html:label><html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="When enabled, both AI translation modes, analysis and image interpretation follow Chat. Translation services and Jev remain independent.">开启后，两种 AI 翻译、文献解析和图片解读跟随对话模型；翻译接口与 Jev 分类独立配置。</html:p></html:div><html:div></html:div></html:div>
+                <html:span data-ui-en="Analysis and images follow the Chat model">解析和图片解读跟随对话模型</html:span>
+              </html:label><html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Only analysis and image interpretation follow Chat. Translation always uses the independent model above.">仅文献解析和图片解读跟随对话模型；翻译始终使用上方独立设置。</html:p></html:div><html:div></html:div></html:div>
               <html:div id="jadense-in-zotero-feature-model-status" role="status">
               </html:div>
             </html:section>
@@ -44,18 +56,7 @@
               <html:h3 data-ui-en="Selection translation">选文翻译</html:h3>
               <html:div data-selection-settings-host="">
               </html:div>
-              <html:section data-translation-scope="selection">
-                <html:div class="jdx-feature-model-row jdx-pref-field">
-                  <html:div><html:h3 id="jadense-in-zotero-feature-translation-label" data-ui-en="AI model">AI 模型</html:h3></html:div>
-                  <html:div>
-                    <html:div id="jadense-in-zotero-feature-translation-model" aria-labelledby="jadense-in-zotero-feature-translation-label">
-                    </html:div>
-                    <html:p id="jadense-in-zotero-feature-translation-model-status" role="status">
-                    </html:p>
-                    <html:p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</html:p>
-                  </html:div>
-                </html:div>
-              </html:section>
+              <html:section data-translation-scope="selection"></html:section>
             </html:section>
             <html:section class="jdx-settings-task" data-settings-task="figure">
               <html:h3 data-ui-en="Image interpretation">图片解读</html:h3>
@@ -72,18 +73,7 @@
             </html:section>
             <html:section class="jdx-settings-task" data-settings-task="pdf-translation">
               <html:h3 data-ui-en="Bilingual PDF translation">对照翻译</html:h3>
-              <html:section data-translation-scope="document">
-                <html:div class="jdx-feature-model-row jdx-pref-field">
-                  <html:div><html:h3 id="jadense-in-zotero-feature-fullTranslation-label" data-ui-en="AI model">AI 模型</html:h3></html:div>
-                  <html:div>
-                    <html:div id="jadense-in-zotero-feature-fullTranslation-model" aria-labelledby="jadense-in-zotero-feature-fullTranslation-label">
-                    </html:div>
-                    <html:p id="jadense-in-zotero-feature-fullTranslation-model-status" role="status">
-                    </html:p>
-                    <html:p class="jdx-manager-settings-note jdx-pref-card-note" data-model-follow="" data-ui-en="Follows the Chat model. Turn off the switch above to choose independently.">跟随当前对话模型；关闭顶部开关可独立配置。</html:p>
-                  </html:div>
-                </html:div>
-              </html:section>
+              <html:section data-translation-scope="document"></html:section>
               <html:p class="jdx-manager-settings-note jdx-pref-card-note" data-ui-en="Preserves PDF layout. Choose source and target languages in the paper’s translation toolbar; language settings are saved per paper. Scanned pages retain the original.">保留 PDF 版面。源语言与目标语言在文献翻译工具栏中选择，按文献保存；扫描页保留原文。</html:p>
             </html:section>
             <html:section class="jdx-settings-task" data-settings-task="document">

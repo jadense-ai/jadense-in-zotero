@@ -5,6 +5,7 @@ import { uiText } from "@/zotero/ui-preferences"
  * 模型返回始终是不可信文本；翻译结果可含 Markdown/LaTeX，由展示层安全渲染，批注适配器另行处理写入与转义。
  */
 import { DEFAULT_TRANSLATION_LANGUAGES, translationLanguageLabel } from "./translation-languages"
+import type { ChatResponseFormat } from './response-format'
 
 export type AnalysisPassage = {
   id: string
@@ -26,6 +27,23 @@ export const ANALYSIS_CATEGORIES = [
 ] as const
 
 export type AnalysisCategoryId = typeof ANALYSIS_CATEGORIES[number]["id"]
+
+/** 生成合同仅包含阅读字段；PDF 坐标、条目身份与句子真实性仍由本地快照验证。 */
+export const PAPER_ANALYSIS_RESPONSE_FORMAT: ChatResponseFormat = {
+  type: 'json_schema', name: 'paper_analysis', fallback: 'text',
+  schema: {
+    type: 'object', required: ['summary', 'sections', 'annotations'],
+    properties: {
+      summary: { type: 'string', minLength: 1, maxLength: 1600 },
+      sections: { type: 'array', items: { type: 'object', required: ['category', 'summary'], properties: {
+        category: { type: 'string', enum: ANALYSIS_CATEGORIES.map(category => category.id) }, summary: { type: 'string', maxLength: 1000 },
+      } } },
+      annotations: { type: 'array', maxItems: 32, items: { type: 'object', required: ['passageId', 'category', 'comment'], properties: {
+        passageId: { type: 'string' }, category: { type: 'string', enum: ANALYSIS_CATEGORIES.map(category => category.id) }, comment: { type: 'string', maxLength: 800 },
+      } } },
+    },
+  },
+}
 
 export type PaperAnalysisAnnotation = {
   passageId: string
@@ -194,6 +212,43 @@ function repairAnalysisSyntax(response: string): string {
   return repaired
 }
 
+/** 末尾已结束在完整值上时补齐容器；未闭合字符串仍交给逐字段恢复，避免猜测正文。 */
+function closeAnalysisContainers(response: string): string {
+  const last = response.trimEnd().at(-1)
+  if (last !== '"' && last !== '}' && last !== ']') return response
+  const stack: { opener: string; field?: string }[] = []
+  let quoted = false
+  let escaped = false
+  let stringStart = -1
+  let topLevelKey: string | undefined
+  for (let index = 0; index < response.length; index += 1) {
+    const char = response[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === "\\") escaped = true
+      else if (char === '"') {
+        quoted = false
+        if (stack.length === 1) {
+          let next = index + 1
+          while (next < response.length && /\s/.test(response[next])) next += 1
+          if (response[next] === ':') {
+            try { topLevelKey = JSON.parse(response.slice(stringStart, index + 1)) }
+            catch { topLevelKey = undefined }
+          }
+        }
+      }
+      continue
+    }
+    if (char === '"' && stack.length) { quoted = true; stringStart = index }
+    else if (char === '{') stack.push({ opener: char, field: stack.at(-1)?.field ?? (stack.length === 1 ? topLevelKey : undefined) })
+    else if (char === '[' && stack.length) stack.push({ opener: char, field: stack.at(-1)?.field ?? (stack.length === 1 ? topLevelKey : undefined) })
+    else if ((char === '}' || char === ']') && stack.length && stack.at(-1)?.opener === (char === '}' ? '{' : '[')) stack.pop()
+  }
+  // 仅展示用的 sections 可恢复完整字段；数组内未闭合批注不能靠补括号取得原生写入资格。
+  if (quoted || !stack.length || (stack.some(frame => frame.opener === '[') && stack.at(-1)?.opener === '{' && stack.at(-1)?.field !== 'sections')) return response
+  return response + stack.reverse().map(frame => frame.opener === '{' ? '}' : ']').join('')
+}
+
 /** 按结构恢复完整的顶层字段和数组条目；不猜截断字符串、缺失字段或未知对象内的批注。 */
 function recoverAnalysisObject(response: string): Record<string, unknown> | null {
   type Frame = { start: number; opener: string; key?: string; field?: string }
@@ -267,6 +322,7 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
   if (!value) {
     const repaired = repairAnalysisSyntax(input)
     value = readAnalysisObject(repaired)
+    if (!value) value = readAnalysisObject(repairAnalysisSyntax(closeAnalysisContainers(repaired)))
     if (value) warnings.add(uiText("已修复 AI 返回的 JSON 格式，批注仍按本地原句校验。", "The AI response format was repaired. Annotations are still validated against local source sentences."))
     else {
       value = recoverAnalysisObject(repaired)

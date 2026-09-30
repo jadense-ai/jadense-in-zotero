@@ -415,6 +415,7 @@ describe("manager operation credential observers", () => {
     const stop = observeManagerOperationPreferences(zotero, changed)
 
     expect([...handlers.keys()]).toEqual([...MANAGER_OPERATION_PREF_KEYS])
+    expect(zotero.Prefs!.registerObserver).toHaveBeenCalledWith("extensions.jadenseInZotero.aiModelSettings", expect.any(Function), true)
     handlers.get("extensions.jadenseInZotero.token")?.()
     handlers.get("extensions.jadenseInZotero.byokConfig")?.()
     expect(changed).toHaveBeenCalledTimes(2)
@@ -899,7 +900,7 @@ describe("manager page state", () => {
     expect(xhtml).not.toContain("AI 请求通道")
     for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-feature-${feature}-model"`)
     expect(xhtml.indexOf('id="jadense-feature-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-auto-follow-chat-model"'))
-    expect(xhtml.indexOf('id="jadense-auto-follow-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-feature-translation-model"'))
+    expect(xhtml.indexOf('id="jadense-auto-follow-chat-model"')).toBeGreaterThan(xhtml.indexOf('id="jadense-feature-translation-model"'))
     expect(xhtml).toContain('id="jadense-manager-byok-key-mask"')
     expect(xhtml).toContain('id="jadense-manager-byok-key-toggle"')
     expect(xhtml).toContain('class="jdx-manager-byok-layout"')

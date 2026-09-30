@@ -1,5 +1,5 @@
 /** 共用 chevron：沿用下拉组件的 SVG 路径，供导航、目录与折叠控件复用。 */
-export function createChevron(doc: Document, className = "jdx-select-chevron", direction: "down" | "right" = "down", size = 16) {
+export function createChevron(doc: Document, className = "jdx-select-chevron", direction: "down" | "right" | "left" = "down", size = 16) {
   const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg")
   svg.setAttribute("class", className)
   svg.setAttribute("viewBox", "0 0 16 16")
@@ -15,6 +15,7 @@ export function createChevron(doc: Document, className = "jdx-select-chevron", d
   path.setAttribute("stroke-linecap", "round")
   path.setAttribute("stroke-linejoin", "round")
   if (direction === "right") path.setAttribute("transform", "rotate(-90 8 8)")
+  if (direction === "left") path.setAttribute("transform", "rotate(90 8 8)")
   svg.append(path)
   return svg
 }

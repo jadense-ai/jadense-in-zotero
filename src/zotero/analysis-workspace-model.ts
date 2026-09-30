@@ -2,17 +2,19 @@
 import type { PaperAnalysisRecord, PaperAnalysisSource } from "@/chat/paper-analysis-history"
 import type { DocumentIdentity } from "./pdf-document"
 import type { PDFTranslationTask } from './pdf-translation-jobs'
+import type { ReadingTask } from './simple-reading-store'
 import type { DocumentTask } from "./document-store"
 import type { TranslationRecord } from '@/chat/translation-history'
 import { literatureIdentity } from './document-identity'
 import type { ZoteroLike } from './runtime'
 
-export type LiteratureResult = { id: string; date: string; mode: 'source' | 'translation' | 'selection' | 'analysis' | 'files'; source: PaperAnalysisSource; pdf?: PDFTranslationTask; task?: DocumentTask; analysis?: PaperAnalysisRecord; selection?: TranslationRecord }
+export type LiteratureResult = { id: string; date: string; mode: 'source' | 'translation' | 'selection' | 'analysis' | 'files' | 'simple'; source: PaperAnalysisSource; simple?: ReadingTask; pdf?: PDFTranslationTask; task?: DocumentTask; analysis?: PaperAnalysisRecord; selection?: TranslationRecord }
 export type LiteraturePaper = { key: string; title: string; source: PaperAnalysisSource; date: string; results: LiteratureResult[]; attachments: PaperAnalysisSource[] }
 
 /** 各成果只投影索引，不复制正文；可信父条目聚合，缺身份旧记录独立保留。 */
-export function literaturePapers(host: ZoteroLike, analyses: PaperAnalysisRecord[], tasks: DocumentTask[], selections: TranslationRecord[], pdfs: PDFTranslationTask[] = []): LiteraturePaper[] {
+export function literaturePapers(host: ZoteroLike, analyses: PaperAnalysisRecord[], tasks: DocumentTask[], selections: TranslationRecord[], pdfs: PDFTranslationTask[] = [], readings: ReadingTask[] = []): LiteraturePaper[] {
   const entries: LiteratureResult[] = [
+    ...readings.map(simple => ({ id: simple.id, date: simple.createdAt, mode: 'simple' as const, source: { ...simple.source, authors: [] }, simple })),
     ...pdfs.map(pdf => ({ id: pdf.id, date: pdf.createdAt || '', mode: 'files' as const, source: { ...pdf.source, authors: [] }, pdf })),
     ...analyses.map(record => ({ id: record.id, date: record.createdAt, mode: 'analysis' as const, source: record.source, analysis: record })),
     ...tasks.map(task => ({ id: task.id, date: task.createdAt, mode: task.kind === 'extraction' ? 'source' as const : task.kind === 'translation' ? 'translation' as const : 'analysis' as const, source: { ...task.source, authors: [] }, task })),

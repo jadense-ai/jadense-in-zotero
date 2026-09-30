@@ -25,6 +25,15 @@ export type JdxSelectOption = {
 
 export type JdxSelectChangeListener = (value: string) => void
 
+/** 仅模型宿主启用：目录决定档位，宿主负责持久化；普通下拉保持原行为。 */
+export type JdxModelControl = {
+  selectionKey?: string
+  levels: { value: string; label: string }[]
+  value: string
+  label: string
+  onCommit?: (value: string) => void
+}
+
 export type JdxSelect = {
   /** 增强后的宿主元素（保留原 id）。 */
   readonly element: HTMLElement
@@ -33,6 +42,7 @@ export type JdxSelect = {
   setValue(value: string): void
   setOptions(options: JdxSelectOption[], selectedValue: string): void
   setDisabled(disabled: boolean): void
+  setModelControl(control: JdxModelControl): void
   /** 仅在用户主动选择且值发生变化时触发，对齐原生 select 的 change。 */
   onChange(listener: JdxSelectChangeListener): void
   onOpen(listener: () => void): void
@@ -141,6 +151,8 @@ export function createJdxSelect(host: HTMLElement, input: {
   const openListeners = new Set<() => void>()
   const disabledListeners = new Set<(option: JdxSelectOption) => void>()
   let anchorTop = 0, anchorLeft = 0
+  let modelControl: JdxModelControl | undefined
+  let modelView: "model" | "route" | "list" = "model"
 
   host.classList.add("jdx-select")
   if (input.compact) host.classList.add("jdx-select-compact")
@@ -185,6 +197,124 @@ export function createJdxSelect(host: HTMLElement, input: {
   search?.setAttribute("aria-controls", list.id)
   popup.append(...(search ? [search, list] : [list]))
   host.append(trigger, popup)
+  const modelPanel = htmlElement(doc, "div")
+  modelPanel.className = "jdx-model-panel"
+  modelPanel.hidden = true
+  popup.prepend(modelPanel)
+  const effortBadge = htmlElement(doc, "span")
+  effortBadge.className = "jdx-model-effort"
+  effortBadge.hidden = true
+  valueLabel.after(effortBadge)
+
+  function visibleOptions() {
+    const options = modelControl ? state.options.filter(option => modelView === "route" ? option.value.startsWith("route:") : !option.value.startsWith("route:")) : state.options
+    return filterSelectOptions(options, state.query)
+  }
+
+  /** 浏览路由/模型不保存；只有选中模型和完成调档手势才写入宿主偏好。 */
+  function renderModelPanel() {
+    if (!modelControl) return
+    modelPanel.hidden = false
+    modelPanel.replaceChildren()
+    popup.classList.add("jdx-model-popup")
+    popup.dataset.modelView = modelView
+    list.hidden = modelView === "model"
+    if (search) search.hidden = modelView !== "list"
+    const header = htmlElement(doc, "div")
+    header.className = "jdx-model-header"
+    const button = (label: string, action: () => void) => {
+      const node = htmlElement(doc, "button")
+      node.type = "button"; node.textContent = label; node.title = label
+      node.setAttribute("aria-label", label); node.addEventListener("click", action)
+      return node
+    }
+    const switchView = (view: typeof modelView) => {
+      modelView = view; state.query = ""; if (search) search.value = ""
+      state.activeIndex = -1; renderOptions(); renderModelPanel(); positionPopup()
+      if (view === "list") search?.focus({ preventScroll: true })
+      else modelPanel.querySelector<HTMLButtonElement>(".jdx-model-heading")?.focus({ preventScroll: true })
+    }
+    if (modelView === "list") {
+      const back = button(uiText("返回思考设置", "Back to thinking settings"), () => switchView("model"))
+      back.replaceChildren(createChevron(doc, "", "left", 16)); header.append(back)
+      const title = htmlElement(doc, "span"); title.textContent = uiText("模型列表", "Models"); header.append(title)
+      modelPanel.append(header); return
+    }
+    const mode = button(modelView === "route" ? uiText("切换到指定模型", "Use a specific model") : uiText("切换到智能路由", "Use smart routing"), () => switchView(modelView === "route" ? "model" : "route"))
+    mode.replaceChildren(createOptionIcon(doc, modelView === "route" ? "M3 12h6l6-6h6M9 12l6 6h6" : "M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"))
+    mode.disabled = !state.options.some(option => option.value.startsWith("route:"))
+    const selected = state.options.find(option => option.value === state.value)
+    const selectedIsRoute = state.value.startsWith("route:")
+    const heading = button(modelView === "route" ? uiText("智能路由", "Smart routing") : modelControl.label, () => { if (modelView === "model") switchView("list") })
+    heading.className = "jdx-model-heading"
+    if (modelView === "model") {
+      const title = htmlElement(doc, "span"); title.className = "jdx-model-heading-effort"
+      title.append(doc.createTextNode(modelControl.label), createChevron(doc, "", "right", 14))
+      const name = htmlElement(doc, "span"); name.className = "jdx-model-heading-name"
+      name.textContent = selectedIsRoute ? uiText("选择模型", "Choose a model") : selected?.label ?? uiText("选择模型", "Choose a model")
+      heading.replaceChildren(title, name)
+    }
+    const auto = button(modelView === "route" ? uiText("恢复默认路由", "Reset route") : uiText("自动", "Auto"), () => {
+      if (modelView === "route") {
+        const index = visibleOptions().findIndex(option => option.value === "route:standard")
+        selectIndex(index, true)
+      } else modelControl?.onCommit?.("auto")
+    })
+    auto.disabled = modelView === "route" ? !visibleOptions().some(option => option.value === "route:standard" && !option.disabled) : selectedIsRoute || !modelControl.onCommit || state.disabled
+    if (modelView === "model") auto.setAttribute("aria-pressed", String(modelControl.value === "auto"))
+    else auto.replaceChildren(createOptionIcon(doc, "M3 10a9 9 0 1 1 2 8M3 3v7h7"))
+    header.append(mode, heading, auto); modelPanel.append(header)
+    if (modelView !== "model") return
+    const rangeWrap = htmlElement(doc, "div"); rangeWrap.className = "jdx-thinking-range"
+    const track = htmlElement(doc, "div"); track.className = "jdx-thinking-track"; track.setAttribute("aria-hidden", "true")
+    const fill = htmlElement(doc, "span"); fill.className = "jdx-thinking-fill"
+    const dots = htmlElement(doc, "span"); dots.className = "jdx-thinking-dots"
+    modelControl.levels.forEach(() => dots.append(htmlElement(doc, "span")))
+    track.append(fill, dots); rangeWrap.append(track)
+    const range = htmlElement(doc, "input")
+    range.type = "range"; range.className = "jdx-model-thinking-range"
+    range.min = "0"; range.max = String(Math.max(1, modelControl.levels.length - 1)); range.step = "1"
+    const index = modelControl.levels.findIndex(level => level.value === modelControl!.value)
+    range.value = String(Math.max(0, index)); range.dataset.automatic = String(index < 0)
+    const paintRange = (index: number) => {
+      const percent = Math.max(0, index) / Math.max(1, modelControl!.levels.length - 1) * 100
+      fill.style.width = index < 0 ? "100%" : `calc(${percent}% + ${14 - percent * .28}px)`
+      fill.style.setProperty("--thinking-particle-duration", index < 0 ? "6s" : `${12 / (1 + percent / 20)}s`)
+    }
+    paintRange(index)
+    range.setAttribute("aria-label", uiText("思考档位", "Thinking effort")); range.setAttribute("aria-valuetext", modelControl.label)
+    range.disabled = selectedIsRoute || !modelControl.onCommit || modelControl.levels.length < 2 || state.disabled
+    const signature = modelControl
+    let gesture: "pointer" | "keyboard" | null = null
+    const commitRange = () => {
+      const level = signature.levels[Number(range.value)]
+      gesture = null
+      if (signature === modelControl && level && !range.disabled && !state.disabled && state.open) modelControl.onCommit?.(level.value)
+    }
+    range.addEventListener("pointerdown", event => { if (!range.disabled) { gesture = "pointer"; range.setPointerCapture?.(event.pointerId) } })
+    range.addEventListener("pointerup", () => { if (gesture === "pointer") commitRange() })
+    range.addEventListener("pointercancel", () => { gesture = null; range.value = String(Math.max(0, index)); paintRange(index) })
+    range.addEventListener("keydown", event => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) gesture = "keyboard"
+      else if (event.key === "Escape") gesture = null
+    })
+    range.addEventListener("keyup", event => {
+      if (gesture === "keyboard" && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) commitRange()
+    })
+    range.addEventListener("blur", () => { if (gesture === "keyboard") commitRange() })
+    range.addEventListener("input", () => {
+      const level = signature.levels[Number(range.value)]
+      if (!level) return
+      range.dataset.automatic = "false"; range.setAttribute("aria-valuetext", level.label)
+      paintRange(Number(range.value))
+      const label = heading.querySelector(".jdx-model-heading-effort")
+      if (label) label.firstChild!.textContent = level.label
+    })
+    range.addEventListener("change", () => {
+      if (!gesture) commitRange()
+    })
+    rangeWrap.append(range); modelPanel.append(rangeWrap)
+  }
 
   function optionId(index: number) {
     return `${hostId}-option-${index}`
@@ -198,9 +328,12 @@ export function createJdxSelect(host: HTMLElement, input: {
       if (selectedIcon.dataset.path !== key) { selectedIcon.replaceChildren(selected?.iconSrc ? createLogo(doc, selected.iconSrc, selected.iconThemed) : createOptionIcon(doc, path)); selectedIcon.dataset.path = key }
     }
     valueLabel.textContent = selected?.label ?? "—"
+    effortBadge.hidden = !modelControl || !selected || state.value.startsWith("route:")
+    effortBadge.textContent = modelControl?.label ?? ""
     trigger.title = selected?.label ?? ""
+    if (!effortBadge.hidden) trigger.title += ` · ${uiText("思考", "Thinking")}: ${modelControl!.label}`
     valueLabel.dataset.placeholder = String(state.value === "")
-    if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${selected?.label ?? uiText("未选择", "Not selected")}`)
+    if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${trigger.title || uiText("未选择", "Not selected")}`)
     trigger.disabled = state.disabled
     trigger.setAttribute("aria-expanded", String(state.open))
     search?.setAttribute("aria-expanded", String(state.open))
@@ -208,7 +341,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   }
 
   function renderOptions() {
-    const options = filterSelectOptions(state.options, state.query)
+    const options = visibleOptions()
     list.replaceChildren()
     if (options.length === 0) {
       const empty = htmlElement(doc, "li")
@@ -233,7 +366,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       row.setAttribute("role", "option")
       row.setAttribute("aria-selected", String(option.value === state.value))
       row.setAttribute("aria-disabled", String(option.disabled === true))
-      if (option.disabled) row.tabIndex = 0
+      if (option.disabled || modelControl) row.tabIndex = 0
       row.dataset.active = String(index === state.activeIndex)
       if (input.compact) row.title = [option.label, option.description, option.meta].filter(Boolean).join("\n")
       const main = htmlElement(doc, "span")
@@ -272,7 +405,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       row.addEventListener("click", () => selectIndex(index, true))
       row.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectIndex(index, true) }
-        else if (event.key === "Escape") { event.preventDefault(); close(); trigger.focus() }
+        else if (event.key === "Escape" && !modelControl) { event.preventDefault(); close(); trigger.focus() }
       })
       list.append(row)
     })
@@ -307,7 +440,8 @@ export function createJdxSelect(host: HTMLElement, input: {
     const spaceBelow = viewportHeight - rect.bottom - POPUP_VIEWPORT_GAP
     const spaceAbove = rect.top - POPUP_VIEWPORT_GAP
     const openUp = shouldOpenUp(spaceBelow, spaceAbove)
-    const width = Math.min(Math.max(rect.width, input.popupWidth ?? 0), viewportWidth - (POPUP_VIEWPORT_GAP * 2))
+    const fontScale = Number(doc.defaultView?.getComputedStyle(host).getPropertyValue("--jdx-font-scale")) || 1
+    const width = Math.min(modelControl ? (modelView === "list" ? 304 : 256) * fontScale : Math.max(rect.width, input.popupWidth ?? 0), viewportWidth - (POPUP_VIEWPORT_GAP * 2))
     const left = Math.min(
       Math.max(POPUP_VIEWPORT_GAP, rect.left),
       viewportWidth - POPUP_VIEWPORT_GAP - width,
@@ -338,16 +472,17 @@ export function createJdxSelect(host: HTMLElement, input: {
   function open() {
     if (state.open || state.disabled) return
     state.open = true
+    if (modelControl) { modelView = state.value.startsWith("route:") ? "route" : "model"; renderModelPanel() }
     if (portal) {
       const computed = doc.defaultView?.getComputedStyle(host)
-      for (const token of ["text", "muted", "line-strong", "surface", "green-deep", "active-bg", "active-text", "press-bg", "popup-shadow", "green"]) portal.style.setProperty(`--jdx-${token}`, computed?.getPropertyValue(`--jdx-${token}`) ?? "")
+      for (const token of ["text", "muted", "line-strong", "surface", "subtle", "font-scale", "green-deep", "active-bg", "active-text", "press-bg", "popup-shadow", "green"]) portal.style.setProperty(`--jdx-${token}`, computed?.getPropertyValue(`--jdx-${token}`) ?? "")
       portal.style.font = computed?.font || "13px system-ui"
       portal.style.color = "var(--jdx-text)"
       portal.append(popup); (doc.body || doc.documentElement).append(portal)
     }
     state.query = ""
     if (search) search.value = ""
-    const options = filterSelectOptions(state.options, state.query)
+    const options = visibleOptions()
     state.activeIndex = options.findIndex((option) => option.value === state.value)
     if (state.activeIndex < 0 && state.options.length > 0) state.activeIndex = 0
     renderOptions()
@@ -356,8 +491,10 @@ export function createJdxSelect(host: HTMLElement, input: {
     setActiveIndex(state.activeIndex, true)
     doc.addEventListener("pointerdown", onDocumentPointerDown, true)
     doc.addEventListener("scroll", onDocumentScroll, true)
-    doc.defaultView?.addEventListener("resize", close)
-    search?.focus({ preventScroll: true })
+    // Gecko 视图/字体变化也可能触发 resize；保持键盘上下文，只重算弹层位置。
+    doc.defaultView?.addEventListener("resize", positionPopup)
+    if (modelControl) modelPanel.querySelector<HTMLButtonElement>(".jdx-model-heading")?.focus({ preventScroll: true })
+    else search?.focus({ preventScroll: true })
     for (const listener of openListeners) listener()
   }
 
@@ -369,17 +506,17 @@ export function createJdxSelect(host: HTMLElement, input: {
     renderTrigger()
     doc.removeEventListener("pointerdown", onDocumentPointerDown, true)
     doc.removeEventListener("scroll", onDocumentScroll, true)
-    doc.defaultView?.removeEventListener("resize", close)
+    doc.defaultView?.removeEventListener("resize", positionPopup)
   }
 
   function selectIndex(index: number, notify: boolean) {
-    const option = filterSelectOptions(state.options, state.query)[index] ?? null
+    const option = visibleOptions()[index] ?? null
     if (!option) return
     if (option.disabled) {
       if (notify) for (const listener of disabledListeners) listener(option)
       return
     }
-    close()
+    if (!modelControl || modelView === "route") close()
     const changed = option.value !== state.value
     state.value = option.value
     renderOptions()
@@ -388,6 +525,7 @@ export function createJdxSelect(host: HTMLElement, input: {
     if (notify && changed) {
       for (const listener of listeners) listener(option.value)
     }
+    if (modelControl && state.open) { modelView = "model"; renderModelPanel(); renderOptions(); positionPopup(); modelPanel.querySelector<HTMLButtonElement>(".jdx-model-heading")?.focus({ preventScroll: true }) }
   }
 
   trigger.addEventListener("click", () => {
@@ -408,7 +546,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   })
 
   function handleOpenKeydown(event: KeyboardEvent) {
-    const options = filterSelectOptions(state.options, state.query)
+    const options = visibleOptions()
     switch (event.key) {
       case "ArrowDown":
       case "ArrowUp":
@@ -416,6 +554,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       case "End":
         event.preventDefault()
         setActiveIndex(moveActiveIndex(state.activeIndex, event.key, options.length), true)
+        if (modelControl && event.target !== search) list.querySelectorAll<HTMLElement>('[role="option"]')[state.activeIndex]?.focus()
         break
       case "Enter":
       case " ":
@@ -426,6 +565,7 @@ export function createJdxSelect(host: HTMLElement, input: {
         break
       case "Escape":
         event.preventDefault()
+        if (modelControl && modelView === "list") { modelView = "model"; renderOptions(); renderModelPanel(); positionPopup(); modelPanel.querySelector<HTMLButtonElement>(".jdx-model-heading")?.focus({ preventScroll: true }); break }
         close()
         trigger.focus()
         break
@@ -437,12 +577,17 @@ export function createJdxSelect(host: HTMLElement, input: {
 
   search?.addEventListener("input", () => {
     state.query = search.value
-    const options = filterSelectOptions(state.options, state.query)
+    const options = visibleOptions()
     state.activeIndex = options.length ? 0 : -1
     renderOptions()
     setActiveIndex(state.activeIndex, false)
   })
   search?.addEventListener("keydown", (event) => handleOpenKeydown(event))
+  popup.addEventListener("keydown", event => {
+    if (!modelControl || event.target === search) return
+    if (event.key === "Escape") { event.stopPropagation(); handleOpenKeydown(event) }
+    else if (modelView !== "model" && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) handleOpenKeydown(event)
+  })
 
   renderOptions()
   renderTrigger()
@@ -452,6 +597,22 @@ export function createJdxSelect(host: HTMLElement, input: {
     close,
     destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); portal?.remove() },
     getValue: () => state.value,
+    setModelControl(control) {
+      if (modelControl && JSON.stringify([modelControl.selectionKey, modelControl.levels, modelControl.value, modelControl.label, Boolean(modelControl.onCommit)]) === JSON.stringify([control.selectionKey, control.levels, control.value, control.label, Boolean(control.onCommit)])) {
+        modelControl.onCommit = control.onCommit
+        return
+      }
+      modelControl = control
+      const restoreRangeFocus = popup.contains(doc.activeElement) && doc.activeElement?.classList.contains("jdx-model-thinking-range")
+      trigger.setAttribute("aria-haspopup", "dialog")
+      popup.id = `${hostId}-model-dialog`
+      trigger.setAttribute("aria-controls", popup.id)
+      popup.setAttribute("role", "dialog")
+      popup.setAttribute("aria-label", uiText("模型与思考设置", "Model and thinking settings"))
+      renderTrigger(); renderModelPanel()
+      if (restoreRangeFocus) modelPanel.querySelector<HTMLInputElement>("input[type=range]")?.focus()
+      if (state.open) { renderOptions(); positionPopup() }
+    },
     setValue(value: string) {
       if (!state.options.some((option) => option.value === value)) return
       state.value = value
@@ -460,15 +621,17 @@ export function createJdxSelect(host: HTMLElement, input: {
     setOptions(options: JdxSelectOption[], selectedValue: string) {
       state.options = options.slice()
       state.value = resolveSelectedValue(state.options, selectedValue)
-      state.activeIndex = state.open ? filterSelectOptions(state.options, state.query).findIndex(option => option.value === state.value) : -1
+      state.activeIndex = state.open ? visibleOptions().findIndex(option => option.value === state.value) : -1
       renderOptions()
       renderTrigger()
       if (state.open) { positionPopup(); setActiveIndex(state.activeIndex, false) }
     },
     setDisabled(disabled: boolean) {
+      if (state.disabled === disabled) return
       state.disabled = disabled
       if (disabled) close()
       renderTrigger()
+      if (modelControl) renderModelPanel()
     },
     onChange(listener: JdxSelectChangeListener) {
       listeners.add(listener)

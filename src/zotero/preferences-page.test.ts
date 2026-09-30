@@ -39,7 +39,7 @@ describe("preferences pane markup", () => {
     expect(xhtml).toContain('id="jadense-in-zotero-auto-follow-chat-model"')
     for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-in-zotero-feature-${feature}-model"`)
     expect(xhtml.indexOf('id="jadense-in-zotero-feature-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-in-zotero-auto-follow-chat-model"'))
-    expect(xhtml.indexOf('id="jadense-in-zotero-auto-follow-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-in-zotero-feature-translation-model"'))
+    expect(xhtml.indexOf('id="jadense-in-zotero-auto-follow-chat-model"')).toBeGreaterThan(xhtml.indexOf('id="jadense-in-zotero-feature-translation-model"'))
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(5)
     expect(xhtml).toContain('data-settings-section="ocr"')
     expect(xhtml).toContain('data-settings-section="jadense"')

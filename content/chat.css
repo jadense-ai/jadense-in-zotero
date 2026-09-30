@@ -214,9 +214,6 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
 /* 提示可换行，发送/停止始终并排留在底栏。 */
 .jdx-chat-composer-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 8px 8px; }
 .jdx-chat-composer-meta { display: flex; min-width: 0; align-items: center; gap: 8px; }
-.jdx-chat-model-select { width: auto; max-width: min(256px, 100%); min-width: 0; flex: 0 1 auto; }
-.jdx-chat-model-select .jdx-select-trigger { width: auto; max-width: 100%; min-height: 32px; height: 32px; gap: 6px; padding: 0 10px; border-color: transparent; border-radius: 6px; background: color-mix(in srgb, var(--jdx-subtle) 45%, transparent); font-size: calc(13px * var(--jdx-font-scale,1)); font-weight: 500; }
-.jdx-chat-model-select .jdx-select-trigger:hover:not(:disabled) { background: var(--jdx-press-bg); }
 .jdx-chat-composer button { min-height: 32px; }
 .jdx-chat-composer .jdx-chat-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--jdx-muted); cursor: pointer; }
 .jdx-chat-icon-button[hidden] { display: none; }
@@ -279,8 +276,3 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
 .jdx-chat-message-image > button[aria-expanded="true"] { cursor: zoom-out; }
 .jdx-chat-message-image > button[aria-expanded="true"] img { max-height: none; }
 .jdx-chat-message-image > span { font-size: calc(12px * var(--jdx-font-scale,1)); overflow-wrap: anywhere; opacity: .75; }
-/* 复用主应用的模型/智能路由/BYOK 图标语言；图标不参与文字收缩。 */
-.jdx-chat-model-select .jdx-select-leading-icon { display:inline-flex; width:18px; height:18px; flex:0 0 18px; align-items:center; color:var(--jdx-muted); }
-.jdx-chat-model-select .jdx-select-leading-icon svg { width:18px; height:18px; }
-
-.jdx-select-leading-icon img { width:18px; height:18px; object-fit:contain; }

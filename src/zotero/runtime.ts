@@ -1,3 +1,4 @@
+import { initializeFeatureModelSelections } from './ai-settings'
 import { uiText } from "./ui-preferences"
 import { JadenseApiClient, type JadenseFavoriteFolder, type JadenseZoteroImportResult } from "@/jadense/api"
 import {
@@ -1060,6 +1061,7 @@ export function saveConnection(zotero: ZoteroLike, input: { token: string; defau
   try {
     if (!prefString(zotero, AI_INITIAL_MODEL_PREF_KEY)) zotero.Prefs?.set(AI_INITIAL_MODEL_PREF_KEY, JSON.stringify({ route: "jadense" }))
   } catch { /* 功能模型仍可由用户在设置中手动选择。 */ }
+  initializeFeatureModelSelections(zotero)
   // defaultFolderId 缺省(undefined)表示不改动已有选择;显式传空(含 null)则清除。
   if (input.defaultFolderId === undefined) return
   const folderId = input.defaultFolderId?.trim() ?? ""

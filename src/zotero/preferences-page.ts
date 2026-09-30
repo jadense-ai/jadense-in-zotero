@@ -1,3 +1,4 @@
+import { createModelSelect } from './ui/model-select'
 import { wireFeatureSettings } from './feature-settings'
 import { diagnostics } from "./diagnostics"
 import { wireOCRSettings } from './ocr-settings'
@@ -25,7 +26,7 @@ import {
   type ByokProtocol,
 } from "@/chat/byok-chat"
 import {
-  AI_FEATURES, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY,
+  AI_SETTINGS_FEATURES as AI_FEATURES, AI_MODEL_SETTINGS_PREF_KEY, featureFollowsChat, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY,
   effectiveFeatureModelSelection,
   readAutoFollowChatModel,
   featureModelSelectionKey,
@@ -45,7 +46,8 @@ import {
   type ByokProvider,
 } from "./ai-settings"
 import { JadenseApiClient, type JadenseChatModelCatalog } from "@/jadense/api"
-import { bindModelSelectToast, buildFeatureModelSelectOptions, shouldRefreshModelCatalog } from "./ai-model-select"
+import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureModelThinking, shouldRefreshModelCatalog } from "./ai-model-select"
+import { rememberModelCatalog } from "./model-catalog"
 import { createJdxSelect, type JdxSelect } from "./custom-select"
 import {
   applyStrings,
@@ -160,15 +162,9 @@ function element<T extends HTMLElement>(id: string) {
 
 function readElements(): PreferenceElements {
   const strings = selectPreferencesStrings(getUiLocale())
-  const labels = { chat: strings.featureChatLabel, translation: uiText("选文翻译", "Selection translation"), fullTranslation: uiText("对照翻译", "Bilingual PDF translation"), analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
+  const labels = { chat: strings.featureChatLabel, translation: uiText("翻译模型", "Translation model"), fullTranslation: uiText("对照翻译", "Bilingual PDF translation"), analysis: strings.featureAnalysisLabel, figure: strings.featureFigureLabel }
   return {
-    featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createJdxSelect(element(`jadense-in-zotero-feature-${feature}-model`), {
-      showSelectedIcon: true,
-      popupWidth: 304,
-      compact: true,
-      searchPlaceholder: strings.featureModelSearch,
-      ariaLabel: labels[feature],
-    })])) as Record<AiFeature, JdxSelect>,
+    featureModels: Object.fromEntries(AI_FEATURES.map(feature => [feature, createModelSelect(element(`jadense-in-zotero-feature-${feature}-model`), { ariaLabel: labels[feature] })])) as Record<AiFeature, JdxSelect>,
     autoFollowChatModel: element<HTMLInputElement>(IDS.autoFollowChatModel),
     featureModelStatus: element("jadense-in-zotero-feature-model-status"),
     connectionStatus: element(IDS.connectionStatus),
@@ -445,7 +441,8 @@ function renderFeatureModels(elements: PreferenceElements) {
   for (const feature of AI_FEATURES) {
     const selection = effectiveFeatureModelSelection(Zotero, feature)
     elements.featureModels[feature].setOptions(buildFeatureModelSelectOptions(Zotero, featureModelCatalog, selection, !getUiLocale()?.toLowerCase().startsWith("zh")), featureModelSelectionKey(selection))
-    elements.featureModels[feature].setDisabled(autoFollow && feature !== "chat")
+    elements.featureModels[feature].setDisabled(featureFollowsChat(Zotero, feature))
+    configureFeatureModelThinking(elements.featureModels[feature], Zotero, feature, featureModelCatalog)
   }
 }
 
@@ -471,6 +468,7 @@ async function refreshFeatureModelCatalog(elements: PreferenceElements) {
     const catalog = await new JadenseApiClient({ ...connection, fetchImpl: ownerWindow?.fetch.bind(ownerWindow) }).getChatModels(controller.signal)
     if (generation !== featureCatalogGeneration) return
     featureModelCatalog = catalog
+    rememberModelCatalog(Zotero, catalog)
     featureCatalogUpdatedAt = Date.now()
     setStatus(elements.featureModelStatus, strings.featureModelReady)
   } catch {
@@ -641,8 +639,8 @@ export function initJadensePreferencesPage() {
     })
   }
   const modelObservers: unknown[] = []
-  for (const key of [...Object.values(FEATURE_MODEL_PREF_KEYS), AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, 'extensions.jadenseInZotero.byokConfig']) {
-    try { const id = Zotero.Prefs?.registerObserver?.(key, () => renderFeatureModels(elements)); if (id !== undefined) modelObservers.push(id) } catch { /* 可选跨窗显示。 */ }
+  for (const key of [AI_MODEL_SETTINGS_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, 'extensions.jadenseInZotero.byokConfig']) {
+    try { const id = Zotero.Prefs?.registerObserver?.(key, () => renderFeatureModels(elements), key === AI_MODEL_SETTINGS_PREF_KEY); if (id !== undefined) modelObservers.push(id) } catch { /* 可选跨窗显示。 */ }
   }
   stopModels = () => { modelObservers.forEach(id => Zotero.Prefs?.unregisterObserver?.(id)); Object.values(elements.featureModels).forEach(select => select.destroy()) }
   renderHelpSteps(elements, strings)
@@ -722,7 +720,7 @@ export function initJadensePreferencesPage() {
 
   for (const feature of AI_FEATURES) elements.featureModels[feature].onChange(value => {
     try {
-      saveFeatureModelSelection(Zotero, feature, featureModelSelectionFromKey(value))
+      saveFeatureModelSelection(Zotero, feature, featureModelSelectionFromKey(value), featureModelCatalog)
       renderFeatureModels(elements)
       setStatus(elements.featureModelStatus, strings.featureModelSaved, "success")
     } catch (error) {

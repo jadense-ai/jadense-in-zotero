@@ -9,7 +9,7 @@ vi.mock('./chat-message-ui', () => ({ nearLatest: () => false, updateLatestButto
 vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ destroy: mocks.destroy, setOptions() {}, setValue() {}, onChange() {}, onOpen() {}, close() {} }) }))
 vi.mock('./research-context', () => ({ collectSourceForItem: async () => null }))
 vi.mock('./ai-settings', () => ({ featureModelState: mocks.feature, effectiveFeatureModelSelection: () => ({}), featureModelSelectionKey: () => 'default' }))
-vi.mock('./ai-model-select', () => ({ buildFeatureModelSelectOptions: () => [], bindModelSelectToast() {}, shouldRefreshModelCatalog: () => false }))
+vi.mock('./ai-model-select', () => ({ buildFeatureModelSelectOptions: () => [], bindModelSelectToast() {}, configureFeatureModelThinking() {}, shouldRefreshModelCatalog: () => false }))
 vi.mock('./runtime', () => ({ readConnection: () => ({ token: '' }) }))
 import { mountReaderChat } from './reader-chat'
 
