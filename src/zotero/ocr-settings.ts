@@ -1,12 +1,13 @@
 import { wireSettingsNavigation } from './settings-navigation'
 /** OCR 共用设置：自动读取本机状态，一个入口完成依赖和模型准备。 */
 import type { ZoteroLike } from './runtime'
-import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, registerOCRSettingsOperation, cancelOCRSettingsOperations, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
+import { checkLocalOCR, installLocalOCR, prepareLocalOCRModels, removeLocalOCR, observeOCRProgress, isLocalOCRPreparing, registerOCRSettingsOperation, cancelOCRSettingsOperations, ocrStorageBusyReason, stopIdleOCRForStorage, rebindOCRReady, movedOCRNeedsHealthCheck, validateMovedOCREngine, OCR_MODEL_SOURCE_PREF, readOCRModelSource, type OCREnvironment, type OCRProgress } from './local-ocr'
 import { createJdxSelect } from './custom-select'
 import { uiText } from './ui-preferences'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { wireCloudOCRSettings } from './cloud-ocr-settings'
 import { wirePDFEngineSettings } from './pdf-translation-settings'
+import { wireEngineStorageSettings } from './engine-storage-settings'
 
 /** 卸载只停止 UI 更新，不取消其他窗口共享的准备任务。 */
 export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | null) {
@@ -24,6 +25,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const stopEngine = wirePDFEngineSettings(host, layout)
   const title = make('h3', uiText('OCR配置', 'OCR configuration'))
   const note = make('p', uiText('将 PDF 中的文字、表格和版面转为可用内容，供全文 Markdown、文献解析和参考文献提取使用。可选择本机或云端服务。', 'Extract text, tables and layout for Markdown, literature analysis and references using a local or cloud engine.'))
+  const storageRoot = make('div')
   const overview = make('section'); overview.className = 'jdx-ocr-section'
   const heading = make('h4', uiText('本机 OCR', 'Local OCR'))
   const panel = make('div'); panel.className = 'jdx-runtime-status'
@@ -60,7 +62,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const environment = make('p', uiText('正在读取组件信息…', 'Reading component information…'))
   const path = make('p'); path.className = 'jdx-ocr-path'
   const errorDetails = make('p'); errorDetails.className = 'jdx-ocr-path'; errorDetails.hidden = true
-  const params = make('p', uiText('Python 是识别组件的运行环境，uv 负责安装，均由插件自动管理，不需要手动填写路径或环境变量。模型缓存使用当前 Zotero 配置目录。默认下载源可沿用系统 HF_ENDPOINT；镜像选项只对 OCR 子进程生效，不修改系统设置。', 'Python runs recognition components and uv installs them. The plugin manages both; no paths or environment variables need to be entered. Models are cached in the current Zotero profile. The default source honors the system HF_ENDPOINT; mirror choices apply only to OCR subprocesses and do not change system settings.'))
+  const params = make('p', uiText('Python 与 uv 由插件管理；依赖、模型及缓存位于上方显示的 OCR 存储目录。默认下载源可沿用系统 HF_ENDPOINT；镜像选项只对 OCR 子进程生效。', 'Python and uv are managed by the plugin. Components, models and caches use the OCR storage folder shown above. The default source honors system HF_ENDPOINT; mirror settings affect OCR subprocesses only.'))
   details.append(make('h4', uiText('安装工具 · uv', 'Installation tool · uv')), environment, make('h4', uiText('运行环境与参数', 'Runtime and parameters')), params, make('h4', uiText('本机日志', 'Local logs')), path, make('p', uiText('仅在组件损坏或持续无法启动时使用修复。将重新同步依赖并自动验证，保留已下载模型。下载失败时，先更换上方下载源，再点击“继续准备”。', 'Repair only if components are damaged or cannot start. Dependencies will be synchronized and verified while retaining models. For download failures, change the source above and choose Continue setup.')))
   details.append(errorDetails)
   const removal = make('section'); removal.className = 'jdx-ocr-removal'
@@ -80,8 +82,15 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   confirmation.append(removalTitle, scope, modelOption, modelHelp, confirmActions); removal.append(confirmation); details.append(removal)
   const cloudRoot = make('div')
   details.append(source)
-  body.append(title, note, cloudRoot, overview, tip, details); layout.before(body)
+  body.append(title, note, storageRoot, cloudRoot, overview, tip, details); layout.before(body)
   let disposed = false, busy = false, retryRead = false
+  let migrationReady: OCREnvironment | undefined
+  const stopStorage = wireEngineStorageSettings(host, storageRoot, 'ocr', {
+    busy: () => { migrationReady = undefined; return busy ? uiText('OCR 设置正在检查或准备，请完成后再迁移。', 'OCR settings are checking or preparing. Retry the move when finished.') : ocrStorageBusyReason(host) },
+    stopIdle: () => stopIdleOCRForStorage(host),
+    validate: async (target, signal) => { if (await movedOCRNeedsHealthCheck(host)) migrationReady = await validateMovedOCREngine(host, target, signal) },
+    committed: () => rebindOCRReady(host, migrationReady),
+  })
   // 单一状态出口：替换旧语义，保留可发现的手动兜底，不抑制进度播报。
   const showState = (kind: string, title: string, description: string) => {
     state.dataset.ocrState = kind; panel.dataset.state = kind
@@ -259,10 +268,10 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const refresh = () => { if (!overview.hidden && !busy && !disposed && confirmation.hidden) void run() }
   doc.defaultView?.addEventListener('focus', refresh)
   const stopCloud = wireCloudOCRSettings(host, cloudRoot, engine => {
-    for (const node of [overview, source, tip, details]) node.hidden = engine !== 'local'
+    for (const node of [storageRoot, overview, source, tip, details]) node.hidden = engine !== 'local'
     if (engine === 'local') refresh()
   })
   const stopNavigation = wireSettingsNavigation(root, '[data-external-dependency]', 'ocr')
   return () => {
-    stopNavigation(); stopEngine(); layout.remove(); headingPage.remove(); disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
+    stopNavigation(); stopEngine(); stopStorage(); layout.remove(); headingPage.remove(); disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
 }

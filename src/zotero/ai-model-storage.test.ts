@@ -1,6 +1,6 @@
 /** 使用真实 Zotero 分支语义验证模型偏好迁移与共享翻译的外部行为。 */
 import { describe, expect, it, vi } from 'vitest'
-import { effectiveFeatureModelSelection, initializeFeatureModelSelections, readFeatureModelSelection, saveFeatureModelSelection, saveAutoFollowChatModel, observeAiModelSettings } from './ai-settings'
+import { effectiveFeatureModelSelection, initializeFeatureModelSelections, migrateChatDefault0610, readFeatureModelSelection, saveFeatureModelSelection, saveAutoFollowChatModel, observeAiModelSettings } from './ai-settings'
 import type { JadenseChatModelCatalog } from '@/jadense/api'
 import type { ZoteroLike } from './runtime'
 
@@ -14,6 +14,44 @@ function fixture() {
 }
 
 describe('canonical AI model storage', () => {
+  it('sets the 0.6.10 default on a fresh profile and migrates a legacy Jadense chat choice', () => {
+    const fresh = fixture()
+    expect(migrateChatDefault0610(fresh.host, '0.6.10-first')).toBe(true)
+    expect(readFeatureModelSelection(fresh.host, 'chat')).toEqual({ route: 'jadense', selection: { kind: 'model', modelId: 'qwen-3.8-flash' } })
+    const legacy = fixture()
+    legacy.host.Prefs!.set('extensions.jadenseInZotero.jadenseChatModel', JSON.stringify({ kind: 'model', modelId: 'legacy-choice' }))
+    expect(migrateChatDefault0610(legacy.host, '0.6.10-upgrade')).toBe(true)
+    expect(readFeatureModelSelection(legacy.host, 'chat')).toEqual({ route: 'jadense', selection: { kind: 'model', modelId: 'qwen-3.8-flash' } })
+  })
+  it('switches Jadense Chat once in 0.6.10 and preserves later user changes', () => {
+    const { host, values } = fixture()
+    saveFeatureModelSelection(host, 'chat', model('old-chat'))
+    saveFeatureModelSelection(host, 'translation', model('translation'))
+    saveFeatureModelSelection(host, 'analysis', model('analysis'))
+    expect(migrateChatDefault0610(host, '0.6.9-previous')).toBe(false)
+    expect(readFeatureModelSelection(host, 'chat')).toEqual(model('old-chat'))
+    expect(migrateChatDefault0610(host, '0.6.10-20260930')).toBe(true)
+    expect(readFeatureModelSelection(host, 'chat')).toEqual({ route: 'jadense', selection: { kind: 'model', modelId: 'qwen-3.8-flash' } })
+    expect(readFeatureModelSelection(host, 'translation')).toEqual(model('translation'))
+    expect(readFeatureModelSelection(host, 'analysis')).toEqual(model('analysis'))
+    saveFeatureModelSelection(host, 'chat', model('chosen-after-upgrade'))
+    expect(JSON.parse(String(values.get(key))).chatDefaultMigration0610).toBe(true)
+    expect(migrateChatDefault0610({ Prefs: host.Prefs }, '0.6.10-restart')).toBe(true)
+    expect(migrateChatDefault0610(host, '0.6.11-later')).toBe(false)
+    expect(readFeatureModelSelection(host, 'chat')).toEqual(model('chosen-after-upgrade'))
+  })
+  it('keeps BYOK and retries a failed migration without marking it complete', () => {
+    const { host, values } = fixture()
+    saveFeatureModelSelection(host, 'chat', { route: 'byok', modelId: 'private-model' })
+    const originalSet = host.Prefs!.set
+    host.Prefs!.set = () => { throw new Error('Synthetic disk failure') }
+    expect(migrateChatDefault0610(host, '0.6.10-first')).toBe(false)
+    expect(JSON.parse(String(values.get(key))).chatDefaultMigration0610).toBeUndefined()
+    host.Prefs!.set = originalSet
+    expect(migrateChatDefault0610(host, '0.6.10-retry')).toBe(true)
+    expect(readFeatureModelSelection(host, 'chat')).toEqual({ route: 'byok', modelId: 'private-model' })
+    expect(JSON.parse(String(values.get(key))).chatDefaultMigration0610).toBe(true)
+  })
   it('reads legacy effective translation without writes and migrates once to a global nonsecret record', () => {
     const { host, values } = fixture()
     host.Prefs!.set('extensions.jadenseInZotero.chatModel', JSON.stringify(model('chat', 'high')))

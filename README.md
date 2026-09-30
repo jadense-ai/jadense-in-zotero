@@ -27,6 +27,8 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **v0.6.9 已发布：**PDF 阅读器新增「简阅模式」，并改进模型思考档位、翻译过程反馈及 PDF 对照操作。简阅的结构提取依赖当前 Zotero 阅读器能力；翻译须主动启动。官方完整包继续包含前沿雷达，公开源码构建的基础版不含该模块。[了解简阅与设置](docs/usage-guide.md#simple-reading-069)。[下载正式安装包](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9)。
 
+**v0.6.10 发布准备：**可为 PDF 排版引擎和本机 OCR 分别选择存储位置，并配置 BYOK 模型的思考档位。首次启动 0.6.10 时，攻玉对话模型会一次性设为 `qwen-3.8-flash`；BYOK 选择不变，此后手动改选不会被再次覆盖。正式安装包须待验收后从 [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) 下载。[操作与升级说明](docs/usage-guide.md#update-0610)。
+
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
 离线套装内含新版 [PDF 安装指南](<docs/jadense-in-zotero 离线安装详细流程.pdf>)。

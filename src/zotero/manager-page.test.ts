@@ -917,6 +917,7 @@ describe("manager page state", () => {
     expect(xhtml).toContain('id="jadense-manager-byok-provider-save"')
     expect(xhtml).toContain('id="jadense-manager-byok-model-select"')
     expect(xhtml).toContain('id="jadense-manager-byok-model-name"')
+    expect(xhtml).toContain('id="jadense-manager-byok-thinking-levels"')
     expect(xhtml).toContain('id="jadense-manager-byok-context-window"')
     for (const id of ["account-name", "account-plan", "account-balance", "account-source", "account-reward", "account-streak"]) {
       expect(xhtml).toContain(`id="jadense-manager-${id}"`)

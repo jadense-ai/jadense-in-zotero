@@ -14,7 +14,7 @@ function processFixture() {
     stderr: { readString: async () => null }, wait: async () => ({ exitCode: 0 }), kill: vi.fn(() => push('')),
   }
   vi.stubGlobal('PathUtils', { profileDir: '/profile', join: (...parts: string[]) => parts.join('/') })
-  vi.stubGlobal('IOUtils', { exists: async () => false })
+  vi.stubGlobal('IOUtils', { exists: async () => false, makeDirectory: async () => {} })
   vi.stubGlobal('ChromeUtils', { importESModule: () => ({ Subprocess: { getEnvironment: () => ({}), call: async () => child } }) })
   return { child, replies, push }
 }
@@ -45,6 +45,16 @@ it('excludes pending translation quota from the layout timeout and drops late re
   await vi.advanceTimersByTimeAsync(31 * 60_000); expect(f.child.kill).not.toHaveBeenCalled()
   controller.abort(); finish(); await vi.advanceTimersByTimeAsync(1); await assertion
   expect(f.replies).toEqual([]); expect(f.child.kill).toHaveBeenCalledOnce()
+})
+
+it('releases a stuck output pipe when the worker is cancelled', async () => {
+  const f = processFixture(), controller = new AbortController()
+  f.child.stderr.readString = async () => new Promise<string | null>(() => {})
+  const result = runPDFWorker({}, {}, controller.signal, async () => {})
+  await vi.waitFor(() => expect(f.child.stdin.write).toHaveBeenCalledOnce())
+  controller.abort()
+  await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  expect(f.child.kill).toHaveBeenCalledOnce()
 })
 
 it('sends soft cancellation and continues consuming the final artifact without killing the engine', async () => {

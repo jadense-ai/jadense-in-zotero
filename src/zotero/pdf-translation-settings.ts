@@ -1,7 +1,8 @@
 /** 对照翻译偏好与外置版面引擎分别挂载；浏览设置不下载引擎或启动翻译。 */
 import type { ZoteroLike } from './runtime'
-import { PDF_ENGINE, pdfPlatform, pdfRuntimeRoot, type PDFEngineProgress } from './pdf-translation-runtime'
+import { PDF_ENGINE, checkPDFEngine, pdfPlatform, pdfRuntimeRoot, preparePDFEngine, type PDFEngineProgress } from './pdf-translation-runtime'
 import { pdfTranslationJobs } from './pdf-translation-jobs'
+import { wireEngineStorageSettings } from './engine-storage-settings'
 import { uiText } from './ui-preferences'
 import { readPDFTranslationMode, savePDFTranslationMode, pdfModeLabel, type PDFTranslationMode } from './pdf-translation-policy'
 import { wireTranslationSpeedSettings } from './translation-speed-settings'
@@ -36,8 +37,22 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
     }
   })
   const location = element('p'); location.className = 'jdx-manager-settings-note jdx-pref-card-note'; location.style.overflowWrap = 'anywhere'
-  try { location.textContent = uiText('安装目录：', 'Install directory: ') + pdfRuntimeRoot() } catch { /* 不影响设置展示。 */ }
+  try { location.textContent = uiText('安装目录：', 'Install directory: ') + pdfRuntimeRoot(host) } catch { /* 不影响设置展示。 */ }
   actions.append(prepare, repair, offline, check, cancel); controls.append(actions, help, location); row.append(description, controls); root.append(title, row)
+  const stopStorage = wireEngineStorageSettings(host, root, 'pdf', {
+    busy: () => pdfTranslationJobs(host).storageBusyReason(),
+    committed: target => { location.textContent = uiText('安装目录：', 'Install directory: ') + target },
+    validate: async (target, signal) => {
+      const paths = pdfPlatform().PathUtils, io = pdfPlatform().IOUtils
+      if (!await io.exists(paths.join(pdfRuntimeRoot(host), PDF_ENGINE))) return
+      try { await checkPDFEngine(host, signal, () => {}, target) }
+      catch (error) {
+        if (signal.aborted) throw error
+        await preparePDFEngine(host, signal, () => {}, true, undefined, target)
+        await checkPDFEngine(host, signal, () => {}, target)
+      }
+    },
+  })
   let disposed = false, controller: AbortController | undefined
   const progress: PDFEngineProgress = (stage, detail) => {
     if (disposed) return
@@ -72,8 +87,8 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
     } catch (error) { if (!disposed) status.textContent = controller.signal.aborted ? uiText('已取消，已下载内容保留；再次准备可继续。', 'Cancelled; downloaded bytes retained. Prepare again to continue.') : error instanceof Error ? error.message : String(error) } finally { controller = undefined; for (const button of [prepare, repair, check, offline]) button.disabled = false; cancel.hidden = true }
   }
   prepare.addEventListener('click', () => { void run('prepare') }); repair.addEventListener('click', () => { void run('repair') }); check.addEventListener('click', () => { void run('check') }); offline.addEventListener('click', () => { void run('import') }); cancel.addEventListener('click', () => controller?.abort())
-  void Promise.resolve().then(() => pdfPlatform().IOUtils.exists(pdfPlatform().PathUtils.join(pdfRuntimeRoot(), PDF_ENGINE))).then(ready => { if (!disposed && !controller) status.textContent = ready ? uiText('已有引擎安装记录，可点击检测确认。', 'An installation was recorded. Check to verify it.') : uiText('首次使用时准备，也可导入离线包或检测手动安装。', 'Prepare on first use, import an offline package, or check a manual installation.') }).catch(() => {})
-  return () => { disposed = true; controller?.abort(); title.remove(); row.remove() }
+  void Promise.resolve().then(() => pdfPlatform().IOUtils.exists(pdfPlatform().PathUtils.join(pdfRuntimeRoot(host), PDF_ENGINE))).then(ready => { if (!disposed && !controller) status.textContent = ready ? uiText('已有引擎安装记录，可点击检测确认。', 'An installation was recorded. Check to verify it.') : uiText('首次使用时准备，也可导入离线包或检测手动安装。', 'Prepare on first use, import an offline package, or check a manual installation.') }).catch(() => {})
+  return () => { disposed = true; controller?.abort(); stopStorage(); title.remove(); row.remove() }
 }
 
 /** 功能偏好复用运行时现有键；不改变历史任务身份，范围用于新任务，同步滚动用于下次打开。 */

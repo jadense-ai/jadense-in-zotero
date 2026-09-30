@@ -95,4 +95,58 @@
 #jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"] { color: var(--settings-green); }
 #jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"]::after { top: auto; bottom: 0; left: 4px; right: 4px; }
 
+/* BYOK 模型编辑器在所选目录条目下展开；档位多选沿用设置页的浅深主题变量。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-editor {
+  display: grid; gap: 7px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-control { position: relative; min-width: 0; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger {
+  min-height: 34px; width: 100%; border: 1px solid var(--settings-line); border-radius: 6px;
+  padding: 7px 10px; background: var(--settings-surface); color: var(--settings-text);
+  font: inherit; text-align: start; overflow-wrap: anywhere; cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger:hover,
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-option:hover {
+  background: var(--settings-active);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-popup {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: min(100%, 340px);
+  box-sizing: border-box; display: grid; gap: 7px; padding: 8px; border: 1px solid var(--settings-line);
+  border-radius: 7px; background: var(--settings-surface); box-shadow: 0 10px 28px rgb(0 0 0 / .16);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-popup[hidden] { display: none; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-options {
+  display: grid; max-height: 140px; overflow-y: auto;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-option {
+  display: flex; align-items: center; gap: 9px; min-height: 32px; border-radius: 5px; padding: 3px 6px;
+  color: var(--settings-text); cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-option input {
+  box-sizing: border-box; flex: 0 0 16px; width: 16px; height: 16px; min-height: 0;
+  margin: 0; padding: 0; border: 0; background: transparent; accent-color: var(--settings-green);
+}
+#jadense-in-zotero-preferences-pane .jdx-byok-thinking-option input[type="checkbox"] {
+  box-sizing: border-box; flex: 0 0 16px; width: 16px; height: 16px; min-height: 0;
+  margin: 0; padding: 0; border: 0; background: transparent; accent-color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-add {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-add button,
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-reset {
+  min-height: 32px; border: 1px solid var(--settings-line); border-radius: 6px; padding: 5px 9px;
+  color: var(--settings-text); background: var(--settings-surface); font: inherit; cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-reset { text-align: start; }
+
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(button.jdx-ocr-danger, button.jdx-pref-danger, button.jdx-manager-danger) { color: var(--jdx-red, var(--jdx-pref-error)); border-color: var(--jdx-red, var(--jdx-pref-error)); }
+/* 引擎父目录：可输入路径与原生文件夹选择并列，窄窗自然换行。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-engine-storage-input-row {
+  display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-engine-storage-input-row > input {
+  flex: 1 1 18rem; width: 100%; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-engine-storage-input-row > button { flex: 0 0 auto; }
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-engine-storage-path { overflow-wrap: anywhere; }

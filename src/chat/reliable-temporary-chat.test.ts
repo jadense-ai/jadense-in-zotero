@@ -231,6 +231,8 @@ it('BYOK reuses a completed response and never resends an uncertain request afte
   expect(await new ReliableByokChatClient(options, disk).send(input)).toBe('done')
   expect(await new ReliableByokChatClient(options, disk).send(input)).toBe('done')
   expect(fetchImpl).toHaveBeenCalledTimes(1)
+  await expect(new ReliableByokChatClient({ ...options, config: { ...config, thinkingEffort: 'low' } }, disk).send(input)).rejects.toThrow('different input')
+  expect(fetchImpl).toHaveBeenCalledTimes(1)
   fetchImpl.mockRejectedValue(new Error('offline'))
   const next = { ...input, clientRequestId: 'next', messages: [{ ...input.messages[0], text: 'next source' }] }
   await expect(new ReliableByokChatClient(options, disk).send(next)).rejects.toThrow('offline')

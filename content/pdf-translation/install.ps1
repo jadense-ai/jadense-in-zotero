@@ -64,7 +64,7 @@ if (-not $uvPath) {
 }
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $runtimePath 'python'
 # 避免 profile 深层缓存将旧依赖的 wheel 构建路径推到 MAX_PATH。
-$env:UV_CACHE_DIR = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Jadense\uv'
+$env:UV_CACHE_DIR = Join-Path $runtimePath 'uv-cache'
 $env:UV_PROJECT_ENVIRONMENT = Join-Path $runtimePath '.venv'
 $env:UV_HTTP_RETRIES = '3'
 $env:UV_HTTP_TIMEOUT = '60'

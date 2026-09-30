@@ -22,6 +22,7 @@ export type ByokConfig = {
   apiKey: string
   model: string
   maxOutputTokens: number
+  thinkingEffort?: string
 }
 
 export type ByokSendInput = TemporaryChatSendInput & {
@@ -91,7 +92,9 @@ export function validateByokConfig(input: ByokConfig): ByokConfig {
   if (!Number.isSafeInteger(input.maxOutputTokens) || input.maxOutputTokens <= 0) {
     throw new Error(uiText("最大输出量（词元） 必须是正整数。", "Maximum output tokens must be a positive integer."))
   }
-  return { protocol: input.protocol, baseUrl, apiKey, model, maxOutputTokens: input.maxOutputTokens }
+  const thinkingEffort = input.thinkingEffort?.trim()
+  return { protocol: input.protocol, baseUrl, apiKey, model, maxOutputTokens: input.maxOutputTokens,
+    ...(thinkingEffort && thinkingEffort !== 'auto' ? { thinkingEffort } : {}) }
 }
 
 export function byokConfigurationIssue(input: ByokConfig) {
@@ -332,6 +335,7 @@ function request(
     return {
       headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
       body: { model: config.model, messages: projected, stream: true, max_completion_tokens: config.maxOutputTokens,
+        ...(config.thinkingEffort ? { reasoning_effort: config.thinkingEffort } : {}),
         ...(format && formatMode !== 'text' ? { response_format: formatMode === 'json' ? { type: 'json_object' } : { type: 'json_schema', json_schema: { name: format.name, strict: true, schema: format.schema } } } : {}) },
     }
   }
@@ -339,24 +343,29 @@ function request(
     return {
       headers: { "x-api-key": config.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: { model: config.model, messages: projected, stream: true, max_tokens: config.maxOutputTokens,
-        ...(format && formatMode === 'schema' ? { output_config: { format: { type: 'json_schema', schema: format.schema } } } : {}) },
+        ...(config.thinkingEffort ? { output_config: { effort: config.thinkingEffort, ...(format && formatMode === 'schema' ? { format: { type: 'json_schema', schema: format.schema } } : {}) } } : {}),
+        ...(!config.thinkingEffort && format && formatMode === 'schema' ? { output_config: { format: { type: 'json_schema', schema: format.schema } } } : {}) },
     }
   }
   return {
     headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
     body: { model: config.model, input: projected, stream: true, store: false, max_output_tokens: config.maxOutputTokens,
+      ...(config.thinkingEffort ? { reasoning: { effort: config.thinkingEffort } } : {}),
       ...(format && formatMode !== 'text' ? { text: { format: formatMode === 'json' ? { type: 'json_object' } : { type: 'json_schema', name: format.name, strict: true, schema: format.schema } } } : {}) },
   }
 }
 
 /** 只有明确参数拒绝才可换格式；成功响应、未知错误、usage 或任何模型输出均不重派。 */
-async function rejectedResponseFormat(response: Response) {
+async function rejectedResponseFormat(response: Response, hasExplicitEffort: boolean) {
   if (![400, 422].includes(response.status)) return false
   try {
     const payload = object(await response.clone().json())
     const error = object(payload?.error)
     if (!error || [payload, error, object(payload?.response)].some(row => row?.usage || row?.choices || row?.output || row?.content)) return false
     const message = [error.param, error.code, error.message].filter(value => typeof value === 'string').join(' ')
+    // output_config 同时承载 Anthropic 的 format 和 effort；档位拒绝不能触发格式降级重派。
+    if (hasExplicitEffort && (/\beffort\b|reasoning_effort/i.test(message)
+      || /output_config/i.test(message) && !/format|schema|json/i.test(message))) return false
     return /response_format|json_schema|json_object|output_config|text\.format/i.test(message)
       && /not supported|unsupported|not support|unknown (?:parameter|field)|unrecognized (?:parameter|field)|unexpected (?:keyword|field|parameter)|extra inputs are not permitted/i.test(message)
   } catch { return false }
@@ -391,7 +400,7 @@ export class ByokChatClient {
         if (input.signal?.aborted || object(error)?.name === 'AbortError') throw error
         throw Object.assign(redactedError(error instanceof Error ? error.message : '', this.config.apiKey, uiText('BYOK 网络请求失败。', 'The BYOK network request failed.')), requestIssue(error, { code: 'NETWORK_ERROR', stage: 'dispatch' }))
       }
-      if (index === modes.length - 1 || !await rejectedResponseFormat(response)) break
+      if (index === modes.length - 1 || !await rejectedResponseFormat(response, Boolean(this.config.thinkingEffort))) break
       await response.body?.cancel().catch(() => undefined)
       input.diagnostic?.event('response_format_compatibility', { source: modes[index + 1] })
     }

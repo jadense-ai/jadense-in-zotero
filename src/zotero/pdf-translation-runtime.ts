@@ -2,6 +2,7 @@
 import type { ZoteroLike } from './runtime'
 import { checkCancelled } from './pdf-document'
 import { uiText } from './ui-preferences'
+import { engineStorageRoot, ensureEngineStorageAvailable } from './engine-storage'
 
 export const PDF_ENGINE = 'babeldoc-0.6.4-v1'
 export const PDF_ADAPTER = 'batch-v4'
@@ -13,10 +14,10 @@ export type PDFPlatform = {
   ChromeUtils: { importESModule(uri: string): { Subprocess: { getEnvironment(): Record<string, string>; call(options: { command: string; arguments: string[]; environment?: Record<string, string>; stderr: string }): Promise<Process> } } }
 }
 export const pdfPlatform = () => globalThis as unknown as PDFPlatform
-export const pdfRuntimeRoot = () => { const p = pdfPlatform().PathUtils; return p.join(p.profileDir, 'jadense-pdf-translation') }
-export const pdfTaskDirectory = (id: string) => {
+export const pdfRuntimeRoot = (host?: ZoteroLike) => host ? engineStorageRoot(host, 'pdf') : pdfPlatform().PathUtils.join(pdfPlatform().PathUtils.profileDir, 'jadense-pdf-translation')
+export const pdfTaskDirectory = (id: string, host?: ZoteroLike) => {
   if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error('Invalid PDF task identity')
-  return pdfPlatform().PathUtils.join(pdfRuntimeRoot(), 'tasks', id)
+  return pdfPlatform().PathUtils.join(pdfRuntimeRoot(host), 'tasks', id)
 }
 const isWindows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platform ?? '').toLowerCase().startsWith('win')
 
@@ -72,15 +73,23 @@ export async function* readPDFMessages(stream: { readString(): Promise<string | 
 }
 
 /** 持续消费两条输出流，翻译回复串行写回；取消和超时终止所启动的进程树。 */
-async function processRun(host: ZoteroLike, command: string, args: string[], signal: AbortSignal, onMessage: (value: Record<string, unknown>) => Promise<unknown>, initial?: unknown, timeout = 30 * 60_000, finishSignal?: AbortSignal) {
+async function processRun(host: ZoteroLike, command: string, args: string[], signal: AbortSignal, onMessage: (value: Record<string, unknown>) => Promise<unknown>, initial?: unknown, timeout = 30 * 60_000, finishSignal?: AbortSignal, root = pdfRuntimeRoot(host)) {
   checkCancelled(signal)
   const { Subprocess } = pdfPlatform().ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
   const environment = { ...Subprocess.getEnvironment(), PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1', PYTHONNOUSERSITE: '1' }
   delete (environment as Record<string, string>).PYTHONPATH; delete (environment as Record<string, string>).PYTHONHOME
+  const temp = pdfPlatform().PathUtils.join(root, 'tmp')
+  await pdfPlatform().IOUtils.makeDirectory(temp, { ignoreExisting: true })
+  Object.assign(environment, { TMP: temp, TEMP: temp, TMPDIR: temp })
   const process = await Subprocess.call({ command, arguments: args, stderr: 'pipe', environment })
   let terminated = false, timedOut = false
   let releaseTermination!: () => void
   const termination = new Promise<void>(resolve => { releaseTermination = resolve })
+  const limited = async <T>(work: Promise<T>, milliseconds: number, label: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try { return await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds) })]) }
+    finally { clearTimeout(timer) }
+  }
   const kill = () => {
     if (terminated) return
     terminated = true
@@ -108,13 +117,15 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
   // 不把引擎日志（可能含原文）保存到插件诊断；只显示结构化阶段与错误。
   let installationLog = ''
   let installationStage = 'environment', installationCategory = ''
-  const drain = (async () => { let text: string | null; while ((text = await process.stderr.readString())) { lastProgress = Date.now(); if (!initial) installationLog = (installationLog + text).slice(-3000) } })()
+  const drain = (async () => { let text: string | null; while ((text = await Promise.race([process.stderr.readString(), termination.then(() => null)]))) { lastProgress = Date.now(); if (!initial) installationLog = (installationLog + text).slice(-3000) } })()
+  void drain.catch(() => {})
   try {
     checkCancelled(signal)
     if (initial) await process.stdin.write(JSON.stringify(initial) + '\n')
     finishSignal?.addEventListener('abort', finish, { once: true })
     if (finishSignal?.aborted) finish()
-    for await (const message of readPDFMessages(process.stdout, () => { lastProgress = Date.now() })) {
+    const stdout = { readString: () => Promise.race([process.stdout.readString(), termination.then(() => null)]) }
+    for await (const message of readPDFMessages(stdout, () => { lastProgress = Date.now() })) {
         checkCancelled(signal)
         lastProgress = Date.now()
         if (!initial && message.type === 'install-error') {
@@ -138,9 +149,9 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     if (dispatchError) throw dispatchError
     await Promise.race([Promise.all(pending), termination])
     if (dispatchError) throw dispatchError
-    const result = await process.wait()
+    const result = await limited(process.wait(), 120_000, uiText('PDF 引擎退出超时，请重试。', 'PDF engine exit timed out. Retry.'))
     // 等待 stderr EOF 后再构造错误；避免快速退出时丢失最后一段安装日志。
-    await drain
+    await limited(drain, 30_000, uiText('PDF 引擎日志管道未结束，请重试。', 'PDF engine output pipe did not close. Retry.'))
     checkCancelled(signal)
     if (timedOut) throw new Error(finishSignal?.aborted ? uiText('保存已完成译文超时，已保留最近成果和译文缓存，请重试。', 'Saving translations timed out. The latest PDF and cached translations were retained. Retry.') : uiText('PDF 翻译阶段超时，请重试。', 'PDF translation stage timed out. Retry.'))
     if (result.exitCode !== 0 || (initial && !complete)) throw new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎未完成，请修复引擎或重试。', 'PDF engine did not finish. Repair the engine or retry.'))
@@ -148,14 +159,15 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     clearInterval(timer); signal.removeEventListener('abort', kill)
     if (finishTimer) clearTimeout(finishTimer)
     finishSignal?.removeEventListener('abort', finish)
-    await drain.catch(() => {})
+    await limited(drain, 30_000, '').catch(() => {})
     // 仅安装器输出落盘，翻译原文和 Provider 消息从不写入该日志。
-    if (!initial && installationLog) await pdfPlatform().IOUtils.writeUTF8(pdfPlatform().PathUtils.join(pdfRuntimeRoot(), 'install.log'), installationLog.replace(/https?:\/\/\S+/gu, '[download URL]')).catch(() => {})
+    if (!initial && installationLog) await pdfPlatform().IOUtils.writeUTF8(pdfPlatform().PathUtils.join(root, 'install.log'), installationLog.replace(/https?:\/\/\S+/gu, '[download URL]')).catch(() => {})
   }
 }
 
-async function deployPDFResources(host: ZoteroLike, signal: AbortSignal) {
-  const { IOUtils: io, PathUtils: paths } = pdfPlatform(), root = pdfRuntimeRoot()
+async function deployPDFResources(host: ZoteroLike, signal: AbortSignal, root = pdfRuntimeRoot(host)) {
+  if (root === pdfRuntimeRoot(host)) await ensureEngineStorageAvailable(host, 'pdf')
+  const { IOUtils: io, PathUtils: paths } = pdfPlatform()
   await io.makeDirectory(root, { ignoreExisting: true })
   const window = host.getMainWindow?.()
   if (!window) throw new Error('Zotero window unavailable')
@@ -171,27 +183,27 @@ async function deployPDFResources(host: ZoteroLike, signal: AbortSignal) {
 }
 
 /** 显式检测手动安装；不下载、不调用 Provider，失败清理过期就绪标记。 */
-export async function checkPDFEngine(host: ZoteroLike, signal: AbortSignal, progress: PDFEngineProgress) {
-  await deployPDFResources(host, signal)
+export async function checkPDFEngine(host: ZoteroLike, signal: AbortSignal, progress: PDFEngineProgress, root = pdfRuntimeRoot(host)) {
+  await deployPDFResources(host, signal, root)
   try {
-    const { IOUtils: io, PathUtils: paths } = pdfPlatform(), root = pdfRuntimeRoot()
+    const { IOUtils: io, PathUtils: paths } = pdfPlatform()
     const portable = paths.join(root, 'runtime', 'python', ...(isWindows(host) ? ['python.exe'] : ['bin', 'python3']))
     const legacy = paths.join(root, '.venv', isWindows(host) ? 'Scripts' : 'bin', isWindows(host) ? 'python.exe' : 'python')
     if (!await io.exists(portable) && !await io.exists(legacy)) throw new Error(uiText('尚未安装 PDF 引擎。请点击准备或导入离线包；手动安装请使用下方目录。', 'PDF engine is not installed. Prepare or import an offline package, or install manually in the directory below.'))
-    await runPDFWorker(host, { operation: 'check' }, signal, async message => progress(String(message.stage ?? 'check'), message))
+    await runPDFWorker(host, { operation: 'check' }, signal, async message => progress(String(message.stage ?? 'check'), message), undefined, root)
   }
   catch (error) {
-    for (const marker of [PDF_ENGINE, PDF_ADAPTER]) await pdfPlatform().IOUtils.remove(pdfPlatform().PathUtils.join(pdfRuntimeRoot(), marker), { ignoreAbsent: true })
+    for (const marker of [PDF_ENGINE, PDF_ADAPTER]) await pdfPlatform().IOUtils.remove(pdfPlatform().PathUtils.join(root, marker), { ignoreAbsent: true })
     throw error
   }
 }
 
 /** 自动准备和离线导入共用队列、校验和健康检查；旧 .venv 手动安装继续兼容。 */
-export async function preparePDFEngine(host: ZoteroLike, signal: AbortSignal, progress: PDFEngineProgress, repair = false, archive?: string) {
-  const { IOUtils: io, PathUtils: paths } = pdfPlatform(), root = pdfRuntimeRoot()
-  await deployPDFResources(host, signal)
+export async function preparePDFEngine(host: ZoteroLike, signal: AbortSignal, progress: PDFEngineProgress, repair = false, archive?: string, root = pdfRuntimeRoot(host)) {
+  const { IOUtils: io, PathUtils: paths } = pdfPlatform()
+  await deployPDFResources(host, signal, root)
   if (!repair && !archive) {
-    try { await checkPDFEngine(host, signal, progress); return } catch { checkCancelled(signal) }
+    try { await checkPDFEngine(host, signal, progress, root); return } catch { checkCancelled(signal) }
   }
   for (const marker of [PDF_ENGINE, PDF_ADAPTER]) await io.remove(paths.join(root, marker), { ignoreAbsent: true })
   progress('dependencies')
@@ -203,14 +215,15 @@ export async function preparePDFEngine(host: ZoteroLike, signal: AbortSignal, pr
   const bundled = isWindows(host) && Boolean(catalog[target]) && (Boolean(archive) || catalog[target]?.published === true)
   if (archive && !bundled) throw new Error(uiText('此平台尚无已验证离线包，请按安装指南手动安装后检测。', 'No verified offline package for this platform. Follow the manual installation guide and check the engine.'))
   await processRun(host, isWindows(host) ? paths.join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : '/bin/sh',
-    isWindows(host) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, bundled ? 'install-bundle.ps1' : 'install.ps1'), root, ...(archive ? [archive] : [])] : [paths.join(root, 'install.sh'), root], signal, async message => progress(String(message.stage ?? 'dependencies'), message))
+    isWindows(host) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, bundled ? 'install-bundle.ps1' : 'install.ps1'), root, ...(archive ? [archive] : [])] : [paths.join(root, 'install.sh'), root], signal, async message => progress(String(message.stage ?? 'dependencies'), message), undefined, undefined, undefined, root)
   progress(bundled ? 'check' : 'assets')
-  await runPDFWorker(host, { operation: bundled ? 'check' : 'prepare' }, signal, async message => progress(String(message.stage ?? 'assets'), message))
+  await runPDFWorker(host, { operation: bundled ? 'check' : 'prepare' }, signal, async message => progress(String(message.stage ?? 'assets'), message), undefined, root)
 }
 
-export async function runPDFWorker(host: ZoteroLike, config: Record<string, unknown>, signal: AbortSignal, onMessage: (message: Record<string, unknown>) => Promise<unknown>, finishSignal?: AbortSignal) {
-  const paths = pdfPlatform().PathUtils, root = pdfRuntimeRoot()
+export async function runPDFWorker(host: ZoteroLike, config: Record<string, unknown>, signal: AbortSignal, onMessage: (message: Record<string, unknown>) => Promise<unknown>, finishSignal?: AbortSignal, root = pdfRuntimeRoot(host)) {
+  if (root === pdfRuntimeRoot(host)) await ensureEngineStorageAvailable(host, 'pdf')
+  const paths = pdfPlatform().PathUtils
   const portable = paths.join(root, 'runtime', 'python', ...(isWindows(host) ? ['python.exe'] : ['bin', 'python3']))
   const command = await pdfPlatform().IOUtils.exists(portable) ? portable : paths.join(root, '.venv', isWindows(host) ? 'Scripts' : 'bin', isWindows(host) ? 'python.exe' : 'python')
-  return processRun(host, command, ['-s', '-u', paths.join(root, 'worker.py')], signal, onMessage, { ...config, root }, undefined, finishSignal)
+  return processRun(host, command, ['-s', '-u', paths.join(root, 'worker.py')], signal, onMessage, { ...config, root }, undefined, finishSignal, root)
 }

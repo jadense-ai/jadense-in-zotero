@@ -12,6 +12,7 @@ import { readArticleTranslationLanguages } from './translation-settings'
 import type { TranslationLanguages } from '@/chat/translation-languages'
 import { checkCancelled, validateDocument, type DocumentIdentity } from './pdf-document'
 import { PDF_ENGINE, PDF_ADAPTER, pdfRuntimeRoot, pdfPlatform, pdfTaskDirectory, preparePDFEngine, checkPDFEngine, runPDFWorker, type PDFEngineProgress } from './pdf-translation-runtime'
+import { assertStorageIdle, ensureEngineStorageAvailable } from './engine-storage'
 import { READING_AI_TOTAL_TIMEOUT_MS, translationScheduler, translationServiceKey, type TranslationSnapshot } from '@/chat/translation-queue'
 import { readingTranslationBudget, refreshTranslationLimits } from './translation-budget'
 import { uiText } from './ui-preferences'
@@ -80,20 +81,27 @@ export class PDFTranslationJobs {
   private observers = new Set<() => void>()
   private queue = new PDFTaskQueue()
   private starts = new Map<string, Promise<PDFTranslationTask>>()
+  private storageReaders = 0
+  private storageOperations = 0
   constructor(private host: ZoteroLike) {}
+  storageBusyReason() { return this.controllers.size || this.starts.size || this.storageReaders || this.storageOperations ? uiText('版面解析正在安装、翻译、读取或导出；请等待当前操作结束后再迁移。', 'Layout engine is installing, translating, reading or exporting. Retry the move when it finishes.') : undefined }
   subscribe(observer: () => void) { this.observers.add(observer); return () => { this.observers.delete(observer) } }
   private emit() { for (const observer of this.observers) { try { observer() } catch (error) { diagnostics()?.record('pdf-translation', 'presentation_failed', error) } } }
   get(id: string) { return this.tasks.get(id) }
   list() { return [...this.tasks.values()].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')) }
   /** 扫描已有产物，不读取当前 Provider 配置、不恢复执行；坏记录只影响自身。 */
   async loadHistory() {
-    const { IOUtils: io, PathUtils: paths } = pdfPlatform(), directory = paths.join(pdfRuntimeRoot(), 'tasks')
+    assertStorageIdle(this.host, 'pdf')
+    this.storageReaders++
+    try {
+    await ensureEngineStorageAvailable(this.host, 'pdf')
+    const { IOUtils: io, PathUtils: paths } = pdfPlatform(), directory = paths.join(pdfRuntimeRoot(this.host), 'tasks')
     if (!await io.exists(directory)) return
     for (const folder of await io.getChildren(directory)) {
       const id = paths.filename(folder)
       if (!/^[a-f0-9]{64}$/u.test(id) || this.tasks.has(id)) continue
       try {
-        const saved = JSON.parse(await io.readUTF8(paths.join(pdfTaskDirectory(id), 'task.json')))
+        const saved = JSON.parse(await io.readUTF8(paths.join(pdfTaskDirectory(id, this.host), 'task.json')))
         if (saved?.id !== id || !Number.isInteger(saved.source?.itemID) || !Number.isInteger(saved.source?.libraryID) || typeof saved.source?.itemKey !== 'string') continue
         const task: PDFTranslationTask = { ...saved, source: { ...saved.source, title: typeof saved.source.title === 'string' ? saved.source.title : 'PDF' },
           createdAt: typeof saved.createdAt === 'string' ? saved.createdAt : undefined,
@@ -106,12 +114,14 @@ export class PDFTranslationJobs {
       } catch { /* 单个历史摘要损坏不阻断其他文献。 */ }
     }
     this.emit()
+    } finally { this.storageReaders-- }
   }
   isActive(id: string) { return this.controllers.has(id) }
   speed(id: string): TranslationSnapshot | undefined { const service = this.tasks.get(id)?.service; return service ? translationScheduler(this.host).snapshot(service) : undefined }
   private async save(task: PDFTranslationTask) {
-    const io = pdfPlatform().IOUtils, file = pdfPlatform().PathUtils.join(pdfTaskDirectory(task.id), 'task.json')
-    await io.makeDirectory(pdfTaskDirectory(task.id), { ignoreExisting: true })
+    await ensureEngineStorageAvailable(this.host, 'pdf')
+    const io = pdfPlatform().IOUtils, file = pdfPlatform().PathUtils.join(pdfTaskDirectory(task.id, this.host), 'task.json')
+    await io.makeDirectory(pdfTaskDirectory(task.id, this.host), { ignoreExisting: true })
     await io.writeUTF8(file, JSON.stringify(task), { tmpPath: file + '.tmp' }); this.emit()
   }
   /** 阅读优先：跨配置和引擎升级查找同一原件的成果，不启动旧任务或调用翻译服务。 */
@@ -125,6 +135,7 @@ export class PDFTranslationJobs {
     return this.start(itemID, mode)
   }
   start(itemID: number, mode = readPDFTranslationMode(this.host), fresh = false): Promise<PDFTranslationTask> {
+    assertStorageIdle(this.host, 'pdf')
     const key = `${itemID}:${mode}:${fresh}`
     const pending = this.starts.get(key)
     if (pending) return pending
@@ -143,7 +154,7 @@ export class PDFTranslationJobs {
     if (this.tasks.has(id)) return this.tasks.get(id)!
     let task: PDFTranslationTask = { id, version: 1, createdAt: new Date().toISOString(), engine: PDF_ENGINE, source: origin.source, fingerprint: origin.fingerprint, configuration: config.fingerprint, languages, service, mode, strategy, formulaPolicy, budget, status: 'queued', stage: 'queued', percent: 0, pages: 0, skipped: [] }
     try {
-      const saved = JSON.parse(await pdfPlatform().IOUtils.readUTF8(pdfPlatform().PathUtils.join(pdfTaskDirectory(id), 'task.json')))
+      const saved = JSON.parse(await pdfPlatform().IOUtils.readUTF8(pdfPlatform().PathUtils.join(pdfTaskDirectory(id, this.host), 'task.json')))
       if (saved.id === id && saved.fingerprint === origin.fingerprint && saved.configuration === config.fingerprint && saved.engine === PDF_ENGINE) {
         task = { ...saved, ...task, createdAt: typeof saved.createdAt === 'string' ? saved.createdAt : undefined, status: saved.status === 'complete' || saved.status === 'partial' ? saved.status : 'interrupted', pages: Number.isInteger(saved.pages) ? saved.pages : 0, skipped: Array.isArray(saved.skipped) ? saved.skipped.filter(Number.isInteger) : [] }
         await this.restoreArtifact(task)
@@ -157,7 +168,7 @@ export class PDFTranslationJobs {
   }
   /** 清单是已验证文件对的提交点，允许 task.json 在崩溃后落后一版。 */
   private async artifact(task: PDFTranslationTask): Promise<PDFArtifact | undefined> {
-    const { IOUtils: io, PathUtils: paths } = pdfPlatform(), dir = pdfTaskDirectory(task.id)
+    const { IOUtils: io, PathUtils: paths } = pdfPlatform(), dir = pdfTaskDirectory(task.id, this.host)
     let saved: Record<string, unknown>
     try { saved = JSON.parse(await io.readUTF8(paths.join(dir, 'artifact.json'))) } catch { return }
     if (!saved || saved.fingerprint !== task.fingerprint || saved.configuration !== task.configuration
@@ -174,14 +185,14 @@ export class PDFTranslationJobs {
       return
     }
     const { IOUtils: io, PathUtils: paths } = pdfPlatform()
-    if (task.status === 'complete' && !task.strategy && await io.exists(paths.join(pdfTaskDirectory(task.id), 'mono.pdf')) && await io.exists(paths.join(pdfTaskDirectory(task.id), 'dual.pdf'))) return
+    if (task.status === 'complete' && !task.strategy && await io.exists(paths.join(pdfTaskDirectory(task.id, this.host), 'mono.pdf')) && await io.exists(paths.join(pdfTaskDirectory(task.id, this.host), 'dual.pdf'))) return
     if (task.status === 'complete' || task.status === 'partial') { task.status = 'interrupted'; task.error = uiText('翻译文件缺失', 'Translation files are missing') }
   }
   hasOutput(task: PDFTranslationTask) { return Boolean(task.artifact) || (task.status === 'complete' && !task.strategy) }
   private outputPath(task: PDFTranslationTask, kind: 'mono' | 'dual') {
-    return pdfPlatform().PathUtils.join(pdfTaskDirectory(task.id), `${task.artifact ? task.artifact.revision + '-' : ''}${kind}.pdf`)
+    return pdfPlatform().PathUtils.join(pdfTaskDirectory(task.id, this.host), `${task.artifact ? task.artifact.revision + '-' : ''}${kind}.pdf`)
   }
-  retry(id: string) { const task = this.tasks.get(id); if (task && !this.controllers.has(id)) { task.status = 'queued'; task.error = undefined; this.dispatch(task) } }
+  retry(id: string) { assertStorageIdle(this.host, 'pdf'); const task = this.tasks.get(id); if (task && !this.controllers.has(id)) { task.status = 'queued'; task.error = undefined; this.dispatch(task) } }
   cancel(id: string) {
     const request = this.requests.get(id)
     if (request) {
@@ -195,8 +206,8 @@ export class PDFTranslationJobs {
     if (task && task.status !== 'complete') { task.status = 'cancelled'; this.emit() }
   }
   stop() { for (const request of this.requests.values()) request.abort(); for (const controller of this.controllers.values()) controller.abort(); this.observers.clear() }
-  prepare(signal: AbortSignal, progress: PDFEngineProgress, repair = false, archive?: string) { return this.queue.enqueue(signal, () => preparePDFEngine(this.host, signal, progress, repair, archive)) }
-  checkEngine(signal: AbortSignal, progress: PDFEngineProgress) { return this.queue.enqueue(signal, () => checkPDFEngine(this.host, signal, progress)) }
+  prepare(signal: AbortSignal, progress: PDFEngineProgress, repair = false, archive?: string) { assertStorageIdle(this.host, 'pdf'); this.storageOperations++; return this.queue.enqueue(signal, () => preparePDFEngine(this.host, signal, progress, repair, archive)).finally(() => { this.storageOperations-- }) }
+  checkEngine(signal: AbortSignal, progress: PDFEngineProgress) { assertStorageIdle(this.host, 'pdf'); this.storageOperations++; return this.queue.enqueue(signal, () => checkPDFEngine(this.host, signal, progress)).finally(() => { this.storageOperations-- }) }
   private dispatch(task: PDFTranslationTask) {
     const controller = new AbortController(); this.controllers.set(task.id, controller)
     void this.queue.enqueue(controller.signal, async () => {
@@ -224,7 +235,7 @@ export class PDFTranslationJobs {
       const budget = task.budget ?? pdfTranslationBudget(this.host)
       const request = new AbortController(); this.requests.set(task.id, request)
       controller.signal.addEventListener('abort', () => request.abort(), { once: true })
-      await runPDFWorker(this.host, { source: origin.path, layoutIdentity: [task.source.libraryID, task.source.itemKey], directory: pdfTaskDirectory(task.id), fingerprint: task.fingerprint, configuration: task.configuration, ...task.languages, machine: config.translation.kind === 'machine', mode: task.mode ?? 'full', strategy: task.strategy, formulaPolicy: task.formulaPolicy, budget, workers: config.translation.kind === 'machine' ? 1 : 8 }, controller.signal, async message => {
+      await runPDFWorker(this.host, { source: origin.path, layoutIdentity: [task.source.libraryID, task.source.itemKey], directory: pdfTaskDirectory(task.id, this.host), fingerprint: task.fingerprint, configuration: task.configuration, ...task.languages, machine: config.translation.kind === 'machine', mode: task.mode ?? 'full', strategy: task.strategy, formulaPolicy: task.formulaPolicy, budget, workers: config.translation.kind === 'machine' ? 1 : 8 }, controller.signal, async message => {
         if (message.type === 'artifact') {
           const artifact = await this.artifact(task)
           if (artifact) {
@@ -363,6 +374,10 @@ export class PDFTranslationJobs {
     }).finally(() => { controller.abort(); this.requests.delete(task.id); this.controllers.delete(task.id); this.emit() })
   }
   async bytes(id: string, artifact?: PDFArtifact) {
+    assertStorageIdle(this.host, 'pdf')
+    this.storageReaders++
+    try {
+    await ensureEngineStorageAvailable(this.host, 'pdf')
     const task = this.tasks.get(id)
     if (!task || !this.hasOutput(task)) throw new Error('PDF translation not complete: no readable artifact')
     await validateDocument(this.host, task.source)
@@ -371,9 +386,14 @@ export class PDFTranslationJobs {
     const snapshot = artifact ? { ...task, artifact } : task
     if (artifact && !/^[a-f0-9]{32}$/u.test(artifact.revision)) throw new Error('Invalid PDF artifact revision')
     if (!await pdfPlatform().IOUtils.exists(this.outputPath(snapshot, 'mono')) || !await pdfPlatform().IOUtils.exists(this.outputPath(snapshot, 'dual'))) throw new Error('PDF translation files are missing')
-    return pdfPlatform().IOUtils.read(this.outputPath(snapshot, 'mono'))
+    return await pdfPlatform().IOUtils.read(this.outputPath(snapshot, 'mono'))
+    } finally { this.storageReaders-- }
   }
   async export(id: string, kind: 'mono' | 'dual', win: Window) {
+    assertStorageIdle(this.host, 'pdf')
+    this.storageReaders++
+    try {
+    await ensureEngineStorageAvailable(this.host, 'pdf')
     await this.bytes(id)
     // 使用 Zotero 自带适配器和宿主 chrome 窗口，避免内容窗口被当作 BrowsingContext。
     const platform = globalThis as unknown as { ChromeUtils: { importESModule(url: string): { FilePicker: new () => { init(win: Window, title: string, mode: number): void; modeSave: number; returnCancel: number; defaultString: string; defaultExtension: string; appendFilter(label: string, pattern: string): void; show(): Promise<number>; file: string } } } }
@@ -386,6 +406,7 @@ export class PDFTranslationJobs {
       if (picker.file.replace(/\\/gu, '/').toLowerCase() === source.path.replace(/\\/gu, '/').toLowerCase()) throw new Error(uiText('请选择新的文件名，不能覆盖原 PDF。', 'Choose a new filename to preserve the original PDF.'))
       await pdfPlatform().IOUtils.copy(this.outputPath(this.tasks.get(id)!, kind), picker.file)
     }
+    } finally { this.storageReaders-- }
   }
 }
 type PDFHost = ZoteroLike & { __jadensePDFTranslationJobs?: PDFTranslationJobs }

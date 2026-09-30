@@ -47,6 +47,19 @@ beforeEach(() => {
 })
 
 describe('PDF jobs', () => {
+  it('keeps task identity and historical bytes in a configured engine folder', async () => {
+    const root = '/external/jadense-pdf-translation', marker = 'test-marker'
+    preferences.set('extensions.jadenseInZotero.pdfEngineStorage', JSON.stringify({ version: 1, parent: '/external', marker }))
+    files.set(path.posix.join(root, '.jadense-storage-id'), marker)
+    const jobs = new PDFTranslationJobs(host), task = await jobs.start(1)
+    await vi.waitFor(() => expect(task.status).toBe('complete'))
+    expect(files.has(path.posix.join(root, 'tasks', task.id, 'task.json'))).toBe(true)
+    expect(files.has(path.posix.join('/profile/jadense-pdf-translation', 'tasks', task.id, 'task.json'))).toBe(false)
+    const restored = new PDFTranslationJobs(host)
+    await restored.loadHistory()
+    expect(restored.get(task.id)?.id).toBe(task.id)
+    await expect(restored.bytes(task.id)).resolves.toEqual(bytes)
+  })
   it('freezes the formula policy per task and keeps legacy retry inputs unchanged', async () => {
     const first = await new PDFTranslationJobs(host).start(1)
     await vi.waitFor(() => expect(first.status).toBe('complete'))

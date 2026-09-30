@@ -511,6 +511,28 @@
   cursor: default;
 }
 
+.jdx-model-single-effort {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--jdx-line);
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--jdx-text);
+  background: var(--jdx-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.jdx-model-single-effort:focus-visible {
+  outline: 2px solid var(--jdx-green);
+  outline-offset: 2px;
+}
+
+.jdx-model-single-effort[aria-pressed="true"] {
+  color: var(--jdx-green-deep);
+  background: var(--jdx-active-bg);
+}
+
 .jdx-thinking-static {
   display: flex;
   min-height: 36px;

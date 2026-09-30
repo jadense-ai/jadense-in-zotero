@@ -717,7 +717,7 @@ textarea {
 }
 
 .jdx-manager-byok-provider-list button[aria-selected="true"],
-.jdx-manager-byok-model-list button[aria-selected="true"] {
+.jdx-manager-byok-model-list button[aria-current="true"] {
   border-color: rgb(22 207 140 / 0.4);
   color: var(--jdx-active-text);
   background: var(--jdx-active-bg);

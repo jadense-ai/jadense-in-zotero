@@ -265,6 +265,15 @@ export function createJdxSelect(host: HTMLElement, input: {
     else auto.replaceChildren(createOptionIcon(doc, "M3 10a9 9 0 1 1 2 8M3 3v7h7"))
     header.append(mode, heading, auto); modelPanel.append(header)
     if (modelView !== "model") return
+    if (modelControl.levels.length === 1) {
+      const only = modelControl.levels[0]
+      const choice = button(only.label, () => modelControl?.onCommit?.(only.value))
+      choice.className = "jdx-model-single-effort"
+      choice.setAttribute("aria-pressed", String(modelControl.value === only.value))
+      choice.disabled = selectedIsRoute || !modelControl.onCommit || state.disabled
+      modelPanel.append(choice)
+      return
+    }
     const rangeWrap = htmlElement(doc, "div"); rangeWrap.className = "jdx-thinking-range"
     const track = htmlElement(doc, "div"); track.className = "jdx-thinking-track"; track.setAttribute("aria-hidden", "true")
     const fill = htmlElement(doc, "span"); fill.className = "jdx-thinking-fill"

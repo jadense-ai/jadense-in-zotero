@@ -3,6 +3,7 @@ import { lifecycleTrace } from './lifecycle-diagnostics'
 import type { ZoteroLike } from './runtime'
 import { checkCancelled, validateDocument, type DocumentHost, type PdfTextDocument, type PdfRect } from './pdf-document'
 import { uiText } from './ui-preferences'
+import { assertStorageIdle, engineStorageRoot, ensureEngineStorageAvailable } from './engine-storage'
 
 type Process = { pid?: number; stdin: { write(value: string): Promise<unknown>; close(): Promise<unknown> }; stdout: { readString(): Promise<string | null> }; wait(): Promise<{ exitCode: number }>; kill(): void }
 type Platform = {
@@ -83,23 +84,25 @@ function invalidateOCR(host: ZoteroLike) {
 }
 function saveOCRReady(host: ZoteroLike, value: OCREnvironment) {
   if (value.ready && value.modelsReady) {
-    try { host.Prefs?.set?.(OCR_READY_PREF, JSON.stringify({ root: platform().PathUtils.profileDir, value }), true) } catch { /* 可选缓存。 */ }
+    try { host.Prefs?.set?.(OCR_READY_PREF, JSON.stringify({ root: engineStorageRoot(host, 'ocr'), value }), true) } catch { /* 可选缓存。 */ }
   }
   return value
 }
 export function cachedOCR(host: ZoteroLike): OCREnvironment | undefined {
   try {
     const saved = JSON.parse(String(host.Prefs?.get(OCR_READY_PREF, true) || 'null'))
-    if (saved?.root === platform().PathUtils.profileDir && saved.value?.ready === true && saved.value.modelsReady === true) return saved.value
+    const root = engineStorageRoot(host, 'ocr')
+    if ((saved?.root === root || (root === platform().PathUtils.join(platform().PathUtils.profileDir, 'jadense-ocr', 'v1') && saved?.root === platform().PathUtils.profileDir)) && saved.value?.ready === true && saved.value.modelsReady === true) return saved.value
   } catch { /* 没有缓存时继续检测。 */ }
 }
 /** 模式切换只读取现有成功凭据，不运行安装器、不等待准备、不启动 Python。 */
 export async function localOCRReadiness(host: ZoteroLike): Promise<boolean | null> {
+  await ensureEngineStorageAvailable(host, 'ocr')
   if (cachedOCR(host)) return true
   if (host.Prefs?.get(OCR_READY_PREF, true) === 'removed' || isLocalOCRPreparing(host)) return false
   try {
     const { IOUtils: io, PathUtils: paths } = platform()
-    const root = paths.join(paths.profileDir, 'jadense-ocr', 'v1')
+    const root = engineStorageRoot(host, 'ocr')
     const runtime = await ocrRuntime(host, root)
     if (!await io.exists(runtime.python)) return false
     const marker = paths.join(runtime.models, 'models-ready.json')
@@ -113,6 +116,33 @@ export function isLocalOCRPreparing(host: ZoteroLike) {
   return !!(shared.__jadenseOCRModels || shared.__jadenseOCRInstall)
 }
 
+/** 搬迁不打断识别或安装；空闲服务在复制前有界退出。 */
+export function ocrStorageBusyReason(host: ZoteroLike) {
+  const shared = host as SharedHost
+  return isLocalOCRPreparing(host) || shared.__jadenseOCRCheck || shared.__jadenseOCRRemove || shared.__jadenseOCRUsers
+    ? uiText('OCR 正在安装、检查、识别或删除；请等待当前操作结束后再迁移。', 'OCR is installing, checking, recognizing or removing. Retry the move when it finishes.') : undefined
+}
+export async function stopIdleOCRForStorage(host: ZoteroLike) {
+  const shared = host as SharedHost, pending = shared.__jadenseOCR
+  if (!pending) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      (async () => { const local = await pending; await local.process.stdin.close(); await local.process.wait() })(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(uiText('OCR 服务未能在 30 秒内退出，请重启 Zotero 后重试迁移。', 'OCR service did not stop within 30 seconds. Restart Zotero and retry the move.'))), 30000) }),
+    ])
+    if (shared.__jadenseOCR === pending) delete shared.__jadenseOCR
+  } finally { clearTimeout(timer) }
+}
+export function rebindOCRReady(host: ZoteroLike, previous?: OCREnvironment) {
+  if (previous?.ready && previous.modelsReady) saveOCRReady(host, previous)
+}
+export async function movedOCRNeedsHealthCheck(host: ZoteroLike) {
+  const { IOUtils: io, PathUtils: paths } = platform(), root = engineStorageRoot(host, 'ocr')
+  const runtime = await ocrRuntime(host, root)
+  return await io.exists(runtime.python) && await io.exists(paths.join(runtime.models, 'models-ready.json'))
+}
+
 /** 设置窗口可各自离开；显式停止会通知同一宿主中仍在运行的准备或检查。 */
 export function registerOCRSettingsOperation(host: ZoteroLike, controller: AbortController) {
   const operations = ((host as SharedHost).__jadenseOCRSettingsOperations ??= new Set())
@@ -124,6 +154,7 @@ export function cancelOCRSettingsOperations(host: ZoteroLike) {
 }
 
 function requireOCRNotRemoving(host: ZoteroLike) {
+  assertStorageIdle(host, 'ocr')
   if ((host as SharedHost).__jadenseOCRRemove) throw new OCRNotReadyError(uiText('正在删除 OCR 依赖，请完成后重新安装。', 'OCR dependencies are being removed. Reinstall when removal finishes.'), 'OCR_REMOVING')
 }
 /** 使用计数在首次 await 前登记，保护识别任务与删除之间的文件生命周期。 */
@@ -136,12 +167,13 @@ async function usingOCR<T>(host: ZoteroLike, action: () => Promise<T>): Promise<
 
 /** 删除固定的插件私有依赖路径；不删除 PDF/成果缓存、日志或用户安装的工具。 */
 export async function removeLocalOCR(host: ZoteroLike, removeModels = false): Promise<void> {
+  assertStorageIdle(host, 'ocr')
   const shared = host as SharedHost
   if (shared.__jadenseOCRRemove) return shared.__jadenseOCRRemove
   if (isLocalOCRPreparing(host) || shared.__jadenseOCRCheck || shared.__jadenseOCRUsers) throw new Error(uiText('OCR 正在安装、检查或识别。请等待完成，或先停止识别任务，再删除依赖。', 'OCR is installing, checking or recognizing. Wait for completion or stop the recognition task before removing dependencies.'))
   shared.__jadenseOCRRemove = Promise.resolve().then(async () => {
     const { IOUtils: io, PathUtils: paths } = platform()
-    const root = paths.normalize(paths.join(paths.profileDir, 'jadense-ocr', 'v1'))
+    const root = paths.normalize(engineStorageRoot(host, 'ocr'))
     const names = ['ready-2.126.0-3.9.2', 'models-ready.json', 'selection-models-ready.json', '.venv', 'python', 'uv-cache', 'uv', 'uvx', 'uv.exe', 'uvx.exe', 'uvw.exe', 'uv.zip', 'uv.tar.gz', 'uv.sha256', ...(removeModels ? ['models'] : [])]
     const targets = names.map(name => paths.normalize(paths.join(root, name)))
     // 递归删除仅接受 profile 私有目录的固定直接子项，绝不接受 UI 路径输入。
@@ -296,7 +328,7 @@ export function ocrFailureMessage(error: unknown): string {
 /** 设置与首次全文任务共用固定安装资源。 */
 async function prepareOCR(host: ZoteroLike, signal?: AbortSignal) {
   const { IOUtils: io, PathUtils: paths } = platform()
-  const root = paths.join(paths.profileDir, 'jadense-ocr', 'v1')
+  const root = await ensureEngineStorageAvailable(host, 'ocr')
   await io.makeDirectory(root, { ignoreExisting: true })
   reportOCRProgress(host, { stage: 'resources' })
   for (const name of ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh', 'bundles.json', 'install-bundle.ps1', 'install-network.ps1']) {
@@ -315,7 +347,7 @@ async function prepareOCR(host: ZoteroLike, signal?: AbortSignal) {
 
 /** 参数单独传递，用户目录不会成为 shell 代码；检查模式不下载依赖。 */
 async function runInstaller(host: ZoteroLike, root: string, checkOnly = false, archive?: string) {
-  const { PathUtils: paths, ChromeUtils } = platform()
+  const { IOUtils: io, PathUtils: paths, ChromeUtils } = platform()
   const { Subprocess } = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
   const environment = Subprocess.getEnvironment()
   const arch = (environment.PROCESSOR_ARCHITEW6432 ?? environment.PROCESSOR_ARCHITECTURE ?? '').toUpperCase()
@@ -325,11 +357,14 @@ async function runInstaller(host: ZoteroLike, root: string, checkOnly = false, a
   const bundle = !checkOnly && windows(host) && (archive || entry?.published === true || portable)
   if (archive && !windows(host)) throw new Error(uiText('当前离线包仅支持 Windows。', 'Offline packages currently support Windows only.'))
   const systemRoot = environment.SystemRoot ?? environment.SYSTEMROOT ?? 'C:\\Windows'
+  const temp = paths.join(root, 'tmp')
+  await io.makeDirectory(temp, { ignoreExisting: true })
   return Subprocess.call({
     command: windows(host) ? paths.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : '/bin/sh',
     arguments: windows(host)
       ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, bundle ? 'install-bundle.ps1' : 'install.ps1'), '-RuntimeDirectory', root, ...(archive ? ['-ArchivePath', archive] : []), ...(checkOnly ? ['-CheckOnly'] : [])]
       : [paths.join(root, 'install.sh'), root, ...(checkOnly ? ['--check'] : [])], stderr: 'stdout',
+    environment: { ...environment, TMP: temp, TEMP: temp, TMPDIR: temp },
   })
 }
 
@@ -338,9 +373,10 @@ export type OCREnvironment = { uvPath: string; uvVersion: string; uvSource: stri
 /** 仅返回 OCR 相关环境状态，不读取其他 Python 项目。 */
 export async function checkLocalOCR(host: ZoteroLike, force = false, signal?: AbortSignal): Promise<OCREnvironment> {
   checkCancelled(signal)
+  await ensureEngineStorageAvailable(host, 'ocr')
   const shared = host as SharedHost
   if (shared.__jadenseOCRRemove) await shared.__jadenseOCRRemove
-  if (!force && host.Prefs?.get(OCR_READY_PREF, true) === 'removed') return { ready: false, modelsReady: false, removed: true, uvPath: '', uvVersion: '', uvSource: '', logPath: platform().PathUtils.join(platform().PathUtils.profileDir, 'jadense-ocr', 'v1', 'install.log') }
+  if (!force && host.Prefs?.get(OCR_READY_PREF, true) === 'removed') return { ready: false, modelsReady: false, removed: true, uvPath: '', uvVersion: '', uvSource: '', logPath: platform().PathUtils.join(engineStorageRoot(host, 'ocr'), 'install.log') }
   if (shared.__jadenseOCRCheck) return signal ? waitForOCR(shared.__jadenseOCRCheck, signal) : shared.__jadenseOCRCheck
   if (force) invalidateOCR(host)
   if (!force && !shared.__jadenseOCRModels && !shared.__jadenseOCRInstall) {
@@ -393,7 +429,9 @@ async function checkModels(host: ZoteroLike, root: string, prepare = false, prog
   const { PathUtils: paths, ChromeUtils } = platform()
   const { Subprocess } = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
   const runtime = await ocrRuntime(host, root)
-  const environment = { ...Subprocess.getEnvironment(), HF_HOME: paths.join(runtime.models, 'models'), HF_HUB_DISABLE_IMPLICIT_TOKEN: '1', PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONHOME: '', JADENSE_OCR_MODEL_SOURCE: readOCRModelSource(host), JADENSE_OCR_SETUP_PROGRESS: '1', JADENSE_OCR_SETUP_TIMEOUT: prepare ? '1740' : '240' }
+  const temp = paths.join(root, 'tmp')
+  await platform().IOUtils.makeDirectory(temp, { ignoreExisting: true })
+  const environment = { ...Subprocess.getEnvironment(), TMP: temp, TEMP: temp, TMPDIR: temp, HF_HOME: paths.join(runtime.models, 'models'), HF_HUB_DISABLE_IMPLICIT_TOKEN: '1', PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONHOME: '', JADENSE_OCR_MODEL_SOURCE: readOCRModelSource(host), JADENSE_OCR_SETUP_PROGRESS: '1', JADENSE_OCR_SETUP_TIMEOUT: prepare ? '1740' : '240' }
   if (readOCRModelSource(host) === 'hf-mirror') Object.assign(environment, { HF_ENDPOINT: 'https://hf-mirror.com' })
   if (!prepare) Object.assign(environment, { HF_HUB_OFFLINE: '1' })
   const process = await Subprocess.call({ command: runtime.python,
@@ -409,6 +447,23 @@ async function checkModels(host: ZoteroLike, root: string, prepare = false, prog
     if (!success) throw new OCRNotReadyError(uiText('OCR 模型准备或识别检查失败，已有依赖和缓存已保留。请检查下载源后重试。诊断日志：', 'OCR model preparation or verification failed. Existing dependencies and cache were preserved. Check the source and retry. Diagnostic log: ') + logPath)
   }
   return success
+}
+
+/** 只检查已就绪环境的迁移副本；旧虚拟环境路径失效时在目标目录重新同步锁定依赖。 */
+export async function validateMovedOCREngine(host: ZoteroLike, root: string, signal: AbortSignal) {
+  const { IOUtils: io, PathUtils: paths } = platform()
+  const runtime = await ocrRuntime(host, root)
+  const ready = (): OCREnvironment => ({ ready: true, modelsReady: true, uvPath: '', uvVersion: '', uvSource: runtime.models === root ? 'plugin' : 'bundle', logPath: paths.join(root, 'install.log') })
+  if (await io.exists(runtime.python)) {
+    try { if (await checkModels(host, root, false, () => {}, signal)) return ready() }
+    catch (error) { if (signal.aborted) throw error }
+  }
+  if (runtime.models !== root) throw new Error(uiText('迁移后的 OCR 模型验证失败，原目录已保留。', 'Moved OCR models failed verification; the original directory was retained.'))
+  const process = await runInstaller(host, root)
+  const exit = await collectOCRProcess(host, process, 30 * 60000, () => {}, signal)
+  if (exit !== 0 || !await checkModels(host, root, false, () => {}, signal)) throw new Error(uiText('迁移后的 OCR 环境修复或模型验证失败，原目录已保留。', 'Moved OCR runtime repair or model verification failed; the original directory was retained.'))
+  await io.writeUTF8(paths.join(root, 'ready-2.126.0-3.9.2'), 'ready')
+  return ready()
 }
 
 export async function prepareLocalOCRModels(host: ZoteroLike, progress: (text: string) => void = () => {}, signal?: AbortSignal) {
@@ -498,7 +553,9 @@ async function service(host: ZoteroLike, progress: (text: string) => void, allow
     reportOCRProgress(host, { stage: 'service_start' })
     let process: Process | undefined
     return ocrDeadline(async signal => {
-    process = await Subprocess.call({ command: runtime.python, arguments: ['-u', paths.join(root, 'server.py')], stderr: 'stdout', environment: { ...Subprocess.getEnvironment(), PYTHONNOUSERSITE: '1', PYTHONIOENCODING: 'utf-8', PYTHONPATH: '', PYTHONHOME: '' } })
+    const temp = paths.join(root, 'tmp')
+    await platform().IOUtils.makeDirectory(temp, { ignoreExisting: true })
+    process = await Subprocess.call({ command: runtime.python, arguments: ['-u', paths.join(root, 'server.py')], stderr: 'stdout', environment: { ...Subprocess.getEnvironment(), TMP: temp, TEMP: temp, TMPDIR: temp, PYTHONNOUSERSITE: '1', PYTHONIOENCODING: 'utf-8', PYTHONPATH: '', PYTHONHOME: '' } })
     if (signal.aborted) { process.kill(); checkCancelled(signal) }
     const token = crypto.randomUUID() + crypto.randomUUID()
     await process.stdin.write(JSON.stringify({ root, modelRoot: runtime.models, token }) + '\n')

@@ -26,6 +26,8 @@ The client is source-available under the [non-commercial license](LICENSE). Mode
 
 **v0.6.9 is released:** The PDF reader adds Reading mode, with clearer model thinking controls, translation progress, and bilingual PDF actions. Reading mode depends on the installed Zotero reader's structure extraction; translation starts only when you choose it. The official full package continues to include Frontier Radar; base builds from public source omit it. [Reading mode and settings](docs/usage-guide.md#simple-reading-069). [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9).
 
+**v0.6.10 release candidate:** Choose separate storage locations for the PDF layout and local OCR engines, and set thinking levels for BYOK models. The first launch of 0.6.10 sets the Jadense chat model to `qwen-3.8-flash` once; BYOK choices remain intact, and later manual changes are preserved. Download the official package from [Releases](https://github.com/jadense-ai/jadense-in-zotero/releases) after validation. [Setup and upgrade notes](docs/usage-guide.md#update-0610).
+
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 
 The offline suite includes the new [PDF installation guide](<docs/jadense-in-zotero 离线安装详细流程.pdf>) (Chinese).

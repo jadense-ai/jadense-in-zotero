@@ -1,5 +1,6 @@
 import { startOptionalFeatures, stopOptionalFeatures } from '@/zotero/optional-features'
 import { migrateTranslationConfiguration } from './zotero/translation-config-migration'
+import { migrateChatDefault0610 } from './zotero/ai-settings'
 import { lifecycleTrace } from './zotero/lifecycle-diagnostics'
 import { selectedClassificationIDs } from './zotero/classification'
 import { openClassificationWindow, closeClassificationWindow } from './zotero/classification-window'
@@ -371,6 +372,7 @@ async function startup(data: BootstrapData = {}) {
     if (!registeredChromeContent) throw Object.assign(new Error('Chrome content unavailable'), { code: 'CHROME_UNAVAILABLE' })
   })
   migrateTranslationConfiguration(Zotero)
+  migrateChatDefault0610(Zotero, typeof __JADENSE_BUILD_ID__ === 'string' ? __JADENSE_BUILD_ID__ : '')
   await step('locale', () => { initializeUiLocale(Zotero); loadLocalizationIntoOpenWindows() })
   await step('menus', () => { registerMenus(); if (!registeredMenuIDs.length) throw new Error('Menus unavailable') })
   await step('preferences', async () => {
