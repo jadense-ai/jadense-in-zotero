@@ -28,7 +28,7 @@
   - [4.1 语言、主题与快捷键](#appearance)
   - [4.2 上传到攻玉](#upload)
 
-本指南包含待发布的 0.6.9 源码功能，当前正式安装包仍为 0.6.8。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
+本指南适用于已发布的 0.6.9。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
 
 <a id="install"></a>
 
@@ -45,9 +45,9 @@
 
 #### Windows x64 ZIP 离线安装
 
-完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 `安装指南.md`。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
+完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 PDF 安装指南。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-从 [v0.6.8 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) 下载完整离线 ZIP。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
+从 [v0.6.9 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) 下载完整离线 ZIP。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
 
 1. 从目标版本的 GitHub Release 下载 `jadense-in-zotero-vX.Y.Z-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
 2. 保留解压目录中的两个引擎 ZIP 原样，不要再次解压。
@@ -65,7 +65,7 @@
 
 The complete offline ZIP is for Windows x64 and contains the matching XPI, PDF layout-engine ZIP, local OCR-engine ZIP and an installation guide. Extract the outer ZIP, install the included XPI through **Tools → Add-ons → gear menu → Install Add-on From File**, and restart Zotero. Then use **Settings → External dependencies → Layout parsing engine → Import offline package** for the PDF ZIP and **Local OCR → Import offline package** for the OCR ZIP. Import the engine ZIPs directly; do not extract them. No system Python/uv or administrator access is required. The plugin checks each engine before replacing an existing installation. AI requests still require a configured service and network access.
 
-Download the complete ZIP from the [v0.6.8 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8). Use the XPI and engine ZIPs inside that suite together.
+Download the complete ZIP from the [v0.6.9 release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9). Use the XPI and engine ZIPs inside that suite together.
 
 The plugin starts installers with `-ExecutionPolicy Bypass` in a separate PowerShell process, so the default Windows execution policy normally needs no change. If a script is blocked, run `Get-ExecutionPolicy -List`. When `MachinePolicy` and `UserPolicy` are both `Undefined`, leave `CurrentUser` unchanged and inspect the program-blocking records below; for manual installation, use the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...` command in the [PDF guide](pdf-engine.en.md). If either device policy is set, inspect the AppLocker or CodeIntegrity Operational event log for the blocked path and have that specific rule changed by the device policy maintainer. For blocked profile writes, inspect **Windows Security → Virus & threat protection → Protection history**. If Controlled folder access names Zotero, PowerShell or engine Python, allow that named program under **Ransomware protection → Allow an app through Controlled folder access** and retry. For `Unexpected UTF-8 BOM`, install the 0.6.6 XPI and import the original ZIP again.
 
@@ -129,7 +129,7 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 
 回到「功能配置」，设置 AI 对话模型。图中为了展示独立配置，已关闭「自动跟随当前对话模型」；新用户默认开启。使用 BYOK 时，请在下拉框选择你保存的模型，而非图中示例的攻玉模型。
 
-0.6.9 源码的模型选择框先显示思考档位，再可打开搜索列表切换模型；档位是否可选取决于模型能力。翻译模型在同一功能配置中独立于对话模型；关闭自动跟随后，可分别保存。简阅和 PDF 对照翻译默认各使用 128K 上下文预算，可在各自阅读器「翻译设置」中修改；修改只作用于下一次主动发起的翻译。
+0.6.9 的模型选择框先显示思考档位，再可打开搜索列表切换模型；档位是否可选取决于模型能力。翻译模型在同一功能配置中独立于对话模型；关闭自动跟随后，可分别保存。简阅和 PDF 对照翻译默认各使用 128K 上下文预算，可在各自阅读器「翻译设置」中修改；修改只作用于下一次主动发起的翻译。
 
 插件会根据协议，在 Base URL 后追加 `chat/completions`、`responses` 或 `messages`。例如，测试用基础地址 `https://api.example.com/v1` 配合 Chat Completions 会请求 `https://api.example.com/v1/chat/completions`；这是地址结构示例，不能直接使用。第三方网关请以其兼容协议和基础地址为准。
 
