@@ -11,7 +11,8 @@ import { redactChatImageDataUrls } from '@/chat/image-input'
 import type { ResearchMessageContext } from '@/chat/research-presentation'
 import { JadenseApiError, jadenseModelSubscriptionErrorMessage } from '@/jadense/api'
 import { readChatImage, saveChatImage } from './chat-images'
-import { featureModelState, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
+import { featureModelState, AI_MODEL_SETTINGS_PREF_KEY, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
+import { refreshModelCatalog } from './model-catalog'
 import { collectSourceForItem, createQuoteSource } from './research-context'
 import { readConnection, type ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
@@ -96,10 +97,10 @@ export class ChatRuntime {
   private queued = false
   private activeFeature: 'chat' | 'figure' = 'chat'
   constructor(readonly host: ZoteroLike, private fetchImpl: typeof fetch, private idleTimeoutMs = 180_000) {
-    for (const key of [LOCAL_CHAT_PREF_KEY, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), 'extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig']) {
+    for (const key of [AI_MODEL_SETTINGS_PREF_KEY, LOCAL_CHAT_PREF_KEY, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), 'extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig']) {
       try {
         const observer = host.Prefs?.registerObserver?.(key, () => {
-          if (key !== LOCAL_CHAT_PREF_KEY && (!Object.values(FEATURE_MODEL_PREF_KEYS).includes(key) || key === FEATURE_MODEL_PREF_KEYS[this.activeFeature])) this.stop(`preference:${key}`)
+          if (key !== AI_MODEL_SETTINGS_PREF_KEY && key !== LOCAL_CHAT_PREF_KEY && (!Object.values(FEATURE_MODEL_PREF_KEYS).includes(key) || key === FEATURE_MODEL_PREF_KEYS[this.activeFeature])) this.stop(`preference:${key}`)
           this.changed()
         }, true)
         if (observer !== undefined) this.observers.push(observer)
@@ -201,6 +202,7 @@ export class ChatRuntime {
       if (attachment && !image) requestText += '\n\n历史图片目前无法读取。本次只提供文字，请仅依据可用文字回答，不得声称看到了原图。'
       const connection = readConnection(this.host)
       const hasDocuments = !prepared.isolated && requestSession.sources.some(source => source.contentType === 'application/pdf')
+      if (hasDocuments) { await refreshModelCatalog(this.host, feature); signal.throwIfAborted() }
       const capacity = chatDocumentCapacity(this.host, feature)
       const client = ai.route === 'byok' ? new ReliableByokChatClient({ config: hasDocuments ? { ...ai.config!, maxOutputTokens: capacity.output } : ai.config!, fetchImpl: this.fetchImpl })
         : new ReliableTemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: ai.selection.route === 'jadense' ? ai.selection.selection : undefined, fetchImpl: this.fetchImpl })

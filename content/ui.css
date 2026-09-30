@@ -201,6 +201,23 @@
 .jdx-check { display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--jdx-muted); }
 .jdx-check input { accent-color:var(--jdx-green); width:15px; height:15px; }
 
+/* 模型专属双视图复用下拉定位与宿主主题；常态档位始终独立于截断的模型名。 */
+.jdx-model-effort { flex:none; padding:2px 6px; border-radius:4px; background:var(--jdx-subtle,var(--jdx-active-bg)); color:var(--jdx-muted); font-size:calc(11px * var(--jdx-font-scale,1)); font-weight:400; }
+.jdx-model-effort[hidden],.jdx-model-popup [hidden] { display:none !important; }
+.jdx-model-popup { padding:8px; border-radius:16px; background:var(--jdx-surface); }
+.jdx-model-header { display:grid; grid-template-columns:calc(32px * var(--jdx-font-scale,1)) minmax(0,1fr) calc(32px * var(--jdx-font-scale,1)); align-items:start; gap:4px; }
+.jdx-model-header button { display:flex; align-items:center; justify-content:center; min-width:0; min-height:32px; padding:2px; border:0; border-radius:6px; color:var(--jdx-muted); background:transparent; font:inherit; white-space:nowrap; cursor:pointer; }
+.jdx-model-header button:hover:not(:disabled) { background:var(--jdx-active-bg); }
+.jdx-model-header button:focus-visible,.jdx-model-thinking-range:focus-visible { outline:2px solid var(--jdx-green); outline-offset:2px; }
+.jdx-model-header button:disabled { cursor:default; opacity:.45; }
+.jdx-model-header button[aria-pressed="true"] { color:var(--jdx-green-deep); background:var(--jdx-active-bg); }
+.jdx-model-header .jdx-model-heading { min-height:calc(44px * var(--jdx-font-scale,1)); height:auto; flex-direction:column; gap:2px; line-height:1.3; }
+.jdx-model-heading-effort { display:flex; align-items:center; gap:2px; color:var(--jdx-green-deep); font-weight:600; }
+.jdx-model-heading-name { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(12px * var(--jdx-font-scale,1)); }
+.jdx-model-thinking-range { box-sizing:border-box; width:calc(100% - 8px); height:28px; margin:8px 4px 4px; accent-color:var(--jdx-green); cursor:pointer; }
+.jdx-model-thinking-range[data-automatic="true"] { opacity:.65; }
+@media (prefers-reduced-motion:no-preference) { .jdx-model-popup[data-model-view="list"] .jdx-select-list { animation:jdx-model-enter .3s ease-out; } @keyframes jdx-model-enter { from { transform:translateX(12px); opacity:0; } to { transform:translateX(0); opacity:1; } } }
+
 /* 对话模型列表对齐 webapp 的单行密度；完整说明保留在 tooltip 和辅助技术描述中。
    仅 compact 宿主使用，资料夹和原生设置的常规下拉不受影响。 */
 .jdx-select-compact .jdx-select-popup { overflow-x: hidden; border: 0; border-radius: 16px; padding: 8px; background: var(--jdx-surface); }
@@ -327,3 +344,197 @@
 .jdx-ocr-settings .jdx-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
 .jdx-ocr-path{color:var(--jdx-muted);font-size:12px}
 .jdx-ocr-settings [data-tone="error"]{color:var(--jdx-red,var(--jdx-pref-error,#b42318))}
+
+/* 思考滑块沿用 Webapp 轨道、微粒、档位点与手柄几何，只映射宿主主题。 */
+.jdx-thinking-range {
+  position: relative;
+  height: 36px;
+  width: 100%;
+}
+
+.jdx-thinking-track {
+  position: absolute;
+  inset: 6px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--jdx-press-bg);
+}
+
+.jdx-thinking-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--jdx-green) 70%, #0c6658),
+    var(--jdx-green) 60%,
+    color-mix(in srgb, var(--jdx-green) 72%, #fff)
+  );
+  transition: width 180ms ease-out;
+}
+
+/* 自动策略铺满轨道，不借用任何手动强度的滑块位置或速度。 */
+.jdx-thinking-automatic {
+  width: 100%;
+  --thinking-particle-duration: 6s;
+}
+
+/* 固定横向渐变与微粒亮度；档位只调整从右向左流动的速度，完整纹理周期保持无缝。 */
+.jdx-thinking-fill::before,
+.jdx-thinking-fill::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background-repeat: repeat;
+  animation: thinking-particle-drift var(--thinking-particle-duration) linear infinite;
+}
+
+.jdx-thinking-fill::before {
+  --thinking-drift-x: -56px;
+  opacity: 0.66;
+  background-image:
+    radial-gradient(circle at 7px 7px, #fff 0.65px, transparent 1px),
+    radial-gradient(circle at 19px 21px, #fff 0.4px, transparent 0.75px),
+    radial-gradient(circle at 30px 13px, #fff 0.75px, transparent 1.1px),
+    radial-gradient(circle at 41px 25px, #fff 0.45px, transparent 0.8px),
+    radial-gradient(circle at 49px 5px, #fff 0.55px, transparent 0.9px);
+  background-size: 56px 28px;
+}
+
+.jdx-thinking-fill::after {
+  --thinking-drift-x: -72px;
+  opacity: 0.36;
+  background-image:
+    radial-gradient(circle at 5px 24px, #fff 0.45px, transparent 0.8px),
+    radial-gradient(circle at 17px 11px, #fff 0.65px, transparent 1px),
+    radial-gradient(circle at 28px 29px, #fff 0.35px, transparent 0.7px),
+    radial-gradient(circle at 40px 5px, #fff 0.5px, transparent 0.9px),
+    radial-gradient(circle at 53px 20px, #fff 0.4px, transparent 0.75px),
+    radial-gradient(circle at 65px 9px, #fff 0.6px, transparent 0.95px);
+  background-size: 72px 32px;
+  animation-duration: calc(var(--thinking-particle-duration) * 1.5);
+}
+
+@keyframes thinking-particle-drift {
+  to {
+    background-position: var(--thinking-drift-x) 0;
+  }
+}
+
+.jdx-thinking-dots {
+  position: absolute;
+  inset: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jdx-thinking-dots > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--jdx-text) 30%, transparent);
+}
+
+.jdx-model-thinking-range {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  inset: 0;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 999px;
+  outline: none;
+}
+
+.jdx-model-thinking-range:focus-visible {
+  outline: 2px solid var(--jdx-green);
+  outline-offset: 2px;
+}
+
+.jdx-model-thinking-range::-webkit-slider-runnable-track {
+  height: 24px;
+  background: transparent;
+}
+
+.jdx-model-thinking-range::-moz-range-track {
+  height: 24px;
+  background: transparent;
+}
+
+.jdx-model-thinking-range::-webkit-slider-thumb {
+  width: 28px;
+  height: 28px;
+  margin-top: -2px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--jdx-popup-shadow);
+}
+
+.jdx-model-thinking-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--jdx-popup-shadow);
+}
+
+.jdx-model-thinking-range[data-automatic="true"]::-webkit-slider-thumb {
+  opacity: 0;
+}
+
+.jdx-model-thinking-range[data-automatic="true"]::-moz-range-thumb {
+  opacity: 0;
+}
+
+.jdx-thinking-range[data-disabled] {
+  opacity: 0.55;
+}
+
+.jdx-thinking-range[data-disabled] .jdx-thinking-fill::before,
+.jdx-thinking-range[data-disabled] .jdx-thinking-fill::after {
+  animation-play-state: paused;
+}
+
+.jdx-model-thinking-range:disabled,
+.jdx-model-thinking-range[aria-disabled="true"] {
+  cursor: default;
+}
+
+.jdx-thinking-static {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  color: var(--jdx-muted);
+  font-size: var(--app-ui-font-size-sm, 0.75rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jdx-thinking-fill,
+  .jdx-thinking-fill::before,
+  .jdx-thinking-fill::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+
+/* 所有模型入口复用对话输入框的触发器外观。 */
+.jdx-model-select { width: auto; max-width: min(256px, 100%); min-width: 0; flex: 0 1 auto; }
+.jdx-model-select .jdx-select-trigger { width: auto; max-width: 100%; min-height: 32px; height: 32px; gap: 6px; padding: 0 10px; border-color: transparent; border-radius: 6px; background: color-mix(in srgb, var(--jdx-subtle) 45%, transparent); font-size: calc(13px * var(--jdx-font-scale,1)); font-weight: 500; }
+.jdx-model-select .jdx-select-trigger:hover:not(:disabled) { background: var(--jdx-press-bg); }
+.jdx-model-select .jdx-select-leading-icon { display:inline-flex; width:18px; height:18px; flex:0 0 18px; align-items:center; color:var(--jdx-muted); }
+.jdx-model-select .jdx-select-leading-icon svg { width:18px; height:18px; }
+
+.jdx-model-select .jdx-select-leading-icon img { width:18px; height:18px; object-fit:contain; }

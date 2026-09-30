@@ -4,6 +4,7 @@
 
 - [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
 - [0.6.2 更新提示与阅读入口](#release-062)
+- [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
 
 ## 目录
 
@@ -27,7 +28,7 @@
   - [4.1 语言、主题与快捷键](#appearance)
   - [4.2 上传到攻玉](#upload)
 
-本指南的操作说明已更新至 0.6.8。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
+本指南包含待发布的 0.6.9 源码功能，当前正式安装包仍为 0.6.8。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
 
 <a id="install"></a>
 
@@ -72,9 +73,9 @@ If the PDF engine check reports a missing Microsoft Visual C++ Redistributable, 
 
 <a id="release-062"></a>
 
-从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；没有可用摘要或网络请求失败时仍可按提示打开 Release 页面。提示只展示说明，不会自动安装插件。阅读器中的「对照翻译」随窗口宽度出现在阅读操作或「•••」菜单；收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。
+从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；没有可用摘要或网络请求失败时仍可按提示打开 Release 页面。提示只展示说明，不会自动安装插件。0.6.9 的「对照翻译」保持顶部入口，窄窗缩为带提示的图标；简阅等操作可从「•••」菜单进入。收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。
 
-From 0.6.2 onward, **Help → Check for updates** and the new-version prompt show highlights from the latest GitHub Release with a download link. If notes are unavailable, open the Release page from the prompt; checking does not install the plugin. Parallel translation appears in the reading actions or **•••** menu as space allows. Closing Zotero's native pane also closes the plugin sidebar; use a reading action to open it again.
+From 0.6.2 onward, **Help → Check for updates** and the new-version prompt show highlights from the latest GitHub Release with a download link. If notes are unavailable, open the Release page from the prompt; checking does not install the plugin. In 0.6.9, Bilingual PDF retains a top toolbar entry that becomes a labelled icon in narrow windows; Reading mode and other actions remain in the **•••** menu. Closing Zotero's native pane also closes the plugin sidebar; use a reading action to open it again.
 
 <a id="open-workbench"></a>
 
@@ -127,6 +128,8 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 ![功能配置与自动跟随当前对话模型开关](images/guide-feature-models.png)
 
 回到「功能配置」，设置 AI 对话模型。图中为了展示独立配置，已关闭「自动跟随当前对话模型」；新用户默认开启。使用 BYOK 时，请在下拉框选择你保存的模型，而非图中示例的攻玉模型。
+
+0.6.9 源码的模型选择框先显示思考档位，再可打开搜索列表切换模型；档位是否可选取决于模型能力。翻译模型在同一功能配置中独立于对话模型；关闭自动跟随后，可分别保存。简阅和 PDF 对照翻译默认各使用 128K 上下文预算，可在各自阅读器「翻译设置」中修改；修改只作用于下一次主动发起的翻译。
 
 插件会根据协议，在 Base URL 后追加 `chat/completions`、`responses` 或 `messages`。例如，测试用基础地址 `https://api.example.com/v1` 配合 Chat Completions 会请求 `https://api.example.com/v1/chat/completions`；这是地址结构示例，不能直接使用。第三方网关请以其兼容协议和基础地址为准。
 
@@ -412,5 +415,24 @@ Open **Frontier Radar → Research interests**, add phrases with Enter, and choo
 
 Start a manual run or schedule daily tracking (09:00 local time by default) while Zotero is running and the selected mode is configured. History keeps earlier results. Save a paper to a library or collection, optionally requesting its PDF; a failed PDF download leaves the saved item intact. Demo papers enter your library only after an explicit save action.
 
+
+<a id="simple-reading-069"></a>
+## 0.6.9 简阅、模型与翻译反馈 / Reading mode, models and translation progress
+
+在 PDF 阅读器顶部点击「简阅模式」；窄窗从「阅读操作」菜单进入。打开后左侧仍是可批注的原生 PDF，右侧是 Zotero 提取的结构化原文 HTML。打开视图、切换主题或查看历史不会自动翻译。结构提取依赖阅读器自身能力；当前版本不支持时，插件提示不可用并保留原 PDF。
+
+需要译文时，先在「设置 → 功能配置 → 对照翻译」选择翻译服务和模型，再在简阅控制栏的「翻译设置」核对语言与上下文预算，点击「翻译」。仅右侧 HTML 更新，左侧 PDF 不会改写；可切换原文／译文、双视图、简阅内容单栏和多屏阅读。部分成果保留已完成段落并标出未翻译段落，可主动「仅补译」或重新翻译；这些操作可能再次调用服务并产生费用。历史版本在「文献解析 → 论文详情 → 简阅译文」查看，重开历史本身不发送请求。扫描件若没有可提取结构，仍需使用其他阅读或 OCR 方式。
+
+![隔离测试中的简阅左右视图：左侧合成 PDF，右侧模拟译文](images/guide-simple-reading-069.png)
+
+图示来自 Windows / Zotero 10.0.3 隔离配置，使用合成 PDF 和模拟译文，仅展示布局与操作位置。
+
+模型选择框支持思考档位和可搜索模型列表；仅支持的模型显示可用档位。对话与翻译各自保存选择。简阅和 PDF 对照翻译分别默认使用 128K 上下文预算，修改后只影响下一次显式翻译。选文、简阅和 PDF 对照显示请求阶段、耗时、已收到正文与停止操作；失败时保留能安全显示的部分成果，并提供可复制的诊断关联信息。遇到认证、额度或不确定执行结果时，先核对状态，再决定是否主动重试。
+
+**English:** Choose **Reading mode** from the PDF toolbar or Reading actions in a narrow window. It leaves the native, annotatable PDF on the left and shows Zotero's extracted original HTML on the right. Opening it, changing the theme or viewing history sends no translation request. If the reader cannot provide the required structure, the PDF remains available with an unavailable message.
+
+Set the translation service and model under **Settings → Feature settings → Bilingual PDF**, then check languages and the context budget in the Reading mode toolbar and select **Translate**. Only right-hand HTML changes. Switch between original and translated HTML, split view, a single reading pane and a separate window. Partial results mark untranslated passages; **Translate remaining passages** or a new translation can make further billable requests. Open saved versions under **Literature analysis → Paper details → Reading translations** without automatically contacting a provider. A scanned PDF without extractable structure needs another reading or OCR path.
+
+Supported models expose thinking controls and a searchable list; chat and translation selections remain independent. Reading mode and bilingual PDF have separate editable 128K default context budgets, applied to the next explicit translation. Selection, Reading mode and bilingual PDF show request progress, elapsed time and a Stop action. When a request fails, review retained partial output and the diagnostic identifier before choosing whether to retry.
 
 离线套装随附 [PDF 详细安装指南](<jadense-in-zotero 离线安装详细流程.pdf>)，替代此前包内的 Markdown 安装指南。The offline suite includes this illustrated PDF guide in place of the previous generated Markdown guide.

@@ -1,6 +1,6 @@
 {
   "name": "jadense-in-zotero",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@10.19.0",
@@ -22,10 +22,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@types/jsdom": "28.0.0",
     "@types/node": "^20.19.33",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.2",
     "globals": "^16.5.0",
+    "jsdom": "28.1.0",
     "jszip": "^3.10.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.0",

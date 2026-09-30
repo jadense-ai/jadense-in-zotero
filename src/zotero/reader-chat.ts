@@ -1,3 +1,4 @@
+import { createModelSelect } from './ui/model-select'
 /** Reader 对话视图：共享工作台消息/输入组件，视图选择和草稿不写入全局 activeSessionId。 */
 import { readLocalChatState } from '@/chat/local-chat-store'
 import type { ChatUploadInput } from '@/chat/file-input'
@@ -11,8 +12,9 @@ import { createJdxSelect } from './ui/select'
 import { element } from './ui/controls'
 import { uiText } from './ui-preferences'
 import { collectSourceForItem } from './research-context'
-import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, featureModelState, readAutoFollowChatModel, saveFeatureModelSelection } from './ai-settings'
-import { bindModelSelectToast, buildFeatureModelSelectOptions, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from './ai-model-select'
+import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, featureModelState, featureFollowsChat, saveFeatureModelSelection } from './ai-settings'
+import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureModelThinking, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from './ai-model-select'
+import { rememberModelCatalog } from './model-catalog'
 import { readConnection, type ZoteroLike } from './runtime'
 
 /** 每个 Reader 生命周期保留一份会话选择；功能页隐藏不销毁此视图。 */
@@ -36,7 +38,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   const elements = { messageList, chatLatest, chatStatus }
   const sessions = createJdxSelect(selector, { compact: true, portal: true, ariaLabel: uiText('切换对话', 'Switch conversation'), popupWidth: 280 })
   cleanups.push(() => sessions.destroy())
-  const models = createJdxSelect(get('model-select'), { compact: true, portal: true, showSelectedIcon: true, popupWidth: 320, ariaLabel: uiText('对话模型', 'Chat model'), searchPlaceholder: uiText('搜索模型', 'Search models') })
+  const models = createModelSelect(get('model-select'), { portal: true, ariaLabel: uiText('对话模型', 'Chat model') })
   bindModelSelectToast(models)
   models.onOpen(() => { void refreshCatalog() })
   cleanups.push(() => models.destroy())
@@ -88,6 +90,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     const nextModelKey = JSON.stringify(options)
     if (nextModelKey !== modelOptionsKey) { modelOptionsKey = nextModelKey; models.setOptions(options, featureModelSelectionKey(selection)) }
     else models.setValue(featureModelSelectionKey(selection))
+    configureFeatureModelThinking(models, host, feature, catalog)
     const issue = ai.route === 'jadense' && catalogReady ? jadenseChatModelSelectionIssue(catalog, ai.selection.route === 'jadense' ? ai.selection.selection ?? { kind: 'default' } : { kind: 'default' }) : ''
     send.disabled = !ai.ready || !!issue || runtime.busy || creating || readingImage || (!input.value.trim() && !image)
     stop.hidden = !runtime.busy
@@ -107,7 +110,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     win.requestAnimationFrame(() => { messageList.scrollTop = draft?.scroll ?? messageList.scrollHeight; updateLatestButton(elements) })
   }
   sessions.onChange(select)
-  models.onChange(value => { const selected = featureModelSelectionFromKey(value); if (selected) saveFeatureModelSelection(host, readAutoFollowChatModel(host) ? 'chat' : image ? 'chat' : runtime.feature(sessionID), selected); update() })
+  models.onChange(value => { const selected = featureModelSelectionFromKey(value); if (selected) saveFeatureModelSelection(host, featureFollowsChat(host, runtime.feature(sessionID)) ? 'chat' : image ? 'chat' : runtime.feature(sessionID), selected, catalog); update() })
   async function newSession(quote?: SelectionQuote) {
     const generation = ++newSessionGeneration
     creating = false
@@ -211,7 +214,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     controller = catalogController
     if (!connection.token) { catalogLoading = false; update(); return }
       const value = await new JadenseApiClient({ ...connection, fetchImpl: win.fetch.bind(win) }).getChatModels(controller.signal)
-      if (!disposed && !controller.signal.aborted) { catalog = value; catalogReady = true; catalogUpdatedAt = Date.now(); update() }
+      if (!disposed && !controller.signal.aborted) { catalog = value; rememberModelCatalog(host, value); catalogReady = true; catalogUpdatedAt = Date.now(); update() }
     } catch { /* 目录是可选展示，不阻断已有模型发送。 */ }
     finally { if (controller === catalogController) catalogLoading = false }
   }

@@ -1,3 +1,4 @@
+import { reportProgress, requestError, type RequestProgressListener } from '@/chat/request-feedback'
 import { diagnostics } from "./diagnostics"
 import { literatureIdentity } from "./document-identity"
 /**
@@ -51,6 +52,8 @@ export async function translateReaderSelection(input: {
   zotero: ZoteroLike
   action: ReaderAction
   fetchImpl: typeof fetch
+  onProgress?: RequestProgressListener
+  signal?: AbortSignal
   onTextDelta?: (text: string) => void
 }): Promise<TranslationRecord> {
   const selectedText = input.action.text?.trim() ?? ""
@@ -77,14 +80,15 @@ export async function translateReaderSelection(input: {
   let translatedText = ""
   try {
     if (!model) {
-      translatedText = await translateMachineText({ host: input.zotero, service: config.service, text: selectedText, ...languages, fetchImpl: input.fetchImpl, onText: input.onTextDelta })
+      translatedText = await translateMachineText({ host: input.zotero, service: config.service, text: selectedText, ...languages, fetchImpl: input.fetchImpl, onText: input.onTextDelta, signal: input.signal })
     } else {
       const connection = readConnection(input.zotero)
-      translatedText = await translationScheduler(input.zotero).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: id, fetchImpl: input.fetchImpl }, async (network, signal) => {
+      translatedText = await translationScheduler(input.zotero).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: id, signal: input.signal, fetchImpl: input.fetchImpl }, async (network, signal) => {
       const client = model.route === "byok"
         ? new ByokChatClient({ config: model.config!, fetchImpl: network })
         : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network })
       return client.send({
+        onProgress: input.onProgress, requireComplete: true,
         clientFeature: "translation", clientOperation: "selection_translation",
         clientRequestId: createId("request"),
         conversationId: id,
@@ -108,10 +112,12 @@ export async function translateReaderSelection(input: {
       translatedText = normalizeSelectionTranslation(translatedText)
     }
   } catch (error) { diagnostics()?.record("reader-translation", "operation_error", error);
-    throw new Error(friendlyTranslationError(error))
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    throw requestError(friendlyTranslationError(error), error)
   }
   if (!translatedText.trim()) throw new Error(uiText("AI 没有返回可显示的译文。", "The AI did not return a translation."))
 
+  reportProgress(input.onProgress, { stage: 'saving', receivedCharacters: translatedText.length })
   const record = appendTranslationRecord(translationPreferences(input.zotero), {
     id,
     createdAt: new Date().toISOString(),

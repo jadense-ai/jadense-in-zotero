@@ -1,9 +1,47 @@
 /** 使用真实流消费和虚拟时间验证服务总量、并发及冷却边界。 */
 import { afterEach, expect, it, vi } from 'vitest'
-import { translationScheduler, saveTranslationSpeed, translationServiceKey } from './translation-queue'
+import { READING_AI_TOTAL_TIMEOUT_MS, translationScheduler, saveTranslationSpeed, translationServiceKey } from './translation-queue'
 
 afterEach(() => vi.useRealTimers())
 const address = 'https://example.test/v1'
+
+it('allows AI streams beyond three minutes and still supports explicit cancellation', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(0)
+  const scheduler = translationScheduler(host()), cancel = new AbortController()
+  const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => new Response(new ReadableStream({
+    start(controller) { init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError'))) },
+  })))
+  let failed = false
+  const job = scheduler.run({ address, task: 'long-reasoning', signal: cancel.signal, fetchImpl }, async network => (await network(address)).text())
+  const checked = job.catch(error => { failed = true; return error })
+  await vi.advanceTimersByTimeAsync(600_000)
+  expect(failed).toBe(false)
+  expect(scheduler.snapshot(address).active).toBe(1)
+  cancel.abort()
+  expect(await checked).toMatchObject({ name: 'AbortError' })
+  expect(fetchImpl).toHaveBeenCalledOnce()
+  expect(scheduler.snapshot(address).active).toBe(0)
+})
+it('ends a stalled reading AI request after 15 minutes even when the transport ignores abort', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(0)
+  const scheduler = translationScheduler(host())
+  let requestSignal: AbortSignal | undefined
+  const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+    requestSignal = init?.signal ?? undefined
+    return new Promise<Response>(() => {})
+  })
+  const job = scheduler.run({ address, task: 'simple-reading', operation: 'one-batch', totalTimeoutMs: READING_AI_TOTAL_TIMEOUT_MS, fetchImpl }, network => network(address, { method: 'POST' }))
+  const settled = vi.fn()
+  const failure = job.catch(error => { settled(); return error })
+  await vi.advanceTimersByTimeAsync(READING_AI_TOTAL_TIMEOUT_MS - 1)
+  expect(settled).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1)
+  expect(await failure).toMatchObject({ code: 'TRANSLATION_TIMEOUT', stage: 'translation' })
+  expect(requestSignal?.aborted).toBe(true)
+  expect(scheduler.snapshot(address).active).toBe(0)
+  expect(fetchImpl).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+})
 function host() { let value = '{}'; return { Prefs: { get: () => value, set: (_key: string, next: unknown) => { value = String(next) } } } }
 
 it('counts HEAD, submissions and recovery in one sliding window without a burst', async () => {

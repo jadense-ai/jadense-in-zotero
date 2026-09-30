@@ -1,3 +1,4 @@
+import { requestStageLabel, type RequestProgress, type RequestProgressListener } from '@/chat/request-feedback'
 import { JADENSE_BRAND_PARTS } from './jadense-brand'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { show as showToast, type ToastHandle } from './ui/toast'
@@ -37,6 +38,8 @@ import { bindReaderActionMenu } from "./reader-toolbar-menu"
 import { readArticleTranslationLanguages } from "./translation-settings"
 import { openPDFTranslation, stopPDFTranslationReaders } from './pdf-translation-reader'
 import { stopPDFTranslationJobs } from './pdf-translation-jobs'
+import { openSimpleReading, stopSimpleReadingReaders } from './simple-reading'
+import { stopSimpleReadingJobs } from './simple-reading-jobs'
 
 type Rect = [number, number, number, number]
 type PdfPosition = { pageIndex: number; rects: Rect[] }
@@ -200,6 +203,8 @@ export type ReaderActionResult = {
 }
 
 export type ReaderActionHooks = {
+  signal?: AbortSignal
+  onTranslationProgress?: RequestProgressListener
   onTranslationText?: (text: string) => void
 }
 
@@ -831,7 +836,8 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:180px;max-width:32vw;gap:6px;overflow:hidden;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {transform-box:fill-box;transform-origin:center;animation:jdx-analysis-logo-spin 1.4s linear infinite;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="complete"] {color:var(--jdx-reader-text,CanvasText);box-shadow:inset 0 -2px #16cf8c;}
-[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="error"] {box-shadow:inset 0 -2px #c37d0d;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="error"] {box-shadow:inset 0 0 0 2px var(--jdx-reader-error,#b42318);}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="retrying"] {box-shadow:inset 0 0 0 1px #c37d0d;}
 [data-jadense-reader-tools][data-compact="true"] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:auto;max-width:100px;padding:0 4px;gap:0;overflow:hidden;}
 [data-jadense-reader-tools] .jadense-reader-runtime-stop[hidden] {display:none!important;}
 .jadense-reader-runtime-label {overflow:hidden;text-overflow:ellipsis;}
@@ -949,17 +955,36 @@ function brandIcon(doc: Document): SVGSVGElement {
   return svg
 }
 
+/** 简阅入口沿用工作台「阅读」的书本图形，同一语义在插件各处保持同一图标。 */
+const SIMPLE_READING_ICON = "M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15"
+
+/** 对照翻译使用常见的 Languages 图标，路径与提供的 languages.svg 一致。 */
+const LANGUAGES_ICON = [
+  "m5 8 6 6",
+  "m4 14 6-6 2-3",
+  "M2 5h12",
+  "M7 2h1",
+  "m22 22-5-10-5 10",
+  "M14 18h6",
+] as const
+
 /** 统一线性图标仅作装饰；完整动作名仍由原生 button 的 aria-label/title 承担。 */
-function actionIcon(doc: Document, kind: ReaderToolbarAction["kind"]): SVGSVGElement {
+function lineIcon(doc: Document, d: string | readonly string[], strokeWidth = "1.7"): SVGSVGElement {
   const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg")
   for (const [name, value] of Object.entries({
-    viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7",
+    viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": strokeWidth,
     "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false",
   })) svg.setAttribute(name, value)
-  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path")
-  path.setAttribute("d", READER_ACTION_ICONS[kind])
-  svg.append(path)
+  for (const pathData of typeof d === "string" ? [d] : d) {
+    const path = doc.createElementNS("http://www.w3.org/2000/svg", "path")
+    path.setAttribute("d", pathData)
+    svg.append(path)
+  }
   return svg
+}
+
+function actionIcon(doc: Document, kind: ReaderToolbarAction["kind"]): SVGSVGElement {
+  return lineIcon(doc, READER_ACTION_ICONS[kind])
 }
 
 /** 文章与本句使用相同的原生语言选择框；仅源语言提供自动识别。 */
@@ -1030,6 +1055,7 @@ export function registerReaderTools(
     setTranslationLanguages: (requestID: number, languages: TranslationLanguages) => boolean
     setTranslationSource: (requestID: number, selection: ReaderToolbarAction) => boolean
     updateTranslation: (requestID: number, text: string) => void
+    updateProgress: (requestID: number, progress: RequestProgress) => void
     finishTranslation: (requestID: number, text: string, error?: boolean) => void
     remove: () => void
     reposition: () => void
@@ -1075,7 +1101,11 @@ export function registerReaderTools(
     const languageHint = doc.createElement("p")
     languageHint.className = "jadense-translation-language-hint"
     languageHint.textContent = uiText("语言修改仅用于当前选文。", "Language changes apply to this selection only.")
-    translationHeader.append(sentenceLanguages.element, languageHint)
+    const progressText = doc.createElement('p'), stopTranslation = doc.createElement('button')
+    progressText.setAttribute('role', 'status'); progressText.className = 'jadense-translation-language-hint'
+    stopTranslation.type = 'button'; stopTranslation.textContent = uiText('停止', 'Stop'); stopTranslation.hidden = true
+    stopTranslation.addEventListener('click', () => { const controller = selectionJobs.get(doc); markDiagnosticAbort(controller?.signal, 'user_stop'); controller?.abort() })
+    translationHeader.append(sentenceLanguages.element, languageHint, progressText, stopTranslation)
     const translationContent = doc.createElement("div")
     translationContent.className = "jadense-translation-content"
     const resultLabel = doc.createElement("p")
@@ -1121,6 +1151,9 @@ export function registerReaderTools(
     placementLabel.append(placement)
     appearance.element.querySelector('.jdx-window-appearance-menu')?.append(placementLabel)
     themeRoot(translationPanel)
+    let latestProgress: (RequestProgress & { startedAt: number }) | undefined
+    const refreshProgress = () => { if (latestProgress && !stopTranslation.hidden) progressText.textContent = `${requestStageLabel(latestProgress.stage)} · ${Math.max(0, Math.floor((Date.now() - latestProgress.startedAt) / 1000))}s · ${uiText('已接收正文', 'Text received')} ${latestProgress.receivedCharacters ?? 0}` }
+    const progressTimer = doc.defaultView?.setInterval?.(refreshProgress, 1000)
     let translationRequestID = 0
     let translationError = false
     let translationMarkdown = ""
@@ -1185,6 +1218,7 @@ export function registerReaderTools(
       style.remove()
       appearance.remove()
       interaction.remove()
+      doc.defaultView?.clearInterval?.(progressTimer)
       translationPanel.remove()
       removeDocumentSurfaces(doc)
       for (const node of nodes) if (node.ownerDocument === doc) {
@@ -1200,6 +1234,7 @@ export function registerReaderTools(
       dismiss,
       remove,
       beginTranslation: (selection: ReaderToolbarAction) => {
+        latestProgress = { stage: 'queued', startedAt: Date.now(), receivedCharacters: 0 }; stopTranslation.hidden = false; refreshProgress()
         translationRequestID += 1
         translationSelection = selection
         sourceSection.open = false
@@ -1234,15 +1269,18 @@ export function registerReaderTools(
         translationMarkdown = text
         renderTranslationMarkdown(text)
       },
+      updateProgress: (requestID: number, progress: RequestProgress) => { if (requestID !== translationRequestID) return; latestProgress = { ...latestProgress, ...progress, startedAt: latestProgress?.stage === progress.stage ? latestProgress.startedAt : Date.now() }; refreshProgress() },
       finishTranslation: (requestID: number, text: string, error = false) => {
         if (requestID !== translationRequestID) return
-        translationMarkdown = error ? "" : text
+        stopTranslation.hidden = true; progressText.textContent = error ? text : ''
+        translationMarkdown = error ? translationMarkdown : text
         const displayText = text || (error ? uiText("翻译未完成。", "Translation did not complete.") : uiText("AI 没有返回可显示的译文。", "The AI did not return a translation."))
-        if (error || !text) resultText.textContent = displayText
+        if (error && translationMarkdown) renderTranslationMarkdown(translationMarkdown)
+        else if (error || !text) resultText.textContent = displayText
         else renderTranslationMarkdown(displayText)
         translationError = error
         resultText.setAttribute("data-error", String(error))
-        copyTranslation.disabled = error || !text.trim()
+        copyTranslation.disabled = !translationMarkdown.trim()
         retranslate.disabled = false
       },
       show: (anchor: HTMLElement, message: string) => {
@@ -1286,7 +1324,7 @@ export function registerReaderTools(
       if (controller.signal.aborted || !active || !documents.has(doc)) return undefined
       if (!feedback.setTranslationLanguages(requestID, languages)) return undefined
       if (selectionJobs.get(doc) === controller) selectionJobs.delete(doc)
-      return onAction({ ...prepared, languages }, { onTranslationText: (text) => feedback.updateTranslation(requestID, text) })
+      return onAction({ ...prepared, languages }, { signal: controller.signal, onTranslationProgress: progress => feedback.updateProgress(requestID, progress), onTranslationText: (text) => feedback.updateTranslation(requestID, text) })
     }).then((result) => {
       if (controller.signal.aborted || !active || !documents.has(doc)) return
       feedback.finishTranslation(requestID, result && typeof result === "object" ? result.translation?.trim() ?? "" : "")
@@ -1402,6 +1440,8 @@ export function registerReaderTools(
   const cleanup = () => {
     active = false
     stopPDFTranslationReaders()
+    stopSimpleReadingReaders()
+    stopSimpleReadingJobs(zotero as unknown as ZoteroLike)
     stopPDFTranslationJobs(zotero as unknown as ZoteroLike)
     try { if (settingsObserver !== undefined) zotero.Prefs?.unregisterObserver?.(settingsObserver) } catch { /* 清理其他资源。 */ }
     for (const [type, handler] of handlers) {
@@ -1448,6 +1488,7 @@ export function registerReaderTools(
         brand.setAttribute("aria-label", brand.title)
         const icon = brandIcon(event.doc), stateLabel = event.doc.createElement('span')
         stateLabel.className = 'jadense-reader-runtime-label'
+        stateLabel.setAttribute('role', 'status')
         brand.append(icon, stateLabel)
         const runtime = analysisRuntime(zotero as unknown as ZoteroLike)
         const stop = event.doc.createElement('button')
@@ -1456,8 +1497,9 @@ export function registerReaderTools(
         stop.addEventListener('click', () => runtime.stop(event.reader.itemID))
         const update = () => {
           const run = runtime.get(event.reader.itemID)
-          brand.dataset.runtime = run ? run.busy ? 'running' : run.error ? 'error' : 'complete' : 'idle'
-          stateLabel.textContent = run ? run.busy ? run.message.replace('已收到 ', '').replace(' 字符', ' 字').replace('characters received', 'chars') : run.error ? uiText('查看解析提示', 'Review analysis') : uiText('查看解析', 'View analysis') : ''
+          brand.dataset.runtime = run ? run.busy ? run.retrying ? 'retrying' : 'running' : run.error ? 'error' : 'complete' : 'idle'
+          brand.setAttribute('aria-busy', String(Boolean(run?.busy)))
+          stateLabel.textContent = run ? run.busy ? run.message.replace('已收到 ', '').replace(' 字符', ' 字').replace('characters received', 'chars') : run.error ? uiText('解析异常 · 查看详情', 'Analysis issue · Details') : uiText('查看解析', 'View analysis') : ''
           brand.title = run ? `${run.message} · ${uiText('点击查看', 'Click to view')}` : uiText('打开攻玉工作台', 'Open Jadense workspace')
           brand.setAttribute('aria-label', brand.title)
           stop.hidden = !run?.busy
@@ -1537,12 +1579,22 @@ export function registerReaderTools(
         actionList.append(button)
       }
       if (type === 'renderToolbar') {
+        const simple = event.doc.createElement('button'), simpleCaption = event.doc.createElement('span')
+        simple.type = 'button'; simple.dataset.jadenseSimpleReading = ''; simple.title = uiText('简阅模式', 'Reading mode'); simple.setAttribute('aria-label', simple.title)
+        simpleCaption.className = 'jadense-reader-label'; simpleCaption.textContent = simple.title; simple.append(lineIcon(event.doc, SIMPLE_READING_ICON), simpleCaption)
+        simple.addEventListener('click', () => {
+          if (!active) return
+          toolbarMenus.get(group)?.close()
+          const anchor = group.getAttribute('data-compact') === 'true' ? group.querySelector<HTMLButtonElement>('.jadense-reader-actions-toggle') || simple : simple
+          void openSimpleReading(zotero as unknown as ZoteroLike, event.reader as unknown as Parameters<typeof openSimpleReading>[1])
+            .catch(error => feedback.show(anchor, error instanceof Error ? error.message : String(error)))
+        })
+        actionList.append(simple)
         const label = uiText('对照翻译', 'Bilingual PDF')
-        const button = event.doc.createElement('button'), icon = event.doc.createElement('span'), caption = event.doc.createElement('span')
+        const button = event.doc.createElement('button'), caption = event.doc.createElement('span')
         button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.dataset.jadensePdfMode = 'compare'
-        icon.textContent = '◫'; icon.setAttribute('aria-hidden', 'true')
         caption.className = 'jadense-reader-label'; caption.textContent = label
-        button.append(icon, caption)
+        button.append(lineIcon(event.doc, LANGUAGES_ICON, "2"), caption)
         button.addEventListener('click', () => {
           if (!active) return
           toolbarMenus.get(group)?.close()

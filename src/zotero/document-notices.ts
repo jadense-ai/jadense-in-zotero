@@ -1,3 +1,4 @@
+import { requestIssue, requestIssueSummary, type RequestIssue } from '@/chat/request-feedback'
 /** 文档执行错误的安全用户投影；单一任务入口通知，窗口只展示持久错误。 */
 import type { ZoteroLike } from './runtime'
 import { openManagerWindow, type ZoteroManagerWindow } from './manager-window'
@@ -6,11 +7,12 @@ import { uiText } from './ui-preferences'
 import { show, type ToastAction } from './ui/toast'
 import { TranslationRateLimitError } from '@/chat/translation-queue'
 
-export type DocumentIssue = { id: string; code: string; message: string; stage: string; action?: 'ocr' | 'connection'; retryAt?: number }
+export type DocumentIssue = RequestIssue & { id: string; code: string; message: string; stage: string; action?: 'ocr' | 'connection'; retryAt?: number }
 export function documentIssue(error: unknown, stage: string, kind = 'translation'): DocumentIssue {
   const value = error as { code?: string; status?: number }
-  const code = (typeof value?.code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/u.test(value.code) ? value.code : undefined) || (error instanceof TranslationRateLimitError ? 'RATE_LIMITED' : 'DOCUMENT_FAILED')
-  const issue: DocumentIssue = { id: crypto.randomUUID(), code, stage, message: '' }
+  const fields = requestIssue(error)
+  const code = (typeof value?.code === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(value.code) ? value.code : undefined) || (error instanceof TranslationRateLimitError ? 'RATE_LIMITED' : 'DOCUMENT_FAILED')
+  const issue: DocumentIssue = { ...fields, id: fields.diagnosticId ?? fields.localDiagnosticId ?? crypto.randomUUID(), code, stage: fields.stage ?? stage, message: '' }
   const retained = uiText('已完成内容已保留。', 'Completed content is retained.')
   if (code.startsWith('OCR_')) { issue.action = 'ocr'; issue.message = uiText('OCR 依赖或模型尚未就绪。请前往 OCR 配置点击“启用本机 OCR”或“继续准备”。', 'OCR dependencies or models are not ready. Open OCR configuration and choose Enable local OCR or Continue setup.') }
   if (code === 'OCR_PREPARING') issue.message = uiText('OCR 正在准备，请完成后重新启动任务。', 'OCR preparation is in progress. Start again when it completes.')
@@ -25,7 +27,7 @@ export function documentIssue(error: unknown, stage: string, kind = 'translation
   else if (code === 'STREAM_INCOMPLETE') issue.message = uiText('此片输出未完整结束，可能已达到输出长度限制，请重试此片。', 'This chunk ended incomplete, possibly at the output limit. Retry the chunk.') + retained
   else if (code === 'CONFIG_CHANGED') issue.message = uiText('当前任务使用的 AI 配置已改变，任务已暂停，请确认设置后继续。', 'The active AI configuration changed. The task paused; check settings and resume.') + retained
   else if (code === 'STORAGE_UNAVAILABLE') issue.message = uiText('尚未完整保存，请及时复制。', 'Not fully saved. Copy the content now.')
-  else if (!issue.message) issue.message = uiText('任务未能完成，请重试或复制诊断编号反馈。', 'The task could not finish. Retry or copy the diagnostic ID to report it.') + retained
+  else if (!issue.message) issue.message = requestIssueSummary(issue) + '。' + retained
   return issue
 }
 

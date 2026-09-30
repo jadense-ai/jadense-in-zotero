@@ -1,6 +1,8 @@
+import { saveFeatureModelSelection } from './ai-settings'
 /** 新版真实调度契约：OCR 边界用有序块夹具，网络用可控流；不安装模型。 */
 import { describe, expect, it, vi } from 'vitest'
-import { DocumentJobs } from './document-jobs'
+import { DocumentJobs as RuntimeDocumentJobs } from './document-jobs'
+import { TemporaryRequestStore, type LocalTemporaryRequest } from '@/chat/temporary-request-store'
 import { DocumentStore, type TaskIO } from './document-store'
 import { renderChatMarkdown } from '@/chat/markdown'
 import { capacitySlices, chunkTranslationDocument, formulasPreserved, tokenCost, translationCapacity } from './translation-chunks'
@@ -12,6 +14,27 @@ const mock = vi.hoisted(() => ({ read: vi.fn(), ensure: vi.fn() }))
 vi.mock('./local-ocr', async original => ({ ...await original<typeof import('./local-ocr')>(), readOCRDocument: mock.read, ensureLocalOCR: mock.ensure, stopLocalOCR: () => {} }))
 // 本文件验证文档调度；HTTP 时钟/并发边界由 translation-scheduler.test.ts 覆盖。
 vi.mock('@/chat/translation-queue', async original => ({ ...await original<typeof import('@/chat/translation-queue')>(), translationScheduler: () => ({ run: (input: { fetchImpl: typeof fetch; signal?: AbortSignal }, run: (network: typeof fetch, signal: AbortSignal) => Promise<unknown>) => run(input.fetchImpl, input.signal ?? new AbortController().signal) }) }))
+
+// 合成服务器声明可靠协议；保留真实 reliable client 和 HTTP 正文，仅替换磁盘/Provider 网络。
+class RequestFixtureStore extends TemporaryRequestStore {
+  rows: LocalTemporaryRequest[] = []
+  async list() { return structuredClone(this.rows) }
+  async save(row: LocalTemporaryRequest) { this.rows = [...this.rows.filter(value => value.id !== row.id), structuredClone(row)] }
+}
+const requestStores = new WeakMap<typeof fetch, RequestFixtureStore>()
+class DocumentJobs extends RuntimeDocumentJobs {
+  constructor(host: ZoteroLike, network: typeof fetch, store: DocumentStore) {
+    const requests = requestStores.get(network) ?? new RequestFixtureStore()
+    requestStores.set(network, requests)
+    super(host, async (url, init) => {
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'x-jadense-temporary-protocol': '1' } })
+      const response = await network(url, init)
+      response.headers.set('x-jadense-temporary-protocol', '1')
+      if (String(url).endsWith('/api/chat') && response.ok && !response.headers.get('content-type')?.includes('application/json')) response.headers.set('content-type', 'text/event-stream')
+      return response
+    }, store, requests)
+  }
+}
 
 function fixture(texts = ['First sentence.', 'Second sentence.']) {
   mock.read.mockReset(); mock.ensure.mockReset(); mock.ensure.mockResolvedValue(undefined)
@@ -220,6 +243,9 @@ describe('OCR continuous translation', () => {
     expect((await jobs.reading(task.id))[0].text).not.toContain('迟到')
     jobs.resume(task.id); await jobs.idle()
     expect(task.completed).toBe(1); expect(task.status).toBe('complete')
+    // 停止期间服务器已经完整返回；恢复复用已保存结果，不再联网。
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(fetch.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(1)
     expect((await jobs.reading(task.id))[0].draft).toBeUndefined()
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))
     expect(JSON.stringify(body)).not.toContain('"translations"')
@@ -238,14 +264,16 @@ describe('OCR continuous translation', () => {
     jobs.dispose()
   })
   it('keeps completed chunks across failure and resume; missing formulas are not completed', async () => {
-    const { host } = fixture(['Text '.repeat(4000)])
+    const { host, prefs } = fixture(['Text '.repeat(4000)])
+    // 固定小容量，确保本例测试第二批失败，不依赖产品的缺省上下文。
+    prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ contextWindow: 16384 }))
     let fail = true
     const fetch = vi.fn(async () => { if (fetch.mock.calls.length === 2 && fail) return new Response(null, { status: 400 }); return reply('译文') })
     const jobs = new DocumentJobs(host, fetch, new DocumentStore())
     await jobs.start('extraction', 1)
     const task = await jobs.start('translation', 1); await jobs.idle()
     expect(task.status).toBe('error'); expect(task.completed).toBe(1)
-    expect(task.error).toContain('已完成内容已保留'); expect(task.issue?.stage).toBe('generation')
+    expect(task.error).toContain('已完成内容已保留'); expect(task.issue?.stage).toBe('http')
     const completed = task.completed, calls = fetch.mock.calls.length
     fail = false; jobs.resume(task.id); await jobs.idle()
     expect(task.status).toBe('complete')
@@ -294,6 +322,7 @@ describe('full translation regression boundaries', () => {
   })
   it('does not pause when unrelated preferences or the same value are saved', async () => {
     const { host, prefs } = fixture(['Text '.repeat(4000)])
+    prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ contextWindow: 16384 }))
     const callbacks = new Map<string, () => void>()
     host.Prefs!.registerObserver = (key, callback) => { callbacks.set(key, callback); return key }
     const fetch = vi.fn(async () => {
@@ -323,7 +352,8 @@ it('extracts OCR references across pages with raw headings, labels and coordinat
 })
 
 it('retains a points error and correlated chunk identity, then resumes only missing chunks', async () => {
-  const { host } = fixture(['Text '.repeat(4000)])
+  const { host, prefs } = fixture(['Text '.repeat(4000)])
+  prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ contextWindow: 16384 }))
   const fetch = vi.fn(async () => fetch.mock.calls.length === 2 ? Response.json({ code: 'POINTS_INSUFFICIENT', error: 'private provider data' }, { status: 402 }) : reply('译文'))
   const disk = durableStore(), jobs = new DocumentJobs(host, fetch, disk.create())
   const task = await jobs.start('translation', 1); await jobs.idle()
@@ -357,7 +387,7 @@ it('pauses when the active credential changes and retains a visible reason', asy
 })
 
 
-it('keeps a running full translation when selection settings change, but pauses for its own effective model', async () => {
+it('freezes a running full translation when any model selection changes', async () => {
   const { host, prefs } = fixture(['Full source text.'])
   prefs.set('extensions.jadenseInZotero.autoFollowChatModel', false)
   prefs.set('extensions.jadenseInZotero.fullTranslationModel', JSON.stringify({ route: 'jadense', selection: { kind: 'model', modelId: 'full-model' } }))
@@ -374,16 +404,18 @@ it('keeps a running full translation when selection settings change, but pauses 
     expect(init?.signal?.aborted).toBe(false)
     prefs.set('extensions.jadenseInZotero.fullTranslationModel', JSON.stringify({ route: 'jadense', selection: { kind: 'model', modelId: 'changed-full' } }))
     callbacks.get('extensions.jadenseInZotero.fullTranslationModel')?.()
-    expect(init?.signal?.aborted).toBe(true)
-    throw new DOMException('Stopped', 'AbortError')
+    saveFeatureModelSelection(host, 'translation', { route: 'jadense', selection: { kind: 'model', modelId: 'changed-canonical', thinkingEffort: 'high' } })
+    expect(init?.signal?.aborted).toBe(false)
+    expect(JSON.parse(String(init?.body)).modelId).toBe('full-model')
+    return reply('译文')
   })
   const jobs = new DocumentJobs(host, fetch, new DocumentStore())
   await jobs.start('extraction', 1)
   const task = await jobs.start('translation', 1)
   await jobs.idle()
   expect(fetch).toHaveBeenCalledOnce()
-  expect(task.status).toBe('paused')
-  expect(task.completed).toBe(0)
+  expect(task.status).toBe('complete')
+  expect(task.completed).toBe(1)
   jobs.dispose()
 })
 

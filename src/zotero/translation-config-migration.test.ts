@@ -1,8 +1,8 @@
 /** 迁移与隔离回归：旧选择必须保留，失败重试不得覆盖已独立编辑的用途。 */
 import { describe, expect, it, vi } from 'vitest'
 import type { ZoteroLike } from './runtime'
-import { migrateTranslationConfiguration, TRANSLATION_CONFIG_MIGRATION_PREF } from './translation-config-migration'
-import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, FEATURE_MODEL_PREF_KEYS, LEGACY_TRANSLATION_MODEL_PREF, effectiveFeatureModelSelection, readFeatureModelSelection, saveAutoFollowChatModel, saveFeatureModelSelection } from './ai-settings'
+import { migrateTranslationConfiguration } from './translation-config-migration'
+import { AI_MODEL_SETTINGS_PREF_KEY, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, FEATURE_MODEL_PREF_KEYS, LEGACY_TRANSLATION_MODEL_PREF, effectiveFeatureModelSelection, readFeatureModelSelection, saveAutoFollowChatModel, saveFeatureModelSelection } from './ai-settings'
 import { readTranslationInterface, saveTranslationInterface, TRANSLATION_INTERFACE_PREF, TRANSLATION_INTERFACE_PREFS } from './translation-interface'
 import { translationCapacity } from './translation-chunks'
 
@@ -28,7 +28,7 @@ describe('translation configuration migration', () => {
     expect(migrateTranslationConfiguration(host)).toBe(true)
     expect(effectiveFeatureModelSelection(host, 'fullTranslation')).toEqual(oldModel)
     expect(readTranslationInterface(host, 'document')).toEqual({ kind: 'machine', service: 'google' })
-    expect(values.has(keyFor(FEATURE_MODEL_PREF_KEYS.fullTranslation))).toBe(true)
+    expect(values.has(AI_MODEL_SETTINGS_PREF_KEY)).toBe(true)
     expect(values.has(FEATURE_MODEL_PREF_KEYS.fullTranslation)).toBe(false)
   })
   it.each(['ai', 'bing', 'google'])('preserves %s and the inactive independent model across restart', method => {
@@ -41,8 +41,8 @@ describe('translation configuration migration', () => {
     expect(effectiveFeatureModelSelection(host, 'fullTranslation')).toEqual(otherModel)
     saveAutoFollowChatModel(host, false)
     const restored = fixture(values).host
-    expect(effectiveFeatureModelSelection(restored, 'translation')).toEqual(oldModel)
-    expect(effectiveFeatureModelSelection(restored, 'fullTranslation')).toEqual(oldModel)
+    expect(effectiveFeatureModelSelection(restored, 'translation')).toEqual(otherModel)
+    expect(effectiveFeatureModelSelection(restored, 'fullTranslation')).toEqual(otherModel)
     const before = [...values]
     expect(migrateTranslationConfiguration(restored)).toBe(true)
     expect([...values]).toEqual(before)
@@ -54,14 +54,14 @@ describe('translation configuration migration', () => {
     values.set(TRANSLATION_INTERFACE_PREFS.selection, JSON.stringify({ kind: 'machine', service: 'google' }))
     vi.mocked(host.Prefs!.set).mockImplementationOnce(() => { throw new Error('disk') })
     expect(migrateTranslationConfiguration(host)).toBe(false)
-    expect(values.has(TRANSLATION_CONFIG_MIGRATION_PREF)).toBe(false)
+    expect(values.has(AI_MODEL_SETTINGS_PREF_KEY)).toBe(false)
     expect(readFeatureModelSelection(host, 'fullTranslation')).toEqual(oldModel)
     expect(migrateTranslationConfiguration(host)).toBe(true)
-    expect(readFeatureModelSelection(host, 'translation')).toEqual(otherModel)
+    expect(readFeatureModelSelection(host, 'translation')).toEqual(oldModel)
     expect(readFeatureModelSelection(host, 'fullTranslation')).toEqual(oldModel)
     expect(readTranslationInterface(host, 'selection')).toEqual({ kind: 'machine', service: 'google' })
   })
-  it('uses independent services and follows only while the global switch is enabled', () => {
+  it('keeps independent services and a shared translation model outside chat following', () => {
     const { host, values } = fixture()
     migrateTranslationConfiguration(host)
     expect(values.get(AUTO_FOLLOW_CHAT_MODEL_PREF_KEY)).toBeUndefined()
@@ -70,9 +70,9 @@ describe('translation configuration migration', () => {
     saveFeatureModelSelection(host, 'chat', oldModel)
     saveFeatureModelSelection(host, 'translation', otherModel)
     saveFeatureModelSelection(host, 'fullTranslation', { route: 'byok', modelId: 'full' })
-    expect(effectiveFeatureModelSelection(host, 'fullTranslation')).toEqual(oldModel)
+    expect(effectiveFeatureModelSelection(host, 'fullTranslation')).toEqual({ route: 'byok', modelId: 'full' })
     saveAutoFollowChatModel(host, false)
-    expect(effectiveFeatureModelSelection(host, 'translation')).toEqual(otherModel)
+    expect(effectiveFeatureModelSelection(host, 'translation')).toEqual({ route: 'byok', modelId: 'full' })
     expect(effectiveFeatureModelSelection(host, 'fullTranslation')).toEqual({ route: 'byok', modelId: 'full' })
     expect(readTranslationInterface(host, 'selection').kind).toBe('machine')
     expect(readTranslationInterface(host, 'document').kind).toBe('ai')

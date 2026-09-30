@@ -1,5 +1,6 @@
 """容量与补缺回归：无网络、无真实论文，直接调用生产适配器。"""
 import json
+import re
 import unittest
 import tempfile
 import threading
@@ -32,14 +33,16 @@ class BatchingTests(unittest.TestCase):
         for raw, expected in fixtures:
             with self.subTest(raw=raw): self.assertEqual(parse_outputs(raw, rows), expected)
 
-    def test_local_repair_preserves_content_and_refuses_ambiguous_or_missing_markers(self):
+    def test_local_repair_preserves_content_and_recovers_missing_markers(self):
         rows = [dict(id='a', text='Text <b0>bold</b0> {v1} ⟦F2⟧'), dict(id='b', text='Second')]
         encoded = [{"id": "a", "output": "译文 &lt;b0&gt;加粗&lt;/b0&gt; ｛ v1 ｝ ⟦ F2 ⟧"}]
         self.assertEqual(parse_outputs(json.dumps(encoded), rows), {'a': '译文 <b0>加粗</b0> {v1} ⟦F2⟧'})
         self.assertEqual(parse_outputs('[{"id":"b","output":"same"},{"id":"b","output":"same"}]', rows), {'b': 'same'})
         self.assertEqual(parse_outputs('[{"id":"b","output":"one"},{"id":"b","output":"two"}]', rows), {})
         self.assertEqual(parse_outputs('[{"output":"no ID"}]', rows), {})
-        self.assertEqual(parse_outputs(json.dumps([dict(id='a', output='Missing placeholders')]), rows), {})
+        restored = parse_outputs(json.dumps([dict(id='a', output='Missing placeholders')]), rows)['a']
+        self.assertTrue(valid_output(rows[0]['text'], restored))
+        self.assertEqual(re.sub(r'</?b\d+>|\{v\d+\}|⟦F\d+⟧', '', restored), 'Missing placeholders')
         self.assertEqual(parse_outputs("[{'id':'b','output':'literal ,} and quote \"hello\"'}]", rows), {'b': 'literal ,} and quote "hello"'})
         self.assertEqual(parse_outputs('[{"id":"b","output":"line one\nline two"}]', rows), {'b': 'line one\nline two'})
         self.assertEqual(parse_outputs(r'[{"id":"b","output":"math \(x\)"}]', rows), {'b': r'math \(x\)'})
@@ -50,6 +53,13 @@ class BatchingTests(unittest.TestCase):
         self.assertEqual(parse_outputs('[{"id":"b","output":"one","output":"two"}]', rows), {})
         self.assertEqual(parse_outputs('[{"id":"b","output":"same","future":1,"future":2}]', rows), {'b': 'same'})
         self.assertEqual(parse_outputs("[{'id':'a','id':'b','output':'ambiguous'}]", rows), {})
+
+    def test_ordered_list_without_ids_recovers_all_passages(self):
+        rows = [dict(id='p1', text='First'), dict(id='p2', text='Second')]
+        self.assertEqual(parse_outputs('["第一段", "第二段"]', rows), {'p1': '第一段', 'p2': '第二段'})
+        self.assertEqual(parse_outputs('第一段\n\n第二段', rows), {'p1': '第一段', 'p2': '第二段'})
+        self.assertEqual(parse_outputs('[{"translation":"第一段"},{"translation":"第二段"}]', rows), {'p1': '第一段', 'p2': '第二段'})
+        self.assertEqual(parse_outputs('[{"id":"foreign","output":"别篇"},{"id":"p2","output":"第二段"}]', rows), {'p2': '第二段'})
 
     def test_chinese_font_reduction_preserves_shared_source_and_formula_styles(self):
         from batch_adapter import reduce_chinese_font_size
@@ -133,7 +143,10 @@ class BatchingTests(unittest.TestCase):
     def test_maps_reordered_ids_and_contains_duplicate_missing_and_formula_damage(self):
         rows = [dict(id=str(i), text='hello {v1}') for i in range(4)]
         values = [dict(id='2', output='译文 {v1}', future=True), dict(id='1', output='译文'), dict(id='0', output='a {v1}'), dict(id='0', output='b {v1}'), dict(id='unknown', output='ignored')]
-        self.assertEqual(parse_outputs(json.dumps(values), rows), {'2': '译文 {v1}'})
+        recovered = parse_outputs(json.dumps(values), rows)
+        self.assertEqual(recovered['2'], '译文 {v1}')
+        self.assertTrue(valid_output(rows[1]['text'], recovered['1']))
+        self.assertNotIn('0', recovered)
         self.assertEqual(parse_outputs('not JSON', rows), {})
         self.assertFalse(valid_output('a {v1}', 'b {v2}'))
         self.assertFalse(valid_output('a {v1}', 'b {v1}{v1}'))
@@ -194,7 +207,7 @@ class BatchingTests(unittest.TestCase):
             adapter.language = 'zh-CN'
             adapter.stats = dict(batches=0, repairs=0, completed=0, batchTokens=[])
             calls = []
-            def request(text, llm, operation): calls.append(operation); return 'invalid JSON'
+            def request(text, llm, operation): calls.append(operation); return '{"id":'
             adapter.translator = SimpleNamespace(request=request)
             rows = [dict(id='1', text='hello', label='text')]
             adapter.translate_batch(rows)
@@ -216,6 +229,31 @@ def document(paragraphs):
 
 
 class ResilienceTests(unittest.TestCase):
+    def test_context_budget_batches_62_paragraphs_and_repairs_only_missing_together(self):
+        budget = dict(contextWindow=131072, batchTokens=32512, maxOutputTokens=96000, policy='context-v1')
+        rows = [dict(id=str(i), text='Scientific evidence and coherent context. ' * 20, label='text') for i in range(62)]
+        self.assertEqual(list(batches(rows, measure, budget, 'zh-CN')), [rows])
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, *args, **kwargs):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append(inputs)
+                outputs = inputs[:40] if len(calls) == 1 else inputs
+                return '\n'.join(json.dumps({row['id']: 'translated'}) for row in outputs)
+            adapter, _ = self.adapter(directory, request, budget=budget)
+            adapter.translate_batch(rows)
+            self.assertEqual([len(group) for group in calls], [62, 22])
+            self.assertTrue(all(row['id'] in adapter.cache for row in rows))
+
+    def test_context_budget_final_repair_stays_batched_and_stops_after_three_calls(self):
+        budget = dict(contextWindow=131072, batchTokens=32512, maxOutputTokens=96000, policy='context-v1')
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, *args, **kwargs):
+                calls.append(json.loads(text.split('\n', 1)[1])); return 'bad JSON'
+            adapter, _ = self.adapter(directory, request, budget=budget)
+            adapter.translate_batch([dict(id=str(i), text='Short paragraph.', label='text') for i in range(62)])
+            self.assertEqual([len(group) for group in calls], [62, 62, 62])
+
     def test_confirmed_failed_batch_recovers_without_resending_success(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
@@ -259,6 +297,7 @@ class ResilienceTests(unittest.TestCase):
             calls = []
             def request(text, llm, operation):
                 inputs = json.loads(text.split('\n', 1)[1]); calls.append((text, operation))
+                if len(calls) <= 2: return '{"id":'
                 if len(calls) == 3: raise ProviderFailure('RECOVERY_PENDING', False)
                 return '\n'.join(json.dumps({row['id']: '译文'}) for row in inputs)
             source = 'Before <b0>formula after.'
@@ -277,6 +316,7 @@ class ResilienceTests(unittest.TestCase):
             calls = []
             def request(text, llm, operation):
                 inputs = json.loads(text.split('\n', 1)[1]); calls.append(inputs)
+                if len(calls) <= 2: return '{"id":'
                 return json.dumps({inputs[0]['id']: '译文'})
             source = 'Before <b0>after.'
             row = dict(id='a', text=source, label='text')
@@ -302,7 +342,8 @@ class ResilienceTests(unittest.TestCase):
             calls = []
             def request(text, llm, operation):
                 inputs = json.loads(text.split('\n', 1)[1]); calls.append((text, operation))
-                # 故意模拟总是丢弃标记的模型；最后一轮不再让模型回传标记。
+                if len(calls) <= 2: return '{"id":'
+                # 只有最后一轮得到正文，格式由本地片段计划恢复。
                 return '\n'.join(json.dumps({row['id']: '译文'}) for row in inputs)
             adapter, _ = self.adapter(directory, request)
             source = 'Before <b0>formula and <b1>styled</b1> after.'
@@ -311,6 +352,21 @@ class ResilienceTests(unittest.TestCase):
             self.assertEqual(len(calls), 3)
             self.assertEqual(len(set(text for text, _ in calls)), 3)
             self.assertNotIn('<b0>', ''.join(row['input'] for row in json.loads(calls[-1][0].split('\n', 1)[1])))
+
+    def test_final_repair_restores_markers_for_every_row_in_a_capacity_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                inputs = json.loads(text.split('\n', 1)[1]); calls.append(inputs)
+                if len(calls) <= 2: return '{"id":'
+                return '\n'.join(json.dumps({row['id']: '译文'}) for row in inputs)
+            adapter, _ = self.adapter(directory, request, budget={**BUDGET, 'policy': 'context-v1', 'batchTokens': 8000})
+            rows = [dict(id='a', text='Before <b0>first</b0> {v1}.', label='text'),
+                    dict(id='b', text='After <b0>second</b0> ⟦F2⟧.', label='text')]
+            adapter.translate_batch(rows)
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(all(valid_output(row['text'], adapter.cache.get(row['id'])) for row in rows))
+            self.assertTrue(all('<b0>' not in row['input'] for row in calls[-1]))
 
     def test_compact_lines_salvage_complete_passages_and_retry_only_truncated_tail(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -413,7 +469,7 @@ class ResilienceTests(unittest.TestCase):
                 rows = json.loads(text.split('\n', 1)[1]); calls.append([row['input'] for row in rows])
                 if len(calls) == 1:
                     return json.dumps([dict(id=rows[0]['id'], output='translated')])
-                if len(rows) > 1: return 'invalid JSON'
+                if len(rows) > 1: return '{"id":'
                 return json.dumps([dict(id=rows[0]['id'], output='translated')])
             adapter, _ = self.adapter(directory, request)
             rows = [dict(id=str(i), text=f'Source paragraph {i}.', label='text') for i in range(6)]
@@ -478,7 +534,7 @@ class ResilienceTests(unittest.TestCase):
             calls = []
             def request(text, *args, **kwargs):
                 rows=json.loads(text.split('\n',1)[1]); calls.append(rows)
-                return json.dumps([dict(id=rows[0]['id'], output='translated')]) if len(calls)==1 else 'invalid'
+                return json.dumps([dict(id=rows[0]['id'], output='translated')]) if len(calls)==1 else '{"id":'
             adapter, config = self.adapter(directory, request)
             originals = [paragraph('Sentence number '+str(i)+'.', y=600-i*40) for i in range(3)]
             docs = document(originals[:]); adapter.translate(docs)
@@ -511,7 +567,7 @@ class ResilienceTests(unittest.TestCase):
             count=[]
             def request(text,*args,**kwargs):
                 rows=json.loads(text.split('\n',1)[1]); count.append(1)
-                return json.dumps([dict(id=rows[0]['id'],output='first part')]) if len(count)==1 else 'invalid'
+                return json.dumps([dict(id=rows[0]['id'],output='first part')]) if len(count)==1 else '{"id":'
             adapter,config=self.adapter(directory,request,budget={**BUDGET,'batchTokens':40})
             original=paragraph('Long sentence. '*60)
             docs=document([original]); adapter.translate(docs)
@@ -571,7 +627,7 @@ class ResilienceTests(unittest.TestCase):
         from collections import Counter
         reasons=Counter()
         parse_outputs('[{"id":"a","output":"private text"}]', [dict(id='a',text='formula {v1}'),dict(id='b',text='missing')],reasons)
-        self.assertEqual(reasons,{'placeholder_mismatch':1,'missing_id':1})
+        self.assertEqual(reasons,{'repositioned_markers':1,'repaired_markers':1,'missing_id':1})
 
 
 if __name__ == '__main__': unittest.main()

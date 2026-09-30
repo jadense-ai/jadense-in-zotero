@@ -1,4 +1,5 @@
 @import url("settings.css");
+@import url("ui.css");
 @import url("translation-interface.css");
 @import url("status.css");
 #jadense-in-zotero-preferences-pane .jdx-ocr-section { margin-top:20px; padding-top:16px; border-top:1px solid var(--jdx-pref-line); }
@@ -14,6 +15,21 @@
 #jadense-in-zotero-preferences-pane .jdx-ocr-settings [data-tone="error"] { color: var(--jdx-pref-error); }
 /* 仅插件 vbox 覆盖主题；Zotero 设置窗口外框继续使用宿主主题。 */
 #jadense-in-zotero-preferences-pane {
+  /* 共享模型控件只继承本 pane 的主题，不改变 Zotero 外框。 */
+  --jdx-text: var(--jdx-pref-text);
+  --jdx-muted: var(--jdx-pref-muted);
+  --jdx-placeholder: var(--jdx-pref-faint);
+  --jdx-surface: var(--jdx-pref-surface);
+  --jdx-subtle: var(--jdx-pref-subtle);
+  --jdx-surface-sunken: var(--jdx-pref-subtle);
+  --jdx-press-bg: var(--jdx-pref-hover);
+  --jdx-active-bg: var(--jdx-pref-active);
+  --jdx-line: var(--jdx-pref-line);
+  --jdx-line-strong: var(--jdx-pref-line-strong);
+  --jdx-hover-line: var(--jdx-pref-line-strong);
+  --jdx-green: #16cf8c;
+  --jdx-green-deep: var(--jdx-pref-green-text);
+  --jdx-popup-shadow: 0 6px 18px rgb(17 21 16 / 0.12), 0 1px 4px rgb(17 21 16 / 0.08);
   --jdx-pref-line: #d9e2dd;
   --jdx-pref-surface: #ffffff;
   --jdx-pref-text: #17211b;
@@ -73,7 +89,7 @@
   line-height: 1.45;
 }
 
-#jadense-in-zotero-preferences-pane :is(label, input, select, button) { font-size: inherit; }
+#jadense-in-zotero-preferences-pane :is(label, input, select, button):not(.jdx-model-select *) { font-size: inherit; }
 
 #jadense-in-zotero-preferences-pane .jdx-pref-grid {
   display: grid;
@@ -457,7 +473,7 @@
   line-height: 1.55;
 }
 
-#jadense-in-zotero-preferences-pane input {
+#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input) {
   box-sizing: border-box;
   min-height: 34px;
   width: 100%;
@@ -471,11 +487,11 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-#jadense-in-zotero-preferences-pane input:hover:not(:disabled) {
+#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input):hover:not(:disabled) {
   border-color: var(--jdx-pref-line-strong);
 }
 
-#jadense-in-zotero-preferences-pane input:focus {
+#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input):focus {
   border-color: #16cf8c;
   outline: 2px solid rgb(22 207 140 / 0.18);
   outline-offset: 0;
@@ -486,13 +502,13 @@
 }
 
 /* 自研下拉组件:不透明白底弹出层,绕开 Zotero 原生 menupopup 的透明渲染。 */
-#jadense-in-zotero-preferences-pane .jdx-select {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select {
   position: relative;
   min-width: 0;
   width: 100%;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-trigger {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-trigger {
   display: flex;
   box-sizing: border-box;
   min-height: 34px;
@@ -512,44 +528,44 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-trigger:hover:not(:disabled) {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-trigger:hover:not(:disabled) {
   border-color: var(--jdx-pref-line-strong);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-trigger:focus-visible,
-#jadense-in-zotero-preferences-pane .jdx-select[data-open="true"] .jdx-select-trigger {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-trigger:focus-visible,
+:where(#jadense-in-zotero-preferences-pane) .jdx-select[data-open="true"] .jdx-select-trigger {
   border-color: #16cf8c;
   outline: 2px solid rgb(22 207 140 / 0.18);
   outline-offset: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-trigger:disabled {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-trigger:disabled {
   cursor: default;
   opacity: 0.58;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-value {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-value[data-placeholder="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-value[data-placeholder="true"] {
   color: var(--jdx-pref-muted);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-chevron {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-chevron {
   flex: 0 0 auto;
   color: var(--jdx-pref-muted);
   transition: transform 0.15s ease;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select[data-open="true"] .jdx-select-chevron {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select[data-open="true"] .jdx-select-chevron {
   transform: rotate(180deg);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-popup {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-popup {
   position: fixed;
   z-index: 100;
   display: none;
@@ -561,11 +577,11 @@
   box-shadow: 0 6px 18px rgb(17 21 16 / 0.12), 0 1px 4px rgb(17 21 16 / 0.08);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select[data-open="true"] .jdx-select-popup {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select[data-open="true"] .jdx-select-popup {
   display: block;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-list {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-list {
   display: grid;
   gap: 1px;
   margin: 0;
@@ -573,7 +589,7 @@
   list-style: none;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-option {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-option {
   min-height: 28px;
   border-radius: 5px;
   padding: 5px 8px;
@@ -584,20 +600,20 @@
   cursor: pointer;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-option[data-active="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-option[data-active="true"] {
   background: var(--jdx-pref-hover);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-option[aria-selected="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-option[aria-selected="true"] {
   color: var(--jdx-pref-green-text);
   font-weight: 650;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-option[aria-selected="true"][data-active="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-option[aria-selected="true"][data-active="true"] {
   background: var(--jdx-pref-active);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-select-empty {
+:where(#jadense-in-zotero-preferences-pane) .jdx-select-empty {
   padding: 6px 8px;
   color: var(--jdx-pref-muted);
 }
@@ -631,7 +647,7 @@
   color: var(--jdx-pref-success);
 }
 
-#jadense-in-zotero-preferences-pane button {
+#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button) {
   min-height: 34px;
   border: 1px solid var(--jdx-pref-line);
   border-radius: 6px;
@@ -642,22 +658,22 @@
   cursor: pointer;
 }
 
-#jadense-in-zotero-preferences-pane button:hover {
+#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):hover {
   border-color: var(--jdx-pref-line-strong);
   background: var(--jdx-pref-hover);
 }
 
-#jadense-in-zotero-preferences-pane button:focus-visible {
+#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):focus-visible {
   border-color: #16cf8c;
   outline: 2px solid rgb(22 207 140 / 0.18);
   outline-offset: 0;
 }
 
-#jadense-in-zotero-preferences-pane button:active:not(:disabled) {
+#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):active:not(:disabled) {
   background: var(--jdx-pref-disabled);
 }
 
-#jadense-in-zotero-preferences-pane button:disabled {
+#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):disabled {
   cursor: default;
   opacity: 0.65;
 }

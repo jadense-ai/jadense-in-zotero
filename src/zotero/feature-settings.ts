@@ -11,6 +11,7 @@ import { checkOCREngine } from './cloud-ocr'
 import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, ocrEngine } from './cloud-ocr-config'
 import { cachedOCR, OCR_READY_PREF, isLocalOCRPreparing, observeOCRProgress } from './local-ocr'
 import { migrateTranslationConfiguration } from './translation-config-migration'
+import { aiModelMigrationFailed } from './ai-settings'
 import { wirePDFTranslationSettings } from './pdf-translation-settings'
 import { createJdxSelect } from './custom-select'
 import { CHAT_DOCUMENT_MODE_PREF_KEY, readChatDocumentMode, saveChatDocumentMode } from './chat-document-policy'
@@ -31,6 +32,10 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     wireReferenceAISetting(host, root.querySelector('[data-feature-group="analysis"]')),
     mountClassificationSettings(doc, host, root.querySelector<HTMLElement>('[data-classification-settings-host]')),
   ]
+  if (aiModelMigrationFailed(host)) {
+    const warning = make('p', uiText('模型设置迁移未能保存，当前继续使用旧配置；重新打开设置可重试。', 'Model settings migration could not be saved. Existing settings remain active; reopen settings to retry.'))
+    warning.setAttribute('role', 'status'); root.querySelector('[data-settings-task="chat"]')?.append(warning); stops.push(() => warning.remove())
+  }
   const chatTask = root.querySelector<HTMLElement>('[data-settings-task="chat"]')
   if (chatTask) {
     const row = make('div'); row.className = 'jdx-feature-model-row'

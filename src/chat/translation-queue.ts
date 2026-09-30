@@ -1,4 +1,6 @@
 /** 翻译服务共享串行节奏；只排队，不自动重试已派发的请求。 */
+import { markDiagnosticAbort } from '@/zotero/diagnostics'
+import { uiText } from '@/zotero/ui-preferences'
 type QueueHost = { __jadenseTranslationServices?: Map<string, { tail: Promise<unknown>; next: number }> }
 export class TranslationRateLimitError extends Error {
   constructor(readonly retryAt: number) { super(`翻译服务限流 / Translation rate limited. ${new Date(retryAt).toLocaleTimeString()} 后可继续 / Resume after this time.`) }
@@ -26,6 +28,7 @@ export async function queueTranslation<T>(host: object, key: string, signal: Abo
 /** 翻译用途共享调度：业务名额覆盖响应消费，HTTP 配额覆盖 HEAD/POST/GET。 */
 export const TRANSLATION_SPEED_PREF = 'extensions.jadenseInZotero.translationSpeed'
 export const DEFAULT_TRANSLATION_SPEED = { concurrency: 2, rpm: 20, batchTokens: 1600 }
+export const READING_AI_TOTAL_TIMEOUT_MS = 15 * 60_000
 export type TranslationSpeed = typeof DEFAULT_TRANSLATION_SPEED
 type SpeedHost = object & { Prefs?: { get(key: string, global?: boolean): unknown; set?(key: string, value: unknown, global?: boolean): void }; __jadenseTranslationScheduler?: TranslationScheduler }
 
@@ -126,7 +129,7 @@ export class TranslationScheduler {
     })
   }
   /** 已提交但结果不确定的操作由原客户端恢复；此处从不自动重发。 */
-  run<T>(input: { address: string; task: string; operation?: string; signal?: AbortSignal; machine?: boolean; fetchImpl: typeof fetch }, work: (network: typeof fetch, signal: AbortSignal) => Promise<T>): Promise<T> {
+  run<T>(input: { address: string; task: string; operation?: string; signal?: AbortSignal; machine?: boolean; totalTimeoutMs?: number; fetchImpl: typeof fetch }, work: (network: typeof fetch, signal: AbortSignal) => Promise<T>): Promise<T> {
     if (this.stopped) return Promise.reject(new DOMException('Aborted', 'AbortError'))
     const identity = input.operation ? JSON.stringify([translationServiceKey(input.address), input.task, input.operation]) : undefined
     const existing = identity && this.operations.get(identity)
@@ -135,13 +138,13 @@ export class TranslationScheduler {
     if (identity) this.operations.set(identity, result)
     return result
   }
-  private async execute<T>(input: { address: string; task: string; signal?: AbortSignal; machine?: boolean; fetchImpl: typeof fetch }, work: (network: typeof fetch, signal: AbortSignal) => Promise<T>) {
+  private async execute<T>(input: { address: string; task: string; signal?: AbortSignal; machine?: boolean; totalTimeoutMs?: number; fetchImpl: typeof fetch }, work: (network: typeof fetch, signal: AbortSignal) => Promise<T>) {
     const state = this.state(input.address, input.machine)
     await this.wait(state, state.queue, input.task, input.signal)
-    const controller = new AbortController(), abort = () => controller.abort()
+    const controller = new AbortController(), abort = () => { markDiagnosticAbort(controller.signal, 'parent_cancel'); controller.abort() }
     this.controllers.add(controller); if (this.stopped) abort()
     input.signal?.addEventListener('abort', abort, { once: true }); if (input.signal?.aborted) abort()
-    let deadline: ReturnType<typeof setTimeout> | undefined, dispatchedAt: number | undefined
+    let deadline: ReturnType<typeof setTimeout> | undefined, totalDeadline: ReturnType<typeof setTimeout> | undefined, dispatchedAt: number | undefined
     let queuedTime = 0, waitingSince: number | undefined
     const network: TranslationFetch = async (url, init) => {
       clearTimeout(deadline)
@@ -151,7 +154,13 @@ export class TranslationScheduler {
       try { await this.wait(state, state.http, input.task, signal) }
       finally { queuedTime += Date.now() - waitingSince; waitingSince = undefined }
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-      dispatchedAt = Date.now(); state.inFlight++; deadline = setTimeout(abort, input.machine ? 30_000 : 180_000)
+      dispatchedAt = Date.now(); state.inFlight++
+      // 传统服务仍使用原有单次 HTTP 时限；指定阅读模式的 AI 总时限覆盖完整流消费。
+      if (input.machine) deadline = setTimeout(() => {
+        markDiagnosticAbort(controller.signal, 'translation_timeout')
+        markDiagnosticAbort(signal, 'translation_timeout')
+        controller.abort()
+      }, 30_000)
       if ((init?.method ?? 'GET').toUpperCase() === 'POST') state.submissions++
       const response = await input.fetchImpl(url, { ...init, signal })
       if (response.status === 429) {
@@ -162,8 +171,21 @@ export class TranslationScheduler {
     }
     network.translationQueueTime = () => queuedTime + (waitingSince === undefined ? 0 : Date.now() - waitingSince)
     const rateLimits = state.rateLimits
-    try { if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError'); const result = await work(network, controller.signal); if (rateLimits === state.rateLimits) state.successes++; return result }
-    finally { clearTimeout(deadline); this.controllers.delete(controller); if (dispatchedAt !== undefined) { state.modelMs += Date.now() - dispatchedAt; state.inFlight-- } input.signal?.removeEventListener('abort', abort); state.active--; this.pump(state) }
+    try {
+      if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+      const timeout = input.totalTimeoutMs && input.totalTimeoutMs > 0 ? new Promise<never>((_resolve, reject) => {
+        totalDeadline = setTimeout(() => {
+          const error = Object.assign(new Error(uiText('AI 翻译请求已超过 15 分钟，已停止等待；可用原请求身份核对或恢复结果。', 'AI translation exceeded 15 minutes. Waiting stopped; check or recover the original request.')), { code: 'TRANSLATION_TIMEOUT', stage: 'translation' })
+          reject(error)
+          markDiagnosticAbort(controller.signal, 'translation_timeout')
+          controller.abort(error)
+        }, input.totalTimeoutMs)
+      }) : undefined
+      const pending = Promise.resolve().then(() => work(network, controller.signal))
+      const result = await (timeout ? Promise.race([pending, timeout]) : pending)
+      if (rateLimits === state.rateLimits) state.successes++
+      return result
+    } finally { clearTimeout(deadline); clearTimeout(totalDeadline); this.controllers.delete(controller); if (dispatchedAt !== undefined) { state.modelMs += Date.now() - dispatchedAt; state.inFlight-- } input.signal?.removeEventListener('abort', abort); state.active--; this.pump(state) }
   }
 }
 export function translationScheduler(host: object) { return (host as SpeedHost).__jadenseTranslationScheduler ??= new TranslationScheduler(host) }

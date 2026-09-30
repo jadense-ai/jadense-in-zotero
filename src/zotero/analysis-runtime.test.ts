@@ -46,6 +46,20 @@ it('stops an unresponsive source read and never dispatches its late result', asy
   expect(run).not.toHaveBeenCalled()
   runtime.dispose()
 })
+it('terminates a stalled preparation with a visible error instead of spinning forever', async () => {
+  vi.useFakeTimers()
+  try {
+    vi.mocked(collectSourceForItem).mockImplementationOnce(() => new Promise(() => {}))
+    const run = vi.fn<typeof runIndependentPaperAnalysis>()
+    const runtime = new AnalysisRuntime({ Prefs: { get: () => true } }, run)
+    void runtime.start(1)
+    await vi.advanceTimersByTimeAsync(120_001)
+    expect(runtime.get(1)).toMatchObject({ busy: false, error: true })
+    expect(runtime.get(1)?.message).toMatch(/超时|timed out/)
+    expect(run).not.toHaveBeenCalled()
+    runtime.dispose()
+  } finally { vi.useRealTimers() }
+})
 it('retains a failed final history update and exposes provider failure without throwing into reader UI', async () => {
   const runtime = new AnalysisRuntime({ Prefs: { get: () => true } }, async input => ({ ...result(input.itemID), historySaved: true, historyError: 'Final update failed' }))
   await runtime.start(1)

@@ -62,6 +62,47 @@ function structured(summary = "总结") {
 }
 
 describe("independent paper analysis", () => {
+  it('times out a stalled PDF read and ignores its late result', async () => {
+    vi.useFakeTimers()
+    try {
+      const { zotero } = fakeZotero({ token: 'fixture' }), send = vi.fn(), saveAnnotations = vi.fn()
+      let finish!: (value: PdfAnalysisSnapshot) => void
+      const result = expect(runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal,
+        services: { readPdf: () => new Promise(resolve => { finish = resolve }), send, saveAnnotations } })).rejects.toMatchObject({ code: 'ANALYSIS_TIMEOUT' })
+      await vi.advanceTimersByTimeAsync(180_001); await result
+      finish(snapshot()); await Promise.resolve()
+      expect(send).not.toHaveBeenCalled(); expect(saveAnnotations).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('retries generation without rereading PDF or duplicating annotation writes', async () => {
+    vi.useFakeTimers()
+    try {
+      const { zotero } = fakeZotero({ token: 'fixture' })
+      const readPdf = vi.fn(async () => snapshot()), saveAnnotations = vi.fn(async () => emptySaved())
+      const send = vi.fn().mockRejectedValueOnce(Object.assign(new Error('Limited'), { status: 429, retryAfter: '1' })).mockResolvedValueOnce(structured())
+      const result = runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, services: { readPdf, send, saveAnnotations } })
+      await vi.advanceTimersByTimeAsync(1001); await result
+      expect(send).toHaveBeenCalledTimes(2)
+      expect(readPdf).toHaveBeenCalledOnce(); expect(saveAnnotations).toHaveBeenCalledOnce()
+      expect(send.mock.calls[0][0].operationId).toBe(send.mock.calls[1][0].operationId)
+      expect(readPaperAnalysisHistory(zotero.Prefs!).records).toHaveLength(1)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('retains history when annotation saving stalls and never retries the write', async () => {
+    vi.useFakeTimers()
+    try {
+      const { zotero } = fakeZotero({ token: 'fixture' }), saveAnnotations = vi.fn(() => new Promise<SavedAnalysisAnnotations>(() => {}))
+      const pending = runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal,
+        services: { readPdf: async () => snapshot(), send: async () => structured(), saveAnnotations } })
+      await vi.advanceTimersByTimeAsync(120_001)
+      const result = await pending
+      expect(result.annotationError).toBeTruthy()
+      expect(readPaperAnalysisHistory(zotero.Prefs!).records[0].summary).toBe('总结')
+      expect(saveAnnotations).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
+  })
   it('persists extraction fallback warnings in the readable analysis history', async () => {
     const { zotero } = fakeZotero({ token: 'synthetic-token' })
     const pdf = snapshot(), notice = '当前 OCR 未提供有效位置，已回退传统文字提取。'
@@ -92,6 +133,11 @@ describe("independent paper analysis", () => {
       expect(request.messages).toHaveLength(1)
       expect(request.sources).toEqual([])
       expect(request.requireComplete).toBe(true)
+      expect(request.responseFormat).toMatchObject({
+        type: 'json_schema',
+        schema: { required: ['summary', 'sections', 'annotations'], properties: { annotations: { maxItems: 32 } } },
+        fallback: 'text',
+      })
       expect(request.messages[0]?.text).toContain("summary 是必填的独立顶层字符串")
       expect(request.messages[0]?.text).toContain("A Useful Paper")
       return structured("结构化总结")

@@ -842,7 +842,7 @@ describe("native reader toolbars", () => {
     expect(key.preventDefault).toHaveBeenCalledOnce()
     expect(onAction).toHaveBeenLastCalledWith(
       { kind: "translate", itemID: 11, text: "Split source", pageIndex: 1, pageLabel: "2", languages: { sourceLanguage: "en", targetLanguage: "zh-CN" } },
-      { onTranslationText: expect.any(Function) },
+      expect.objectContaining({ onTranslationText: expect.any(Function), onTranslationProgress: expect.any(Function), signal: expect.any(AbortSignal) }),
     )
     const panel = doc.body.children.find((node) => node.attributes.has("data-jadense-translation-panel"))!
     await vi.waitFor(() => expect(panel.children[1].children[1].textContent).toBe("快捷键译文"))
@@ -1102,7 +1102,7 @@ describe("native reader toolbars", () => {
     await vi.waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
     expect(onAction).toHaveBeenLastCalledWith(
       { kind: "translate", itemID: 11, text: "Popup source text", pageIndex: 1, pageLabel: "2", languages: { sourceLanguage: "en", targetLanguage: "zh-CN" } },
-      { onTranslationText: expect.any(Function) },
+      expect.objectContaining({ onTranslationText: expect.any(Function), onTranslationProgress: expect.any(Function), signal: expect.any(AbortSignal) }),
     )
     cleanup()
     expect(unregisterEventListener).toHaveBeenCalledTimes(2)

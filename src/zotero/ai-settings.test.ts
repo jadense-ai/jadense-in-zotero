@@ -117,7 +117,7 @@ describe("paper analysis model settings", () => {
     })
     expect(readAiRoute(zotero)).toBe("jadense")
     expect(readByokSettings(zotero)).toEqual(globalSettings)
-    expect(zotero.values.get(PAPER_ANALYSIS_MODEL_PREF_KEY)).toBe('{"route":"byok","modelId":"one-model"}')
+    expect(JSON.parse(String(zotero.values.get('extensions.jadenseInZotero.aiModelSettings'))).models.analysis).toEqual({ route: 'byok', modelId: 'one-model' })
   })
 
   it("keeps an explicitly selected stale model detectable without falling back or mutating global state", () => {

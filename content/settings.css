@@ -43,7 +43,7 @@
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-actions, .jdx-pref-actions, .jdx-actions) > :is(.jdx-manager-primary, .jdx-pref-primary, .jdx-button-primary) {
   background: var(--settings-active); border-color: var(--settings-green); color: var(--settings-green);
 }
-:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not(.jdx-model-select *) {
   box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 34px; border-radius: 6px;
   border: 1px solid var(--settings-line); padding: 7px 10px; background: var(--settings-surface); color: var(--settings-text); font: inherit;
 }

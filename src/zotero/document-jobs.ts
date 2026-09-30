@@ -1,15 +1,15 @@
+import { requestStageLabel, type RequestProgress } from '@/chat/request-feedback'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { diagnostics, markDiagnosticAbort, type RequestDiagnostic } from "./diagnostics"
 /** 插件生命周期文档任务：Reader/Manager 共享实例，界面关闭不取消；持久结果独立于普通聊天。 */
 import { ReliableByokChatClient as ByokChatClient } from "@/chat/reliable-byok-chat"
-import { ByokChatClient as DirectByokChatClient, ByokResponseError } from '@/chat/byok-chat'
+import { ByokResponseError } from '@/chat/byok-chat'
 import { recordStarInvitationUse } from './star-invitation'
-import { TemporaryChatClient } from "@/chat/temporary-chat"
 import { ReliableTemporaryChatClient } from "@/chat/reliable-temporary-chat"
 import { extractReferences, parseReferenceFields, stripReferenceLabel } from "@/chat/reference-list"
 import { applyReferenceBatch, referenceBatches, referencePrompt } from "@/chat/reference-batches"
 import { JadenseApiError } from '@/jadense/api'
-import { requestHash } from '@/chat/temporary-request-store'
+import { requestHash, TemporaryRequestStore } from '@/chat/temporary-request-store'
 import { REFERENCE_AI_PREF, referenceAIEnabled } from './reference-ai-settings'
 import { translationLanguageLabel, normalizeTranslationLanguages, type TranslationLanguages } from "@/chat/translation-languages"
 import { featureModelState, readByokSettings, FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from "./ai-settings"
@@ -89,12 +89,14 @@ export class DocumentJobs {
   private starts = new Map<string, Promise<DocumentTask>>()
   private observers: unknown[] = []
   private configurations = new Map<string, string>()
+  private translationModels = new Map<string, { model: ReturnType<typeof featureModelState>; capacity: ReturnType<typeof translationCapacity> }>()
+  private requestProgress = new Map<string, RequestProgress & { startedAt: number }>()
   private storageNotified = new Set<string>()
   private verifier: ReferenceVerifier
   private stopped = false
   readonly ready: Promise<void>
   activity = ""
-  constructor(readonly host: ZoteroLike, readonly fetchImpl: typeof fetch, store = new DocumentStore()) {
+  constructor(readonly host: ZoteroLike, readonly fetchImpl: typeof fetch, store = new DocumentStore(), private requests = new TemporaryRequestStore()) {
     this.store = store
     this.verifier = new ReferenceVerifier(host as unknown as ReferenceHost, fetchImpl)
     this.ready = store.list().then(rows => { for (const task of rows) { if (task.status === "running") task.status = "paused"; this.tasks.set(task.id, task) } this.emit() })
@@ -118,9 +120,9 @@ export class DocumentJobs {
   private configuration(task: DocumentTask) {
     const config = task.kind === 'translation' ? readTranslationInterface(this.host, 'document') : { kind: 'ai' }
     if (config.kind === 'machine') return JSON.stringify(config)
-    const model = featureModelState(this.host, task.kind === 'translation' ? 'fullTranslation' : 'analysis')
+    const model = task.kind === 'translation' ? this.translationModels.get(task.id)?.model ?? featureModelState(this.host, 'translation') : featureModelState(this.host, 'analysis')
     const connection = readConnection(this.host)
-    return JSON.stringify({ config, ...(task.kind === 'translation' ? { capacity: translationCapacity(this.host) } : {}), selection: model.selection, connection: model.route === 'byok' ? model.config : { baseUrl: connection.baseUrl, token: connection.token } })
+    return JSON.stringify({ config, ...(task.kind === 'translation' ? { capacity: this.translationModels.get(task.id)?.capacity ?? translationCapacity(this.host) } : {}), selection: model.selection, connection: model.route === 'byok' ? model.config : { baseUrl: connection.baseUrl, token: connection.token } })
   }
   private fail(error: unknown, stage: string, task?: DocumentTask) {
     const issue = documentIssue(error, stage, task?.kind)
@@ -134,7 +136,7 @@ export class DocumentJobs {
   private emit() { for (const fn of this.listeners) { try { fn() } catch { /* UI 故障不改变任务。 */ } } }
   list(kind?: DocumentTask["kind"]) { return [...this.tasks.values()].reverse().filter(task => !kind || task.kind === kind).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }
   get(id: string) { return this.tasks.get(id) }
-  translationPhase(id: string) { return this.phases.get(id) }
+  translationPhase(id: string) { const progress = this.requestProgress.get(id); return progress ? `${requestStageLabel(progress.stage)} · ${Math.floor((Date.now() - progress.startedAt) / 1000)}s · ${uiText('已接收正文', 'Text received')} ${progress.receivedCharacters ?? 0} · ${this.tasks.get(id)?.completed ?? 0}/${this.tasks.get(id)?.total ?? 0}` : this.phases.get(id) }
   translationSpeed(id: string) {
     const task = this.get(id)
     if (task?.kind !== 'translation') return undefined
@@ -161,22 +163,17 @@ export class DocumentJobs {
   private async send(feature: "translation" | "analysis", task: DocumentTask, prompt: string, signal: AbortSignal, identity?: { id: string; requestId: string; previousRequestId?: string }, outputTokens?: number, onText?: (text: string) => void, diagnostic?: RequestDiagnostic, chunkIndex?: number) {
     checkCancelled(signal)
     await this.validateSource(task)
-    const model = featureModelState(this.host, feature === "translation" ? "fullTranslation" : feature)
+    const model = (feature === "translation" ? this.translationModels.get(task.id)?.model : undefined) ?? featureModelState(this.host, feature)
     if (!model.ready) throw Object.assign(new Error(model.issue), { code: 'AI_NOT_CONFIGURED' })
-    const snapshot = JSON.stringify(model.selection)
     const connection = readConnection(this.host)
-    const ByokClient = feature === 'translation' && task.chunkVersion === 1 ? DirectByokChatClient : ByokChatClient
-    const createClient = (network: typeof fetch) => model.route === "byok" ? new ByokClient({ config: feature === 'translation' ? model.config! : { ...model.config!, maxOutputTokens: Math.min(model.config!.maxOutputTokens, outputTokens ?? Math.max(512, estimateTokens(prompt) * 3 + 512)) }, fetchImpl: network })
-      : feature === "translation"
-        ? new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network })
-        : new ReliableTemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network })
+    const createClient = (network: typeof fetch) => model.route === "byok" ? new ByokChatClient({ config: feature === 'translation' ? model.config! : { ...model.config!, maxOutputTokens: Math.min(model.config!.maxOutputTokens, outputTokens ?? Math.max(512, estimateTokens(prompt) * 3 + 512)) }, fetchImpl: network }, this.requests)
+      : new ReliableTemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network }, this.requests)
     if (!task.models.includes(model.label)) task.models.push(model.label)
     const requestID = identity?.requestId ?? crypto.randomUUID()
     diagnostic?.identify({ clientRequestId: requestID, taskId: task.id, operationId: identity?.id, operation: feature === "translation" ? "full_translation" : "reference_identification" })
     let received = ""
     try {
-      if (snapshot !== JSON.stringify(featureModelState(this.host, feature === "translation" ? "fullTranslation" : feature).selection)) throw new DOMException("Model changed", "AbortError")
-      const send = async (network: typeof fetch, requestSignal: AbortSignal) => createClient(network).send({ diagnostic, clientOperation: feature === 'translation' ? 'full_translation' : 'reference_identification', chunkIndex, chunkTotal: feature === 'translation' ? task.total : undefined, clientFeature: feature, clientRequestId: requestID, conversationId: task.id,
+      const send = async (network: typeof fetch, requestSignal: AbortSignal) => createClient(network).send({ reuseCompletedOperation: feature === 'translation', diagnostic, onProgress: progress => { const previous = this.requestProgress.get(task.id); this.requestProgress.set(task.id, { ...previous, ...progress, startedAt: previous?.stage === progress.stage ? previous.startedAt : Date.now() }); if (Date.now() - this.lastStreamEmit > 200 || previous?.stage !== progress.stage) { this.lastStreamEmit = Date.now(); this.emit() } }, clientOperation: feature === 'translation' ? 'full_translation' : 'reference_identification', chunkIndex, chunkTotal: feature === 'translation' ? task.total : undefined, clientFeature: feature, clientRequestId: requestID, conversationId: task.id,
         taskId: task.id, operationId: identity?.id ?? await requestHash(prompt), previousRequestId: identity?.previousRequestId,
         messages: [{ id: crypto.randomUUID(), role: "user", text: prompt }], signal: requestSignal, requireComplete: true, onTextDelta: (_delta, all) => { if (!signal.aborted) { received = all; onText?.(all) } } })
       return await (feature === 'translation' ? translationScheduler(this.host).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: task.id, operation: identity?.id ?? requestID, signal, fetchImpl: this.fetchImpl }, send) : send(this.fetchImpl, signal))
@@ -290,6 +287,7 @@ export class DocumentJobs {
       task.error = uiText('旧版历史仅供阅读，请使用「重新翻译」建立 OCR 任务。', 'This legacy history is read-only. Use Translate again to create an OCR task.'); this.emit(); return
     }
     const controller = new AbortController(); this.controllers.set(id, controller); task.status = "running"; delete task.error; delete task.issue
+    if (task.kind === 'translation') this.translationModels.set(id, { model: featureModelState(this.host, 'translation'), capacity: translationCapacity(this.host) })
     this.configurations.set(id, this.configuration(task))
     if (task.kind === "references") this.referencePhases.set(id, "queued")
     this.emit()
@@ -303,7 +301,7 @@ export class DocumentJobs {
         else await this.references(task, controller.signal, identifyReferences)
         if (task.status === 'complete' && !controller.signal.aborted) recordStarInvitationUse(this.host)
       } catch (error) { diagnostics()?.record("document-jobs", "operation_error", error); task.status = controller.signal.aborted || error instanceof TranslationRateLimitError ? "paused" : "error"; if (!controller.signal.aborted) this.fail(error, this.phases.get(id) ? 'generation' : 'preflight', task) }
-      finally { this.configurations.delete(id); this.controllers.delete(id); this.referencePhases.delete(id); this.phases.delete(id); await this.save(task) }
+      finally { this.translationModels.delete(id); this.requestProgress.delete(id); this.configurations.delete(id); this.controllers.delete(id); this.referencePhases.delete(id); this.phases.delete(id); await this.save(task) }
     })
     this.executions.set(id, this.tail)
   }
@@ -436,14 +434,12 @@ export class DocumentJobs {
     const pages = this.readingCache.get(task.id) ?? (await Promise.all(Array.from({ length: task.totalPages }, (_, index) => this.store.page(task.id, index)))).filter((page): page is TranslationPage => Boolean(page))
     this.readingCache.set(task.id, pages)
     const config = readTranslationInterface(this.host, 'document'), snapshot = JSON.stringify(config)
-    const modelSnapshot = JSON.stringify(featureModelState(this.host, 'fullTranslation').selection)
     const current = () => {
       checkCancelled(signal)
       if (this.configurations.get(task.id) !== this.configuration(task)) { this.pause(task.id, 'configuration_changed'); checkCancelled(signal) }
       if (snapshot !== JSON.stringify(readTranslationInterface(this.host, 'document'))) { this.pause(task.id); throw new DOMException('Translation configuration changed', 'AbortError') }
-      if (config.kind === 'ai' && modelSnapshot !== JSON.stringify(featureModelState(this.host, 'fullTranslation').selection)) { this.pause(task.id); throw new DOMException('Translation model changed', 'AbortError') }
     }
-    const capacity = translationCapacity(this.host)
+    const capacity = this.translationModels.get(task.id)?.capacity ?? translationCapacity(this.host)
     const limit = config.kind === 'machine' ? TRANSLATION_LIMITS[config.service] : capacity.sourceTokens
     // 更小模型/服务继续时，仅拆未完成片，不动已完成内容及其来源坐标。
     for (const page of pages) {
@@ -490,9 +486,10 @@ export class DocumentJobs {
           catch (error) { diagnostics()?.record("document-jobs", "operation_error", error); if ((error instanceof JadenseApiError || error instanceof ByokResponseError) && error.status === 429) throw new TranslationRateLimitError(retryAt(error.retryAfter)); throw error }
       }
       trace?.event('response_complete')
-      current(); trace?.event('validate')
+      current(); trace?.event('validate'); this.requestProgress.set(task.id, { stage: 'validating', startedAt: Date.now(), receivedCharacters: result.length }); this.emit()
       if (!result.trim()) throw Object.assign(new Error('Empty translation'), { code: 'OUTPUT_EMPTY' })
       if (!formulasPreserved(piece.text, result)) throw Object.assign(new Error('Translation resources changed'), { code: 'OUTPUT_RESOURCES_CHANGED' })
+      this.requestProgress.set(task.id, { stage: 'saving', startedAt: Date.now(), receivedCharacters: result.length }); this.emit()
       piece.page.translations[piece.id] = result
       this.drafts.delete(task.id)
       task.storageWarning = !(await this.store.savePage(task.id, piece.page)) || task.storageWarning

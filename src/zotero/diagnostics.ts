@@ -4,12 +4,12 @@ export type DiagnosticEvent = { at: string; stage: string; code?: string; name?:
 export type DiagnosticRecord = {
   id: string; session: string; startedAt: string; endedAt?: string; category: DiagnosticCategory
   environment?: Record<string,string>; context: Record<string, string>; events: DiagnosticEvent[]; firstError?: DiagnosticEvent
-  bytes: number; characters: number; firstDataAt?: string; firstTextAt?: string; lastDataAt?: string
+  bytes: number; characters: number; firstDataAt?: string; firstTextAt?: string; firstReasoningAt?: string; lastDataAt?: string
 }
 type IO = { makeDirectory(path: string, options: { ignoreExisting: boolean }): Promise<unknown>; readUTF8(path: string): Promise<string>; writeUTF8(path: string, text: string, options: { tmpPath: string }): Promise<unknown> }
 type Platform = { IOUtils?: IO; PathUtils?: { profileDir: string; join(...parts: string[]): string } }
 type Host = object & { __jadenseDiagnostics?: Diagnostics; version?: string; platform?: string }
-const CONTEXT = ['feature', 'provider', 'protocol', 'model', 'clientRequestId', 'conversationId', 'taskId', 'operationId', 'transportAttemptId', 'executionId', 'diagnosticId', 'window', 'operation', 'chunkIndex', 'chunkTotal']
+const CONTEXT = ['feature', 'provider', 'protocol', 'model', 'clientRequestId', 'conversationId', 'taskId', 'operationId', 'transportAttemptId', 'executionId', 'diagnosticId', 'window', 'operation', 'chunkIndex', 'chunkTotal', 'requestId', 'requestedThinkingEffort', 'preparedThinkingEffort', 'effectiveThinkingEffort', 'thinkingSource', 'adjustmentReason', 'configSource', 'requestContractHash', 'causeCode', 'requestedOutputMode', 'effectiveOutputMode', 'outputFallbackReason', 'outputSchemaHash', 'effectiveThinkingMode']
 const LIMIT = 2 * 1024 * 1024, MAX_AGE = 7 * 86400000
 const safe = (v: unknown) => typeof v === 'string' && /^[a-zA-Z0-9_.:@/-]{1,160}$/.test(v) && !/^(?:https?:|file:|data:|Bearer|sk-|eyJ)/i.test(v) && !v.includes('\\') && !v.startsWith('/') ? v : undefined
 const time = () => new Date().toISOString()
@@ -23,7 +23,7 @@ function metrics(value: Partial<DiagnosticEvent>) {
   if (typeof value.visible === 'boolean') result.visible = value.visible
   if (['chat', 'source', 'translation', 'selection', 'summary', 'notes', 'references'].includes(value.page ?? '')) result.page = value.page
   if (value.translation && typeof value.translation === 'object') {
-    const entries = ['missing', 'translated', 'failed', 'preserved', 'rawBlocks', 'organized', 'fragments', 'deduplicated', 'total', 'completed', 'batches', 'repairs', 'cacheHits', 'batchMin', 'batchMax', 'batchMean', 'batchRowsMean', 'batchFillMean', 'endSource', 'endOutput', 'endContext', 'endDocument', 'httpRequests', 'submissions', 'extraHttp', 'rateLimits', 'queueTimeMs', 'modelTimeMs', 'parseMs', 'layoutMs', 'translationMs']
+    const entries = ['firstReasoningMs', 'streamEvents', 'doneEvents', 'emptyEvents', 'invalidEvents', 'reasoningEvents', 'reasoningChars', 'textEvents', 'textChars', 'invalidDeltaEvents', 'controlEvents', 'openaiEvents', 'unknownEvents', 'pendingChars', 'missing', 'translated', 'failed', 'preserved', 'rawBlocks', 'organized', 'fragments', 'deduplicated', 'total', 'completed', 'batches', 'repairs', 'cacheHits', 'batchMin', 'batchMax', 'batchMean', 'batchRowsMean', 'batchFillMean', 'endSource', 'endOutput', 'endContext', 'endDocument', 'httpRequests', 'submissions', 'extraHttp', 'rateLimits', 'queueTimeMs', 'modelTimeMs', 'parseMs', 'layoutMs', 'translationMs']
       .filter(key => typeof value.translation![key] === 'number' && Number.isFinite(value.translation![key]) && value.translation![key] >= 0)
       .map(key => [key, value.translation![key]])
     result.translation = Object.fromEntries(entries)
@@ -50,7 +50,7 @@ function project(value: unknown): DiagnosticRecord | undefined {
     category: ['running','success','error','cancelled','business'].includes(r.category) ? r.category : 'error', context: context(r.context ?? {}),
     events: Array.isArray(r.events) ? r.events.slice(0,32).map(event) : [], firstError: r.firstError ? event(r.firstError) : undefined,
     bytes: Number.isFinite(r.bytes) ? Math.max(0,r.bytes) : 0, characters: Number.isFinite(r.characters) ? Math.max(0,r.characters) : 0,
-    ...Object.fromEntries(['firstDataAt','firstTextAt','lastDataAt'].filter(k => Number.isFinite(Date.parse((r as unknown as Record<string,string>)[k]))).map(k => [k,(r as unknown as Record<string,string>)[k]])) }
+    ...Object.fromEntries(['firstDataAt','firstTextAt','firstReasoningAt','lastDataAt'].filter(k => Number.isFinite(Date.parse((r as unknown as Record<string,string>)[k]))).map(k => [k,(r as unknown as Record<string,string>)[k]])) }
 }
 
 export class Diagnostics {
@@ -133,8 +133,10 @@ export class RequestDiagnostic {
   }
   data(bytes: number) { if (!bytes) return; const at = time(); this.row.bytes += bytes; this.row.lastDataAt = at; if (!this.row.firstDataAt) { this.row.firstDataAt = at; this.event('first_data') } }
   text(characters: number) { this.row.characters += characters; if (characters && !this.row.firstTextAt) { this.row.firstTextAt = time(); this.event('first_text') } }
+  reasoning() { if (!this.row.firstReasoningAt) { this.row.firstReasoningAt = time(); this.event('first_reasoning') } }
   identify(input: Record<string,unknown>) { Object.assign(this.row.context,context(input)) }
   fail(error: unknown, stage = 'error') {
+    if (error && typeof error === 'object') this.identify(error as Record<string, unknown>)
     const fields = errorFields(error); this.event(stage,fields)
     if (this.row.firstError) return
     this.row.firstError = { at: time(), stage, ...fields }
@@ -157,13 +159,22 @@ export function diagnostics(host?: Host) {
 export function stopDiagnostics(host: Host) { host.__jadenseDiagnostics?.dispose(); delete host.__jadenseDiagnostics; current = undefined }
 export type DiagnosticInput = { diagnostic?: RequestDiagnostic; signal?: AbortSignal; clientFeature?: string; clientOperation?: string; chunkIndex?: number; chunkTotal?: number; clientRequestId?: string; conversationId?: string; taskId?: string; operationId?: string }
 /** 同一次调用跨 reliable/base 客户端复用记录，不额外派发，不改变原返回值和异常。 */
-export async function traceRequest<T extends DiagnosticInput,R>(input: T, detail: Record<string,unknown>, run: (input: T) => Promise<R>): Promise<R> {
-  if (input.diagnostic || !current) return run(input)
+export async function traceRequest<T extends DiagnosticInput,R>(input: T, detail: Record<string,unknown>, run: (input: T & { diagnostic?: RequestDiagnostic }) => Promise<R>): Promise<R> {
+  if (input.diagnostic) { input.diagnostic.identify(detail); return run(input) }
+  if (!current) return run(input)
   const trace = current.start({ window: realmId, ...detail, operation: input.clientOperation, chunkIndex: input.chunkIndex?.toString(), chunkTotal: input.chunkTotal?.toString(), feature: input.clientFeature ?? detail.feature ?? 'chat', clientRequestId: input.clientRequestId, conversationId: input.conversationId, taskId: input.taskId, operationId: input.operationId },input.signal)
-  try { return await run({ ...input, diagnostic: trace }) } catch (error) { trace.fail(error); throw error } finally { trace.end() }
+  try { return await run({ ...input, diagnostic: trace }) } catch (error) { trace.fail(error); try { if (error && typeof error === 'object') Object.assign(error, { localDiagnosticId: trace.row.id }) } catch { /* Frozen error. */ } throw error } finally { trace.end() }
 }
 export async function diagnosticFetch(trace: RequestDiagnostic | undefined, request: typeof fetch, input: RequestInfo | URL, init?: RequestInit) {
   trace?.event('dispatch', { source: init?.method ?? 'GET' })
-  try { const response = await request(input, init); trace?.event('headers', { status: response.status }); trace?.identify({ diagnosticId: response.headers.get('x-diagnostic-id'), executionId: response.headers.get('x-execution-id') }); return response }
-  catch (error) { trace?.fail(error,'fetch_error'); throw error }
+  try { const response = await request(input, init); trace?.event('headers', { status: response.status }); trace?.identify({ requestId: response.headers.get('x-request-id'), diagnosticId: response.headers.get('x-diagnostic-id'), executionId: response.headers.get('x-execution-id') }); return response }
+  catch (error) {
+    // 网络异常经同一投影保留底层错误码；主动取消不能误记为网络故障。
+    if (error && typeof error === 'object') try {
+      const row = error as { code?: string; stage?: string; name?: string; cause?: { code?: unknown }; causeCode?: string }
+      row.code ??= row.name === 'AbortError' || init?.signal?.aborted ? 'OUTPUT_CANCELLED' : 'NETWORK_ERROR'
+      row.stage ??= 'dispatch'; row.causeCode ??= safe(row.cause?.code)
+    } catch { /* 不可写的外部错误保持原值。 */ }
+    trace?.fail(error,'fetch_error'); throw error
+  }
 }

@@ -1,5 +1,16 @@
 # 更新说明 / Changelog
 
+## 0.6.9 — 待发布 / Unreleased
+
+- PDF 阅读器新增「简阅模式」：左侧保留原生 PDF，右侧显示 Zotero 提取的结构化 HTML；只有主动点击翻译才替换右侧文字，可查看部分成果、补译和历史版本。缺少所需阅读器能力时会提示不可用。
+- 模型选择新增思考档位与可搜索列表；选文、简阅及 PDF 对照翻译的进度、停止和失败反馈更清楚。简阅与 PDF 对照的翻译上下文预算分别可调，默认各为 128K。
+- PDF 对照翻译改进单行控制栏、视图切换及侧栏宽度变化后的适宽；工具栏入口使用 Languages 图标。文献解析与 AI 请求中断后的恢复反馈也更明确。
+- 现有设置和历史保留；官方完整 XPI 继续包含前沿雷达，公开源码基础构建不包含该模块。正式包的环境与升级验收将在发布前补齐。
+- PDF Reading mode keeps the native PDF on the left and Zotero's extracted HTML on the right. Translation starts only on request and replaces right-hand text; partial results, remaining passages and local history remain available. Unsupported reader capabilities produce a clear message.
+- Model selection adds thinking controls and searchable choices. Selection, Reading mode and bilingual PDF translation show clearer progress, stop and failure feedback. Reading mode and bilingual PDF each have an editable 128K default context budget.
+- Bilingual PDF improves its compact toolbar, view switching and fit-to-width after sidebar resizing, and uses the Languages icon. Analysis and interrupted AI requests provide clearer recovery feedback.
+- Existing settings and history are retained. Official full packages continue to include Frontier Radar; public-source base builds omit it. Native and upgrade acceptance details will be added before publication.
+
 ## 0.6.8 — 2026-09-29
 
 - 前沿雷达开放双模式：通用模式追踪 arXiv，攻玉模式可选择 13 个公开文献来源；两种模式均可手动或每日追踪、查看历史和收藏。

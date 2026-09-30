@@ -8,11 +8,12 @@ import type { ZoteroLike } from './runtime'
 import { requestHash } from '@/chat/temporary-request-store'
 import { validateDocument, type DocumentHost } from './pdf-document'
 import { readChatDocumentMode } from './chat-document-policy'
+import { featureModelMetadata } from './model-catalog'
 
 export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature) {
   const ai = featureModelState(host, feature)
   const selection = ai.selection
-  const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : undefined
+  const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : featureModelMetadata(host, feature)
   const context = model?.contextWindow ?? 16384
   const output = Math.max(1, Math.min(model?.maxOutputTokens ?? 4096, Math.floor(context / 4)))
   return { context, output, input: Math.floor(context * .85) - output - 512 }

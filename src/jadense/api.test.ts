@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from "vitest"
 import { JadenseApiClient, JadenseApiError, jadenseModelSubscriptionErrorMessage, parseJadenseChatModelCatalog, readJadenseApiError } from "./api"
 
 describe("JadenseApiClient", () => {
+  it('keeps optional model capacities and contains malformed metadata', () => {
+    const catalog = parseJadenseChatModelCatalog({ options: [
+      { kind: 'model', modelId: 'large', displayName: 'Large', contextWindow: 262144, maxOutputTokens: 96000, future: true },
+      { kind: 'model', modelId: 'unknown', displayName: 'Unknown', contextWindow: 'unknown', maxOutputTokens: -1 },
+    ] })
+    expect(catalog.options[0]).toMatchObject({ contextWindow: 262144, maxOutputTokens: 96000 })
+    expect(catalog.options[1]).not.toHaveProperty('contextWindow')
+    expect(catalog.options[1]).not.toHaveProperty('maxOutputTokens')
+  })
   it("queries the original operation after uncertain dispatch without replaying POST", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ code: 'SPECIALIZED_OPERATION_ALREADY_SUBMITTED', message: 'duplicate' }, { status: 409 }))
       .mockResolvedValueOnce(Response.json({ status: 'reconciliation_required', billingStatus: 'reconciliation_required' }))

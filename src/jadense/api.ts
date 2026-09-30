@@ -1,3 +1,4 @@
+import { requestIssue, type RequestIssue } from '@/chat/request-feedback'
 import { traceRequest, diagnosticFetch } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 import type { JadenseZoteroImportItem } from "@/sync/metadata"
@@ -46,9 +47,13 @@ export type JadensePointsCheckInResult = {
 export type JadenseChatSelection =
   | { kind: "default" }
   | { kind: "route"; routeTier: string }
-  | { kind: "model"; modelId: string }
+  | { kind: "model"; modelId: string; thinkingEffort?: string }
 
 type JadenseChatModelOptionBase = {
+  defaultThinkingEffort?: string
+  reasoningConfig?: { reasoningEfforts: string[]; reasoningRequired?: boolean }
+  contextWindow?: number
+  maxOutputTokens?: number
   displayName: string
   description: string
   locked: boolean
@@ -67,19 +72,26 @@ export type JadenseChatModelOption =
     })
 
 export type JadenseChatModelCatalog = {
+  thinkingContractVersion?: number
   options: JadenseChatModelOption[]
   defaultSelection: Exclude<JadenseChatSelection, { kind: "default" }> | null
 }
 
 /** 保留服务端状态、稳定错误码与原始响应，供各 UI 区域独立决定恢复方式。 */
 export class JadenseApiError extends Error {
+  readonly requestId?: string
+  readonly executionId?: string
+  readonly diagnosticId?: string
+  readonly stage?: string
+  readonly causeCode?: string
   readonly status: number
   readonly code: string | null
   readonly body: string
   readonly retryAfter: string | null
 
-  constructor(input: { status: number; code?: string | null; body: string; message: string; retryAfter?: string | null }) {
+  constructor(input: Omit<RequestIssue, "code"> & { status: number; code?: string | null; body: string; message: string; retryAfter?: string | null }) {
     super(input.message)
+    Object.assign(this, requestIssue(input))
     this.name = "JadenseApiError"
     this.status = input.status
     this.code = input.code ?? null
@@ -190,6 +202,13 @@ function parseChatModelOption(value: unknown): JadenseChatModelOption | null {
   const displayName = nonEmptyText(row?.displayName)
   if (!row || !displayName) return null
   const base = {
+    ...(nonEmptyText(row.defaultThinkingEffort) ? { defaultThinkingEffort: nonEmptyText(row.defaultThinkingEffort)! } : {}),
+    ...(objectValue(row.reasoningConfig) ? { reasoningConfig: {
+      reasoningEfforts: [...new Set(stringList(objectValue(row.reasoningConfig)?.reasoningEfforts))],
+      reasoningRequired: objectValue(row.reasoningConfig)?.reasoningRequired === true,
+    } } : {}),
+    ...(typeof row.contextWindow === 'number' && Number.isFinite(row.contextWindow) && row.contextWindow > 0 ? { contextWindow: row.contextWindow } : {}),
+    ...(typeof row.maxOutputTokens === 'number' && Number.isFinite(row.maxOutputTokens) && row.maxOutputTokens > 0 ? { maxOutputTokens: row.maxOutputTokens } : {}),
     displayName,
     description: nonEmptyText(row.description) ?? "",
     locked: row.locked === true,
@@ -218,16 +237,19 @@ export function parseJadenseChatModelCatalog(value: unknown): JadenseChatModelCa
   return {
     options: root.options.flatMap(option => parseChatModelOption(option) ?? []),
     defaultSelection: parseChatSelection(root.defaultSelection),
+    ...(root.thinkingContractVersion === 1 ? { thinkingContractVersion: 1 } : {}),
   }
 }
 
 export async function readJadenseApiError(response: Response, fallback = uiText("攻玉请求失败", "The Jadense request failed"), showPlainText = false) {
   let readFailed = false
   const body = await response.text().catch(() => { readFailed = true; return "" })
+  let issue: RequestIssue = requestIssue({ requestId: response.headers?.get?.("x-request-id"), executionId: response.headers?.get?.("x-execution-id"), diagnosticId: response.headers?.get?.("x-diagnostic-id") }, { stage: "http" })
   let code: string | null = null
   let message: string | null = null
   try {
     const parsed = JSON.parse(body) as { code?: unknown; error?: unknown; message?: unknown }
+    issue = requestIssue(parsed, issue)
     code = nonEmptyText(parsed.code)
     message = nonEmptyText(parsed.error) ?? nonEmptyText(parsed.message)
   } catch {
@@ -251,6 +273,7 @@ export async function readJadenseApiError(response: Response, fallback = uiText(
     if (requestID && /^[a-z\d_.:-]{1,128}$/iu.test(requestID)) message += uiText(` 请求 ID：${requestID}`, ` Request ID: ${requestID}`)
   }
   return new JadenseApiError({
+    ...issue,
     status: response.status,
     retryAfter: response.headers?.get?.('Retry-After') ?? null,
     code,

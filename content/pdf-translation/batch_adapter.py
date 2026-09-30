@@ -297,19 +297,30 @@ def repair_json_syntax(raw):
     return text
 
 
-def output_values(raw, expected, issues):
+def output_values(raw, expected, issues, order=None):
     """宽容读取容器；截断时只回收已经闭合的对象，不补造字符串尾部或段落 ID。"""
     def unpack(value, depth=0):
         if depth > 4: return []
         if isinstance(value, str):
             try: return unpack(json.loads(value, strict=False, object_pairs_hook=json_object), depth + 1)
             except (ValueError, TypeError): return []
-        if isinstance(value, list): return [row for item in value for row in unpack(item, depth + 1)]
+        if isinstance(value, list):
+            if order and len(value) == len(order) and all(isinstance(item, str) or
+                    isinstance(item, dict) and 'id' not in item and
+                    any(key in item for key in ('output', 'translation', 'translated_text')) for item in value):
+                return [dict(id=identity, output=item if isinstance(item, str) else
+                             item.get('output', item.get('translation', item.get('translated_text'))))
+                        for identity, item in zip(order, value)]
+            return [row for item in value for row in unpack(item, depth + 1)]
         if not isinstance(value, dict): return []
         conflicts = value.get(JSON_CONFLICTS, set())
         if 'id' in value:
             output_key = next((key for key in ['output', 'translation', 'translated_text'] if key in value), 'output')
             return [] if conflicts.intersection({'id', output_key}) else [value]
+        if order and len(order) == 1:
+            output_key = next((key for key in ['output', 'translation', 'translated_text'] if key in value), None)
+            if output_key and output_key not in conflicts and isinstance(value[output_key], str):
+                return [dict(id=order[0], output=value[output_key])]
         mapped = [dict(id=key, output=item) if isinstance(item, str) else dict(item, id=key)
                   for key, item in value.items() if key in expected and key not in conflicts and isinstance(item, (str, dict))]
         if mapped: return [row for item in mapped for row in unpack(item, depth + 1)]
@@ -357,6 +368,12 @@ def output_values(raw, expected, issues):
                 index += 1
         index += 1
     if values: issues['salvaged_objects'] += len(values)
+    if not values and order and not text.lstrip().startswith(('[', '{')):
+        passages = [part.strip() for part in re.split(r'\n\s*\n', raw.strip()) if part.strip()]
+        if len(passages) != len(order): passages = [part.strip() for part in raw.splitlines() if part.strip()]
+        if len(passages) == len(order):
+            issues['ordered_prose'] += len(passages)
+            return [dict(id=identity, output=passage) for identity, passage in zip(order, passages)]
     return values
 
 
@@ -371,12 +388,35 @@ def repair_markers(source, output):
     return output
 
 
+def restore_missing_markers(source, output):
+    """保留模型译文，按原文相对位置补回原生公式和格式；不猜造跨文段内容。"""
+    markers = list(MARKERS.finditer(source))
+    if not markers or not output.strip(): return output
+    prose = MARKERS.sub('', output)
+    if not prose.strip(): return output
+    def boundary(approximate, minimum):
+        candidates = (index for index in range(max(minimum, approximate - 6), min(len(prose), approximate + 6) + 1)
+                      if index in (0, len(prose)) or prose[index - 1].isspace() or prose[index].isspace()
+                      or prose[index - 1] in '.,;:!?，。；：！？、')
+        return min(candidates, key=lambda index: (abs(index - approximate), index), default=max(minimum, approximate))
+    source_length = len(MARKERS.sub('', source))
+    result, previous, source_offset, output_offset = [], 0, 0, 0
+    for marker in markers:
+        source_offset += len(source[previous:marker.start()])
+        approximate = round(source_offset / source_length * len(prose)) if source_length else 0
+        position = boundary(approximate, output_offset)
+        result.extend((prose[output_offset:position], marker.group()))
+        previous, output_offset = marker.end(), position
+    result.append(prose[output_offset:])
+    return ''.join(result)
+
+
 def parse_outputs(raw, rows, issues=None):
     """额外字段不影响映射；错误原因只含类别和计数，不包含原文/响应。"""
     issues = issues if issues is not None else Counter()
     expected = {row['id'] for row in rows}
     try:
-        values = output_values(raw, expected, issues)
+        values = output_values(raw, expected, issues, [row['id'] for row in rows])
     except (ValueError, TypeError, AttributeError, RecursionError):
         issues['invalid_json'] += 1
         return {}
@@ -398,6 +438,11 @@ def parse_outputs(raw, rows, issues=None):
                 issues['empty_output'] += 1
             else:
                 repaired = repair_markers(source, output)
+                if not valid_output(source, repaired):
+                    restored = restore_missing_markers(source, repaired)
+                    if valid_output(source, restored):
+                        repaired = restored
+                        issues['repositioned_markers'] += 1
                 if not valid_output(source, repaired): issues['placeholder_mismatch'] += 1
                 else:
                     if repaired != output: issues['repaired_markers'] += 1
@@ -406,11 +451,11 @@ def parse_outputs(raw, rows, issues=None):
 
 
 def capacity_limit(rows, measure, budget, language, legacy=False):
-    """只限制原文及上下文；历史输出预算仅用于还原旧分片和未确认请求。"""
+    """按原文、完整提示/回复和输出上限组批；旧任务保留原容量协议。"""
     source = sum(measure(row['text']) for row in rows)
     output = source * 3 + 512 + measure(json.dumps([{'id': row['id'], 'output': ''} for row in rows]))
     if source > budget['batchTokens']: return 'source'
-    if legacy and 'maxOutputTokens' in budget and output > budget['maxOutputTokens']: return 'output'
+    if (legacy or budget.get('policy') == 'context-v1') and 'maxOutputTokens' in budget and output > budget['maxOutputTokens']: return 'output'
     if measure(prompt(rows, language, cross_layout=not budget.get('machine', False))) + output > budget['contextWindow']: return 'context'
     return None
 
@@ -597,10 +642,15 @@ def install_adapter(high_level, config, emit):
                 # 固定每轮分组及游标；中断恢复必须使用原输入和身份，不能因缓存变化改写待恢复请求。
                 size = 1 if attempt == 2 else max(1, (len(missing) + 1) // 2) if attempt and state.get('shrink') else len(missing)
                 if 'groups' not in state:
-                    state['groups'] = [[row['id'] for row in missing[i:i+size]] for i in range(0, len(missing), size)]
+                    if getattr(self, 'budget', {}).get('policy') == 'context-v1':
+                        # 新预算按缺失正文的实际容量组批，末轮也不退化成每段一个请求。
+                        repair_budget = {**self.budget, 'batchTokens': max(32, self.budget['batchTokens'] // (2 ** attempt))}
+                        state['groups'] = [[row['id'] for row in group] for group in batches(missing, self.base.calc_token_count, repair_budget, self.language)]
+                    else:
+                        state['groups'] = [[row['id'] for row in missing[i:i+size]] for i in range(0, len(missing), size)]
                     state['cursor'] = 0
                     # 只为新请求选择修复协议；旧冻结请求仍按原提示和操作身份恢复。
-                    if attempt: state['repair_format'] = 'spans-v1' if attempt == 2 else 'markers-v1'
+                    if attempt: state['repair_format'] = 'spans-v2' if attempt == 2 else 'markers-v1'
                     self.save({}, batch_id, state)
                 for index in range(state['cursor'], len(state['groups'])):
                     if getattr(self, 'stop_dispatch', None) and self.stop_dispatch.is_set(): return
@@ -618,11 +668,21 @@ def install_adapter(high_level, config, emit):
                     if attempt and (state.get('shrink') or attempt == 2): identity.append(state['groups'][index])
                     compact = state.get('format') == 'jsonl-v1'
                     repair = state.get('repair_format')
-                    pieces = None
+                    plans = {}
                     targets = group
                     if repair == 'spans-v1' and len(group) == 1 and MARKERS.search(group[0]['text']):
                         targets, pieces = span_plan(group[0])
+                        plans[group[0]['id']] = pieces
                         targets = [row for row in targets if not valid_output(row['text'], self.cache.get(row['id']))]
+                    elif repair == 'spans-v2':
+                        targets = []
+                        for row in group:
+                            if MARKERS.search(row['text']):
+                                spans, pieces = span_plan(row)
+                                plans[row['id']] = pieces
+                                targets.extend(span for span in spans if not valid_output(span['text'], self.cache.get(span['id'])))
+                            else:
+                                targets.append(row)
                     request_rows = [{**row, 'id': f'p{i + 1}'} for i, row in enumerate(targets)] if compact else targets
                     if compact: identity.append('jsonl-v1')
                     if repair: identity.append(repair)
@@ -636,12 +696,14 @@ def install_adapter(high_level, config, emit):
                         emit(type='passage_failure', category=error.code, missing=len(group), operation=batch_id)
                         parsed = {}
                     outputs = {row['id']: parsed[wire['id']] for row, wire in zip(targets, request_rows) if wire['id'] in parsed}
-                    if pieces is not None:
+                    if plans:
                         available = {**self.cache, **outputs}
-                        if all(isinstance(piece, str) or valid_output(piece[1], available.get(piece[0])) for piece in pieces):
-                            outputs[group[0]['id']] = ''.join(piece if isinstance(piece, str) else available[piece[0]] for piece in pieces)
+                        for row in group:
+                            pieces = plans.get(row['id'])
+                            if pieces and all(isinstance(piece, str) or valid_output(piece[1], available.get(piece[0])) for piece in pieces):
+                                outputs[row['id']] = ''.join(piece if isinstance(piece, str) else available[piece[0]] for piece in pieces)
                     for reason, count in issues.items():
-                        emit(type='local_repair' if reason in {'repaired_json', 'salvaged_objects', 'repaired_markers'} else 'passage_failure', category=reason, missing=count, operation=batch_id)
+                        emit(type='local_repair' if reason in {'repaired_json', 'salvaged_objects', 'repaired_markers', 'repositioned_markers', 'ordered_prose'} else 'passage_failure', category=reason, missing=count, operation=batch_id)
                     state['cursor'] = index + 1
                     self.save(outputs, batch_id, state)
                     with self.lock:

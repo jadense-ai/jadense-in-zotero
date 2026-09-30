@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest"
 vi.mock('./local-ocr', async () => ({ ensureLocalOCR: async () => {}, readOCRDocument: async (host: unknown, id: number, signal: AbortSignal) => (await import('./pdf-document')).readTextDocument(host as never, id, signal), stopLocalOCR: () => {} }))
 vi.mock('./translation-chunks', async importOriginal => ({ ...await importOriginal<typeof import('./translation-chunks')>(), OCR_EXTRACTION_VERSION: 4 }))
 vi.mock('@/chat/translation-queue', async importOriginal => ({ ...await importOriginal<typeof import('@/chat/translation-queue')>(), queueTranslation: async (_host: unknown, _key: string, _signal: unknown, run: () => Promise<unknown>) => run() }))
-// 本文件验证文档调度；全文翻译经过普通 temporary chat 客户端，参考文献 AI 的可靠传输单独测试。
+// 本文件验证文档调度；全文翻译和参考文献 AI 共用可靠 temporary 传输，网络边界另有专项覆盖。
 vi.mock('@/chat/reliable-temporary-chat', async () => ({ ReliableTemporaryChatClient: (await import('@/chat/temporary-chat')).TemporaryChatClient }))
 vi.mock('@/chat/reliable-byok-chat', async () => ({ ReliableByokChatClient: (await import('@/chat/byok-chat')).ByokChatClient }))
 import { extractReferences, applyReferenceSuggestion, metadataMatches, parseReferenceFields, stripReferenceLabel } from "@/chat/reference-list"

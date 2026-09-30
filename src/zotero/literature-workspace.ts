@@ -5,6 +5,9 @@ import { literaturePapers, paperKey, type LiteraturePaper } from './analysis-wor
 import { mountDocumentResults, resultLabels, resultStatus, sameAttachment, type AnalysisOptions, type DocumentResultMode } from './document-results'
 import type { AnalysisDetailTab, AnalysisRunView } from './analysis-workspace'
 import { pdfTranslationJobs } from './pdf-translation-jobs'
+import { simpleReadingJobs } from './simple-reading-jobs'
+import { openSavedSimpleReading } from './simple-reading'
+import { mountSimpleReadingHistory } from './simple-reading-history'
 import { mountPDFTranslationFiles, pdfFileStatus } from './pdf-translation-files'
 import { documentJobs } from './document-jobs'
 import { actionIcon, element, action, badge, bindTabs } from './ui/controls'
@@ -12,10 +15,11 @@ import { createJdxSelect } from './ui/select'
 import { uiText } from './ui-preferences'
 import type { ZoteroLike } from './runtime'
 
-type LiteratureTab = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab | 'history' | 'files'
+type LiteratureTab = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab | 'history' | 'files' | 'simple'
 
 export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, options: AnalysisOptions) {
   const doc = root.ownerDocument, jobs = documentJobs(host), pdfs = pdfTranslationJobs(host), section = root.closest<HTMLElement>('.jdx-analysis-section') || root
+  const readings = simpleReadingJobs(host)
   root.classList.add('jdx-literature-workspace')
   const toolbar = element(doc, 'div', 'jdx-result-tools'), search = element(doc, 'input', 'jdx-search'), list = element(doc, 'div', 'jdx-analysis-list'), detail = element(doc, 'article', 'jdx-literature-detail')
   search.type = 'search'; search.placeholder = uiText('搜索文献与成果', 'Search papers and results'); search.setAttribute('aria-label', search.placeholder)
@@ -26,20 +30,21 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
   nav.append(backButton, attachmentHost, action(doc, uiText('打开原文', 'Open PDF'), () => { if (source) void options.openSource(source).catch(error => { metadata.textContent = String(error) }) }))
   actionIcon(backButton, 'back')
   actionIcon(nav.lastElementChild as HTMLButtonElement, 'open')
+  nav.append(action(doc, uiText('简阅模式', 'Reading mode'), () => { if (source) void openSavedSimpleReading(host, source).catch(error => { metadata.textContent = String(error) }) }))
   const tabsHost = element(doc, 'div', 'jdx-tabs'), panels = element(doc, 'div', 'jdx-literature-panels')
   tabsHost.setAttribute('role', 'tablist'); tabsHost.setAttribute('aria-label', uiText('文献成果', 'Paper results'))
-  const labels = { ...resultLabels(), files: uiText('对照翻译', 'Bilingual PDF'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = ['source', 'files', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
+  const labels = { ...resultLabels(), simple: uiText('简阅译文', 'Reading translations'), files: uiText('对照翻译', 'Bilingual PDF'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = ['source', 'files', 'simple', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
   const tabs = modes.map(mode => { const button = action(doc, labels[mode], () => {}); button.setAttribute('role', 'tab'); button.id = `jdx-literature-tab-${mode}`; button.setAttribute('aria-controls', `jdx-literature-panel-${mode}`); tabsHost.append(button); return button })
   const hero = element(doc, 'header', 'jdx-literature-hero'); hero.append(title, metadata)
   detail.append(nav, hero, tabsHost, panels)
-  const mounted = new Map<string, { root: HTMLElement; view?: ReturnType<typeof mountDocumentResults>; files?: ReturnType<typeof mountPDFTranslationFiles>; scroll: number }>()
+  const mounted = new Map<string, { root: HTMLElement; view?: ReturnType<typeof mountDocumentResults>; files?: ReturnType<typeof mountPDFTranslationFiles>; simple?: ReturnType<typeof mountSimpleReadingHistory>; scroll: number }>()
   const runs = new Map<string, AnalysisRunView>(), opened = new Map<string, PaperAnalysisSource>()
   let papers: LiteraturePaper[] = [], current: LiteraturePaper | undefined, source: PaperAnalysisSource | undefined, active: LiteratureTab = 'source', selectedKey = '', savedScroll = 0, disposed = false, sequence = 0
   const recordIDs = new Map<string, string>(), buttons = new Map<string, HTMLButtonElement>()
   const listRows = new Map<string, { root: HTMLElement; state: HTMLElement; date: HTMLElement; meta: HTMLElement }>()
   const empty = element(doc, 'p', 'jdx-result-empty', uiText('暂无文献成果。提取、翻译或解析文献后，结果将汇集于此。', 'No results yet. Extract, translate or analyze a paper to begin.'))
   list.append(empty)
-  function clearViews() { for (const entry of mounted.values()) { entry.view?.remove(); entry.files?.remove() }; mounted.clear(); panels.replaceChildren() }
+  function clearViews() { for (const entry of mounted.values()) { entry.view?.remove(); entry.files?.remove(); entry.simple?.remove() }; mounted.clear(); panels.replaceChildren() }
   function show(requested: DocumentResultMode | LiteratureTab, recordID?: string) {
     const mode: LiteratureTab = requested === 'analysis' ? (recordID && jobs.get(recordID)?.kind === 'references' ? 'references' : 'summary') : requested
     const analysisTab = mode === 'summary' || mode === 'notes' || mode === 'references' ? mode : undefined
@@ -58,13 +63,14 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
       recordID ??= recordIDs.get(key)
       if (recordID) for (const tab of ['summary', 'notes']) recordIDs.set(`${paperKey(source)}:${tab}`, recordID)
     }
-    if (recordID && (sharedAnalysis ? mounted.get(key)?.view?.selectedRecordID() : recordIDs.get(key)) !== recordID) { mounted.get(key)?.view?.remove(); mounted.get(key)?.files?.remove(); mounted.get(key)?.root.remove(); mounted.delete(key); recordIDs.set(key, recordID) }
+    if (recordID && (sharedAnalysis ? mounted.get(key)?.view?.selectedRecordID() : recordIDs.get(key)) !== recordID) { mounted.get(key)?.view?.remove(); mounted.get(key)?.files?.remove(); mounted.get(key)?.simple?.remove(); mounted.get(key)?.root.remove(); mounted.delete(key); recordIDs.set(key, recordID) }
     for (const [name, panel] of mounted) panel.root.hidden = name !== key
     let panel = mounted.get(key)
     if (!panel) {
       const container = element(doc, 'section', 'jdx-literature-panel'); container.setAttribute('role', 'tabpanel'); container.id = `jdx-literature-panel-${mode}-${++sequence}`; container.setAttribute('aria-labelledby', `jdx-literature-tab-${mode}`)
       panels.append(container); panel = { root: container, scroll: 0 }; mounted.set(key, panel)
       if (mode === 'files') panel.files = mountPDFTranslationFiles(container, host, source, recordIDs.get(key))
+      else if (mode === 'simple') panel.simple = mountSimpleReadingHistory(container, host, source)
       else if (mode !== 'history') {
         panel.view = mountDocumentResults(container, host, source, analysisTab ? 'analysis' : mode as DocumentResultMode, { recordID: recordIDs.get(key), analysis: options, analysisTab, hideAnalysisTabs: true, onTranslate: id => show('translation', id) })
         const run = runs.get(paperKey(source)); if (run) panel.view.setRun(run)
@@ -100,7 +106,7 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
   }
   function refresh() {
     if (disposed) return
-    papers = literaturePapers(host, options.records(), jobs.list(), host.Prefs ? readTranslationHistory(host.Prefs).records : [], pdfs.list())
+    papers = literaturePapers(host, options.records(), jobs.list(), host.Prefs ? readTranslationHistory(host.Prefs).records : [], pdfs.list(), readings.list())
     for (const entry of opened.values()) if (!papers.some(paper => paper.attachments.some(item => sameAttachment(item, entry)))) papers.push({ key: `attachment:${paperKey(entry)}`, title: entry.title, source: entry, date: '', results: [], attachments: [entry] })
     if (selectedKey) {
       current = papers.find(paper => paper.key === selectedKey) || papers.find(paper => source && paper.attachments.some(item => sameAttachment(item, source!))) || current
@@ -147,9 +153,10 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
   }
   attachments.onChange(value => { const next = current?.attachments.find(item => paperKey(item) === value); if (next) { source = next; updateDetail(); show(active) } })
   search.addEventListener('input', refresh)
-  const cleanups = [bindTabs(tabs, index => show(modes[index])), jobs.subscribe(refresh), pdfs.subscribe(refresh)]
+  const cleanups = [bindTabs(tabs, index => show(modes[index])), jobs.subscribe(refresh), pdfs.subscribe(refresh), readings.subscribe(refresh)]
   for (const key of [TRANSLATION_HISTORY_PREF_KEY, PAPER_ANALYSIS_HISTORY_PREF_KEY]) try { const id = host.Prefs?.registerObserver?.(key, refresh); if (id !== undefined) cleanups.push(() => host.Prefs?.unregisterObserver?.(id)) } catch { /* 显式刷新仍可读取。 */ }
   void jobs.ready.then(refresh)
+  void readings.load().catch(() => {})
   void pdfs.loadHistory().then(refresh).catch(() => { if (!disposed) { const warning = element(doc, 'div', 'jdx-notice', uiText('翻译文件历史读取失败。', 'Could not load translated file history.')); warning.append(action(doc, uiText('重试', 'Retry'), () => { void pdfs.loadHistory().then(() => { warning.remove(); refresh() }).catch(() => {}) })); root.prepend(warning) } })
   return { refresh, open, back, setRun(run: AnalysisRunView) { runs.set(paperKey(run.source), run); opened.set(paperKey(run.source), run.source); refresh(); for (const entry of mounted.values()) entry.view?.setRun(run) }, remove() { disposed = true; clearViews(); attachments.destroy(); cleanups.forEach(stop => stop()) } }
 }

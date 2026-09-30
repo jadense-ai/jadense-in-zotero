@@ -25,18 +25,18 @@ function fixture(initial: Record<string, unknown> = {}) {
 }
 
 describe("feature model configuration modes", () => {
-  it("follows the Chat model by default and restores saved feature models when disabled", () => {
+  it("follows Chat only for analysis and figure while translation stays independent", () => {
     const { zotero } = fixture({ [AUTO_FOLLOW_CHAT_MODEL_PREF_KEY]: undefined })
     saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "two-model" })
     saveFeatureModelSelection(zotero, "translation", { route: "byok", modelId: "one-model" })
 
     expect(readAutoFollowChatModel(zotero)).toBe(true)
-    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "one-api-model" } })
 
     saveAutoFollowChatModel(zotero, false)
     expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "one-api-model" } })
     saveAutoFollowChatModel(zotero, true)
-    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+    expect(featureModelState(zotero, "translation")).toMatchObject({ route: "byok", config: { model: "one-api-model" } })
   })
 
   it.each(AI_FEATURES)("preserves an explicitly saved previous default for %s", feature => {
@@ -134,7 +134,7 @@ describe("feature model configuration modes", () => {
     deleteByokModel(zotero, "one-model")
     const reloaded = fixture(Object.fromEntries(values)).zotero
     expect(featureModelState(reloaded, feature)).toMatchObject({ ready: true, config: { baseUrl: "https://two.test/v1", model: "two-api-model", apiKey: "two-key" } })
-    for (const other of AI_FEATURES.filter(other => other !== feature)) expect(readFeatureModelSelection(reloaded, other)).toEqual(before[other])
+    for (const other of AI_FEATURES.filter(other => other !== feature && !(['translation', 'fullTranslation'].includes(feature) && ['translation', 'fullTranslation'].includes(other)))) expect(readFeatureModelSelection(reloaded, other)).toEqual(before[other])
   })
 
   it("accepts additive fields and preserves exact selections without needing a model catalog", () => {
