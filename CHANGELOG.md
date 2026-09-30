@@ -1,15 +1,17 @@
 # 更新说明 / Changelog
 
-## 0.6.9 — 待发布 / Unreleased
+## 0.6.9 — 2026-09-30
 
 - PDF 阅读器新增「简阅模式」：左侧保留原生 PDF，右侧显示 Zotero 提取的结构化 HTML；只有主动点击翻译才替换右侧文字，可查看部分成果、补译和历史版本。缺少所需阅读器能力时会提示不可用。
 - 模型选择新增思考档位与可搜索列表；选文、简阅及 PDF 对照翻译的进度、停止和失败反馈更清楚。简阅与 PDF 对照的翻译上下文预算分别可调，默认各为 128K。
 - PDF 对照翻译改进单行控制栏、视图切换及侧栏宽度变化后的适宽；工具栏入口使用 Languages 图标。文献解析与 AI 请求中断后的恢复反馈也更明确。
-- 现有设置和历史保留；官方完整 XPI 继续包含前沿雷达，公开源码基础构建不包含该模块。正式包的环境与升级验收将在发布前补齐。
+- 现有设置和历史保留；官方完整 XPI 继续包含前沿雷达，公开源码基础构建不包含该模块。
 - PDF Reading mode keeps the native PDF on the left and Zotero's extracted HTML on the right. Translation starts only on request and replaces right-hand text; partial results, remaining passages and local history remain available. Unsupported reader capabilities produce a clear message.
 - Model selection adds thinking controls and searchable choices. Selection, Reading mode and bilingual PDF translation show clearer progress, stop and failure feedback. Reading mode and bilingual PDF each have an editable 128K default context budget.
 - Bilingual PDF improves its compact toolbar, view switching and fit-to-width after sidebar resizing, and uses the Languages icon. Analysis and interrupted AI requests provide clearer recovery feedback.
-- Existing settings and history are retained. Official full packages continue to include Frontier Radar; public-source base builds omit it. Native and upgrade acceptance details will be added before publication.
+- Existing settings and history are retained. Official full packages continue to include Frontier Radar; public-source base builds omit it.
+- 已正式公开发布；Windows 11 / Zotero 10.0.3 上，草稿原包通过三次冷启动、0.6.8 原位升级、简阅、PDF 对照翻译、选文工具栏、前沿雷达专项及两种引擎的离线安装检查。其他系统、Zotero 8/9、Zotero 10.0.4 和真实付费服务未实测。
+- Released publicly. On Windows 11 / Zotero 10.0.3, the original draft assets passed three cold starts, an in-place upgrade from 0.6.8, Reading mode, bilingual PDF, selection toolbar, Frontier Radar checks and offline installation checks for both engines. Other systems, Zotero 8/9, Zotero 10.0.4 and live paid services were not tested.
 
 ## 0.6.8 — 2026-09-29
 
