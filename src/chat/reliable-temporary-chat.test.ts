@@ -102,10 +102,11 @@ it('recovers a stream error as partial text with no second model POST', async ()
       return Response.json({ state: 'partial', complete: false, text }, { headers })
     })
     const client = new ReliableTemporaryChatClient({ baseUrl: 'https://partial-stream.test', token: 'synthetic', fetchImpl }, store())
-    const result = retryPDFTranslation({ route: 'jadense', signal: new AbortController().signal, run: () => client.send(input), recover: async () => client.recover((await client.pending())[0]), progress: vi.fn() })
+    const progress = vi.fn()
+    const result = retryPDFTranslation({ route: 'jadense', signal: new AbortController().signal, run: () => client.send(input), recover: async () => client.recover((await client.pending())[0]), progress })
     const assertion = expect(result).rejects.toBeInstanceOf(TemporaryPartialOutputError)
-    await vi.waitFor(() => expect(fetchImpl.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
-    await vi.runAllTimersAsync(); await assertion
+    await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(expect.objectContaining({ recovering: true })))
+    await vi.advanceTimersByTimeAsync(2500); await assertion
     expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   } finally { vi.useRealTimers() }
 })
