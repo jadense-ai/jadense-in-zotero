@@ -50,6 +50,23 @@ it('copies PDF tasks and engine files, verifies and removes the old root', async
   expect(engineStorageRoot(host, 'pdf')).toBe(result.root)
 })
 
+it('keeps staging paths short enough for a deep Windows profile and task folder', async () => {
+  const { host, put, io, files } = fixture()
+  const taskID = 'a'.repeat(64), parent = '/external/' + 'x'.repeat(140)
+  put(`/profile/jadense-pdf-translation/tasks/${taskID}/artifact.json`, 'result')
+  const makeDirectory = io.makeDirectory
+  io.makeDirectory = async (name, options) => {
+    if (name.length > 255) throw new Error('Windows path too long')
+    return makeDirectory(name, options)
+  }
+  io.copy.mockImplementation(async (from, to) => {
+    if (to.length > 255) throw new Error('Windows path too long')
+    files.set(to, files.get(from)!.slice())
+  })
+  await expect(changeEngineStorage(host, 'pdf', parent)).resolves.toMatchObject({ moved: true })
+  expect(files.has(`${parent}/jadense-pdf-translation/tasks/${taskID}/artifact.json`)).toBe(true)
+})
+
 it('leaves rebuildable Unix environment links for target repair while preserving results', async () => {
   const { host, put, files, io } = fixture()
   const link = '/profile/jadense-pdf-translation/.venv/bin/python'
@@ -204,9 +221,10 @@ it('bounds a stuck cleanup call and keeps the engine fenced', async () => {
   const controller = new AbortController()
   await expect(changeEngineStorage(host, 'pdf', '/external', { signal: controller.signal, progress: phase => { if (phase === 'copy') controller.abort() } })).rejects.toMatchObject({ name: 'AbortError' })
   let finish!: () => void
+  const stage = (await storageRecovery('pdf'))!.stage
   const original = io.remove.getMockImplementation()!
   io.remove.mockImplementation(async (name: string) => {
-    if (name.includes('.jadense-pdf-move-')) await new Promise<void>(resolve => { finish = resolve })
+    if (name === stage) await new Promise<void>(resolve => { finish = resolve })
     return original(name)
   })
   vi.useFakeTimers()

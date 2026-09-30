@@ -27,6 +27,8 @@ const leaf = (kind: EngineStorageKind) => kind === 'pdf' ? 'jadense-pdf-translat
 const markerName = '.jadense-storage-id'
 const migrationMarkerName = '.jadense-migration-id'
 const sourceMarkerName = '.jadense-migration-source-id'
+// 暂存目录保持短名，避免 Windows 深层 profile 中的任务文件超过路径长度限制。
+const stageName = (marker: string) => `.jdx-${marker.replace(/-/gu, '').slice(0, 12)}`
 const profileRoot = (kind: EngineStorageKind) => {
   const paths = platform().PathUtils
   return paths.join(paths.profileDir, leaf(kind), ...(kind === 'ocr' ? ['v1'] : []))
@@ -92,7 +94,7 @@ export async function storageRecovery(kind: EngineStorageKind): Promise<Journal 
     if (value.version === 1 && (value.phase === 'copy' || value.phase === 'commit') && typeof value.marker === 'string' && /^[0-9a-f-]{36}$/iu.test(value.marker)
       && typeof value.sourceExists === 'boolean' && typeof value.parent === 'string' && typeof value.fromParent === 'string'
       && value.from === childRoot(value.fromParent, kind) && value.to === childRoot(value.parent, kind)
-      && value.stage === platform().PathUtils.join(value.parent, `.jadense-${kind}-move-${value.marker}`) && !overlaps(value.from, value.to)) return value
+      && value.stage === platform().PathUtils.join(value.parent, stageName(value.marker)) && !overlaps(value.from, value.to)) return value
   } catch { /* 损坏或不可信的记录不能自动覆盖。 */ }
   throw new Error(uiText('迁移记录损坏，请先检查配置目录中的迁移记录。', 'Storage migration record is invalid. Inspect the migration record in the profile folder.'))
 }
@@ -219,7 +221,7 @@ export async function changeEngineStorage(host: ZoteroLike, kind: EngineStorageK
       await bounded(io.remove(to, { recursive: true }), 30000)
     }
     sourceExists = await bounded(io.exists(from), 30000)
-    stage = paths.join(parent, `.jadense-${kind}-move-${marker}`)
+    stage = paths.join(parent, stageName(marker))
     if (await bounded(io.exists(stage), 30000)) throw new Error(uiText('迁移暂存目录已存在，请重试。', 'Storage staging directory already exists. Retry.'))
     const record = { version: 1, phase: 'copy', from, fromParent: engineStorageParent(host, kind), to, stage, parent, marker, sourceExists } as const
     if (sourceExists) await bounded(io.writeUTF8(paths.join(from, sourceMarkerName), marker), 30000)
