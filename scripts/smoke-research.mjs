@@ -636,6 +636,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     // 合成连续操作不应被可选 Star 邀请抢焦点；邀请状态机由独立测试覆盖。
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
+    // 综合夹具显式选定合成目录模型；0.6.10 的一次性默认迁移不适用于后续全新安装。
+    if (!config.upgradeXpi && !config.resumeOnly && !config.simpleReadingResume && !config.pdfTranslationResume && !config.featureSettingsResume && !config.longPdfResume) {
+      const key = 'extensions.jadenseInZotero.aiModelSettings'
+      const settings = JSON.parse(Zotero.Prefs.get(key, true) || '{}')
+      Zotero.Prefs.set(key, JSON.stringify({ ...settings, version: 1, followChatModel: settings.followChatModel !== false,
+        models: { ...settings.models, chat: { route: 'jadense', selection: { kind: 'model', modelId: 'qwen-3.8-flash' } } } }), true)
+    }
     if (config.simpleReadingResume) {
       await verifySimpleReadingRestart({ Zotero, waitFor, assert, report })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
@@ -1854,7 +1861,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     "Appending a figure changed the current conversation identity, title, or sources")
     await waitFor(() => Array.from(manager.document.querySelectorAll('.jdx-chat-message-image img')).filter(image => image.naturalWidth > 0).length === 2,
       "both figure messages retain their own image")
-    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-default-qwen-3.8-flash")
+    report.checks.push("native-sdt-figure-hover-and-lock", "figure-independent-reader-tools", "figure-two-conversation-targets", "figure-actions-keyboard", "figure-actions-viewport-clamped", "figure-caption-multimodal-chat", "figure-new-conversation-auto-sources", "figure-streaming-response", "figure-in-window-followup-image", "figure-data-url-not-persisted", "jadense-chat-configured-qwen-3.8-flash")
 
     await stage("reader-question-new-conversation")
     const beforeQuestionState = JSON.stringify(localState())

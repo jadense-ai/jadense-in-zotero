@@ -9,13 +9,13 @@
 
 <a id="update-0611"></a>
 
-## 0.6.11：发现前沿、PDF 上传与翻译（发布准备 / Release preparation）
+## 0.6.11：发现前沿、PDF 上传与翻译（2026-10-15）
 
 - **发现前沿**：官方完整安装包的侧栏入口更新为“发现前沿”。编辑兴趣档案并保存，再点“开始发现”；保存不会自动检索。首页显示兴趣与今日状态，下方发现历史可查看过去的结果。扫描时显示当前文献题录，摘要和 AI 评价可按需展开。说明文字居中，支持中英文、浅深色、窄窗和字号缩放。
 - **来源与配置**：通用模式检索 arXiv，攻玉模式可选择 13 个来源；AI 功能在“设置 → 功能配置 → 发现前沿”选择独立模型。最近 3 天、最多 30 篇候选，AI 评价和每日追踪默认关闭；每日追踪需 Zotero 保持运行。中文关键词可能需要所选模型翻译。公开源码的基础版不含此可选模块。
 - **收藏 PDF 上传**：连接攻玉并选择目标收藏夹后，可上传所选条目或收藏夹并包含 PDF。上传中断后再次执行可继续未完成意图；若提示“PDF 已保存，待关联”，再次上传将继续关联，保留已有文件。此恢复能力依赖服务端配套支持；服务端不支持或返回错误时会显示失败，不代表上传成功。元数据上传与 PDF 状态分别显示。
 - **翻译与模型**：改进简阅/PDF 翻译的部分结果保留、停止与未确认请求反馈；按界面提示处理未确认请求，重试仍可能产生费用。模型目录以 Auto 和直接模型展示，功能选择继续保留。
-- **升级**：正式发布后下载 0.6.11 XPI，在 Zotero“工具 → 插件 → 齿轮 → 从文件安装插件”覆盖安装并重启。相同 .cn 插件身份保留设置与历史；从 0.6.10 升级不重复执行其已完成的默认模型迁移。官网自动更新渠道独立。
+- **升级**：下载 0.6.11 XPI，在 Zotero“工具 → 插件 → 齿轮 → 从文件安装插件”覆盖安装并重启。相同 .cn 插件身份保留设置与历史；从 0.6.10 升级不重复执行其已完成的默认模型迁移。官网自动更新渠道独立。
 
 ### English
 
@@ -25,7 +25,7 @@ Standard mode uses arXiv; Jadense mode supports 13 selectable sources. Choose th
 
 For PDF uploads, connect Jadense, choose a destination folder and upload selected items or a collection with PDFs enabled. Retry an interrupted upload to continue its pending intent. “PDFs saved, awaiting association” means the file is retained and retry continues association. This recovery requires matching server support; unsupported requests or server errors remain visible failures. Metadata and PDF results are reported separately.
 
-Reading/PDF translation better preserves partial results and reports stopped or unconfirmed requests. Follow the displayed recovery instructions; retries may incur additional charges. Model menus show Auto alongside direct models. After release, install the 0.6.11 XPI over the previous .cn plugin and restart Zotero. Settings and history are retained; completed 0.6.10 default-model migration does not run again. Website automatic updates are managed separately.
+Reading/PDF translation better preserves partial results and reports stopped or unconfirmed requests. Follow the displayed recovery instructions; retries may incur additional charges. Model menus show Auto alongside direct models. Install the 0.6.11 XPI over the previous .cn plugin and restart Zotero. Settings and history are retained; completed 0.6.10 default-model migration does not run again. Website automatic updates are managed separately.
 
 ![发现前沿居中说明与发现历史 / Centered welcome and discovery history](images/guide-discovery-0611.png)
 

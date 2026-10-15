@@ -16,6 +16,8 @@ async function nativeHarness(config) {
     await Zotero.uiReadyPromise
     const main=await wait(()=>Zotero.getMainWindow(),'main window')
     await wait(()=>main.document.readyState==='complete','main document')
+    // uiReadyPromise 早于冷启动条目缓存；与综合夹具一样等待后再读取既有合成条目。
+    await Zotero.Libraries.get(Zotero.Libraries.userLibraryID).waitForDataLoad('item')
     Zotero.Prefs.set('extensions.jadenseInZotero.quickStartShown',true)
     Zotero.Prefs.set('extensions.jadenseInZotero.displayLanguage',config.appearanceLanguage,true)
     Zotero.Prefs.set('extensions.jadenseInZotero.baseUrl',config.origin)

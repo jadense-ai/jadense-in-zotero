@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**0.6.11 发布准备：**发现前沿更新欢迎页、逐篇扫描与发现历史，修复说明文字居中和窄窗布局；改进收藏 PDF 的上传恢复与翻译反馈。 官方完整包包含发现前沿，公开源码构建为基础版。候选安装包为 `jadense-in-zotero-v0.6.11.xpi`；当前正式版仍为 0.6.10。[操作与升级说明](docs/usage-guide.md#update-0611)。
+**v0.6.11 已发布：**发现前沿更新欢迎页、逐篇扫描与发现历史，修复说明文字居中和窄窗布局；改进收藏 PDF 上传恢复与翻译反馈。官方完整包包含发现前沿，公开源码构建为基础版。[操作与升级说明](docs/usage-guide.md#update-0611) · [下载正式安装包](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11)。
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -34,14 +34,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11) — 发现前沿欢迎、扫描与历史布局更新，修复文本居中，改进收藏 PDF 上传恢复与翻译反馈。
 - [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) — PDF 与 OCR 引擎可分别选择存储位置；BYOK 可按功能设置思考档位，攻玉对话模型一次性设为 `qwen-3.8-flash`。
 - [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) — 新增简阅模式与主动翻译，改进模型思考档位、翻译进度反馈和 PDF 对照工具栏。
 - [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — 前沿雷达支持通用 arXiv 与攻玉 13 来源追踪，新增结构化 AI 预评和独立模型设置；攻玉模式可接力 Jev 分类与 OCR。
 - [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — 新增仅支持 arXiv 的文献雷达、攻玉模式及新版 PDF 离线安装指南，改进 OCR 准备停止与 PDF 翻译恢复。
-- [v0.6.6](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.6) — 修复离线安装的 BOM 和深路径解压错误，版面引擎指南可从设置页打开。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
+
+0.6.11 正式草稿原件已在 Windows 11 / Zotero 10.0.6 完成原生验收；详情见 [Release 验证记录](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11)。其他系统、Zotero 8/9 和真实付费服务未实测。
 
 <a id="api-recommendation"></a>
 
@@ -111,7 +113,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10)，同时提供元数据和 SHA-256 校验和 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
 | 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.11/jadense-in-zotero-v0.6.11.xpi` | 当前源码构建为基础版；前沿雷达仅随官方完整安装包提供 |
 
@@ -184,7 +186,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 ### 1. 安装与打开工作台
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前正式版为 **0.6.10**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前正式版为 **0.6.11**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -370,7 +372,7 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.\***。部分旧截图来自 **Windo
 
 ### 从旧版怎样升级？
 
-可从同一 `.cn` 插件身份的旧 GitHub 版本安装升级到正式版 0.6.10；已在 Windows 11 / Zotero 10.0.3 验证 0.6.9 原位升级。已有设置与本地历史保留，旧译文不会自动重译。首次运行 0.6.10 会一次性把攻玉对话模型设为 `qwen-3.8-flash`；BYOK 对话目的地不变，此后手动选择不再被覆盖。
+可从同一 `.cn` 插件身份的旧 GitHub 版本安装升级到正式版 0.6.11；已在 Windows 11 / Zotero 10.0.3 验证 0.6.9 原位升级。已有设置与本地历史保留，旧译文不会自动重译。首次运行 0.6.10 会一次性把攻玉对话模型设为 `qwen-3.8-flash`；BYOK 对话目的地不变，此后手动选择不再被覆盖。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 
