@@ -247,8 +247,6 @@ type ManagerElements = {
   accountPlan: HTMLElement
   accountBalance: HTMLElement
   accountSource: HTMLElement
-  accountFallbackRow: HTMLElement
-  accountFallback: HTMLElement
   accountReward: HTMLElement
   accountStreak: HTMLElement
   accountProfileStatus: HTMLElement
@@ -385,8 +383,6 @@ const IDS = {
   accountPlan: "jadense-manager-account-plan",
   accountBalance: "jadense-manager-account-balance",
   accountSource: "jadense-manager-account-source",
-  accountFallbackRow: "jadense-manager-account-fallback-row",
-  accountFallback: "jadense-manager-account-fallback",
   accountReward: "jadense-manager-account-reward",
   accountStreak: "jadense-manager-account-streak",
   accountProfileStatus: "jadense-manager-account-profile-status",
@@ -677,8 +673,6 @@ function readElements(): ManagerElements {
     accountPlan: element(IDS.accountPlan),
     accountBalance: element(IDS.accountBalance),
     accountSource: element(IDS.accountSource),
-    accountFallbackRow: element(IDS.accountFallbackRow),
-    accountFallback: element(IDS.accountFallback),
     accountReward: element(IDS.accountReward),
     accountStreak: element(IDS.accountStreak),
     accountProfileStatus: element(IDS.accountProfileStatus),
@@ -2433,15 +2427,9 @@ function formatPoints(value: number) {
 
 export function buildJadensePointsView(status: JadensePointsStatus) {
   const { billing, checkIn } = status
-  const fallback = billing.sourceKind === "team" && billing.fallbackBalancePoints !== null
-    ? formatPoints(billing.fallbackBalancePoints)
-    : null
   return {
     balance: formatPoints(billing.balancePoints),
-    source: billing.sourceKind === "team"
-      ? uiText(`团队积分（主余额 ${formatPoints(billing.primaryBalancePoints)}）`, `Team points (primary balance ${formatPoints(billing.primaryBalancePoints)})`)
-      : uiText("个人积分", "Personal points"),
-    fallback,
+    source: uiText("个人积分", "Personal points"),
     reward: `+${formatPoints(checkIn.todayReward.grantedPoints)}`,
     streak: uiText(`${checkIn.currentStreakDays} 天`, `${checkIn.currentStreakDays.toLocaleString(getUiLocale())} days`),
     signedToday: checkIn.signedToday,
@@ -2466,8 +2454,6 @@ function renderAccountPoints(elements: ManagerElements, status: JadensePointsSta
   const view = buildJadensePointsView(status)
   elements.accountBalance.textContent = view.balance
   elements.accountSource.textContent = view.source
-  elements.accountFallbackRow.hidden = view.fallback === null
-  elements.accountFallback.textContent = view.fallback ?? "—"
   elements.accountReward.textContent = view.reward
   elements.accountStreak.textContent = view.streak
   elements.accountBalance.dataset.loaded = "true"
@@ -2476,8 +2462,6 @@ function renderAccountPoints(elements: ManagerElements, status: JadensePointsSta
 function clearAccountPoints(elements: ManagerElements, label = "—") {
   elements.accountBalance.textContent = label
   elements.accountSource.textContent = label
-  elements.accountFallbackRow.hidden = true
-  elements.accountFallback.textContent = label
   elements.accountReward.textContent = label
   elements.accountStreak.textContent = label
   elements.accountBalance.dataset.loaded = "false"

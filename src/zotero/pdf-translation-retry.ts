@@ -1,4 +1,5 @@
 /** PDF 请求恢复：只重发明确被限流的请求，攻玉不确定结果走只读恢复。 */
+import { executionResult } from '@/chat/request-feedback'
 export type PDFRetryState = { attempt: number; until: number; recovering: boolean }
 
 /** 等待可随用户取消立即结束，不占用共享服务的并发槽。 */
@@ -25,6 +26,7 @@ export async function retryPDFTranslation<T>(options: {
       catch (error) {
         if (options.signal.aborted) throw error
         const { status, code, retryAfter, name } = (error ?? {}) as { status?: number; code?: string; retryAfter?: string; name?: string }
+        if (status !== 429 && ['partial', 'failed', 'cancelled'].includes(executionResult(error).state)) throw error
         // Gecko fetch 的异常来自窗口 compartment，不能依赖 instanceof。
         const transient = (status !== undefined && status >= 500) || name === 'TypeError' || name === 'AbortError' || ['STREAM_EARLY_EOF', 'STREAM_INCOMPLETE', 'STREAM_FAILED', 'RECOVERY_PENDING'].includes(code ?? '')
         if (attempt >= 3 || (status !== 429 && !(transient && options.route !== 'byok'))) throw error

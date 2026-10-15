@@ -42,4 +42,5 @@ export type ZoteroItemDraft = {
 export type ZoteroPdfAttachmentFile = {
   file: Blob
   filename: string
+  identity?: string
 }

@@ -1,0 +1,10 @@
+[
+  {"name":"numeric IDs, reordered and additive","raw":"[{\"id\":2,\"output\":\"第二段\",\"extra\":true},{\"id\":1,\"translation\":\"第一段\"}]","expected":{"1":"第一段","2":"第二段"}},
+  {"name":"compact JSONL","raw":"{\"2\":\"第二段\"}\n{\"1\":\"第一段\"}","expected":{"1":"第一段","2":"第二段"}},
+  {"name":"ordered strings","raw":"[\"第一段\",\"第二段\"]","expected":{"1":"第一段","2":"第二段"}},
+  {"name":"numbered multiline prose","raw":"2. 第二段\n继续\n1. 第一段","expected":{"1":"第一段","2":"第二段\n继续"}},
+  {"name":"closed record before truncation","raw":"[{\"id\":1,\"output\":\"第一段\"},{\"id\":2,\"output\":\"未结束","expected":{"1":"第一段"}},
+  {"name":"longer duplicate","raw":"{\"1\":\"短\"}\n{\"1\":\"完整的第一段\"}\n{\"2\":\"第二段\"}","expected":{"1":"完整的第一段","2":"第二段"}},
+  {"name":"unknown identity not guessed","raw":"[{\"id\":99,\"output\":\"未知\"},{\"id\":2,\"output\":\"第二段\"}]","expected":{"2":"第二段"}},
+  {"name":"wrapped fenced trailing comma","raw":"```json\n{\"translations\":[{\"id\":\"1\",\"output\":\"第一段\",},{\"id\":\"2\",\"output\":\"第二段\"}]}\n```","expected":{"1":"第一段","2":"第二段"}}
+]

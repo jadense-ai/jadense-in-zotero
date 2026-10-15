@@ -1,5 +1,14 @@
 # 更新说明 / Changelog
 
+## 0.6.11 — 发布准备 / Release preparation
+
+- 发现前沿更新小玉欢迎页、兴趣摘要、逐篇扫描与发现历史，修复说明段落偏左、滚动区和窄窗布局；保留来源选择、模型设置与收藏功能。
+- 改进收藏 PDF 的预检、未完成上传恢复、已保存文件关联重试及逐项结果反馈；需要配套服务端支持。
+- 改进简阅与 PDF 翻译的部分结果保留、停止及未确认请求提示，模型选择器统一展示 Auto 与直接模型。
+- Refresh Discover frontiers with a welcome page, interests, per-paper scanning and history; fix paragraph centering, scrolling and narrow-window layout while retaining sources, model settings and favorites.
+- Improve PDF upload preflight, pending-intent recovery, saved-file association retries and per-item feedback; matching server support is required.
+- Improve partial translation retention, cancellation and unconfirmed-request feedback; show Auto alongside direct models in model menus.
+
 ## 0.6.10 — 2026-09-30
 
 - PDF 版面引擎与本机 OCR 可分别选择存储位置；移动已有安装时先复制、校验并检查健康状态，失败保留原位置。

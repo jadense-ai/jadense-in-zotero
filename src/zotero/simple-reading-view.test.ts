@@ -17,8 +17,13 @@ afterEach(() => { stopSimpleReadingReaders(); vi.restoreAllMocks() })
 function fakePDF(window: Window) {
   const doc = window.document, page = doc.createElement('div'), container = doc.createElement('div')
   container.append(page)
-  return { container, currentScaleValue: 'page-width', currentPageNumber: 1, pagesCount: 1,
-    getPageView: () => ({ div: page }), eventBus: { on: vi.fn(), off: vi.fn(), dispatch: vi.fn() } }
+  const listeners = new Map<string, Set<() => void>>()
+  return { container, currentScale: 1, currentScaleValue: 'page-width', currentPageNumber: 1, pagesCount: 1,
+    getPageView: () => ({ div: page }), eventBus: {
+      on: vi.fn((name: string, callback: () => void) => { const group = listeners.get(name) ?? new Set(); group.add(callback); listeners.set(name, group) }),
+      off: vi.fn((name: string, callback: () => void) => listeners.get(name)?.delete(callback)),
+      dispatch: vi.fn((name: string) => { for (const callback of listeners.get(name) ?? []) callback() }),
+    } }
 }
 
 it('gates empty and loading views, marks missing paragraphs, and clears markers after translation', async () => {
@@ -26,12 +31,14 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   const frame = window.document.querySelector<HTMLIFrameElement>('#pdf')!, doc = window.document.querySelector<HTMLIFrameElement>('#sdt')!.contentDocument!
   frame.style.display = 'none' // 宿主切到 SDT 时临时隐藏 PDF。
   frame.contentDocument!.body.textContent = 'Original PDF'
+  doc.body.style.inlineSize = '1800px' // 原生全宽 SDT 的尺寸不能直接继承到右侧半栏。
   doc.body.innerHTML = '<article id="sdt-content"><p data-ref-path="0">First paragraph</p><p data-ref-path="1">Second paragraph</p></article>'
   const root = doc.querySelector<HTMLElement>('article')!, blocks = readingBlocks(root)
   const identity: ReadingIdentity = { source: { itemID: 1, itemKey: 'PDF', libraryID: 1, title: 'Paper' }, fingerprint: 'file', sdtHash: 'sdt', contentHash: 'content' }
   const restore = vi.fn(async () => {})
   const showPDF = vi.fn(async () => { frame.style.display = 'block' })
-  vi.mocked(acquireNativeReading).mockResolvedValue({ root, frame, pdfFrameStyle: 'display: block;', blocks, identity, authors: [], restore, showPDF, pdf: fakePDF(window as unknown as Window), pages: [[0], [0]], view: {}, baseWindow: undefined, createCrops: () => undefined })
+  const pdf = fakePDF(window as unknown as Window)
+  vi.mocked(acquireNativeReading).mockResolvedValue({ root, frame, pdfFrameStyle: 'display: block;', blocks, identity, authors: [], restore, showPDF, pdf, pages: [[0], [0]], view: {}, baseWindow: undefined, createCrops: () => undefined })
   vi.mocked(pdfSource).mockResolvedValue({ source: identity.source, fingerprint: 'file' } as Awaited<ReturnType<typeof pdfSource>>)
   const files = new Map<string, string>()
   const platform = { IOUtils: { exists: async () => true, makeDirectory: async () => {}, writeUTF8: async (file: string, text: string) => { files.set(file, text) }, readUTF8: async (file: string) => files.get(file)!, getChildren: async () => [...files.keys()] }, PathUtils: { profileDir: 'test', join: (...parts: string[]) => parts.join('/'), filename: (file: string) => file.split('/').at(-1)! } } as unknown as PDFPlatform
@@ -68,6 +75,11 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   expect(viewOption(/多屏阅读|Separate window/u).getAttribute('aria-disabled')).toBe('false')
   expect(panel.querySelector('iframe')?.hidden).toBe(false)
   expect(panel.querySelector('iframe')?.contentDocument?.body.textContent).toContain('First paragraph')
+  const readingDocument = panel.querySelector('iframe')!.contentDocument!
+  expect(readingDocument.body.style.inlineSize).toBe('100%')
+  expect(readingDocument.body.style.boxSizing).toBe('border-box')
+  pdf.currentScale = 1.5; pdf.eventBus.dispatch('scalechanging')
+  await vi.waitFor(() => expect(readingDocument.documentElement.style.getPropertyValue('--scale')).toBe('1.5'))
   expect(frame.contentDocument?.body.textContent).toBe('Original PDF')
   expect(send).not.toHaveBeenCalled()
   button(/^(翻译|Translate)$/u).click()
@@ -83,6 +95,7 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   const requestsBeforeLanguage = send.mock.calls.length
   languageButton(/原文|Original/u).click()
   await vi.waitFor(() => expect(mirror.querySelector('[data-ref-path="0"]')?.textContent).toBe('First paragraph'))
+  expect(mirror.documentElement.style.getPropertyValue('--scale')).toBe('1.5')
   expect(languageButton(/原文|Original/u).getAttribute('aria-pressed')).toBe('true')
   expect(send).toHaveBeenCalledTimes(requestsBeforeLanguage)
   languageButton(/译文|Translation/u).click()

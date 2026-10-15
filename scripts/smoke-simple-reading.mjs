@@ -4,7 +4,8 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
   const doc = reader._iframeWindow.document, internal = reader._internalReader
   const button = await waitFor(() => doc.querySelector('[data-jadense-simple-reading]'), 'simple reading entry')
   report.simpleReading = { version: Zotero.version, setReadingMode: typeof internal._setReadingMode, loadSDT: typeof internal._loadSDT, getSDTReader: typeof internal.getSDTReader }
-  const before = internal._primaryView._iframeWindow.PDFViewerApplication.pdfViewer.container.scrollTop
+  const nativePDF = internal._primaryView._iframeWindow.PDFViewerApplication.pdfViewer
+  const before = nativePDF.container.scrollTop
   button.click()
   if (typeof internal._setReadingMode !== 'function') {
     await waitFor(() => /简阅模式不可用|Reading mode is unavailable/u.test(doc.body.textContent), 'unavailable reading feedback')
@@ -23,6 +24,19 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
   const pdfFrame = internal._primaryView._iframeWindow.frameElement
   let mirror = panel.querySelector('iframe').contentDocument.querySelector('#sdt-content')
   assert(mirror.querySelectorAll('[data-ref-path]').length > 0 && pdfFrame.getBoundingClientRect().width > 0, 'PDF and extracted HTML are not both available')
+  const mirrorDoc = panel.querySelector('iframe').contentDocument
+  const mirrorBody = mirrorDoc.body, viewport = mirrorDoc.documentElement.clientWidth
+  const bodyBounds = mirrorBody.getBoundingClientRect()
+  assert(bodyBounds.left >= -1 && bodyBounds.right <= viewport + 1 && Math.abs((bodyBounds.left + bodyBounds.right) / 2 - viewport / 2) <= 2, 'Reading content is not centered within its pane')
+  const originalScale = pdf.currentScaleValue, firstBlock = mirror.querySelector('[data-ref-path]')
+  const initialHeight = firstBlock?.getBoundingClientRect().height ?? 0
+  pdf.currentScale = pdf.currentScale * 1.5
+  await waitFor(() => Math.abs(Number(mirrorDoc.documentElement.style.getPropertyValue('--scale')) - 1.5) < .02, 'reading zoom follows PDF zoom')
+  assert(firstBlock?.getBoundingClientRect().height > initialHeight * 1.2, 'Reading text did not grow with PDF zoom')
+  await screenshot('simple-reading-zoomed')
+  pdf.currentScaleValue = originalScale
+  await waitFor(() => Math.abs(Number(mirrorDoc.documentElement.style.getPropertyValue('--scale')) - 1) < .02, 'reading zoom restores with PDF zoom')
+  report.checks.push('simple-reading-centered-and-zoom-synchronized')
   assert(!internal._state?.primaryReadingModeEnabled, 'Simple reading left the native SDT view in place of the PDF')
   assert(!Zotero.__jadenseSimpleReading.list().length, 'Opening reading mode created a translation task')
   const main = Zotero.getMainWindow(), previousFetch = main.fetch
@@ -38,8 +52,17 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
   panel.querySelector('.jdx-simple-menu').dispatchEvent(new doc.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   assert(panel.querySelector('.jdx-simple-menu').hidden && !Zotero.__jadenseSimpleReading.list().length, 'Settings failed to close or started translation')
   report.checks.push('simple-reading-context-default-edit-no-request')
-  Zotero.Prefs.set('extensions.jadenseInZotero.fullTranslationInterface', JSON.stringify({ kind: 'machine', service: 'google' }), true)
+  Zotero.Prefs.set('extensions.jadenseInZotero.fullTranslationInterface', JSON.stringify({ kind: config.pdfAI ? 'ai' : 'machine', service: 'google' }), true)
   main.fetch = async (url, options) => {
+    if (config.pdfAI && options?.method === 'HEAD' && /\/api\/chat\/temporary$/u.test(String(url))) return new main.Response(null, { headers: { 'x-jadense-temporary-protocol': '1' } })
+    if (config.pdfAI && options?.method === 'POST' && /\/api\/chat$/u.test(String(url))) {
+      const body = JSON.parse(options.body), prompt = body.messages.flatMap(message => message.parts ?? []).map(part => part.text ?? '').join('')
+      const rows = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1))
+      assert(rows.every((row, index) => row.id === String(index + 1)), 'Model saw native IDs instead of batch numbers')
+      requests++; await Zotero.Promise.delay(300)
+      const output = rows.map(row => JSON.stringify({ [row.id]: row.text.replace(/[A-Za-z][A-Za-z ,.-]+/gu, '模拟译文') })).join('\n')
+      return new main.Response(`data: {"type":"reasoning-delta","delta":"synthetic"}\n\ndata: ${JSON.stringify({ type: 'text-delta', delta: output })}\n\ndata: {"type":"finish","finishReason":"stop"}\n\n`, { headers: { 'content-type': 'text/event-stream', 'x-jadense-temporary-protocol': '1' } })
+    }
     if (!String(url).startsWith('https://translate.google.com/')) return previousFetch.call(main, url, options)
     requests++
     await Zotero.Promise.delay(80)

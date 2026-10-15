@@ -89,6 +89,11 @@ function capacityDescription(option: { contextWindow?: number; maxOutputTokens?:
     option.maxOutputTokens ? `${english ? "Max output" : "最大输出"}: ${option.maxOutputTokens.toLocaleString("en-US")} tokens` : ""].filter(Boolean).join(" · ")
 }
 
+function sourcePriceLabel(option: JadenseChatModelOption, english: boolean) {
+  const rate = option.kind === "model" ? option.sourceMultiplier : undefined
+  return rate === undefined || !Number.isFinite(rate) || rate < 0 || rate === 1 ? "" : rate === 0 ? (english ? "Free" : "免费") : english ? (rate < 1 ? `${Number(((1 - rate) * 100).toFixed(3))}% off` : `${rate}× source rate`) : rate < 1 ? `${Number((rate * 10).toFixed(3))}折` : `来源倍率 ${rate}×`
+}
+
 function modelLockReason(option: JadenseChatModelOption, english: boolean) {
   if (option.lockReason?.trim()) return option.lockReason.trim()
   const plan = option.minimumPlanCode?.trim().toUpperCase()
@@ -115,7 +120,9 @@ export function buildJadenseChatModelSelectOptions(
   selection?: JadenseChatSelection,
   english = getUiLocale() === "en-US",
 ): JdxSelectOption[] {
-  const options: JdxSelectOption[] = catalog.options.map(option => {
+  const auto = catalog.options.find(option => option.kind === "route" && option.routeTier === "standard")
+  const visible = [...(auto ? [{ ...auto, displayName: "Auto" }] : []), ...catalog.options.filter(option => option.kind === "model")]
+  const options: JdxSelectOption[] = visible.map(option => {
     const features = option.kind === "model" ? capabilityLabels(option.capabilities, english) : ""
     const plan = option.minimumPlanCode?.trim().toUpperCase()
     const minimumPlan = plan && plan !== "FREE" ? plan : null
@@ -124,18 +131,20 @@ export function buildJadenseChatModelSelectOptions(
       : minimumPlan ? (english ? `Minimum subscription: ${minimumPlan}` : `最低订阅：${minimumPlan}`) : ""
     const meta = [
       option.locked ? (minimumPlan ? (english ? `Requires ${minimumPlan}` : `需 ${minimumPlan}`) : (english ? "Upgrade required" : "需升级订阅")) : "",
-      option.kind === "model" && option.consumptionMultiplier !== undefined ? `${option.consumptionMultiplier.toFixed(2)}x` : "",
+      option.kind === "model" && option.consumptionMultiplier !== undefined ? option.consumptionMultiplier === 0 ? english ? "Free" : "免费" : `${option.consumptionMultiplier.toFixed(2)}x` : "",
     ].filter(Boolean).join(" · ")
     return {
       value: jadenseModelOptionKey(option),
-      ...(option.kind === "model" ? modelLogo(option.modelId) : {}),
+      sourcePriceLabel: sourcePriceLabel(option, english) ? `${option.kind === "model" ? option.sourcePricePrefix ?? "" : ""}${sourcePriceLabel(option, english)}` : "",
+      ...(option.kind === "model" ? { priceDetail: { base: option.baseConsumptionMultiplier, current: option.consumptionMultiplier, discounted: option.sourceMultiplier !== undefined && option.sourceMultiplier >= 0 && option.sourceMultiplier < 1 } } : {}),
+      ...(option.kind === "model" ? modelLogo(option.modelId) : { iconSrc: "chrome://jadense-in-zotero/content/auto.svg", iconThemed: true }),
       iconPath: option.kind === "route" ? "M3 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0M7 12h2.5c4 0 5-5 7.5-5M7 12h2.5c4 0 5 5 7.5 5M17 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M17 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0"
         : "M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4",
       label: `${option.displayName}${option.locked ? (english ? " (upgrade required)" : "（需升级）") : ""}`,
       description: [subscription, option.description, features ? `${english ? "Supports: " : "支持："}${features}` : "", capacityDescription(option, english)]
         .filter(Boolean)
         .join(" · "),
-      group: option.kind === "route" ? (english ? "Jadense routes" : "攻玉智能路由") : (english ? "Jadense models" : "攻玉内置模型"),
+      group: english ? "Jadense models" : "攻玉内置模型",
       ...(meta ? { meta } : {}),
       disabled: option.locked,
       ...(option.locked ? { disabledReason: subscription } : {}),

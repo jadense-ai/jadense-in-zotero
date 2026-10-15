@@ -29,6 +29,29 @@ function config(protocol: ByokProtocol): ByokConfig {
   }
 }
 
+it('finishes after a terminal event even when the provider keeps its socket open', async () => {
+  const cancel = vi.fn()
+  const response = new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"translated"},"finish_reason":"stop"}]}\n\n'))
+  }, cancel }))
+  expect(await consumeByokStream(response, 'openai-chat-completions', 'fixture', undefined, true)).toBe('translated')
+  expect(cancel).toHaveBeenCalledOnce()
+}, 1000)
+
+it('retains complete records when the provider ends at its output limit', async () => {
+  const response = streamResponse(['data: {"choices":[{"delta":{"content":"translated"},"finish_reason":"length"}]}\n\n'])
+  await expect(consumeByokStream(response, 'openai-chat-completions', 'fixture', undefined, true))
+    .rejects.toMatchObject({ code: 'STREAM_INCOMPLETE', executionState: 'partial', partialText: 'translated' })
+})
+it('recovers a final Responses text snapshot without duplicating earlier deltas', async () => {
+  const response = streamResponse([
+    'data: {"type":"response.output_text.delta","delta":"first"}\n\n',
+    'data: {"type":"response.output_text.done","text":"first second"}\n\n',
+    'data: {"type":"response.completed","response":{"output":[{"content":[{"type":"output_text","text":"first second"}]}]}}\n\n',
+  ])
+  expect(await consumeByokStream(response, 'openai-responses', 'fixture', undefined, true)).toBe('first second')
+})
+
 describe("BYOK request protocols", () => {
   it.each([
     { protocol: "openai-chat-completions" as const, expected: { reasoning_effort: "custom-level" } },

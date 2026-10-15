@@ -1,5 +1,5 @@
 import { structuredResponseReceipt } from './response-format'
-import { reportProgress, requestError, requestIssue, thinkingReceipt } from './request-feedback'
+import { reportProgress, requestIssue, thinkingReceipt, RequestExecutionError } from './request-feedback'
 import { traceRequest, diagnosticFetch, markDiagnosticAbort } from "@/zotero/diagnostics"
 /** 新版 Zotero 攻玉客户端：先确认协议，再持久化/认领；重发只复用稳定执行身份。 */
 import { TemporaryChatClient, temporaryChatMessages, jadenseChatSelectionBody, consumeTemporaryChatStream, type TemporaryChatClientOptions, type TemporaryChatSendInput } from './temporary-chat'
@@ -14,10 +14,9 @@ const HEADER = 'x-jadense-temporary-protocol'
 // 只缓存翻译用途的成功能力探针；POST 仍执行服务端鉴权。
 const translationCapabilities = new Map<string, { expires: number; pending?: Promise<void> }>()
 /** 服务端已确认 partial 终态；文本仅供 PDF 本地段落校验，不代表完整执行成功。 */
-export class TemporaryPartialOutputError extends Error {
+export class TemporaryPartialOutputError extends RequestExecutionError {
   readonly code = 'OUTPUT_PARTIAL'
-  readonly executionState = 'partial'
-  constructor(message: string, readonly partialText: string) { super(message) }
+  constructor(message: string, partialText: string) { super(message, 'partial', partialText) }
 }
 export class ReliableTemporaryChatClient extends TemporaryChatClient {
   private options: TemporaryChatClientOptions
@@ -46,6 +45,7 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     const timeout = setInterval(() => { if (elapsed() >= 60_000) abort() }, 1000)
     try {
     do {
+      reportProgress(input?.onProgress, { stage: 'recovering' })
       response = await diagnosticFetch(input?.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat/temporary?conversationId=${encodeURIComponent(String(row.body.temporaryConversationId))}&requestId=${encodeURIComponent(String(row.body.clientRequestId))}`, { headers: this.headers(), signal: deadline.signal })
       if (response.status !== 202) return await this.consume(response, row, input)
       if (elapsed() >= 60_000) throw Object.assign(new Error(uiText('仍在执行，稍后点击“恢复结果”；不会重复请求模型。', 'Still running. Use Recover result later; the model will not run again.')), { code: 'RECOVERY_PENDING' })
@@ -67,15 +67,25 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     if (response.status === 202) return this.recover(row, input)
     if (!response.ok) {
       const error = await readJadenseApiError(response, 'AI request failed')
-      let terminal = false
-      if (error instanceof JadenseApiError) try { terminal = ['failed','partial','cancelled'].includes(JSON.parse(error.body).state) } catch { /* 无权威终态则保留待恢复。 */ }
+      let terminal: Record<string, unknown> | undefined
+      if (error instanceof JadenseApiError) try { const value = JSON.parse(error.body); if (['failed','partial','cancelled'].includes(value.state)) terminal = value } catch { /* 无权威终态则保留待恢复。 */ }
       // 未找到/不确定可恢复；明确业务终态允许用户开始新轮次，但不自动重发。
-      if (error instanceof JadenseApiError && (terminal || [400,401,402,403,410,422,429].includes(error.status))) { row.status = 'failed'; row.error = error.message; await this.store.save(row) }
+      if (error instanceof JadenseApiError && (terminal || [400,401,402,403,410,422,429].includes(error.status))) {
+        row.status = 'failed'; row.error = error.message; row.issue = requestIssue(error)
+        if (terminal) { row.resultState = terminal.state as 'partial' | 'failed' | 'cancelled'; row.text = typeof terminal.text === 'string' ? terminal.text : '' }
+        await this.store.save(row)
+        if (terminal) { reportProgress(input?.onProgress, { stage: 'receiving', receivedCharacters: row.text?.length ?? 0 }); throw new RequestExecutionError(error.message, row.resultState!, row.text ?? '', row.issue) }
+      }
       throw error
     }
     let output: string
     if (response.headers.get('content-type')?.includes('text/event-stream')) {
-      output = await consumeTemporaryChatStream(response, input?.onTextDelta, true, input?.diagnostic, input?.onProgress)
+      try { output = await consumeTemporaryChatStream(response, input?.onTextDelta, true, input?.diagnostic, input?.onProgress) }
+      catch (error) {
+        const partial = (error as { partialText?: string }).partialText
+        if (typeof partial === 'string' && partial.length > (row.text?.length ?? 0)) { row.text = partial; await this.store.save(row) }
+        throw error
+      }
     } else {
       const result = await response.json() as { text?: string; complete?: boolean; error?: string; state?: string; finishReason?: string; thinking?: unknown; structuredResponse?: unknown }
       input?.diagnostic?.identify(result as Record<string, unknown>)
@@ -86,17 +96,22 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       input?.diagnostic?.event('result_state', { source: state })
       input?.diagnostic?.event('result_finish', { source: ['stop', 'length', 'error', 'content-filter'].includes(result.finishReason ?? '') ? result.finishReason : 'unknown' })
       output = typeof result.text === 'string' ? result.text : ''
+      reportProgress(input?.onProgress, { stage: 'receiving', receivedCharacters: output.length })
       input?.diagnostic?.text(output.length)
       input?.onTextDelta?.(output, output)
       if (!result.complete || state !== 'completed') {
         if (['partial', 'failed', 'cancelled'].includes(state)) row.status = 'failed'
-        if (state === 'partial') row.resultState = 'partial'
+        if (['partial', 'failed', 'cancelled'].includes(state)) { row.resultState = state as 'partial' | 'failed' | 'cancelled'; row.issue = requestIssue(result) }
         row.text = output; row.error = result.error ?? uiText('输出未完整结束，已有内容保留。', 'Output was incomplete; existing text is retained.'); await this.store.save(row)
         if (state === 'partial') throw Object.assign(new TemporaryPartialOutputError(row.error, output), requestIssue(result))
-        throw requestError(row.error, result, { stage: 'recovery', code: state === 'failed' ? 'OUTPUT_FAILED' : state === 'cancelled' ? 'OUTPUT_CANCELLED' : 'TEMPORARY_RESULT_UNCONFIRMED' })
+        throw new RequestExecutionError(row.error, state === 'failed' || state === 'cancelled' ? state : 'unknown', output,
+          requestIssue(result, { stage: 'recovery', code: state === 'failed' ? 'OUTPUT_FAILED' : state === 'cancelled' ? 'OUTPUT_CANCELLED' : 'TEMPORARY_RESULT_UNCONFIRMED' }))
       }
     }
-    if (!output.trim()) throw requestError(uiText('模型未返回正文。', 'The model returned no text.'), {}, { code: 'EMPTY_OUTPUT', stage: 'recovery' })
+    if (!output.trim()) {
+      row.status = 'failed'; row.resultState = 'failed'; row.text = ''; row.issue = { code: 'EMPTY_OUTPUT', stage: 'recovery' }; await this.store.save(row)
+      throw new RequestExecutionError(uiText('模型未返回正文。', 'The model returned no text.'), 'failed', '', row.issue)
+    }
     row.status = 'completed'; row.text = output; await this.store.save(row)
     return output
   }
@@ -116,17 +131,23 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images,
       ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}) }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
+    if (input.previousOperationId && !body.previousRequestId) body.previousRequestId = rows.find(row => row.body.operationId === input.previousOperationId)?.body.clientRequestId
     const completed = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'completed' && row.fingerprint === fingerprint) : undefined
-    if (completed) return completed.text ?? ''
+    if (completed) { reportProgress(input.onProgress, { stage: 'receiving', receivedCharacters: completed.text?.length ?? 0 }); return completed.text ?? '' }
     // PDF 进程可能在接收结果后、保存段落前退出；复用已确认的部分文本，交回本地补缺。
     const partial = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'failed' && row.resultState === 'partial' && row.fingerprint === fingerprint && typeof row.text === 'string') : undefined
-    if (partial) throw new TemporaryPartialOutputError(partial.error ?? 'Partial output retained', partial.text!)
-    const exact = rows.find(row => row.account === account && row.body.clientRequestId === input.clientRequestId)
+    if (partial) { reportProgress(input.onProgress, { stage: 'receiving', receivedCharacters: partial.text!.length }); throw new TemporaryPartialOutputError(partial.error ?? 'Partial output retained', partial.text!) }
+    let exact = rows.find(row => row.account === account && row.body.clientRequestId === input.clientRequestId)
     if (exact && exact.fingerprint !== fingerprint) throw new Error(uiText('同一请求身份不能用于不同输入。', 'The request identity belongs to different input.'))
-    if (exact?.status === 'completed') { input.onTextDelta?.(exact.text ?? '', exact.text ?? ''); return exact.text ?? '' }
+    if (exact?.status === 'completed') { reportProgress(input.onProgress, { stage: 'receiving', receivedCharacters: exact.text?.length ?? 0 }); input.onTextDelta?.(exact.text ?? '', exact.text ?? ''); return exact.text ?? '' }
+    if (exact?.status === 'failed' && exact.issue?.status === 429 && input.clientFeature === 'translation') {
+      body.previousRequestId = exact.body.clientRequestId; body.clientRequestId = crypto.randomUUID(); exact = undefined
+    }
+    if (exact?.status === 'failed' && exact.resultState) { reportProgress(input.onProgress, { stage: 'receiving', receivedCharacters: exact.text?.length ?? 0 }); throw new RequestExecutionError(exact.error ?? 'Request ended', exact.resultState, exact.text ?? '', exact.issue) }
     // 只有显式同一子任务可恢复，不能因内容相同而合并两个不同的正常请求。
     let row = exact ?? rows.find(row => row.account === account && input.operationId && row.body.operationId === input.operationId && row.status === 'pending')
     if (row && row.fingerprint !== fingerprint) throw new Error(uiText('待恢复子任务的输入或模型已变化，请先恢复原请求。', 'The pending operation has different input or model settings. Recover the original request first.'))
+    if (row?.status === 'pending' && input.clientFeature === 'translation') return this.recover(row, input)
     const probe = async () => {
       const capability = await diagnosticFetch(input.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat/temporary`, { method: 'HEAD', headers: this.headers(), signal: input.signal })
       if (!capability.ok) throw await readJadenseApiError(capability, uiText('请检查当前 Zotero 令牌与对话权限。', 'Check the current Zotero token and chat permissions.'))
@@ -160,9 +181,16 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     reportProgress(input.onProgress, { stage: 'sent' })
     const transportAttemptId = crypto.randomUUID()
     input.diagnostic?.identify({ transportAttemptId })
+    try {
     const response = await diagnosticFetch(input?.diagnostic, this.fetch.bind(this), `${this.base()}/api/chat`, { method: 'POST', headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify({ ...row.body, transportAttemptId }), signal: input.signal })
     if ([401, 403].includes(response.status)) translationCapabilities.delete(account)
-    return this.consume(response, row, input)
+    return await this.consume(response, row, input)
+    } catch (error) {
+      if (input.clientFeature !== 'translation' || input.signal?.aborted || row.status !== 'pending'
+        || [401, 402, 403, 429].includes(requestIssue(error).status ?? 0)) throw error
+      // SSE 错误不是权威终态；查询同一执行后再决定是否补缺，不再提交模型。
+      return this.recover(row, input)
+    }
   }
 }

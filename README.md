@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.10 已发布：**可为 PDF 排版引擎和本机 OCR 分别选择存储位置，并配置 BYOK 模型的思考档位。首次启动 0.6.10 时，攻玉对话模型会一次性设为 `qwen-3.8-flash`；BYOK 选择不变，此后手动改选不会被再次覆盖。官方完整包继续包含前沿雷达，公开源码构建的基础版不含该模块。[操作与升级说明](docs/usage-guide.md#update-0610) · [下载正式安装包](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10)。
+**0.6.11 发布准备：**发现前沿更新欢迎页、逐篇扫描与发现历史，修复说明文字居中和窄窗布局；改进收藏 PDF 的上传恢复与翻译反馈。 官方完整包包含发现前沿，公开源码构建为基础版。候选安装包为 `jadense-in-zotero-v0.6.11.xpi`；当前正式版仍为 0.6.10。[操作与升级说明](docs/usage-guide.md#update-0611)。
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -113,7 +113,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.10/jadense-in-zotero-v0.6.10.xpi` | 当前源码构建为基础版；前沿雷达仅随官方完整安装包提供 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.11/jadense-in-zotero-v0.6.11.xpi` | 当前源码构建为基础版；前沿雷达仅随官方完整安装包提供 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 

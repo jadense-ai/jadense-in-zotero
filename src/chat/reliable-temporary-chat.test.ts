@@ -11,6 +11,48 @@ function store() {
 }
 const input = { clientRequestId: 'request-1', operationId: 'operation-1', conversationId: 'conversation', messages: [{ id: 'message', role: 'user' as const, text: 'example' }] }
 const headers = { 'x-jadense-temporary-protocol': '1' }
+it('retains authoritative failure independently of the provider reason', async () => {
+  const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
+    ? new Response(null, { headers }) : Response.json({ state: 'failed', complete: false, text: '', code: 'REASONING_ONLY', stage: 'stream' }, { headers }))
+  const client = new ReliableTemporaryChatClient({ baseUrl: 'https://terminal.test', token: 'synthetic', fetchImpl }, store())
+  await expect(client.send(input)).rejects.toMatchObject({ code: 'REASONING_ONLY', executionState: 'failed', partialText: '' })
+})
+it('reports text from recovery and completed operation reuse', async () => {
+  const onProgress = vi.fn(), fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'
+    ? new Response(null, { headers }) : Response.json({ state: 'completed', complete: true, text: 'translated' }, { headers }))
+  const client = new ReliableTemporaryChatClient({ baseUrl: 'https://counts.test', token: 'synthetic', fetchImpl }, store())
+  await client.send({ ...input, onProgress, reuseCompletedOperation: true })
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ receivedCharacters: 10 }))
+  onProgress.mockClear()
+  await client.send({ ...input, onProgress, reuseCompletedOperation: true })
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ receivedCharacters: 10 }))
+})
+it('creates a linked fresh identity after a confirmed 429 instead of replaying the refusal', async () => {
+  const bodies: Record<string, unknown>[] = []
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    if (init?.method === 'HEAD') return new Response(null, { headers })
+    const body = JSON.parse(String(init?.body)); bodies.push(body)
+    if (bodies.length === 1 || body.clientRequestId === bodies[0].clientRequestId) return Response.json({ state: 'failed', code: 'RATE_LIMITED' }, { status: 429, headers })
+    return Response.json({ state: 'completed', complete: true, text: 'done' }, { headers })
+  }
+  const client = new ReliableTemporaryChatClient({ baseUrl: 'https://refusal.test', token: 'synthetic', fetchImpl }, store())
+  const request = { ...input, clientFeature: 'translation' as const }
+  await expect(client.send(request)).rejects.toMatchObject({ status: 429 })
+  expect(await client.send(request)).toBe('done')
+  expect(bodies[1].clientRequestId).not.toBe(bodies[0].clientRequestId)
+  expect(bodies[1].previousRequestId).toBe(bodies[0].clientRequestId)
+})
+it('resends unknown BYOK execution only with explicit authorization, retaining its predecessor', async () => {
+  const disk = store(), fetchImpl = vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValue(new Response('data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n'))
+  const client = new ReliableByokChatClient({ config: { protocol: 'openai-chat-completions', baseUrl: 'https://fixture.test', apiKey: 'synthetic', model: 'fixture', maxOutputTokens: 1000 }, fetchImpl }, disk)
+  const request = { ...input, clientFeature: 'translation' as const, reuseCompletedOperation: true }
+  await expect(client.send(request)).rejects.toMatchObject({ code: 'BYOK_EXECUTION_UNCONFIRMED' })
+  await expect(client.send(request)).rejects.toMatchObject({ code: 'BYOK_EXECUTION_UNCONFIRMED' }); expect(fetchImpl).toHaveBeenCalledOnce()
+  expect(await client.send({ ...request, allowUnconfirmedRetry: true })).toBe('done')
+  const rows = await disk.list()
+  expect(rows.find(row => row.status === 'completed')?.body.previousRequestId).toBe(input.clientRequestId)
+  expect(await client.send(request)).toBe('done'); expect(fetchImpl).toHaveBeenCalledTimes(2)
+})
 it('freezes translation effort in the durable request and never reuses its identity with a different effort', async () => {
   const disk = store()
   const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'HEAD'

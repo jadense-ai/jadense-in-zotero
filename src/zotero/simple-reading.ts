@@ -1,4 +1,4 @@
-import { requestStageLabel } from '@/chat/request-feedback'
+import { requestStageLabel, requestActivityText } from '@/chat/request-feedback'
 import { diagnostics } from './diagnostics'
 import { saveDiagnosticExport } from './diagnostics-panel'
 import { copyTextToClipboard } from './connection-display'
@@ -65,6 +65,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   if (epoch !== lifecycle) { await native.restore(); return }
   const { frame: original } = native, parent = original.parentElement!, doc = parent.ownerDocument, win = doc.defaultView!
   const source = snapshotNativeReading(native.root, doc)
+  const sourceScale = Number(source.ownerDocument.documentElement.style.getPropertyValue('--scale')) || 1
   const jobs = simpleReadingJobs(host)
   let languages: Awaited<ReturnType<typeof readArticleTranslationLanguages>>
   try { languages = await whileReaderOpen(readArticleTranslationLanguages(host, reader.itemID), signal) }
@@ -77,6 +78,18 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   let starting = false, ready = false
   let historyState: 'ready' | 'slow' | 'failed' = 'ready'
   let mirrorPosition: { id: string; fraction: number } | undefined
+  let pdfScaleAtOpen = 0, mirrorZoomFrame = 0
+  // 以双栏建立后的 PDF 倍率为基准，语言重建和多屏共用同一正文缩放比例。
+  const syncMirrorZoom = () => {
+    const target = frame.contentDocument?.documentElement
+    const currentScale = native.pdf.currentScale
+    if (!target?.querySelector('#sdt-content') || !pdfScaleAtOpen || !Number.isFinite(currentScale) || currentScale <= 0) return
+    target.style.setProperty('--scale', String(Number((sourceScale * currentScale / pdfScaleAtOpen).toFixed(3))))
+  }
+  const scheduleMirrorZoom = () => {
+    win.cancelAnimationFrame(mirrorZoomFrame)
+    mirrorZoomFrame = win.requestAnimationFrame(() => { if (!disposed) syncMirrorZoom() })
+  }
   const automaticPDFScale = /^(?:auto|page-width|page-fit|page-height)$/u.test(native.pdf.currentScaleValue) ? native.pdf.currentScaleValue : undefined
   const panel = element(doc, 'section', 'jdx-simple-reading'), toolbar = element(doc, 'div', 'jdx-simple-tools'), status = element(doc, 'div', 'jdx-simple-status'), embeddedFrame = element(doc, 'iframe'), style = element(doc, 'style')
   let frame = embeddedFrame, openingWindow = false
@@ -204,6 +217,10 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   })
   const linkedButton = action(doc, uiText('同步滚动', 'Sync scroll'), () => { linked = !linked; linkedButton.setAttribute('aria-pressed', String(linked)); if (linked) syncPages(activeSide) }); linkedButton.setAttribute('aria-pressed', 'true'); linkedButton.hidden = true; toolbar.append(linkedButton)
   const translate = action(doc, uiText('翻译', 'Translate'), () => { void start(false) }), retranslate = action(doc, uiText('重新翻译', 'Retranslate'), () => { void start(true) }), cancel = action(doc, uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id) })
+  const retryUnknown = action(doc, uiText('重新请求未确认段落', 'Request unconfirmed passages again'), () => {
+    if (win.confirm(uiText('原 BYOK 请求可能仍在执行，重新请求可能重复计费。是否继续？', 'The original BYOK request may still be running. A new request may incur duplicate charges. Continue?'))) void start(false, true)
+  })
+  retryUnknown.hidden = true; settings.append(retryUnknown)
   translate.classList.add('jdx-simple-task'); cancel.classList.add('jdx-simple-task')
   retranslate.hidden = true; cancel.hidden = true; translate.disabled = true
   toolbar.append(translate, cancel); navigation.append(linkedButton); settings.append(retranslate)
@@ -237,10 +254,11 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
     originalLanguage.setAttribute('aria-pressed', String(!showTranslation))
     translatedLanguage.setAttribute('aria-pressed', String(showTranslation)); translatedLanguage.disabled = count === 0
     detach.disabled = false; retranslate.hidden = !task || busy
+    retryUnknown.hidden = busy || task?.issue?.code !== 'BYOK_EXECUTION_UNCONFIRMED'
     translate.textContent = busy ? uiText('正在翻译', 'Translating') : count ? uiText('仅补译', 'Translate missing') : uiText('翻译', 'Translate')
     translate.title = translate.textContent
     translate.hidden = busy; translate.disabled ||= count === native.blocks.length
-    const stageText = task?.progress ? `${requestStageLabel(task.progress.stage)} · ${Math.max(0, Math.floor((Date.now() - task.progress.stageStartedAt) / 1000))}s` : uiText('正在翻译', 'Translating')
+    const stageText = task?.progress ? `${requestStageLabel(task.progress.stage)} · ${Math.max(0, Math.floor((Date.now() - task.progress.stageStartedAt) / 1000))}s${requestActivityText(task.progress) ? ' · ' + requestActivityText(task.progress) : ''}` : uiText('正在翻译', 'Translating')
     statusLabel.textContent = busy ? stageText : task ? `${count} / ${native.blocks.length}${task.error ? uiText(' · 待重试', ' · Retry needed') : ''}` : uiText('待翻译', 'Not translated')
     if (historyState !== 'ready') statusLabel.textContent += historyState === 'slow' ? uiText(' · 历史读取较慢', ' · History is slow') : uiText(' · 历史读取失败', ' · History unavailable')
     statusToggle.dataset.state = busy ? 'busy' : task?.error ? 'error' : count === native.blocks.length ? 'success' : count ? 'warning' : 'idle'
@@ -284,7 +302,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   }
   const progressTimer = win.setInterval(() => { if (busy) render() }, 1000)
   cleanups.push(() => win.clearInterval(progressTimer))
-  async function start(fresh: boolean) {
+  async function start(fresh: boolean, allowUnconfirmedRetry = false) {
     if (!ready || busy || disposed) return
     starting = true; busy = true; translate.disabled = true; retranslate.disabled = true
     render()
@@ -296,7 +314,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
       if (origin.fingerprint !== native.identity.fingerprint) throw new Error(uiText('原文件已变化，请关闭并重新打开简阅。', 'The source file changed. Close and reopen reading mode.'))
       const transport = await readingTransport(host)
       if (disposed) return
-      task = await jobs.start(native.identity, languages, native.blocks.map(({ id, text, pairs }) => ({ id, text, pairs })), transport, () => mirror ? visibleReadingBlocks(bound.map(block => ({ ...block, element: mirror!.root.querySelector<HTMLElement>(`[data-ref-path="${block.id}"]`) ?? block.element }))) : new Set<string>(), fresh, fresh ? undefined : task?.id)
+      task = await jobs.start(native.identity, languages, native.blocks.map(({ id, text, pairs }) => ({ id, text, pairs })), transport, () => mirror ? visibleReadingBlocks(bound.map(block => ({ ...block, element: mirror!.root.querySelector<HTMLElement>(`[data-ref-path="${block.id}"]`) ?? block.element }))) : new Set<string>(), fresh, fresh ? undefined : task?.id, allowUnconfirmedRetry)
       if (disposed) return
       if (fresh) { await buildMirror(); applied = new Map() }
       starting = false; render()
@@ -345,6 +363,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
     if (!target) throw new Error(uiText('译文视图尚未就绪。', 'The translation view is not ready.'))
     mirror = mirrorNativeReading(source, target, native.authors); bound = mirror.blocks; applied.clear()
     updateMirrorTheme(mirrorDark)
+    syncMirrorZoom()
     cropCleanup = observeReadingCrops(mirror.root, native.createCrops(), native.baseWindow)
     const a = native.baseWindow!, b = target.defaultView!, translated = mirror.root
     const inputA = () => { activeSide = 'source' }, inputB = () => { activeSide = 'translation' }
@@ -429,6 +448,11 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
     await whileReaderOpen(native.showPDF(), signal)
     mirror?.remove()
     if (disposed) return
+    fitPDF()
+    pdfScaleAtOpen = native.pdf.currentScale
+    syncMirrorZoom()
+    native.pdf.eventBus.on('scalechanging', scheduleMirrorZoom)
+    cleanups.push(() => { native.pdf.eventBus.off('scalechanging', scheduleMirrorZoom); win.cancelAnimationFrame(mirrorZoomFrame) })
     scheduleFit()
     statusLabel.textContent = uiText('正在读取简阅历史', 'Loading reading history')
     const historyLoad = jobs.load()

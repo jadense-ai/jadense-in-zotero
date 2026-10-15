@@ -8,7 +8,7 @@ import { uiText } from './ui-preferences'
 
 type Crop = { displayWidth: number; displayHeight: number; render(): Promise<string> }
 type CropProvider = (ref: number[]) => Crop[]
-export type ReadingPDF = { container: HTMLElement; currentScaleValue: string; currentPageNumber: number; pagesCount: number; getPageView(index: number): { div: HTMLElement }; eventBus: { on(name: string, callback: () => void): void; off(name: string, callback: () => void): void; dispatch?(name: string, data: unknown): void } }
+export type ReadingPDF = { container: HTMLElement; currentScale: number; currentScaleValue: string; currentPageNumber: number; pagesCount: number; getPageView(index: number): { div: HTMLElement }; eventBus: { on(name: string, callback: () => void): void; off(name: string, callback: () => void): void; dispatch?(name: string, data: unknown): void } }
 export type NativeReadingView = {
   initializedPromise?: Promise<unknown>; _iframe?: HTMLIFrameElement; _iframeWindow?: Window; _iframeDocument?: Document
   getData?(): { getBlockCrops?(ref: number[]): Crop[] }
@@ -97,7 +97,18 @@ export function mirrorNativeReading(source: HTMLElement, doc: Document, authors:
     for (const attr of Array.from(to.attributes)) to.removeAttribute(attr.name)
     for (const attr of Array.from(from.attributes)) if (!attr.name.startsWith('on')) to.setAttribute(attr.name, attr.value)
   }
+  // SDT 源窗口可能比镜像栏宽；正文沿用原生页宽档位，但始终按当前 iframe 重新居中排版。
+  const fitBody = () => {
+    const pageWidth = doc.documentElement.dataset.pageWidth
+    doc.body.style.boxSizing = 'border-box'
+    doc.body.style.inlineSize = '100%'
+    doc.body.style.minInlineSize = '0'
+    doc.body.style.maxInlineSize = pageWidth === 'narrow' ? 'min(100%, calc(650px + 6rem))'
+      : pageWidth === 'full' ? '100%' : 'min(100%, calc(800px + 6rem))'
+    doc.body.style.marginInline = 'auto'
+  }
   copyAttributes(original.documentElement, doc.documentElement); copyAttributes(original.body, doc.body)
+  fitBody()
   const root = doc.importNode(source, true)
   for (const node of Array.from(root.querySelectorAll('script,iframe,object,embed,form'))) node.remove()
   for (const node of [root, ...Array.from(root.querySelectorAll('*'))]) for (const attr of Array.from(node.attributes)) {
@@ -106,6 +117,7 @@ export function mirrorNativeReading(source: HTMLElement, doc: Document, authors:
   doc.body.replaceChildren(root)
   const refreshStyles = () => {
     copyAttributes(original.documentElement, doc.documentElement); copyAttributes(original.body, doc.body)
+    fitBody()
     doc.head.replaceChildren(...Array.from(original.querySelectorAll('head style'), style => doc.importNode(style, true)))
   }
   const sourceWindow = original.defaultView as (Window & typeof globalThis) | null

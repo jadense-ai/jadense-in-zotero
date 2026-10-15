@@ -130,7 +130,12 @@ export function readingReply(blocks: ReadingBlock[], reply: string): Record<stri
   if (parsed === undefined) try { parsed = JSON.parse(repaired) } catch { /* 外层仍损坏时逐对象回收。 */ }
   const allowed = new Map(blocks.map(block => [block.id, block])), values = new Map<string, string>()
   const rows = parsed === undefined ? completeReplyRows(repaired, blocks) : readingRows(parsed, blocks)
+  if (!rows.length && parsed === undefined) {
+    const numbered = [...clean.matchAll(/^\s*(?:\[|【)?(\d+)(?:\]|】|[.．、):：])\s+(.+)(?:\n(?!\s*(?:\[|【)?\d+(?:\]|】|[.．、):：])\s).*)*/gmu)]
+    for (const match of numbered) rows.push({ id: match[1], output: match[0].replace(/^\s*(?:\[|【)?\d+(?:\]|】|[.．、):：])\s+/u, '').trim() })
+  }
   if (!rows.length && parsed === undefined && !clean.startsWith('[') && !clean.startsWith('{')) {
+    if (blocks.length === 1) rows.push({ id: blocks[0].id, output: clean })
     const passages = clean.split(/\n\s*\n/gu).map(part => part.trim()).filter(Boolean)
     const lines = passages.length === blocks.length ? passages : clean.split(/\n+/gu).map(part => part.trim()).filter(Boolean)
     if (lines.length === blocks.length) lines.forEach((part, index) => rows.push({ id: blocks[index].id, output: part }))

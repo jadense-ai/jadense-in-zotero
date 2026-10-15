@@ -401,13 +401,15 @@ it.each([401, 402, 403])('contains HTTP %i without killing layout and stops furt
   await expect(jobs.bytes(task.id)).resolves.toEqual(bytes)
 })
 
-it('hands authoritative partial output to the local parser and keeps dispatching other batches', async () => {
+it.each(['partial', 'failed'])('hands authoritative %s output to the local parser and keeps dispatching other batches', async state => {
   kind = 'ai'
   const partial = '[{"id":"p1","output":"translated"},'
-  const send = vi.spyOn(ReliableTemporaryChatClient.prototype, 'send').mockRejectedValueOnce(new TemporaryPartialOutputError('partial', partial)).mockResolvedValue('next translated')
+  const failure = state === 'partial' ? new TemporaryPartialOutputError('partial', partial)
+    : Object.assign(new Error('failed'), { code: 'REASONING_ONLY', stage: 'stream', executionState: 'failed', partialText: '' })
+  const send = vi.spyOn(ReliableTemporaryChatClient.prototype, 'send').mockRejectedValueOnce(failure).mockResolvedValue('next translated')
   try {
     vi.mocked(runPDFWorker).mockImplementation(async (_host, config, _signal, message) => {
-      expect(await message({ type: 'translate', id: 'first', text: 'input', llm: true })).toEqual({ id: 'first', text: partial })
+      expect(await message({ type: 'translate', id: 'first', text: 'input', llm: true })).toEqual(state === 'partial' ? { id: 'first', text: partial } : { id: 'first', error: { code: 'OUTPUT_FAILED', stop: false } })
       expect(await message({ type: 'translate', id: 'next', text: 'input', llm: true })).toEqual({ id: 'next', text: 'next translated' })
       files.set(path.posix.join(String(config.directory), 'artifact.json'), JSON.stringify({ fingerprint: config.fingerprint, configuration: config.configuration, revision: 'a'.repeat(32), pages: 2, skipped: [], coverage: { total: 2, translated: 2, failed: 0, preserved: 0, failedPages: [] } }))
       await message({ type: 'complete' })

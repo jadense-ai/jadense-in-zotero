@@ -166,9 +166,9 @@ describe("Manager English content", () => {
   it("formats points and errors in English while keeping effective balance semantics", () => {
     initializeUiLocale({ locale: "en-US" })
     expect(buildJadensePointsView({
-      billing: { sourceKind: "team", balancePoints: 1234, primaryBalancePoints: 1234, fallbackBalancePoints: 50 },
+      billing: { sourceKind: "personal", balancePoints: 1234 },
       checkIn: { signedToday: true, currentStreakDays: 2, todayReward: { grantedPoints: 8 } },
-    } as Parameters<typeof buildJadensePointsView>[0])).toMatchObject({ balance: "1,234 points", fallback: "50 points", streak: "2 days", reward: "+8 points" })
+    } as Parameters<typeof buildJadensePointsView>[0])).toMatchObject({ balance: "1,234 points", streak: "2 days", reward: "+8 points" })
     const error = new Error("cancelled"); error.name = "AbortError"
     expect(friendlyChatError(error)).toBe("Generation stopped.")
   })

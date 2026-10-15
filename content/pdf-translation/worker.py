@@ -165,6 +165,11 @@ async def run_in_workspace(config, staged):
         def __init__(self):
             super().__init__(config["sourceLanguage"], config["targetLanguage"], True)
             self.model = config["configuration"]
+            self.previous_operations = {}
+
+        def link_operation(self, operation, previous):
+            """仅关联已结束批次；不改变原请求的去重身份。"""
+            if previous: self.previous_operations[operation] = previous
 
         def request(self, text, llm, operation=None):
             key = operation or hashlib.sha256(json.dumps([text, llm], ensure_ascii=True).encode()).hexdigest()
@@ -180,7 +185,7 @@ async def run_in_workspace(config, staged):
                     future = Future()
                     waiting[key] = future
             if owner:
-                emit(type="translate", id=key, text=text, llm=llm)
+                emit(type="translate", id=key, text=text, llm=llm, previousOperationId=self.previous_operations.get(key))
             try:
                 reply = future.result()
                 if reply.get("error"):

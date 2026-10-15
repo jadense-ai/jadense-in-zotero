@@ -1,4 +1,4 @@
-import { requestStageLabel } from '@/chat/request-feedback'
+import { requestStageLabel, requestActivityText } from '@/chat/request-feedback'
 /** PDF 对照翻译状态参数:集中计算徽章级别、单行摘要、详情行与进度,Reader 只套用结果。 */
 import { pdfCoverageText, pdfFailureDetails } from './pdf-translation-policy'
 import { translationSpeedText } from './translation-speed-settings'
@@ -68,7 +68,8 @@ export function pdfTranslationStatusView(input: PDFStatusInput): PDFStatusView {
       ? uiText(`服务暂时繁忙，${waitSeconds} 秒后自动继续，无需重复点击。`, `The service is busy. Continuing automatically in ${waitSeconds}s; no action needed.`)
       : uiText('正在自动恢复未完成内容，无需重复点击。', 'Automatically recovering unfinished work; no action needed.'))
     else if (waitSeconds > 0) text += '\n' + uiText(`正在等待翻译服务，约 ${waitSeconds} 秒后继续。`, `Waiting for the translation service; continuing in about ${waitSeconds}s.`)
-    if (hasOutput) text += '\n' + uiText('已有译文已保存，可以先阅读。', 'Completed translations are saved and ready to read.')
+    if ((task.completed ?? task.artifact?.coverage?.translated ?? task.coverage?.translated ?? 0) > 0) text += '\n' + uiText('已有译文已保存，可以先阅读。', 'Completed translations are saved and ready to read.')
+    if (task.requestProgress) { const activity = requestActivityText(task.requestProgress, now); if (activity) text += '\n' + activity }
   }
   if (task.stage === 'finishing' && busy) text = uiText('正在保存已完成译文', 'Saving completed translations')
   if (task.status === 'cancelled') text = (task.error ? task.error + '\n' : '') + uiText('已取消，点击重试可复用已完成片段。', 'Cancelled. Retry to reuse completed segments.')

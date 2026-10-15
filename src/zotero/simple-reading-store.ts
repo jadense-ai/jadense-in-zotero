@@ -7,7 +7,7 @@ import { pdfPlatform } from './pdf-translation-runtime'
 import { SIMPLE_READING_STRATEGY, validBlockOutput, type ReadingBlock } from './simple-reading-blocks'
 
 export type ReadingIdentity = { source: DocumentIdentity; fingerprint: string; sdtHash: string; contentHash: string }
-export type ReadingRequest = { id: string; operation: string; blocks: ReadingBlock[]; state: 'pending' | 'complete' | 'failed'; output?: Record<string, string>; single?: boolean; promptVersion?: 2 }
+export type ReadingRequest = { id: string; operation: string; blocks: ReadingBlock[]; state: 'pending' | 'complete' | 'failed'; output?: Record<string, string>; single?: boolean; promptVersion?: 2 | 3; previousOperation?: string }
 export type ReadingTask = ReadingIdentity & {
   version: 1; strategy: string; id: string; createdAt: string; languages: TranslationLanguages; configuration: string
   status: 'running' | 'partial' | 'complete' | 'cancelled' | 'interrupted'; outputs: Record<string, string>; requests: ReadingRequest[]

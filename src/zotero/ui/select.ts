@@ -13,6 +13,9 @@ export type JdxSelectOption = {
   description?: string
   group?: string
   meta?: string
+  /** 来源优惠说明只进入详情；价格元数据缺失不影响普通 Select。 */
+  sourcePriceLabel?: string
+  priceDetail?: { base?: number; current?: number; discounted: boolean }
   disabled?: boolean
   /** 禁选行仍可点按；调用方可将此原因交给 Toast。 */
   disabledReason?: string
@@ -58,6 +61,7 @@ const POPUP_MIN_HEIGHT = 48
 const POPUP_FLIP_THRESHOLD = 140
 const POPUP_VIEWPORT_GAP = 8
 const POPUP_TRIGGER_GAP = 4
+const DISCOUNT_ICON_PATH = "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z M7.5 7.5h.01"
 
 /** 请求值存在于选项中则选中，否则回落到空值占位行（等价原生 select 的未匹配回落）。 */
 export function resolveSelectedValue(options: JdxSelectOption[], requested: string) {
@@ -112,6 +116,16 @@ function createOptionIcon(doc: Document, pathData: string) {
   return svg
 }
 
+/** 模型选中态复用 Mobile 的圆底镂空勾号路径；普通 Select 保留原有状态图标。 */
+function createSelectedModelIcon(doc: Document) {
+  const svg = createOptionIcon(doc, "M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22ZM7 11l3.5 3.5L17 8l1.4 1.4-7.9 7.9-4.9-4.9Z")
+  svg.classList.add("jdx-select-selected-model-icon")
+  svg.setAttribute("fill", "currentColor")
+  svg.setAttribute("fill-rule", "evenodd")
+  svg.setAttribute("stroke", "none")
+  return svg
+}
+
 function createLogo(doc: Document, src: string, themed = false) {
   if (themed) {
     const mask = htmlElement(doc, "span")
@@ -152,7 +166,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   const disabledListeners = new Set<(option: JdxSelectOption) => void>()
   let anchorTop = 0, anchorLeft = 0
   let modelControl: JdxModelControl | undefined
-  let modelView: "model" | "route" | "list" = "model"
+  let modelView: "model" | "list" = "model"
 
   host.classList.add("jdx-select")
   if (input.compact) host.classList.add("jdx-select-compact")
@@ -205,9 +219,69 @@ export function createJdxSelect(host: HTMLElement, input: {
   effortBadge.className = "jdx-model-effort"
   effortBadge.hidden = true
   valueLabel.after(effortBadge)
+  const sourcePriceBadge = htmlElement(doc, "span")
+  sourcePriceBadge.className = "jdx-model-discount-icon"
+  sourcePriceBadge.dataset.sourcePrice = ""
+  sourcePriceBadge.hidden = true
+  valueLabel.after(sourcePriceBadge)
+  sourcePriceBadge.append(createOptionIcon(doc, DISCOUNT_ICON_PATH))
+  const detail = htmlElement(doc, "div")
+  detail.className = "jdx-model-detail"
+  detail.id = `${hostId}-model-detail`
+  detail.setAttribute("role", "tooltip")
+  detail.hidden = true
+  host.append(detail)
+  let detailOption: JdxSelectOption | undefined
+  let detailAnchor: HTMLElement | undefined
+
+  /** 只在模型详情中解释价格；宽窗侧向展开，窄栏在原弹层内显示。 */
+  function showDetail(option?: JdxSelectOption, anchor?: HTMLElement) {
+    if (!state.open || !option?.priceDetail || !anchor || (modelControl && modelView === "model" && anchor !== modelPanel.querySelector(".jdx-model-heading"))) { hideDetail(); return }
+    detailAnchor?.removeAttribute("aria-describedby")
+    detailOption = option; detailAnchor = anchor
+    detail.replaceChildren()
+    const heading = htmlElement(doc, "div"); heading.className = "jdx-model-detail-heading"
+    const title = htmlElement(doc, "strong"); title.textContent = option.label; heading.append(title)
+    if (option.sourcePriceLabel) {
+      const badge = htmlElement(doc, "span"); badge.className = "jdx-model-detail-offer"; badge.dataset.discounted = String(option.priceDetail.discounted); badge.textContent = option.sourcePriceLabel; heading.append(badge)
+    }
+    detail.append(heading)
+    if (option.description) { const description = htmlElement(doc, "p"); description.textContent = option.description; detail.append(description) }
+    const priceRow = (label: string, value?: number) => {
+      const row = htmlElement(doc, "div"); row.className = "jdx-model-detail-price"
+      const name = htmlElement(doc, "span"), amount = htmlElement(doc, "span")
+      name.textContent = label; amount.textContent = value === undefined || !Number.isFinite(value) || value < 0 ? uiText("暂无价格", "Price unavailable") : value === 0 ? uiText("免费", "Free") : `${value.toFixed(2)}x`
+      row.append(name, amount); detail.append(row)
+    }
+    priceRow(uiText("原消费倍率", "Original consumption multiplier"), option.priceDetail.base)
+    priceRow(uiText("当前消费倍率", "Current consumption multiplier"), option.priceDetail.current)
+    const note = htmlElement(doc, "p"); note.textContent = uiText("用于模型间比较估算，实际消耗按请求用量结算。", "For model comparison. Actual consumption is settled from request usage."); detail.append(note)
+    detail.hidden = false
+    anchor.setAttribute("aria-describedby", detail.id)
+    positionDetail()
+  }
+
+  function hideDetail() {
+    detailAnchor?.removeAttribute("aria-describedby")
+    detail.hidden = true; detailOption = undefined; detailAnchor = undefined
+  }
+
+  function positionDetail() {
+    if (detail.hidden || !detailAnchor) return
+    const viewportWidth = doc.defaultView?.innerWidth ?? 960, viewportHeight = doc.defaultView?.innerHeight ?? 640
+    const scale = Number(doc.defaultView?.getComputedStyle(host).getPropertyValue("--jdx-font-scale")) || 1
+    const width = Math.min(304 * scale, viewportWidth - 16), bounds = popup.getBoundingClientRect()
+    const left = bounds.right + 8 + width <= viewportWidth - 8 ? bounds.right + 8 : bounds.left - 8 - width >= 8 ? bounds.left - 8 - width : null
+    detail.dataset.inline = String(left === null)
+    ;(left === null ? popup : portal ?? host).append(detail)
+    detail.style.width = left === null ? "" : `${width}px`
+    detail.style.left = left === null ? "" : `${left}px`
+    detail.style.top = ""; detail.style.maxHeight = left === null ? "200px" : `${viewportHeight - 16}px`
+    if (left !== null) detail.style.top = `${Math.max(8, Math.min(detailAnchor.getBoundingClientRect().top, viewportHeight - detail.getBoundingClientRect().height - 8))}px`
+  }
 
   function visibleOptions() {
-    const options = modelControl ? state.options.filter(option => modelView === "route" ? option.value.startsWith("route:") : !option.value.startsWith("route:")) : state.options
+    const options = state.options
     return filterSelectOptions(options, state.query)
   }
 
@@ -240,31 +314,27 @@ export function createJdxSelect(host: HTMLElement, input: {
       const title = htmlElement(doc, "span"); title.textContent = uiText("模型列表", "Models"); header.append(title)
       modelPanel.append(header); return
     }
-    const mode = button(modelView === "route" ? uiText("切换到指定模型", "Use a specific model") : uiText("切换到智能路由", "Use smart routing"), () => switchView(modelView === "route" ? "model" : "route"))
-    mode.replaceChildren(createOptionIcon(doc, modelView === "route" ? "M3 12h6l6-6h6M9 12l6 6h6" : "M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"))
-    mode.disabled = !state.options.some(option => option.value.startsWith("route:"))
+    const icon = htmlElement(doc, "span")
+    icon.append(createOptionIcon(doc, "M6 6h12v12H6zM9 9h6v6H9z"))
     const selected = state.options.find(option => option.value === state.value)
     const selectedIsRoute = state.value.startsWith("route:")
-    const heading = button(modelView === "route" ? uiText("智能路由", "Smart routing") : modelControl.label, () => { if (modelView === "model") switchView("list") })
+    const heading = button(uiText("选择模型", "Choose a model"), () => switchView("list"))
     heading.className = "jdx-model-heading"
     if (modelView === "model") {
       const title = htmlElement(doc, "span"); title.className = "jdx-model-heading-effort"
-      title.append(doc.createTextNode(modelControl.label), createChevron(doc, "", "right", 14))
+      title.append(doc.createTextNode(selectedIsRoute ? "Auto" : modelControl.label), createChevron(doc, "", "right", 14))
       const name = htmlElement(doc, "span"); name.className = "jdx-model-heading-name"
       name.textContent = selectedIsRoute ? uiText("选择模型", "Choose a model") : selected?.label ?? uiText("选择模型", "Choose a model")
       heading.replaceChildren(title, name)
+      heading.addEventListener("mouseenter", () => showDetail(selected, heading))
+      heading.addEventListener("focus", () => showDetail(selected, heading))
     }
-    const auto = button(modelView === "route" ? uiText("恢复默认路由", "Reset route") : uiText("自动", "Auto"), () => {
-      if (modelView === "route") {
-        const index = visibleOptions().findIndex(option => option.value === "route:standard")
-        selectIndex(index, true)
-      } else modelControl?.onCommit?.("auto")
-    })
-    auto.disabled = modelView === "route" ? !visibleOptions().some(option => option.value === "route:standard" && !option.disabled) : selectedIsRoute || !modelControl.onCommit || state.disabled
-    if (modelView === "model") auto.setAttribute("aria-pressed", String(modelControl.value === "auto"))
-    else auto.replaceChildren(createOptionIcon(doc, "M3 10a9 9 0 1 1 2 8M3 3v7h7"))
-    header.append(mode, heading, auto); modelPanel.append(header)
+    const auto = button(uiText("自动", "Auto"), () => modelControl?.onCommit?.("auto"))
+    auto.disabled = selectedIsRoute || !modelControl.onCommit || state.disabled
+    auto.setAttribute("aria-pressed", String(modelControl.value === "auto"))
+    header.append(icon, heading, auto); modelPanel.append(header)
     if (modelView !== "model") return
+    if (selectedIsRoute || !modelControl.levels.length) return
     if (modelControl.levels.length === 1) {
       const only = modelControl.levels[0]
       const choice = button(only.label, () => modelControl?.onCommit?.(only.value))
@@ -339,7 +409,10 @@ export function createJdxSelect(host: HTMLElement, input: {
     valueLabel.textContent = selected?.label ?? "—"
     effortBadge.hidden = !modelControl || !selected || state.value.startsWith("route:")
     effortBadge.textContent = modelControl?.label ?? ""
+    sourcePriceBadge.hidden = !selected?.priceDetail?.discounted
+    sourcePriceBadge.title = selected?.sourcePriceLabel ?? ""
     trigger.title = selected?.label ?? ""
+    if (selected?.sourcePriceLabel) trigger.title += ` · ${selected.sourcePriceLabel}`
     if (!effortBadge.hidden) trigger.title += ` · ${uiText("思考", "Thinking")}: ${modelControl!.label}`
     valueLabel.dataset.placeholder = String(state.value === "")
     if (input.ariaLabel) trigger.setAttribute("aria-label", `${input.ariaLabel}：${trigger.title || uiText("未选择", "Not selected")}`)
@@ -350,6 +423,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   }
 
   function renderOptions() {
+    hideDetail()
     const options = visibleOptions()
     list.replaceChildren()
     if (options.length === 0) {
@@ -383,16 +457,22 @@ export function createJdxSelect(host: HTMLElement, input: {
       const label = htmlElement(doc, "span")
       label.className = "jdx-select-option-label"
       label.textContent = option.label
-      if (input.compact && option.iconSrc) main.append(createLogo(doc, option.iconSrc, option.iconThemed))
+      if (input.compact && input.showSelectedIcon && option.value === state.value) main.append(createSelectedModelIcon(doc))
+      else if (input.compact && option.iconSrc) main.append(createLogo(doc, option.iconSrc, option.iconThemed))
       else if (input.compact && option.iconPath) main.append(createOptionIcon(doc, option.iconPath))
-      main.append(label)
+      if (option.priceDetail?.discounted) {
+        const name = htmlElement(doc, "span"); name.className = "jdx-model-option-name"; name.append(label)
+        const discount = createOptionIcon(doc, DISCOUNT_ICON_PATH)
+        discount.classList.add("jdx-model-discount-icon")
+        name.append(discount); main.append(name)
+      } else main.append(label)
       if (option.meta) {
         const meta = htmlElement(doc, "span")
         meta.className = "jdx-select-option-meta"
         meta.textContent = option.meta
         main.append(meta)
       }
-      if (input.compact || option.disabled) {
+      if ((input.compact && !input.showSelectedIcon) || option.disabled) {
         const status = createOptionIcon(doc, option.disabled
           ? "M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3"
           : option.value === state.value ? "m5 12 4 4L19 6" : "")
@@ -411,6 +491,7 @@ export function createJdxSelect(host: HTMLElement, input: {
         row.append(description)
       }
       row.addEventListener("mouseenter", () => setActiveIndex(index, false))
+      row.addEventListener("focus", () => setActiveIndex(index, false))
       row.addEventListener("click", () => selectIndex(index, true))
       row.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectIndex(index, true) }
@@ -427,6 +508,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       row.dataset.active = String(rowIndex === index)
     })
     if (index >= 0 && index < rows.length) {
+      showDetail(visibleOptions()[index], rows[index])
       trigger.setAttribute("aria-activedescendant", optionId(index))
       search?.setAttribute("aria-activedescendant", optionId(index))
       if (scroll) {
@@ -437,6 +519,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       }
     } else {
       trigger.removeAttribute("aria-activedescendant")
+      hideDetail()
       search?.removeAttribute("aria-activedescendant")
     }
   }
@@ -465,14 +548,15 @@ export function createJdxSelect(host: HTMLElement, input: {
       popup.style.bottom = ""
       popup.style.top = `${Math.round(rect.bottom + POPUP_TRIGGER_GAP)}px`
     }
+    if (detailOption) positionDetail()
   }
 
   function onDocumentPointerDown(event: Event) {
-    if (!host.contains(event.target as Node) && !popup.contains(event.target as Node)) close()
+    if (!host.contains(event.target as Node) && !popup.contains(event.target as Node) && !detail.contains(event.target as Node)) close()
   }
 
   function onDocumentScroll(event: Event) {
-    if (popup.contains(event.target as Node)) return
+    if (popup.contains(event.target as Node) || detail.contains(event.target as Node)) return
     // Gecko 的焦点/滚动锚定可派发位置未变化的 scroll；固定底部工具条仍可安全保持弹层。
     const rect = trigger.getBoundingClientRect()
     if (Math.abs(rect.top - anchorTop) > 1 || Math.abs(rect.left - anchorLeft) > 1) close()
@@ -481,7 +565,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   function open() {
     if (state.open || state.disabled) return
     state.open = true
-    if (modelControl) { modelView = state.value.startsWith("route:") ? "route" : "model"; renderModelPanel() }
+    if (modelControl) { modelView = "model"; renderModelPanel() }
     if (portal) {
       const computed = doc.defaultView?.getComputedStyle(host)
       for (const token of ["text", "muted", "line-strong", "surface", "subtle", "font-scale", "green-deep", "active-bg", "active-text", "press-bg", "popup-shadow", "green"]) portal.style.setProperty(`--jdx-${token}`, computed?.getPropertyValue(`--jdx-${token}`) ?? "")
@@ -510,6 +594,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   function close() {
     if (!state.open) return
     state.open = false
+    hideDetail()
     if (portal) { host.append(popup); portal.remove() }
     state.activeIndex = -1
     renderTrigger()
@@ -525,7 +610,7 @@ export function createJdxSelect(host: HTMLElement, input: {
       if (notify) for (const listener of disabledListeners) listener(option)
       return
     }
-    if (!modelControl || modelView === "route") close()
+    if (!modelControl) close()
     const changed = option.value !== state.value
     state.value = option.value
     renderOptions()
@@ -604,7 +689,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   return {
     element: host,
     close,
-    destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); portal?.remove() },
+    destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); detail.remove(); portal?.remove() },
     getValue: () => state.value,
     setModelControl(control) {
       if (modelControl && JSON.stringify([modelControl.selectionKey, modelControl.levels, modelControl.value, modelControl.label, Boolean(modelControl.onCommit)]) === JSON.stringify([control.selectionKey, control.levels, control.value, control.label, Boolean(control.onCommit)])) {

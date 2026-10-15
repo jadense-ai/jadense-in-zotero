@@ -37,6 +37,7 @@ export type TemporaryChatSendInput = {
   taskId?: string
   operationId?: string
   previousRequestId?: string
+  previousOperationId?: string
   clientFeature?: "chat" | "translation" | "analysis" | "figure"
   clientRequestId: string
   conversationId: string
@@ -49,6 +50,8 @@ export type TemporaryChatSendInput = {
   requireComplete?: boolean
   /** PDF 批次身份含持久化重试代次，可复用同一操作的完整回执。 */
   reuseCompletedOperation?: boolean
+  /** 仅用户明确要求重发未知 BYOK 执行时的一次性授权，不发送给 Provider。 */
+  allowUnconfirmedRetry?: boolean
 }
 
 type StreamEvent = Record<string, unknown> & {
@@ -159,7 +162,7 @@ export async function consumeTemporaryChatStream(
         streamTrace.pending(pending.length)
         boundary = pending.search(/\r?\n\r?\n/)
       }
-      if (complete) { await reader.cancel().catch(() => undefined); break }
+      if (complete) { void reader.cancel().catch(() => undefined); break }
       if (done) break
     }
     if (!complete && pending.trim()) consumeBlock(pending)
@@ -169,13 +172,14 @@ export async function consumeTemporaryChatStream(
     if (requireComplete && !accumulatedText.trim()) throw requestError(uiText('模型未返回译文。', 'The model returned no translation.'), {}, { code: malformed ? 'STREAM_PARSE_FAILED' : reasoning ? 'REASONING_ONLY' : 'EMPTY_OUTPUT', stage: 'stream' })
     return accumulatedText
   } catch (error) {
+    if (error && typeof error === 'object') Object.assign(error, { partialText: accumulatedText })
     if (error && typeof error === 'object') try { Object.assign(error, requestIssue(error, {
       code: (error as Error).name === 'AbortError' ? 'OUTPUT_CANCELLED' : 'NETWORK_ERROR', stage: 'stream',
       ...requestIssue({ requestId: response.headers.get('x-request-id'), executionId: response.headers.get('x-execution-id'), diagnosticId: response.headers.get('x-diagnostic-id') }),
     })) } catch { /* Frozen error. */ }
     diagnostic?.fail(error, "stream_error")
     diagnostic?.event("cleanup_cancel", { source: "stream_cleanup" })
-    await reader.cancel().catch(() => undefined)
+    void reader.cancel().catch(() => undefined)
     throw error
   } finally {
     streamTrace.flush()

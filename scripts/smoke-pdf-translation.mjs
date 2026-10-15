@@ -65,6 +65,10 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     }
   }
   const ai = Boolean(config?.pdfAI), starts = [], mixed = [], batchRows = []
+  if (ai) {
+    const selection = { route: 'jadense', selection: { kind: 'model', modelId: 'synthetic-platform-model' } }
+    Zotero.Prefs.set('extensions.jadenseInZotero.aiModelSettings', JSON.stringify({ version: 1, followChatModel: true, models: { chat: selection, translation: selection, analysis: selection, figure: selection } }), true)
+  }
   let active = 0, peak = 0, mixedStarted = false
   Zotero.Prefs.set('extensions.jadenseInZotero.fullTranslationInterface', JSON.stringify(ai ? { kind: 'ai', service: 'google' } : { kind: 'machine', service: 'google' }), true)
   let requests = 0, failedID = '', injectFailure = Boolean(config?.pdfPartial)
@@ -77,7 +81,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       requests++; starts.push(Date.now()); active++; peak = Math.max(peak, active)
       let translated
       const translate = source => source.split(/(<[^>]+>|\{[^}]+\}|⟦[^⟧]+⟧)/u).map(part => /^(<|\{|⟦)/u.test(part) ? part : part.replace(/[A-Za-z][A-Za-z ,.]+/gu, '科学研究保留证据。')).join('')
-      if (text.startsWith('Translate the document passages')) {
+      if (text.startsWith('Translate the document passages') || text.startsWith('Translate all passages to')) {
         const current = Zotero.__jadensePDFTranslationJobs.list().find(task => task.status === 'running')
         assert(current && Zotero.__jadensePDFTranslationJobs.hasOutput(current), 'PDF must be published before any Provider request')
         if (!batchRows.length) report.checks.push('pdf-artifact-before-first-provider-request')
@@ -206,6 +210,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 150, true)
       await new Promise(resolve => main.setTimeout(resolve, 200))
       assert(toolbar.scrollWidth <= toolbar.clientWidth + 1 && toolbar.getBoundingClientRect().height <= 52, 'Partial retry overflows compact PDF toolbar')
+      await screenshot('pdf-translation-partial-320-scaled', reader._iframeWindow)
       Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
       panel.style.width = '640px'
       Object.assign(fixtureTask, { status: 'complete' }); notifyFixture()

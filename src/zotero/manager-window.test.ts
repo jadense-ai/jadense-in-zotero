@@ -9,6 +9,104 @@ import {
 import type { ZoteroLike } from "./runtime"
 
 describe("manager window helpers", () => {
+  it.each(["document", "closed"])("discards a cached window with dead %s and opens one replacement with the original action", property => {
+    const dead = { closed: false, document: { readyState: "complete" }, focus: vi.fn(), receiveJadenseContext: vi.fn() }
+    const replacement = { closed: false, focus: vi.fn() }
+    const openDialog = vi.fn().mockReturnValueOnce(dead).mockReturnValue(replacement)
+    const input = { zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } }
+    openManagerWindow(input)
+    Object.defineProperty(dead, property, { get() { throw new TypeError("Synthetic dead window property") } })
+    dead.focus.mockImplementation(() => { throw new TypeError("Synthetic dead window") })
+    const action = { kind: "analyze" as const, itemID: 2 }
+    expect(openManagerWindow({ ...input, section: "analysis", action })).toBe(true)
+    expect(openDialog).toHaveBeenCalledTimes(2)
+    expect(openDialog.mock.calls[1][3].actions).toEqual([action])
+    expect(dead.receiveJadenseContext).not.toHaveBeenCalled()
+  })
+
+  it("skips dead registry entries and uses the current native window instead of stale callbacks", () => {
+    const stale = { closed: false, document: { readyState: "complete" }, focus: vi.fn(), receiveJadenseContext: vi.fn() }
+    const current = { closed: false, location: { href: managerWindowUrl({ pluginID: "fixture", rootURI: "" }) }, focus: vi.fn(), receiveJadenseContext: vi.fn() }
+    const dead = { get closed(): boolean { throw new TypeError("Synthetic dead registry window") } }
+    const openDialog = vi.fn().mockReturnValue(stale)
+    const input = { zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } }
+    openManagerWindow(input)
+    vi.stubGlobal("Services", { wm: { getEnumerator: () => { const entries = [dead, current]; return { hasMoreElements: () => entries.length > 0, getNext: () => entries.shift() } } } })
+    try {
+      expect(openManagerWindow({ ...input, action: { kind: "analyze", itemID: 2 } })).toBe(true)
+      expect(current.receiveJadenseContext).toHaveBeenCalledOnce()
+      expect(stale.receiveJadenseContext).not.toHaveBeenCalled()
+      expect(openDialog).toHaveBeenCalledOnce()
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it.each(["throws", "missing"])("recovers %s focus through the host without delivering the analysis twice", fault => {
+    const manager = { closed: false, document: { readyState: "complete" }, focus: vi.fn(), receiveJadenseContext: vi.fn(), restore: vi.fn() }
+    const openDialog = vi.fn().mockReturnValue(manager), nativeFocus = { focusedWindow: null as unknown }
+    // Gecko 的 activeWindow 只读；只有 focusedWindow 能发起宿主焦点恢复。
+    Object.defineProperty(nativeFocus, "activeWindow", { get: () => null })
+    const input = { zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } }
+    openManagerWindow(input)
+    if (fault === "throws") manager.focus.mockImplementation(() => { throw new TypeError("Synthetic focus failure") })
+    else Object.defineProperty(manager, "focus", { value: undefined })
+    vi.stubGlobal("Services", { focus: nativeFocus })
+    try {
+      expect(openManagerWindow({ ...input, action: { kind: "analyze", itemID: 2 } })).toBe(true)
+      expect(nativeFocus.focusedWindow).toBe(manager)
+      expect(manager.receiveJadenseContext).toHaveBeenCalledOnce()
+      expect(openDialog).toHaveBeenCalledOnce()
+      expect(manager.restore).not.toHaveBeenCalled()
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it("does not open a second window when a newly created window cannot focus", () => {
+    const manager = { closed: false, focus: vi.fn(() => { throw new TypeError("Synthetic focus failure") }) }
+    const openDialog = vi.fn().mockReturnValue(manager), open = vi.fn()
+    expect(openManagerWindow({ zotero: {}, win: { openDialog, open } as unknown as ZoteroManagerWindow,
+      context: { pluginID: "fixture", rootURI: "" }, action: { kind: "analyze", itemID: 2 } })).toBe(true)
+    expect(openDialog).toHaveBeenCalledOnce()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it("keeps a delivered action successful when native focus and optional diagnostics both fail", () => {
+    const manager = { closed: false, focus: vi.fn(), receiveJadenseContext: vi.fn() }
+    const zotero = { __jadenseDiagnostics: { record: vi.fn(() => { throw new Error("Synthetic diagnostic failure") }) } }
+    const openDialog = vi.fn().mockReturnValue(manager)
+    const input = { zotero, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } }
+    openManagerWindow(input)
+    manager.focus.mockImplementation(() => { throw new TypeError("Synthetic focus failure") })
+    const focus = Object.defineProperty({}, "focusedWindow", { set() { throw new TypeError("Synthetic host focus failure") } })
+    vi.stubGlobal("Services", { focus })
+    try {
+      expect(openManagerWindow({ ...input, action: { kind: "analyze", itemID: 2 } })).toBe(true)
+      expect(manager.receiveJadenseContext).toHaveBeenCalledOnce()
+      expect(openDialog).toHaveBeenCalledOnce()
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it("contains callback failure without replaying an action that may already have started", () => {
+    const receiveJadenseContext = vi.fn(() => { throw new TypeError("Synthetic failure after handoff") })
+    const manager = { closed: false, focus: vi.fn(), receiveJadenseContext }
+    const openDialog = vi.fn().mockReturnValue(manager)
+    const input = { zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } }
+    openManagerWindow(input)
+    expect(openManagerWindow({ ...input, action: { kind: "analyze", itemID: 2 } })).toBe(false)
+    expect(receiveJadenseContext).toHaveBeenCalledOnce()
+    expect(openDialog).toHaveBeenCalledOnce()
+    expect(manager.focus).toHaveBeenCalledTimes(2)
+  })
+
+  it("clears dead cached windows on shutdown without throwing", () => {
+    const manager = { closed: false, focus: vi.fn() }
+    const openDialog = vi.fn().mockReturnValue(manager), zotero = {}
+    openManagerWindow({ zotero, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } })
+    Object.defineProperty(manager, "JadenseInZotero", { get() { throw new TypeError("Synthetic dead context") } })
+    expect(() => closeManagerWindow(zotero)).not.toThrow()
+    openDialog.mockReturnValue({ focus: vi.fn() })
+    expect(openManagerWindow({ zotero, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" } })).toBe(true)
+    expect(openDialog).toHaveBeenCalledTimes(2)
+  })
+
   it("recovers a reloaded Manager from the native window registry without opening another window", () => {
     const receiveJadenseContext = vi.fn(), opened = { closed: false, location: { href: "chrome://jadense-in-zotero/content/manager.xhtml?section=chat" }, focus: vi.fn(), receiveJadenseContext }
     const openDialog = vi.fn(); let read = false

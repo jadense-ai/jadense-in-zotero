@@ -38,7 +38,7 @@ class BatchingTests(unittest.TestCase):
         encoded = [{"id": "a", "output": "译文 &lt;b0&gt;加粗&lt;/b0&gt; ｛ v1 ｝ ⟦ F2 ⟧"}]
         self.assertEqual(parse_outputs(json.dumps(encoded), rows), {'a': '译文 <b0>加粗</b0> {v1} ⟦F2⟧'})
         self.assertEqual(parse_outputs('[{"id":"b","output":"same"},{"id":"b","output":"same"}]', rows), {'b': 'same'})
-        self.assertEqual(parse_outputs('[{"id":"b","output":"one"},{"id":"b","output":"two"}]', rows), {})
+        self.assertEqual(parse_outputs('[{"id":"b","output":"one"},{"id":"b","output":"two"}]', rows), {'b': 'one'})
         self.assertEqual(parse_outputs('[{"output":"no ID"}]', rows), {})
         restored = parse_outputs(json.dumps([dict(id='a', output='Missing placeholders')]), rows)['a']
         self.assertTrue(valid_output(rows[0]['text'], restored))
@@ -146,7 +146,7 @@ class BatchingTests(unittest.TestCase):
         recovered = parse_outputs(json.dumps(values), rows)
         self.assertEqual(recovered['2'], '译文 {v1}')
         self.assertTrue(valid_output(rows[1]['text'], recovered['1']))
-        self.assertNotIn('0', recovered)
+        self.assertEqual(recovered['0'], 'a {v1}')
         self.assertEqual(parse_outputs('not JSON', rows), {})
         self.assertFalse(valid_output('a {v1}', 'b {v2}'))
         self.assertFalse(valid_output('a {v1}', 'b {v1}{v1}'))
@@ -189,7 +189,7 @@ class BatchingTests(unittest.TestCase):
             adapter.translator = SimpleNamespace(request=request)
             with self.assertRaises(TimeoutError): adapter.translate_batch(rows)
             self.assertEqual(adapter.cache['0'], '译文 {v1}')
-            self.assertEqual([r['id'] for r in calls[1][1]], ['p1'])
+            self.assertEqual([r['id'] for r in calls[1][1]], ['1'])
             adapter.cache = json.loads(adapter.cache_path.read_text())
             adapter.translate_batch(rows)
             self.assertEqual(calls[1], calls[2])
@@ -350,7 +350,7 @@ class ResilienceTests(unittest.TestCase):
             adapter.translate_batch([dict(id='a', text=source, label='text')])
             self.assertTrue(valid_output(source, adapter.cache.get('a')))
             self.assertEqual(len(calls), 3)
-            self.assertEqual(len(set(text for text, _ in calls)), 3)
+            self.assertEqual(len(set(operation for _, operation in calls)), 3)
             self.assertNotIn('<b0>', ''.join(row['input'] for row in json.loads(calls[-1][0].split('\n', 1)[1])))
 
     def test_final_repair_restores_markers_for_every_row_in_a_capacity_group(self):
@@ -374,11 +374,11 @@ class ResilienceTests(unittest.TestCase):
             def request(text, *args, **kwargs):
                 inputs = json.loads(text.split('\n', 1)[1]); calls.append(inputs)
                 self.assertIn('one JSON object per line', text)
-                self.assertEqual([row['id'] for row in inputs], [f'p{i + 1}' for i in range(len(inputs))])
+                self.assertEqual([row['id'] for row in inputs], [str(i + 1) for i in range(len(inputs))])
                 if len(calls) == 1:
-                    return '{"p2":"第二段 {v1}"}\n{"p1":"第一段"}\n{"p3":"截断'
+                    return '{"2":"第二段 {v1}"}\n{"1":"第一段"}\n{"3":"截断'
                 self.assertEqual([row['input'] for row in inputs], ['Third'])
-                return '{"p1":"第三段"}'
+                return '{"1":"第三段"}'
             adapter, _ = self.adapter(directory, request)
             rows = [dict(id='a' * 64, text='First', label='text'), dict(id='b' * 64, text='Second {v1}', label='text'), dict(id='c' * 64, text='Third', label='text')]
             adapter.translate_batch(rows)
@@ -390,7 +390,7 @@ class ResilienceTests(unittest.TestCase):
 
     def test_compact_lines_contain_duplicate_ids_and_preserve_multiline_text(self):
         rows = [dict(id='p1', text='first'), dict(id='p2', text='second')]
-        self.assertEqual(parse_outputs('{"p1":"one"}\n{"p1":"two"}\n{"p2":"line one\\nline two"}', rows), {'p2': 'line one\nline two'})
+        self.assertEqual(parse_outputs('{"p1":"one"}\n{"p1":"two"}\n{"p2":"line one\\nline two"}', rows), {'p1': 'one', 'p2': 'line one\nline two'})
         self.assertEqual(parse_outputs('{"p1":"one","p1":"two"}\n{"p2":"complete"}', rows), {'p2': 'complete'})
 
     def test_restart_regroups_only_missing_across_previous_batch_boundaries(self):
@@ -435,7 +435,7 @@ class ResilienceTests(unittest.TestCase):
             calls = []
             def request(text, llm, operation):
                 inputs = json.loads(text.split('\n', 1)[1]); calls.append((text, operation))
-                if len(calls) == 1: return '{"p1":"saved"}\n{"p2":"saved"}'
+                if len(calls) == 1: return '{"1":"saved"}\n{"2":"saved"}'
                 if len(calls) == 2: raise TimeoutError('unconfirmed')
                 return '\n'.join(json.dumps({row['id']: 'recovered'}) for row in inputs)
             adapter, _ = self.adapter(directory, request)

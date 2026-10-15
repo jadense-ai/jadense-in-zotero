@@ -75,7 +75,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
 .jdx-pdf-translation-toolbar{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--jdx-reader-line);flex:none;box-sizing:border-box;width:100%;min-height:42px;background:var(--jdx-reader-background,#fff);pointer-events:auto;white-space:nowrap;overflow:hidden}
 .jdx-pdf-translation-group{display:flex;align-items:center;gap:4px;min-width:0}
 .jdx-pdf-translation-primary{width:100%}
-.jdx-pdf-translation-primary .jdx-pdf-task{margin-inline-start:auto}
+.jdx-pdf-translation-primary .jdx-pdf-task{margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .jdx-pdf-translation button,.jdx-pdf-translation input{box-sizing:border-box;font:inherit;color:inherit;border:1px solid var(--jdx-reader-border);border-radius:6px;min-height:32px}
 .jdx-pdf-translation button{padding:4px 9px;background:transparent;cursor:pointer;white-space:nowrap}
 .jdx-pdf-translation button:hover{background:var(--jdx-reader-hover)}
@@ -242,6 +242,10 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), () => { savedTaskID = undefined; void start(true) }, 'regenerate')
   cleanups.push(wireReadingBudgetSettings(host, configGroup, ['pdf']))
   const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (task) jobs.retry(task.id); else void start() }, 'retry')
+  const retryUnknown = button(uiText('重新请求未确认段落', 'Request unconfirmed passages again'), () => {
+    if (task && win.confirm(uiText('原 BYOK 请求可能仍在执行，重新请求可能重复计费。是否继续？', 'The original BYOK request may still be running. A new request may incur duplicate charges. Continue?'))) jobs.retry(task.id, true)
+  }, 'retry-unconfirmed')
+  retryUnknown.hidden = true; configGroup.append(retryUnknown)
   const cancel = button(uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id); preparation.abort() }, 'cancel')
   const closeMenu = button(uiText('退出对照翻译', 'Exit PDF translation'), () => remove(), 'exit'); closeMenu.hidden = true
   const statusContent = element('div'); statusContent.className = 'jdx-pdf-status-content'; statusContent.setAttribute('role', 'status'); statusContent.tabIndex = 0
@@ -429,6 +433,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     const hasOutput = jobs.hasOutput(task), resumeNeeded = !busy && task.status !== 'complete'
     scope.setDisabled(busy); regenerate.disabled = busy; repair.hidden = hasOutput; cancel.hidden = !busy; retry.hidden = !resumeNeeded || hasOutput; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !hasOutput
     retry.textContent = uiText('重试', 'Retry')
+    retryUnknown.hidden = busy || !task.unconfirmed
     if (task.stage === 'finishing' && busy) cancel.disabled = true; else cancel.disabled = false
     taskAction.hidden = !busy && !resumeNeeded && mono.disabled
     taskAction.textContent = busy ? uiText('取消', 'Cancel') : resumeNeeded ? hasOutput ? uiText('补译', 'Resume') : uiText('重试', 'Retry') : uiText('保存译文', 'Save PDF')

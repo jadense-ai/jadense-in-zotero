@@ -17,6 +17,11 @@ export function formatJadenseSyncResult(result: unknown) {
         ["pdfSkippedCount", "PDF 已跳过", "PDFs skipped"],
         ["pdfFailedCount", "PDF 失败", "PDFs failed"],
       ] as const).map(([key, zh, en]) => `${uiText(zh, en)}${uiText("：", ": ")}${new Intl.NumberFormat(getUiLocale()).format(Number(record[key] ?? 0))}`),
+      ...(Number(record.pdfAssociationPendingCount) > 0 ? [uiText(`PDF 已保存，待关联：${record.pdfAssociationPendingCount}。再次上传将继续关联。`, `PDFs saved, awaiting association: ${record.pdfAssociationPendingCount}. Upload again to continue association.`)] : []),
+      ...(Array.isArray(record.items) ? record.items.flatMap(raw => {
+        const item = raw as {title?:string;pdf?:{status?:string;error?:string}}
+        return item.pdf?.status === "failed" && item.pdf.error ? [`${item.title || uiText("文献", "Paper")}：${item.pdf.error}`] : []
+      }).slice(0,3) : []),
     ].join("\n")
   }
 

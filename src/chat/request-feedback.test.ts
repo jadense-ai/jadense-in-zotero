@@ -4,7 +4,17 @@ import { TemporaryChatClient, consumeTemporaryChatStream } from './temporary-cha
 import { ByokChatClient, consumeByokStream } from './byok-chat'
 import { readJadenseApiError } from '@/jadense/api'
 import { Diagnostics } from '@/zotero/diagnostics'
-import { requestIssue, requestIssueSummary, type RequestProgress } from './request-feedback'
+import { requestIssue, requestIssueSummary, RequestProgressTracker, type RequestProgress } from './request-feedback'
+
+it('aggregates concurrent operations without resetting counts or double-counting replays', () => {
+  const tracker = new RequestProgressTracker()
+  tracker.update('a', { stage: 'receiving', receivedCharacters: 30 })
+  expect(tracker.update('b', { stage: 'queued', receivedCharacters: 0 })).toMatchObject({ stage: 'receiving', receivedCharacters: 30 })
+  tracker.update('b', { stage: 'reasoning' })
+  expect(tracker.update('a', { stage: 'recovering', receivedCharacters: 30 }).receivedCharacters).toBe(30)
+  tracker.update('a', { stage: 'completed' })
+  expect(tracker.update('b', { stage: 'receiving', receivedCharacters: 20 })).toMatchObject({ receivedCharacters: 50, operationId: 'b' })
+})
 
 const sse = (events: unknown[]) => new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'x-execution-id': 'execution-one', 'content-type': 'text/event-stream' } })
 

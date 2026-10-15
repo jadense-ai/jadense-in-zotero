@@ -155,7 +155,7 @@ describe("JadenseApiClient", () => {
         subscription: { code: "pro", label: "PRO" }, futureField: true,
       })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        billing: { sourceKind: "team", teamId: "team-1", balancePoints: 36, primaryBalancePoints: 30, fallbackBalancePoints: 6 },
+        billing: { sourceKind: "personal", balancePoints: 36 },
         checkIn: { signedToday: false, currentStreakDays: 4, todayReward: { grantedPoints: 2 } }, futureField: true,
       })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ alreadyCheckedIn: false, balanceAfter: 38, grantedPoints: 2, ignored: true })))
@@ -218,13 +218,13 @@ describe("JadenseApiClient", () => {
       baseUrl: "https://jadense.cn",
       token: "jdx_ext_secret",
       fetchImpl: vi.fn().mockResolvedValue(new Response(JSON.stringify({
-        billing: { sourceKind: "personal", teamId: null, balancePoints: -5, primaryBalancePoints: 0, fallbackBalancePoints: null },
+        billing: { sourceKind: "personal", balancePoints: -5 },
         checkIn: { signedToday: true, currentStreakDays: 0, todayReward: { grantedPoints: 0 } },
       }))) as unknown as typeof fetch,
     })
 
     await expect(client.getPointsStatus()).resolves.toMatchObject({
-      billing: { sourceKind: "personal", balancePoints: -5, primaryBalancePoints: 0 },
+      billing: { sourceKind: "personal", balancePoints: -5 },
       checkIn: { signedToday: true, currentStreakDays: 0 },
     })
   })
@@ -323,7 +323,7 @@ describe("JadenseApiClient", () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ itemKind: "literature", articleId: null, insertedFolderIds: ["folder-1"], skippedFolderIds: [] }),
-    })
+    }).mockResolvedValueOnce(Response.json({ reused: false }))
     const client = new JadenseApiClient({
       baseUrl: "http://localhost:3000",
       token: "jdx_ext_secret",
@@ -356,10 +356,10 @@ describe("JadenseApiClient", () => {
       "http://localhost:3000/api/extension/favorite/import-page-pdf",
       expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
     )
-    const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers
+    const headers = fetchImpl.mock.calls[1]?.[1]?.headers as Headers
     expect(headers.get("authorization")).toBe("Bearer jdx_ext_secret")
     expect(headers.has("content-type")).toBe(false)
-    const form = fetchImpl.mock.calls[0]?.[1]?.body as FormData
+    const form = fetchImpl.mock.calls[1]?.[1]?.body as FormData
     const paper = JSON.parse(String(form.get("paper")))
     expect(paper.metadata).toMatchObject({
       title: "Paper",
@@ -374,7 +374,7 @@ describe("JadenseApiClient", () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ itemKind: "literature", articleId: null, insertedFolderIds: [], skippedFolderIds: [] }),
-    })
+    }).mockResolvedValueOnce(Response.json({ reused: false }))
     const client = new JadenseApiClient({
       baseUrl: "http://localhost:3000",
       token: "jdx_ext_secret",
@@ -409,7 +409,7 @@ describe("JadenseApiClient", () => {
       "http://localhost:3000/api/extension/favorite/import-page-pdf",
       expect.objectContaining({ body: windowForm }),
     )
-    const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers
+    const headers = fetchImpl.mock.calls[1]?.[1]?.headers as Headers
     expect(headers.has("content-type")).toBe(false)
   })
 })

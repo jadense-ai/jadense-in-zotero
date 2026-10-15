@@ -17,6 +17,7 @@ import {
 } from "./runtime"
 
 const SYNC_MAPPING_PREF_KEY = "extensions.jadenseInZotero.syncMappings"
+const PDF_UPLOAD_ATTEMPTS_PREF = "extensions.jadenseInZotero.pdfUploadAttempts"
 
 type FakeFieldMap = Record<string, string>
 
@@ -400,6 +401,88 @@ describe("pullFavoriteFolderToZotero", () => {
 })
 
 describe("Zotero -> Jadense upload", () => {
+  it("restores association-only retries across host restart even when the local PDF is missing", async () => {
+    const {zotero,prefs,selectedItems,seedItem,seedAttachment}=createFakeZotero()
+    const paper=seedItem({title:"Saved PDF"}),attachment=seedAttachment({title:"中文 100%.pdf"})
+    paper.addAttachment(attachment.id);selectedItems.push(paper)
+    const requests: Array<{body:unknown}> = []
+    const fetcher=vi.fn(async (_url:RequestInfo|URL,init?:RequestInit)=>{
+      requests.push({body:init?.body})
+      if(typeof init?.body==='string') {
+        const body=JSON.parse(init.body)
+        if(body.assetFileId)return Response.json({reused:true,result:{itemKind:'literature',articleId:null,assetFileId:'saved',insertedFolderIds:['folder-1'],skippedFolderIds:[]}})
+        return Response.json({reused:false})
+      }
+      return Response.json({error:'文件已保存，关联失败',code:'FILE_ASSOCIATION_FAILED',assetFileId:'saved',retryAssociationOnly:true},{status:503})
+    })
+    vi.stubGlobal('fetch',fetcher)
+    expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfUploadedCount:0,pdfSavedCount:1,pdfAssociationPendingCount:1})
+    const persisted=JSON.parse(String(prefs.get(PDF_UPLOAD_ATTEMPTS_PREF))) as Record<string,{requestId:string}>
+    const requestId=Object.values(persisted)[0]!.requestId
+    expect(String(prefs.get(PDF_UPLOAD_ATTEMPTS_PREF))).not.toContain('jdx_ext_')
+    attachment.file=null
+    const restarted={...zotero};delete (restarted as typeof restarted & {__jadensePdfUploadAttempts?:unknown}).__jadensePdfUploadAttempts
+    expect(await pushSelectedItemsToJadense(restarted,{includePdf:true})).toMatchObject({pdfUploadedCount:1,pdfAssociationPendingCount:0})
+    expect(JSON.parse(String(requests[2]!.body))).toMatchObject({assetFileId:'saved',requestId})
+    expect(requests.filter(r=>r.body instanceof FormData)).toHaveLength(1)
+    expect(JSON.parse(String(prefs.get(PDF_UPLOAD_ATTEMPTS_PREF)))).toEqual({})
+  })
+  it("preserves uncertain requests, starts new intentions for changed bytes, and isolates accounts",async()=>{
+    const {zotero,prefs,selectedItems,seedItem,seedAttachment}=createFakeZotero()
+    const paper=seedItem({title:'Uncertain'}),attachment=seedAttachment({title:'paper.pdf'})
+    paper.addAttachment(attachment.id);selectedItems.push(paper)
+    const ids:string[]=[]
+    vi.stubGlobal('fetch',vi.fn(async (_url:RequestInfo|URL,init?:RequestInit)=>{
+      if(typeof init?.body==='string'){ids.push(JSON.parse(init.body).requestId);return Response.json({reused:false})}
+      throw new Error('response lost')
+    }))
+    await pushSelectedItemsToJadense(zotero,{includePdf:true});await pushSelectedItemsToJadense(zotero,{includePdf:true})
+    expect(ids[0]).toBe(ids[1])
+    attachment.file=new Blob(['changed'])
+    await pushSelectedItemsToJadense(zotero,{includePdf:true});expect(ids[2]).not.toBe(ids[1])
+    prefs.set('extensions.jadenseInZotero.token','synthetic-other-account')
+    await pushSelectedItemsToJadense(zotero,{includePdf:true});expect(ids[3]).not.toBe(ids[2])
+  })
+  it("prevents two windows from dispatching the same pending item",async()=>{
+    const {zotero,selectedItems,seedItem,seedAttachment}=createFakeZotero()
+    const paper=seedItem({title:'Concurrent'}),attachment=seedAttachment({title:'paper.pdf'})
+    paper.addAttachment(attachment.id);selectedItems.push(paper)
+    let release!:()=>void
+    const blocked=new Promise<void>(resolve=>{release=resolve}),fetcher=vi.fn(async()=>{await blocked;return Response.json({reused:true,result:{itemKind:'literature',articleId:null,insertedFolderIds:['folder-1'],skippedFolderIds:[]}})})
+    vi.stubGlobal('fetch',fetcher)
+    const first=pushSelectedItemsToJadense(zotero,{includePdf:true})
+    await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1))
+    expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfFailedCount:1})
+    release();expect(await first).toMatchObject({pdfUploadedCount:1});expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  it("allows updated metadata to associate the already saved PDF under a new intention",async()=>{
+    const {zotero,selectedItems,seedItem,seedAttachment}=createFakeZotero()
+    const paper=seedItem({title:'Original'}),attachment=seedAttachment({title:'paper.pdf'});paper.addAttachment(attachment.id);selectedItems.push(paper)
+    const bodies:Record<string,unknown>[]=[]
+    vi.stubGlobal('fetch',vi.fn(async (_url:RequestInfo|URL,init?:RequestInit)=>{
+      if(typeof init?.body==='string'){const body=JSON.parse(init.body);bodies.push(body);return Response.json(body.assetFileId?{reused:true,result:{assetFileId:'saved',insertedFolderIds:['folder-1'],skippedFolderIds:[]}}:{reused:false})}
+      return Response.json({code:'FILE_ASSOCIATION_FAILED',assetFileId:'saved',retryAssociationOnly:true,error:'saved'},{status:503})
+    }))
+    await pushSelectedItemsToJadense(zotero,{includePdf:true});attachment.file=null;paper.setField('title','Updated')
+    expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfUploadedCount:1})
+    expect(bodies[1]!.assetFileId).toBe('saved');expect(bodies[1]!.requestId).not.toBe(bodies[0]!.requestId)
+    expect((bodies[1]!.metadata as {title:string}).title).toBe('Updated')
+  })
+  it("ends a deleted-file recovery intention without automatically uploading another file",async()=>{
+    const {zotero,selectedItems,seedItem,seedAttachment}=createFakeZotero()
+    const paper=seedItem({title:'Deleted'}),attachment=seedAttachment({title:'paper.pdf'});paper.addAttachment(attachment.id);selectedItems.push(paper)
+    const fetcher=vi.fn().mockResolvedValueOnce(Response.json({reused:false}))
+      .mockResolvedValueOnce(Response.json({code:'FILE_ASSOCIATION_FAILED',assetFileId:'saved',retryAssociationOnly:true,error:'saved'},{status:503}))
+      .mockResolvedValueOnce(Response.json({code:'ASSET_FILE_DELETED_BY_USER',error:'deleted'},{status:410}))
+      .mockResolvedValueOnce(Response.json({reused:false}))
+      .mockResolvedValueOnce(Response.json({assetFileId:'new',insertedFolderIds:['folder-1'],skippedFolderIds:[]}))
+    vi.stubGlobal('fetch',fetcher)
+    await pushSelectedItemsToJadense(zotero,{includePdf:true})
+    expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfFailedCount:1,pdfAssociationPendingCount:0})
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfUploadedCount:1})
+    expect(JSON.parse(fetcher.mock.calls[3][1].body).requestId).not.toBe(JSON.parse(fetcher.mock.calls[0][1].body).requestId)
+  })
   it("pushes selected method-style Zotero items and persists v2 push mappings", async () => {
     const { zotero, prefs, selectedItems, seedItem } = createFakeZotero()
     const item = seedItem({
@@ -441,6 +524,7 @@ describe("Zotero -> Jadense upload", () => {
     item.addAttachment(attachment.id)
     selectedItems.push(item)
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (typeof init?.body === "string" && JSON.parse(init.body).allowReuse) return Response.json({ reused: false })
       if (init?.body instanceof FormData) {
         return {
           ok: true,
@@ -471,7 +555,8 @@ describe("Zotero -> Jadense upload", () => {
       pdfUploadedCount: 1,
       pdfFailedCount: 0,
     })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl.mock.calls.filter(([,init]) => init?.body instanceof FormData)).toHaveLength(1)
   })
 
   it("uploads selected collection recursively with dedupe, chunking, and optional PDFs", async () => {
@@ -529,6 +614,7 @@ describe("Zotero -> Jadense upload", () => {
         }
       }
       if (value.includes("/api/extension/favorite/import-page-pdf")) {
+        if (typeof init?.body === "string") return Response.json({ reused: false })
         pdfUploadCount += 1
         return {
           ok: true,
@@ -592,6 +678,7 @@ describe("Zotero -> Jadense upload", () => {
     selectedItems.push(item)
     vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => {
       if (String(url).includes("/api/extension/favorite/import-page-pdf")) {
+        if (typeof _init?.body === "string") return Response.json({ reused: false })
         return {
           ok: true,
           json: async () => ({

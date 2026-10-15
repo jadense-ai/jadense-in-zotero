@@ -1,6 +1,8 @@
 import { initializeFeatureModelSelections } from './ai-settings'
 import { uiText } from "./ui-preferences"
-import { JadenseApiClient, type JadenseFavoriteFolder, type JadenseZoteroImportResult } from "@/jadense/api"
+import { JadenseApiClient, JadenseApiError, type JadenseFavoriteFolder, type JadenseZoteroImportResult } from "@/jadense/api"
+import { PdfUploadAttempts, pdfUploadScope, pdfUploadInputFingerprint } from "@/sync/pdf-upload-attempts"
+import { uploadFileSha256, uploadRequestId } from "@/sync/pdf-upload-platform"
 import {
   jadenseFavoriteToZoteroDraft,
   zoteroItemToJadenseImportItem,
@@ -215,10 +217,10 @@ type CollectionSkippedEntry = {
 }
 
 type ZoteroUploadPdfStatus =
-  | { status: "uploaded"; result: unknown }
+  | { status: "uploaded"; result: unknown; warning?: string }
   | { status: "not_requested"; reason: string }
   | { status: "skipped"; reason: string }
-  | { status: "failed"; error: string }
+  | { status: "failed"; error: string; assetFileId?: string; retryAssociationOnly?: boolean; warning?: string }
 
 type ZoteroCollectionUploadItemResult = {
   clientItemId: string
@@ -283,7 +285,7 @@ function readSyncMappings(zotero: ZoteroLike): SyncMappingState {
 }
 
 function saveSyncMappings(zotero: ZoteroLike, state: SyncMappingState) {
-  zotero.Prefs?.set(PREF_SYNC_MAPPINGS, JSON.stringify(state))
+  try { zotero.Prefs?.set(PREF_SYNC_MAPPINGS, JSON.stringify(state)) } catch { /* 本机映射不是服务端导入的准入条件。 */ }
 }
 
 function nonEmptyText(value: unknown) {
@@ -315,7 +317,8 @@ function assertClient(zotero: ZoteroLike) {
   const win = zotero.getMainWindow?.()
   const fetchImpl = win?.fetch ? win.fetch.bind(win) : undefined
   const formDataFactory = win?.FormData ? () => new win.FormData() : undefined
-  return new JadenseApiClient({ baseUrl, token, fetchImpl, formDataFactory })
+  return new JadenseApiClient({ baseUrl, token, fetchImpl, formDataFactory,
+    computeSha256: file => uploadFileSha256(file, win ?? globalThis), requestIdFactory: () => uploadRequestId(win ?? globalThis) })
 }
 
 function readField(item: Record<string, unknown>, name: string) {
@@ -646,7 +649,7 @@ async function buildPdfAttachmentFile(attachment: unknown): Promise<ZoteroPdfAtt
 
   try {
     const blob = blobFromAttachmentRecord(record) ?? (filePath ? await readFilePathAsBlob(filePath) : null)
-    return blob ? { file: blob, filename } : null
+    return blob ? { file: blob, filename, identity: pdfUploadInputFingerprint([record.libraryID,record.key,filePath]) } : null
   } catch {
     return null
   }
@@ -948,50 +951,85 @@ async function uploadPdfForEntry(input: {
   entry: CollectionItemEntry
   importItem: JadenseZoteroImportItem
   includePdf: boolean
+  signal?: AbortSignal
 }): Promise<ZoteroUploadPdfStatus> {
   if (!input.includePdf) return { status: "not_requested" as const, reason: "未请求上传 PDF。" }
 
-  const attachment = await findFirstPdfAttachment(input.zotero, input.entry.item)
-  if (!attachment) return { status: "skipped", reason: "未找到可读取的 PDF 附件。" }
-
+  const attempts = new PdfUploadAttempts(input.zotero)
+  const scopeKey = pdfUploadScope(readConnection(input.zotero), input.importItem.clientItemId, input.folderId)
+  if (!attempts.lock(scopeKey)) return { status: "failed", error: uiText("该条目正在另一个窗口上传，请等待当前请求完成。", "This item is uploading in another window. Wait for the current request.") }
   try {
+    const previous = attempts.get(scopeKey)
+    const attachment = await findFirstPdfAttachment(input.zotero, input.entry.item)
+    if (!attachment && !previous?.assetFileId) return { status: "skipped", reason: "未找到可读取的 PDF 附件。" }
+    const filename = attachment?.filename ?? previous!.filename
+    const sha256 = attachment ? await uploadFileSha256(attachment.file,input.zotero.getMainWindow?.() ?? globalThis).catch(() => undefined) : previous?.sha256
+    const size = attachment?.file.size ?? previous?.size
+    const attachmentIdentity = attachment?.identity ?? previous?.attachmentIdentity
+    const inputFingerprint = pdfUploadInputFingerprint({ filename,sha256,size,attachmentIdentity,folderIds:[input.folderId],metadata:input.importItem.metadata })
+    const attempt = attempts.begin({scopeKey,inputFingerprint,filename,sha256,size,attachmentIdentity,
+      ...(!attachment && previous?.assetFileId ? {assetFileId:previous.assetFileId,retryAssociationOnly:previous.retryAssociationOnly} : {}),
+    },()=>uploadRequestId(input.zotero.getMainWindow?.() ?? globalThis))
     const result = await input.client.importFavoritePdf({
       folderIds: [input.folderId],
       item: input.importItem,
-      file: attachment.file,
-      filename: attachment.filename,
+      file: attachment?.file,
+      filename,
+      sha256,
+      requestId: attempt.requestId,
+      assetFileId: attempt.assetFileId,
+      signal: input.signal,
+      onStage: stage => attempts.update(scopeKey,{stage}),
+      onSavedFile: (assetFileId,retryAssociationOnly) => attempts.update(scopeKey,{assetFileId,retryAssociationOnly,stage:"association"}),
     })
-    if (result.conflicts?.length) return { status: "failed",error: result.conflicts.map(conflict => conflict.message).join(" ") }
-    // 新导入必须明确创建成功；已有条目由独立附加文件操作处理。
-    const deliveredCount =
-      (result.insertedFolderIds?.length ?? 0) + (result.backfilledFolderIds?.length ?? 0)
-    if (deliveredCount === 0) {
-      return { status: "failed", error: "当前收藏夹已有同名或相同文献，已拒绝重复导入。" }
+    const delivered = result.insertedFolderIds.includes(input.folderId) || result.backfilledFolderIds?.includes(input.folderId)
+    if (!delivered && !result.skippedFolderIds.includes(input.folderId) && !result.conflicts?.length) {
+      throw new Error(uiText("攻玉未返回目标收藏夹的关联回执，重试将继续原请求。", "Jadense did not return the target folder receipt. Retry continues the original request."))
     }
-    return { status: "uploaded", result }
+    attempts.finish(scopeKey)
+    if (result.conflicts?.length) return { status: "failed",error: result.conflicts.map(conflict => conflict.message).join(" "),assetFileId:result.assetFileId ?? undefined,retryAssociationOnly:false }
+    // 新导入必须明确创建成功；已有条目由独立附加文件操作处理。
+    if (!delivered) {
+      return { status: "failed", error: "当前收藏夹已有同名或相同文献，已拒绝重复导入。",assetFileId:result.assetFileId ?? undefined,retryAssociationOnly:false }
+    }
+    return { status: "uploaded", result, ...(!attempts.persistent ? {warning:uiText("上传已完成，本机恢复记录未保存。", "Upload completed; local recovery state was not saved.")} : {}) }
   } catch (error) {
+    if (error instanceof JadenseApiError && error.code === "ASSET_FILE_DELETED_BY_USER") {
+      attempts.finish(scopeKey)
+      return {status:"failed",error:uiText("已保存的 PDF 已被删除，请再次上传原 PDF。", "The saved PDF was deleted. Upload the original PDF again.")}
+    }
     const message = errorMessage(error)
     return {
       status: "failed",
-      error: /insufficient_scope/i.test(message)
+      assetFileId: attempts.get(scopeKey)?.assetFileId,
+      retryAssociationOnly: attempts.get(scopeKey)?.retryAssociationOnly,
+      ...(!attempts.persistent ? {warning:uiText("恢复状态仅保留在当前运行中，请暂勿退出 Zotero。", "Recovery state is retained only in this session. Keep Zotero open.")} : {}),
+      error: error instanceof JadenseApiError && error.code === "insufficient_scope"
         ? "PDF 上传需要重新生成带 favorites:write 权限的攻玉插件令牌。"
         : message,
     }
-  }
+  } finally { attempts.unlock(scopeKey) }
 }
 
 /** 带 PDF 的新条目一次导入；避免先写元数据后把同一次导入误判为收藏冲突。 */
-async function importEntriesWithPdf(client: JadenseApiClient, folderId: string, zotero: ZoteroLike, entries: CollectionItemEntry[], importItems: JadenseZoteroImportItem[], includePdf: boolean) {
+async function importEntriesWithPdf(client: JadenseApiClient, folderId: string, zotero: ZoteroLike, entries: CollectionItemEntry[], importItems: JadenseZoteroImportItem[], includePdf: boolean, signal?: AbortSignal) {
   const pdfs = new Map<string,ZoteroUploadPdfStatus>()
   const results: JadenseZoteroImportResult["results"] = []
   const metadataOnly: JadenseZoteroImportItem[] = []
   for (const [index,entry] of entries.entries()) {
+    signal?.throwIfAborted()
     const item = importItems[index]!
-    const pdf = await uploadPdfForEntry({ client,folderId,zotero,entry,importItem: item,includePdf })
+    const pdf = await uploadPdfForEntry({ client,folderId,zotero,entry,importItem: item,includePdf,signal })
     pdfs.set(item.clientItemId,pdf)
     if (pdf.status === "uploaded") results.push({ clientItemId: item.clientItemId,status: "imported",result: pdf.result })
     else if (pdf.status === "failed") results.push({ clientItemId: item.clientItemId,status: "failed",error: pdf.error })
     else metadataOnly.push(item)
+    if (pdf.status === "uploaded" || pdf.status === "failed") {
+      // 逐项发布映射；关窗/取消不能丢失先前完成条目的结果。
+      const state=readSyncMappings(zotero)
+      savePushMapping(state,{folderId,entry,importItem:item,metadataResult:results[results.length-1]!,pdfStatus:pdf})
+      try { saveSyncMappings(zotero,state) } catch { /* 上传已完成，本机投影写入不回滚服务端。 */ }
+    }
   }
   if (metadataOnly.length) results.push(...(await importMetadataBatches(client,folderId,metadataOnly)).results)
   return { pdfs,metadata: { results,importedCount: results.filter(item => item.status === "imported").length,skippedCount: results.filter(item => item.status === "skipped").length,failedCount: results.filter(item => item.status === "failed").length } }
@@ -1029,6 +1067,8 @@ function summarizeCollectionUpload(items: ZoteroCollectionUploadItemResult[]) {
     pdfUploadedCount: items.filter((item) => item.pdf.status === "uploaded").length,
     pdfSkippedCount: items.filter((item) => item.pdf.status === "skipped" || item.pdf.status === "not_requested").length,
     pdfFailedCount: items.filter((item) => item.pdf.status === "failed").length,
+    pdfSavedCount: items.filter(item => item.pdf.status === "uploaded" || (item.pdf.status === "failed" && item.pdf.assetFileId)).length,
+    pdfAssociationPendingCount: items.filter(item => item.pdf.status === "failed" && item.pdf.assetFileId && item.pdf.retryAssociationOnly).length,
   }
 }
 
@@ -1081,6 +1121,7 @@ export function saveDefaultFolderId(zotero: ZoteroLike, folderId: string) {
 }
 
 export function clearConnection(zotero: ZoteroLike) {
+  new PdfUploadAttempts(zotero).clear()
   zotero.Prefs?.clear(PREF_BASE_URL)
   zotero.Prefs?.clear(PREF_TOKEN)
   zotero.Prefs?.clear(PREF_DEFAULT_FOLDER_ID)
@@ -1228,7 +1269,7 @@ export function refreshFavoriteFoldersCache(
 
 export async function pushSelectedItemsToJadense(
   zotero: ZoteroLike,
-  options: { includePdf?: boolean } = {},
+  options: { includePdf?: boolean; signal?: AbortSignal } = {},
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
@@ -1238,7 +1279,7 @@ export async function pushSelectedItemsToJadense(
   const items = entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
   if (items.length === 0) throw new Error(uiText("未选中可上传的 Zotero 条目。", "No uploadable Zotero items are selected."))
 
-  const imported = await importEntriesWithPdf(client,folderId,zotero,entries,items,Boolean(options.includePdf))
+  const imported = await importEntriesWithPdf(client,folderId,zotero,entries,items,Boolean(options.includePdf),options.signal)
   const result = imported.metadata
   const resultsById = resultByClientItemId(result.results)
   const mappingState = readSyncMappings(zotero)
@@ -1288,7 +1329,7 @@ export async function previewSelectedCollectionUpload(zotero: ZoteroLike): Promi
 
 export async function pushSelectedCollectionToJadense(
   zotero: ZoteroLike,
-  options: { includePdf?: boolean } = {},
+  options: { includePdf?: boolean; signal?: AbortSignal } = {},
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
@@ -1315,12 +1356,14 @@ export async function pushSelectedCollectionToJadense(
       pdfUploadedCount: 0,
       pdfSkippedCount: localSkippedItems.length,
       pdfFailedCount: 0,
+      pdfSavedCount: 0,
+      pdfAssociationPendingCount: 0,
       items: localSkippedItems,
     }
   }
 
   const importItems = collected.entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
-  const imported = await importEntriesWithPdf(client,folderId,zotero,collected.entries,importItems,Boolean(options.includePdf))
+  const imported = await importEntriesWithPdf(client,folderId,zotero,collected.entries,importItems,Boolean(options.includePdf),options.signal)
   const metadataResult = imported.metadata
   const resultsById = resultByClientItemId(metadataResult.results)
   const mappingState = readSyncMappings(zotero)

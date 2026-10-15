@@ -122,13 +122,14 @@ describe("Jadense chat model selector", () => {
     defaultSelection: { kind: "route", routeTier: "standard" },
   }
 
-  it("groups routes and direct models without an account-default option", () => {
+  it("groups Auto and direct models without an account-default option", () => {
     const options = buildJadenseChatModelSelectOptions(catalog, { kind: "model", modelId: "glm-5" })
     expect(options.map(option => [option.value, option.group])).toEqual([
-      ["route:standard", "攻玉智能路由"],
+      ["route:standard", "攻玉内置模型"],
       ["model:glm-5", "攻玉内置模型"],
       ["model:locked", "攻玉内置模型"],
     ])
+    expect(options[0].label).toBe("Auto")
     expect(options[1]).toMatchObject({ description: "长文模型 · 支持：文本、图片", meta: "1.25x", disabled: false })
     expect(options[2]).toMatchObject({ label: "Locked（需升级）", description: "需要升级 · 高阶模型", meta: "需升级订阅", disabled: true })
   })
@@ -149,7 +150,7 @@ describe("Jadense chat model selector", () => {
   it("shows minimum plans and a visible locked selection in Chinese and English", () => {
     const paidCatalog: JadenseChatModelCatalog = { options: [
       { kind: "model", modelId: "paid", displayName: "Paid", description: "", minimumPlanCode: "go", locked: true, capabilities: [], consumptionMultiplier: 1.5 },
-      { kind: "route", routeTier: "premium", displayName: "Premium", description: "", minimumPlanCode: "pro", locked: false },
+      { kind: "model", modelId: "premium", displayName: "Premium", description: "", minimumPlanCode: "pro", locked: false, capabilities: [] },
     ], defaultSelection: null }
     const chinese = buildJadenseChatModelSelectOptions(paidCatalog, { kind: "model", modelId: "paid" })
     expect(chinese[0]).toMatchObject({ label: "Paid（需升级）", meta: "需 GO · 1.50x", disabled: true })
@@ -581,25 +582,24 @@ describe("manager connection indicator", () => {
     }))).toContain(expected)
   })
 
-  it("renders the authoritative effective team balance without adding its fallback", () => {
+  it("renders the authoritative personal balance", () => {
     expect(buildJadensePointsView({
-      billing: { sourceKind: "team", teamId: "team-1", balancePoints: 30, primaryBalancePoints: 30, fallbackBalancePoints: 6 },
+      billing: { sourceKind: "personal", balancePoints: 30 },
       checkIn: { signedToday: false, currentStreakDays: 4, todayReward: { grantedPoints: 2 } },
     })).toEqual({
       balance: "30 积分",
-      source: "团队积分（主余额 30 积分）",
-      fallback: "6 积分",
+      source: "个人积分",
       reward: "+2 积分",
       streak: "4 天",
       signedToday: false,
     })
   })
 
-  it("keeps non-positive personal balances visible and hides the team fallback row", () => {
+  it("keeps non-positive personal balances visible", () => {
     expect(buildJadensePointsView({
-      billing: { sourceKind: "personal", teamId: null, balancePoints: -5, primaryBalancePoints: -5, fallbackBalancePoints: null },
+      billing: { sourceKind: "personal", balancePoints: -5 },
       checkIn: { signedToday: true, currentStreakDays: 0, todayReward: { grantedPoints: 0 } },
-    })).toMatchObject({ balance: "-5 积分", source: "个人积分", fallback: null, signedToday: true })
+    })).toMatchObject({ balance: "-5 积分", source: "个人积分", signedToday: true })
   })
 })
 

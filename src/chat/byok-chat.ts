@@ -205,11 +205,11 @@ export async function consumeByokStream(
     }
     const errorMessage = providerErrorMessage(event)
     if (protocol === "openai-chat-completions") {
-      if (event.error) throw Object.assign(redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
+      if (event.error) { complete = true; throw Object.assign(redactedError(errorMessage, apiKey, uiText("OpenAI Chat Completion 生成失败。", "OpenAI Chat Completion failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" })) }
       const choices = Array.isArray(event.choices) ? event.choices : []
       for (const choiceValue of choices) {
         const choice = object(choiceValue)
-        append(object(choice?.delta)?.content)
+        append(object(choice?.delta)?.content ?? (!accumulatedText ? object(choice?.message)?.content : undefined))
         if (typeof choice?.finish_reason === "string") {
           diagnostic?.event("finish")
           complete = true
@@ -220,7 +220,8 @@ export async function consumeByokStream(
     }
 
     if (protocol === "anthropic-messages") {
-      if (event.type === "error") throw Object.assign(redactedError(errorMessage, apiKey, uiText("Anthropic Messages 生成失败。", "Anthropic Messages failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
+      if (event.type === "error") { complete = true; throw Object.assign(redactedError(errorMessage, apiKey, uiText("Anthropic Messages 生成失败。", "Anthropic Messages failed.")), requestIssue(event.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" })) }
+      if (event.type === 'content_block_start') append(object(event.content_block)?.text)
       if (event.type === "content_block_delta") append(object(event.delta)?.text)
       if (event.type === "message_delta") {
         const stopReason = object(event.delta)?.stop_reason
@@ -235,10 +236,18 @@ export async function consumeByokStream(
     }
 
     if (event.type === "error" || event.type === "response.failed") {
+      complete = true
       const nested = providerErrorMessage(event.response)
       throw Object.assign(redactedError(errorMessage || nested, apiKey, uiText("OpenAI Responses 生成失败。", "OpenAI Responses failed.")), requestIssue(event.error ?? object(event.response)?.error, { code: "BYOK_STREAM_ERROR", stage: "provider_stream" }))
     }
     if (event.type === "response.output_text.delta") append(event.delta)
+    if (event.type === 'response.output_text.done' || event.type === 'response.completed') {
+      const snapshot = event.type === 'response.output_text.done' ? event.text
+        : (Array.isArray(object(event.response)?.output) ? object(event.response)!.output as unknown[] : [])
+          .flatMap(item => Array.isArray(object(item)?.content) ? object(item)!.content as unknown[] : [])
+          .map(item => typeof object(item)?.text === 'string' ? object(item)!.text as string : '').join('')
+      if (typeof snapshot === 'string' && snapshot.startsWith(accumulatedText)) append(snapshot.slice(accumulatedText.length))
+    }
     if (event.type === "response.completed") complete = true
     if (event.type === "response.incomplete") {
       complete = true
@@ -258,6 +267,7 @@ export async function consumeByokStream(
         pending = pending.slice(boundary + separator.length)
         boundary = pending.search(/\r?\n\r?\n/)
       }
+      if (complete) { void reader.cancel().catch(() => undefined); break }
       if (done) break
     }
     if (pending.trim()) consumeBlock(pending)
@@ -268,9 +278,10 @@ export async function consumeByokStream(
   } catch (error) {
     diagnostic?.fail(error, "stream_error")
     diagnostic?.event("cleanup_cancel", { source: "stream_cleanup" })
-    await reader.cancel().catch(() => undefined)
+    void reader.cancel().catch(() => undefined)
     if (object(error)?.name === "AbortError") throw error
-    throw Object.assign(redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream.")), requestIssue(error, { code: "NETWORK_ERROR", stage: "stream" }))
+    throw Object.assign(redactedError(error instanceof Error ? error.message : "", apiKey, uiText("BYOK 数据流处理失败。", "Could not process the BYOK stream.")), requestIssue(error, { code: "NETWORK_ERROR", stage: "stream" }),
+      { executionState: complete ? accumulatedText.trim() ? 'partial' : 'failed' : 'unknown', partialText: accumulatedText })
   } finally {
     reader.releaseLock()
   }

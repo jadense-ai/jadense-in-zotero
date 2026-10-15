@@ -2,12 +2,15 @@ import { requestIssue, type RequestIssue } from '@/chat/request-feedback'
 import { traceRequest, diagnosticFetch } from "@/zotero/diagnostics"
 import { uiText } from "@/zotero/ui-preferences"
 import type { JadenseZoteroImportItem } from "@/sync/metadata"
+import { uploadFileSha256, uploadRequestId } from "@/sync/pdf-upload-platform"
 
 export type JadenseApiOptions = {
   baseUrl: string
   token: string
   fetchImpl?: typeof fetch
   formDataFactory?: () => FormData
+  computeSha256?: (file: Blob) => Promise<string | undefined>
+  requestIdFactory?: () => string
 }
 
 export type JadenseProfile = {
@@ -23,11 +26,10 @@ export type JadenseProfile = {
 
 export type JadensePointsStatus = {
   billing: {
-    sourceKind: "personal" | "team"
-    teamId: string | null
+    sourceKind: "personal"
     balancePoints: number
-    primaryBalancePoints: number
-    fallbackBalancePoints: number | null
+
+
   }
   checkIn: {
     signedToday: boolean
@@ -69,6 +71,9 @@ export type JadenseChatModelOption =
       modelId: string
       capabilities: string[]
       consumptionMultiplier?: number
+      baseConsumptionMultiplier?: number
+      sourceMultiplier?: number
+      sourcePricePrefix?: string
     })
 
 export type JadenseChatModelCatalog = {
@@ -88,8 +93,10 @@ export class JadenseApiError extends Error {
   readonly code: string | null
   readonly body: string
   readonly retryAfter: string | null
+  readonly assetFileId?: string
+  readonly retryAssociationOnly?: boolean
 
-  constructor(input: Omit<RequestIssue, "code"> & { status: number; code?: string | null; body: string; message: string; retryAfter?: string | null }) {
+  constructor(input: Omit<RequestIssue, "code"> & { status: number; code?: string | null; body: string; message: string; retryAfter?: string | null; assetFileId?: string; retryAssociationOnly?: boolean }) {
     super(input.message)
     Object.assign(this, requestIssue(input))
     this.name = "JadenseApiError"
@@ -97,6 +104,8 @@ export class JadenseApiError extends Error {
     this.code = input.code ?? null
     this.body = input.body
     this.retryAfter = input.retryAfter ?? null
+    this.assetFileId = input.assetFileId
+    this.retryAssociationOnly = input.retryAssociationOnly
   }
 }
 
@@ -147,26 +156,18 @@ function parsePointsStatus(value: unknown): JadensePointsStatus {
   const billing = objectValue(root?.billing)
   const checkIn = objectValue(root?.checkIn)
   const todayReward = objectValue(checkIn?.todayReward)
-  const sourceKind = billing?.sourceKind
-  const teamId = billing?.teamId
+  const sourceKind = "personal" as const
   const balancePoints = finiteNumber(billing?.balancePoints)
-  const primaryBalancePoints = finiteNumber(billing?.primaryBalancePoints)
-  const fallbackBalancePoints = billing?.fallbackBalancePoints === null
-    ? null
-    : finiteNumber(billing?.fallbackBalancePoints)
   const signedToday = checkIn?.signedToday
   const currentStreakDays = finiteNumber(checkIn?.currentStreakDays)
   const grantedPoints = finiteNumber(todayReward?.grantedPoints)
   if (
     !root || !billing || !checkIn || !todayReward
-    || (sourceKind !== "personal" && sourceKind !== "team")
-    || (teamId !== null && typeof teamId !== "string")
-    || balancePoints === null || primaryBalancePoints === null
-    || (fallbackBalancePoints === null && billing.fallbackBalancePoints !== null)
+    || balancePoints === null
     || typeof signedToday !== "boolean" || currentStreakDays === null || grantedPoints === null
   ) throw invalidPayload(uiText("积分状态", "points status"))
   return {
-    billing: { sourceKind, teamId, balancePoints, primaryBalancePoints, fallbackBalancePoints },
+    billing: { sourceKind, balancePoints },
     checkIn: { signedToday, currentStreakDays, todayReward: { grantedPoints } },
   }
 }
@@ -227,6 +228,9 @@ function parseChatModelOption(value: unknown): JadenseChatModelOption | null {
     modelId,
     capabilities: stringList(row.capabilities),
     ...(consumptionMultiplier !== null ? { consumptionMultiplier } : {}),
+    ...(finiteNumber(row.sourceMultiplier) !== null ? { sourceMultiplier: finiteNumber(row.sourceMultiplier)! } : {}),
+    ...(typeof row.sourcePricePrefix === "string" && row.sourcePricePrefix.trim() ? { sourcePricePrefix: row.sourcePricePrefix.trim() } : {}),
+    ...(finiteNumber(row.baseConsumptionMultiplier) !== null ? { baseConsumptionMultiplier: finiteNumber(row.baseConsumptionMultiplier)! } : {}),
   }
 }
 
@@ -247,11 +251,14 @@ export async function readJadenseApiError(response: Response, fallback = uiText(
   let issue: RequestIssue = requestIssue({ requestId: response.headers?.get?.("x-request-id"), executionId: response.headers?.get?.("x-execution-id"), diagnosticId: response.headers?.get?.("x-diagnostic-id") }, { stage: "http" })
   let code: string | null = null
   let message: string | null = null
+  let savedFile: { assetFileId?: string; retryAssociationOnly?: boolean } = {}
   try {
-    const parsed = JSON.parse(body) as { code?: unknown; error?: unknown; message?: unknown }
+    const parsed = JSON.parse(body) as { code?: unknown; error?: unknown; message?: unknown; assetFileId?: unknown; retryAssociationOnly?: unknown }
     issue = requestIssue(parsed, issue)
     code = nonEmptyText(parsed.code)
     message = nonEmptyText(parsed.error) ?? nonEmptyText(parsed.message)
+    const assetFileId = nonEmptyText(parsed.assetFileId)
+    if (assetFileId) savedFile = { assetFileId, retryAssociationOnly: parsed.retryAssociationOnly === true }
   } catch {
     // 简短纯文本业务拒绝需要可见；HTML 代理页及长正文只保留在错误对象中。
     const plain = body.trim()
@@ -274,6 +281,7 @@ export async function readJadenseApiError(response: Response, fallback = uiText(
   }
   return new JadenseApiError({
     ...issue,
+    ...savedFile,
     status: response.status,
     retryAfter: response.headers?.get?.('Retry-After') ?? null,
     code,
@@ -369,12 +377,16 @@ export class JadenseApiClient {
   private readonly token: string
   private readonly fetchImpl: typeof fetch
   private readonly formDataFactory: () => FormData
+  private readonly computeSha256: (file: Blob) => Promise<string | undefined>
+  private readonly requestIdFactory: () => string
 
   constructor(options: JadenseApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/g, "")
     this.token = options.token
     this.fetchImpl = options.fetchImpl ?? defaultFetch
     this.formDataFactory = options.formDataFactory ?? (() => new FormData())
+    this.computeSha256 = options.computeSha256 ?? uploadFileSha256
+    this.requestIdFactory = options.requestIdFactory ?? uploadRequestId
   }
 
   private async requestJson<T>(path: string, init: RequestInit = {}, payloadLabel?: string): Promise<T> {
@@ -440,18 +452,70 @@ export class JadenseApiClient {
   importZoteroItems(folderIds: string[], items: JadenseZoteroImportItem[]) {
     return this.requestJson<JadenseZoteroImportResult>("/api/extension/favorite/import-zotero-items", {
       method: "POST",
-      body: JSON.stringify({ folderIds, items, requestId: globalThis.crypto.randomUUID() }),
+      body: JSON.stringify({ folderIds, items, requestId: this.requestIdFactory() }),
     })
   }
 
-  importFavoritePdf(input: {
+  /** 同一未完成意图保留回执；已保存文件只关联，预检明确未命中才传字节。 */
+  async importFavoritePdf(input: {
     folderIds: string[]
     item: JadenseZoteroImportItem
-    file: Blob
+    file?: Blob
     filename: string
+    requestId?: string
+    sha256?: string
+    assetFileId?: string
+    signal?: AbortSignal
+    onStage?: (stage: "preflight" | "uploading" | "association") => void
+    onSavedFile?: (assetFileId: string, retryAssociationOnly: boolean) => void
   }) {
+    const requestId = input.requestId ?? this.requestIdFactory()
+    const sha256 = input.assetFileId ? undefined : input.sha256 ?? (input.file ? await this.computeSha256(input.file).catch(() => undefined) : undefined)
+    const notifyStage = (stage: "preflight" | "uploading" | "association") => { try { input.onStage?.(stage) } catch { /* 展示/本地保存失败不阻断上传。 */ } }
+    const request = async (body: BodyInit, timeout: number) => {
+      input.signal?.throwIfAborted()
+      const controller = new AbortController(), abort = () => controller.abort(input.signal?.reason)
+      input.signal?.addEventListener("abort", abort, { once: true })
+      let timer: ReturnType<typeof setTimeout> | undefined, stop: (() => void) | undefined
+      try {
+        return await Promise.race([
+          this.requestJson<unknown>("/api/extension/favorite/import-page-pdf", { method: "POST", body, signal: controller.signal }),
+          new Promise<never>((_, reject) => {
+            stop = () => reject(controller.signal.reason ?? new Error(uiText("已停止等待上传，重试将继续原请求。", "Stopped waiting for upload. Retry continues the original request.")))
+            controller.signal.addEventListener("abort", stop, { once: true })
+            timer = setTimeout(() => controller.abort(new Error(uiText("上传等待超时，重试将继续原请求。", "Upload timed out. Retry continues the original request."))), timeout)
+          }),
+        ])
+      } catch (error) {
+        if (error instanceof JadenseApiError && error.assetFileId) {
+          try { input.onSavedFile?.(error.assetFileId, error.retryAssociationOnly === true) } catch { /* 本机状态可在当前会话恢复。 */ }
+        }
+        throw error
+      } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", abort); if (stop) controller.signal.removeEventListener("abort", stop) }
+    }
+    const result = (value: unknown): JadensePdfImportResult => {
+      const row = objectValue(value)
+      const assetFileId = nonEmptyText(row?.assetFileId)
+      if (assetFileId) { try { input.onSavedFile?.(assetFileId, true) } catch { /* 最终回执仍可继续消费。 */ } }
+      // 缺少回执不能证明是否已写入；禁止因此继续上传另一份字节。
+      if (!row || !Array.isArray(row.insertedFolderIds) || !Array.isArray(row.skippedFolderIds)) throw invalidPayload(uiText("PDF 上传", "PDF upload"))
+      return { ...row, insertedFolderIds: row.insertedFolderIds.filter((id): id is string => typeof id === "string"),
+        skippedFolderIds: row.skippedFolderIds.filter((id): id is string => typeof id === "string"),
+        backfilledFolderIds: Array.isArray(row.backfilledFolderIds) ? row.backfilledFolderIds.filter((id): id is string => typeof id === "string") : undefined,
+        conflicts: Array.isArray(row.conflicts) ? row.conflicts.flatMap(raw => { const conflict=objectValue(raw);return typeof conflict?.message === "string" ? [{...conflict,message:conflict.message}] : [] }) : undefined,
+      } as JadensePdfImportResult
+    }
+    if (input.assetFileId || sha256) {
+      notifyStage(input.assetFileId ? "association" : "preflight")
+      const preflight = objectValue(await request(JSON.stringify({ allowReuse: true, sha256, size: input.file?.size,
+        assetFileId: input.assetFileId, filename: input.filename, requestId, folderIds: input.folderIds, metadata: input.item.metadata }), 60000))
+      if (preflight?.reused === true) return result(preflight.result)
+      if (preflight?.reused !== false || input.assetFileId) throw invalidPayload(uiText("PDF 上传预检", "PDF upload preparation"))
+    }
+    if (!input.file) throw new Error(uiText("原 PDF 不可读取，请重新选择附件。", "The original PDF cannot be read. Select the attachment again."))
+    notifyStage("uploading")
     const form = this.formDataFactory()
-    form.set("requestId",globalThis.crypto.randomUUID())
+    form.set("requestId",requestId)
     form.set("file", input.file, input.filename)
     form.set("folderIds", JSON.stringify(input.folderIds))
     form.set("metadata", JSON.stringify(input.item.metadata))
@@ -473,9 +537,6 @@ export class JadenseApiClient {
         sourceMetadata: input.item.metadata.sourceMetadata,
       },
     }))
-    return this.requestJson<JadensePdfImportResult>("/api/extension/favorite/import-page-pdf", {
-      method: "POST",
-      body: form,
-    })
+    return result(await request(form, 1800000))
   }
 }
