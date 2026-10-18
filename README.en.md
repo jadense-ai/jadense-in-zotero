@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.11 is released:** Discover frontiers refreshes its welcome, scanning and history views, fixes centered text and narrow layouts, and improves PDF upload recovery and translation feedback. The official full package includes Discover frontiers; public-source builds are base distributions. [Setup and upgrade notes](docs/usage-guide.md#update-0611) · [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11).
+**v0.6.12 is pending release:** Discover frontiers separates home, progress and results, refreshes paper cards and saving actions, and adds all-keyword / any-keyword search modes with help. The official full package includes Discover frontiers; public-source builds are base distributions. [Setup and upgrade notes](docs/usage-guide.md#update-0612).
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 

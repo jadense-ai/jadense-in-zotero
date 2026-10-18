@@ -7,6 +7,28 @@
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
 
+<a id="update-0612"></a>
+
+## 0.6.12：发现视图、文献卡片与检索模式（待发布）
+
+- **首页、进行、结果**：侧栏“发现前沿”进入首页，选择“开始发现”或历史记录进入相应运行。进行页显示小玉进度和停止操作，结果页显示文献；通过左上角返回首页。返回首页不会停止正在执行的任务。
+- **阅读与收藏**：结果以文献卡片展示，按需展开摘要和 AI 评价，通过原文入口继续阅读；在文献操作中收藏条目或包含 PDF，选择 Zotero 目标库／收藏夹。下载或导入失败时查看对应反馈后重试，来源没有可用 PDF 时不能保证下载成功。
+- **检索模式**：打开“编辑兴趣档案”，输入关键词或完整短语并按 Enter 添加。在“检索模式”选择“并集模式”（默认，标题或摘要匹配任意一项）或“交集模式”（标题或摘要须命中每一项），之后仍需 AI 初筛判断是否入选。悬停、点击或键盘聚焦旁边的帮助按钮可查看示例。保存档案后再开始发现；保存本身不启动检索。旧档案未设置模式时使用并集。
+- **配置与费用**：通用模式使用 arXiv，攻玉模式可选 13 个来源；默认最近 3 天、最多 30 篇，AI 评价和每日追踪关闭。模型在“设置 → 功能配置 → 发现前沿”选择。中文词先翻译为英文再检索，可能产生模型费用；每日追踪需要 Zotero 保持运行。AI 与来源可用性依赖相应服务。
+- **升级**：0.6.12 正式发布后下载本版 XPI，在 Zotero“工具 → 插件 → 齿轮 → 从文件安装插件”覆盖安装并重启。相同 .cn 插件身份保留设置和本地历史，不重复执行已完成的 0.6.10 模型迁移。完整包包含发现前沿，公开源码基础版不含此模块；官网自动更新渠道独立。
+
+### English
+
+The sidebar opens Discover frontiers at home. Start discovery or select a history entry to view a run. Progress and results have separate views; Stop remains on the progress page, and the top-left back action returns home without stopping the run. Paper cards provide expandable abstracts/reviews, original-paper links and save/PDF actions with a Zotero destination picker. Check individual feedback before retrying an unavailable download or failed import.
+
+In **Edit interests**, enter keywords or complete phrases and press Enter. **Any-keyword mode** is the default: a title or abstract match for any phrase enters AI screening. **All-keyword mode** requires every phrase to match before screening. Hover, click or focus each help button for examples. Save first, then start discovery; saving does not search. Existing profiles without a mode use any-keyword matching.
+
+Standard mode uses arXiv; Jadense mode offers 13 sources. Defaults remain the last three days and 30 candidates, with AI reviews and daily runs off. Choose the model under Settings → Feature settings → Discover frontiers. Chinese keywords are translated before searching and may use paid model calls; daily runs require Zotero to remain open. Install the 0.6.12 XPI after publication and restart. Settings and local history for the same .cn identity are retained. Official full packages include Discover frontiers; public-source base builds omit it. Website updates are managed separately.
+
+![发现结果文献卡片 / Discovery result cards](images/guide-discovery-0612.png)
+
+![兴趣档案检索模式帮助 / Search-mode help](images/guide-search-modes-0612.png)
+
 <a id="update-0611"></a>
 
 ## 0.6.11：发现前沿、PDF 上传与翻译（2026-10-15）

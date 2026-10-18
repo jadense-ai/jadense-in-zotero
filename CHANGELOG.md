@@ -1,5 +1,14 @@
 # 更新说明 / Changelog
 
+## 0.6.12 — Unreleased
+
+- 发现前沿侧栏入口回到首页，进行与结果独立显示；进度页保留停止操作，历史在首页回看。
+- 更新结果文献卡片、摘要与 AI 评价展开、原文入口和收藏／PDF 操作，改善浅深色、窄窗与字号缩放。
+- 兴趣档案新增交集／并集检索模式；默认并集，帮助提示说明关键词与完整短语的匹配方式，并改善弹窗关闭图标对齐。
+- Discover frontiers opens at home, with separate progress and result views, a stop action during a run and history on the home page.
+- Refresh result cards, abstract/review expansion, original-paper links and save/PDF actions across themes, narrow windows and font sizes.
+- Add all-keyword and any-keyword modes to interests, defaulting to any-keyword matching; contextual help explains keyword/phrase matching and the dialog close icon is centered.
+
 ## 0.6.11 — 2026-10-15
 
 - 发现前沿更新小玉欢迎页、兴趣摘要、逐篇扫描与发现历史，修复说明段落偏左、滚动区和窄窗布局；保留来源选择、模型设置与收藏功能。

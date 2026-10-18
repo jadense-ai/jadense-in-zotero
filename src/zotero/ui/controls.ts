@@ -54,6 +54,7 @@ const actionPaths = {
   list: 'M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1', type: 'M4 5h16M12 5v15M8 20h8', more: 'M4 12h2m5 0h2m5 0h2',
   search: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 6 6', import: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5', edit: 'm4 16-1 5 5 5-1L20 8l-4-4L4 16m9-9 4 4', delete: 'M5 7h14m-9 4v6m4-6v6M9 7V4h6v3m-9 0 1 13h10l1-13', close: 'M5 5l14 14M19 5L5 19',
   verify: 'm4 12 5 5L20 6', skip: 'm5 5 9 7-9 7zM19 5v14',
+  bookmark: 'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
 } as const
 export function actionIcon(button: HTMLButtonElement, icon: keyof typeof actionPaths, label = button.textContent || '') {
   button.classList.add('jdx-icon-action'); button.title = label; button.setAttribute('aria-label', label)
