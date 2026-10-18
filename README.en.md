@@ -108,9 +108,9 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | Method | How | Notes |
 | --- | --- | --- |
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current official XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest official release is [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11), with metadata and SHA-256 checksums |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current official XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest official release is [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.11/jadense-in-zotero-v0.6.11.xpi` | The current public source builds the base distribution; Frontier Radar is available in official full packages |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.12/jadense-in-zotero-v0.6.12.xpi` | The current public source builds the base distribution; Frontier Radar is available in official full packages |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 
@@ -179,7 +179,7 @@ The workbench supports both English and Simplified Chinese. The steps below also
 
 ### 1. Install and open the workbench
 
-1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.11**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
+1. Download the `.xpi` plugin file from the [latest release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest). The published release is **0.6.12**. If you have an older version installed, read the [upgrade instructions](#upgrade) first.
 2. In Zotero's plugin manager, choose the option to install a plugin from a file and select the XPI.
 3. Open the workbench from Zotero's Jadense entry and choose how to connect to a model service.
 
@@ -355,7 +355,7 @@ Scanned PDFs need OCR before operations that depend on extracted text. Analysis 
 
 ### How do I upgrade from an older version?
 
-Install the current v0.6.11 release over an older GitHub version with the same `.cn` plugin ID. An in-place upgrade from 0.6.9 passed on Windows 11 / Zotero 10.0.3. Settings and local history are preserved. Existing translations are not regenerated automatically. The first 0.6.10 launch sets Jadense chat to `qwen-3.8-flash` once; BYOK chat stays unchanged, and later manual choices remain intact.
+Install the current v0.6.12 release over an older GitHub version with the same `.cn` plugin ID. An in-place upgrade from 0.6.11 passed on Windows 11 / Zotero 10.0.6. Settings and local history are preserved. Existing translations are not regenerated automatically. The first 0.6.10 launch sets Jadense chat to `qwen-3.8-flash` once; BYOK chat stays unchanged, and later manual choices remain intact.
 
 If your installed version uses `jadense-in-zotero@jadense.com`—including website version 0.3.2—**disable the old Jadense plugin first, then manually install the latest published XPI**. The new ID is `jadense-in-zotero@jadense.cn`. Different IDs do not replace each other through automatic updates; do not enable both at once.
 

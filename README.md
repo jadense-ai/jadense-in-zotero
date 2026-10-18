@@ -113,9 +113,9 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11)，同时提供元数据和 SHA-256 校验和 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.11/jadense-in-zotero-v0.6.11.xpi` | 当前源码构建为基础版；前沿雷达仅随官方完整安装包提供 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.12/jadense-in-zotero-v0.6.12.xpi` | 当前源码构建为基础版；前沿雷达仅随官方完整安装包提供 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
@@ -186,7 +186,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 ### 1. 安装与打开工作台
 
-1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前正式版为 **0.6.11**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 从 [最新 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) 下载 `.xpi` 插件文件，当前正式版为 **0.6.12**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -372,7 +372,7 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.\***。部分旧截图来自 **Windo
 
 ### 从旧版怎样升级？
 
-可从同一 `.cn` 插件身份的旧 GitHub 版本安装升级到正式版 0.6.11；已在 Windows 11 / Zotero 10.0.3 验证 0.6.9 原位升级。已有设置与本地历史保留，旧译文不会自动重译。首次运行 0.6.10 会一次性把攻玉对话模型设为 `qwen-3.8-flash`；BYOK 对话目的地不变，此后手动选择不再被覆盖。
+可从同一 `.cn` 插件身份的旧 GitHub 版本安装升级到正式版 0.6.12；已在 Windows 11 / Zotero 10.0.6 验证 0.6.11 原位升级。已有设置与本地历史保留，旧译文不会自动重译。首次运行 0.6.10 会一次性把攻玉对话模型设为 `qwen-3.8-flash`；BYOK 对话目的地不变，此后手动选择不再被覆盖。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 
