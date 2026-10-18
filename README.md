@@ -25,7 +25,7 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.12 待发布：**发现前沿分为首页、进行和结果视图；更新文献卡片与收藏操作，兴趣档案新增交集／并集检索模式和帮助提示。官方完整包包含发现前沿，公开源码构建为基础版。[操作与升级说明](docs/usage-guide.md#update-0612)。
+**v0.6.12 已发布：**发现前沿分为首页、进行和结果视图；更新文献卡片与收藏操作，兴趣档案新增交集／并集检索模式和帮助提示。官方完整包包含发现前沿，公开源码构建为基础版。[操作与升级说明](docs/usage-guide.md#update-0612) · [下载正式安装包](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12)。
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -34,16 +34,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12) — 发现前沿分离首页、进行与结果，更新文献卡片和收藏操作，新增交集／并集检索与帮助。
 - [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11) — 发现前沿欢迎、扫描与历史布局更新，修复文本居中，改进收藏 PDF 上传恢复与翻译反馈。
 - [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) — PDF 与 OCR 引擎可分别选择存储位置；BYOK 可按功能设置思考档位，攻玉对话模型一次性设为 `qwen-3.8-flash`。
 - [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) — 新增简阅模式与主动翻译，改进模型思考档位、翻译进度反馈和 PDF 对照工具栏。
 - [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — 前沿雷达支持通用 arXiv 与攻玉 13 来源追踪，新增结构化 AI 预评和独立模型设置；攻玉模式可接力 Jev 分类与 OCR。
-- [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — 新增仅支持 arXiv 的文献雷达、攻玉模式及新版 PDF 离线安装指南，改进 OCR 准备停止与 PDF 翻译恢复。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-0.6.11 正式草稿原件已在 Windows 11 / Zotero 10.0.6 完成原生验收；详情见 [Release 验证记录](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11)。其他系统、Zotero 8/9 和真实付费服务未实测。
+0.6.12 正式草稿原件已在 Windows 11 / Zotero 10.0.6 完成原生验收；详情见 [Release 验证记录](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12)。其他系统、Zotero 8/9 和真实付费服务未实测。
 
 <a id="api-recommendation"></a>
 

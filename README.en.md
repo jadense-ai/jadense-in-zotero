@@ -24,7 +24,7 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.12 is pending release:** Discover frontiers separates home, progress and results, refreshes paper cards and saving actions, and adds all-keyword / any-keyword search modes with help. The official full package includes Discover frontiers; public-source builds are base distributions. [Setup and upgrade notes](docs/usage-guide.md#update-0612).
+**v0.6.12 is released:** Discover frontiers separates home, progress and results, refreshes paper cards and saving actions, and adds all-keyword / any-keyword search modes with help. The official full package includes Discover frontiers; public-source builds are base distributions. [Setup and upgrade notes](docs/usage-guide.md#update-0612) · [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12).
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 
@@ -33,16 +33,16 @@ The offline suite includes the new [PDF installation guide](<docs/jadense-in-zot
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12) — Separate discovery home, progress and results; refresh paper cards and saving, and add all-keyword / any-keyword search with help.
 - [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11) — Refresh Discover frontiers welcome, scanning and history; fix centered text and improve PDF upload recovery and translation feedback.
 - [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) — Set separate PDF and OCR engine locations, choose BYOK thinking levels per feature, and set Jadense chat to `qwen-3.8-flash` once.
 - [v0.6.9](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.9) — Add Reading mode with on-demand translation; improve model thinking controls, translation progress and the bilingual PDF toolbar.
 - [v0.6.8](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.8) — Frontier Radar adds standard arXiv and 13-source Jadense tracking, structured AI reviews and separate model settings; Jadense mode also supports Jev classification and OCR.
-- [v0.6.7](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.7) — Add arXiv-only Literature Radar, Jadense mode and an illustrated PDF offline guide; improve OCR setup cancellation and PDF translation recovery.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
-The 0.6.11 draft originals were tested on Windows 11 / Zotero 10.0.6; see the [release verification notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11). Other operating systems, Zotero 8/9 and real paid services were not tested.
+The 0.6.12 draft originals were tested on Windows 11 / Zotero 10.0.6; see the [release verification notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12). Other operating systems, Zotero 8/9 and real paid services were not tested.
 
 <a id="api-recommendation"></a>
 
