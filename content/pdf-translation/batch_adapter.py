@@ -64,6 +64,13 @@ class ProviderFailure(Exception):
         super().__init__(code)
 
 
+class LocalCheckpointError(RuntimeError):
+    """付费请求身份/译文不可落盘时停止派发；宿主只恢复同一检查点，不另建付费轮次。"""
+    def __init__(self, code, message):
+        self.code = code
+        super().__init__(message)
+
+
 BODY = {'text', 'plain text', 'paragraph_hybrid'}
 MARGINAL = {'header', 'footer', 'page header', 'page footer', 'page_header', 'page_footer'}
 METADATA = {'author', 'authors', 'affiliation', 'reference', 'references', 'reference_content', 'bibliography'}
@@ -568,9 +575,12 @@ def install_adapter(high_level, config, emit):
             self.cache_path = Path(config['directory']) / 'paragraphs-v3.json'
             try:
                 self.cache = json.loads(self.cache_path.read_text(encoding='utf-8'))
-                if not isinstance(self.cache, dict): self.cache = {}
-            except (ValueError, OSError):
+                if not isinstance(self.cache, dict):
+                    raise LocalCheckpointError('PDF_CACHE_UNREADABLE', 'Translation checkpoint has an invalid container; existing request identities were preserved.')
+            except FileNotFoundError:
                 self.cache = {}
+            except (ValueError, OSError) as error:
+                raise LocalCheckpointError('PDF_CACHE_UNREADABLE', 'Translation checkpoint could not be read; existing paid request identities were preserved.') from error
             self.stats = dict(total=0, completed=0, cacheHits=0, batches=0, repairs=0, batchTokens=[])
 
         def save(self, outputs, batch_id=None, state=None):
@@ -579,8 +589,11 @@ def install_adapter(high_level, config, emit):
                 if batch_id is not None:
                     self.cache.setdefault('__batches', {})[batch_id] = state
                 temporary = self.cache_path.with_suffix('.tmp')
-                temporary.write_text(json.dumps(self.cache, ensure_ascii=True), encoding='utf-8')
-                atomic_replace(temporary, self.cache_path)
+                try:
+                    temporary.write_text(json.dumps(self.cache, ensure_ascii=True), encoding='utf-8')
+                    atomic_replace(temporary, self.cache_path)
+                except OSError as error:
+                    raise LocalCheckpointError('PDF_LOCAL_SAVE_FAILED', 'Translation checkpoint could not be saved; retry will reuse the same request identity.') from error
 
         def report(self):
             with self.lock:
@@ -600,10 +613,13 @@ def install_adapter(high_level, config, emit):
             legacy = {digest([row['id'] for row in group]): [row['id'] for row in group]
                       for group in batches(rows, self.base.calc_token_count, self.budget, self.language, legacy=True)}
             for batch_id, state in list(states.items()):
-                if state.get('attempt', 3) >= 3 or state.get('cursor', 0) >= len(state.get('groups', [])): continue
                 identities = state.get('row_ids', legacy.get(batch_id, []))
                 if not identities or not all(identity in row_map for identity in identities): continue
                 if reserved.intersection(identities): continue
+                if state.get('attempt', 3) >= 3:
+                    # 自动恢复只能继续原轮次；已耗尽的内容修复须用户明确补译才开启新付费轮次。
+                    if not config.get('retryExhausted', True): reserved.update(identities)
+                    continue
                 reserved.update(identities)
                 yield [row_map[identity] for identity in identities]
             pending = [row for row in rows if row['id'] not in reserved and not valid_output(row['text'], self.cache.get(row['id']))]
@@ -640,6 +656,8 @@ def install_adapter(high_level, config, emit):
             row_map = {row['id']: row for row in rows}
             with self.lock:
                 state = self.cache.get('__batches', {}).get(batch_id)
+                if state and state['attempt'] >= 3 and not config.get('retryExhausted', True):
+                    return
                 if not state or state['attempt'] >= 3:
                     state = dict(cycle=state['cycle'] + 1 if state else 0, attempt=2 if len(rows) == 1 and self.has_cached_spans(rows[0]) else 0,
                                  format='numbered-v1', row_ids=list(row_map), shrink=True,
@@ -867,7 +885,9 @@ def install_adapter(high_level, config, emit):
                             failedPages=sorted(failed_pages), rawBlocks=raw_count, organized=organized,
                             fragments=len(rows), deduplicated=deduplicated, failures=failures)
             config['coverage'] = coverage
-            if not render_only: emit(type='translation_summary', strategy=strategy, **self.stats, coverage=coverage)
+            if not render_only:
+                pending = sum(not valid_output(row['text'], self.cache.get(row['id'])) for row in rows)
+                emit(type='translation_summary', strategy=strategy, **self.stats, pending=pending, coverage=coverage)
 
     CapacityTranslator.stage_name = ILTranslator.stage_name
     high_level.ILTranslatorLLMOnly = CapacityTranslator

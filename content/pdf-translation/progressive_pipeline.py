@@ -12,7 +12,7 @@ import time
 import uuid
 from typing import get_args, get_origin
 
-from batch_adapter import atomic_replace
+from batch_adapter import atomic_replace, LocalCheckpointError
 
 LAYOUT_VERSION = 'layout-v1'
 
@@ -136,16 +136,19 @@ def install_pipeline(high_level, config, emit, publish_snapshot):
 
         def render(document, coverage):
             nonlocal last_result
-            if coverage['translated'] == 0:
-                output = config['source']
-            else:
-                high_level.Typesetting(parameters).typesetting_document(document)
-                result = SnapshotPDFCreator(prepared, document, parameters, mediabox).write(parameters)
-                result.original_pdf_path = parameters.input_file
-                high_level.fix_cmap(result, parameters)
-                last_result = result
-                output = result.mono_pdf_path
-            publish_snapshot(output, coverage)
+            try:
+                if coverage['translated'] == 0:
+                    output = config['source']
+                else:
+                    high_level.Typesetting(parameters).typesetting_document(document)
+                    result = SnapshotPDFCreator(prepared, document, parameters, mediabox).write(parameters)
+                    result.original_pdf_path = parameters.input_file
+                    high_level.fix_cmap(result, parameters)
+                    last_result = result
+                    output = result.mono_pdf_path
+                publish_snapshot(output, coverage)
+            except Exception as error:
+                raise LocalCheckpointError('PDF_RENDER_FAILED', 'PDF rendering could not finish; saved translations will be rendered again without new translation requests.') from error
 
         def snapshot(original, force=False):
             nonlocal last_publish, last_translated
@@ -170,7 +173,7 @@ def install_pipeline(high_level, config, emit, publish_snapshot):
         publish_snapshot(config['source'], dict(total=total, translated=0, failed=total, preserved=0, failedPages=[]))
         working = clone_document(docs)
         try:
-            translator.translate(working)
+            translator.translate(working, render_only=bool(config.get('renderOnly')))
             if config['coverage']['translated'] != last_translated:
                 render(working, config['coverage'])
         except Exception:

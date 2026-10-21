@@ -20,6 +20,7 @@ import { wireReadingBudgetSettings } from './translation-budget-settings'
 import { bindReaderControlPopover } from './reader-toolbar-menu'
 import { createJdxSelect } from './ui/select'
 import { createChevron } from './ui/chevron'
+import { createSimpleReadingAppearance, SIMPLE_READING_APPEARANCE_CSS } from './simple-reading-appearance'
 
 const readers = new Map<SimpleReader, { close(): Promise<void>; taskID(): string | undefined }>()
 const openings = new Map<SimpleReader, Promise<void>>()
@@ -78,18 +79,28 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   let starting = false, ready = false
   let historyState: 'ready' | 'slow' | 'failed' = 'ready'
   let mirrorPosition: { id: string; fraction: number } | undefined
-  let pdfScaleAtOpen = 0, mirrorZoomFrame = 0
+  let pdfScaleAtOpen = 0, mirrorZoomFrame = 0, synchronizing = false
   // 以双栏建立后的 PDF 倍率为基准，语言重建和多屏共用同一正文缩放比例。
   const syncMirrorZoom = () => {
     const target = frame.contentDocument?.documentElement
     const currentScale = native.pdf.currentScale
     if (!target?.querySelector('#sdt-content') || !pdfScaleAtOpen || !Number.isFinite(currentScale) || currentScale <= 0) return
-    target.style.setProperty('--scale', String(Number((sourceScale * currentScale / pdfScaleAtOpen).toFixed(3))))
+    target.style.setProperty('--scale', String(Number((sourceScale * currentScale / pdfScaleAtOpen * appearance.scale()).toFixed(3))))
   }
   const scheduleMirrorZoom = () => {
     win.cancelAnimationFrame(mirrorZoomFrame)
     mirrorZoomFrame = win.requestAnimationFrame(() => { if (!disposed) syncMirrorZoom() })
   }
+  const appearance = createSimpleReadingAppearance(host, () => {
+    if (disposed || !ready) return
+    const anchor = mirror?.blocks.map(block => block.element).find(node => node.getBoundingClientRect().bottom > 0)
+    const rect = anchor?.getBoundingClientRect(), fraction = rect ? rect.top / Math.max(1, rect.height) : 0
+    // 正文重排只恢复当前 HTML 段落，不通过同步滚动改变左侧原 PDF。
+    synchronizing = true; syncMirrorZoom()
+    if (anchor && rect) { const resized = anchor.getBoundingClientRect(); frame.contentWindow?.scrollBy(0, resized.top - fraction * resized.height) }
+    win.requestAnimationFrame(() => { synchronizing = false })
+  })
+  cleanups.push(() => appearance.remove())
   const automaticPDFScale = /^(?:auto|page-width|page-fit|page-height)$/u.test(native.pdf.currentScaleValue) ? native.pdf.currentScaleValue : undefined
   const panel = element(doc, 'section', 'jdx-simple-reading'), toolbar = element(doc, 'div', 'jdx-simple-tools'), status = element(doc, 'div', 'jdx-simple-status'), embeddedFrame = element(doc, 'iframe'), style = element(doc, 'style')
   let frame = embeddedFrame, openingWindow = false
@@ -98,7 +109,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   frame.title = uiText('简阅 HTML 内容（批注请使用左侧 PDF）', 'Reading HTML (annotate the PDF on the left)')
   // 固定空白文档，不载入 Provider HTML；禁用脚本、表单和弹窗。
   frame.setAttribute('sandbox', 'allow-same-origin'); frame.src = 'about:blank'; frame.hidden = true
-  style.textContent = `${READER_UI_THEME_CSS}
+  style.textContent = `${READER_UI_THEME_CSS}${SIMPLE_READING_APPEARANCE_CSS}
 .jdx-simple-reading{position:absolute;inset:0;z-index:3;pointer-events:none;display:flex;flex-direction:column;align-items:flex-end;min-width:0;container-type:inline-size;color:var(--jdx-reader-text);font:calc(13px * var(--jdx-font-scale,1)) system-ui}
 .jdx-simple-tools,.jdx-simple-status{box-sizing:border-box;width:100%;pointer-events:auto;background:var(--jdx-reader-background);border-bottom:1px solid var(--jdx-reader-line);padding:5px 8px}
 .jdx-simple-tools{display:flex;align-items:center;gap:6px;flex:none;min-height:42px;white-space:nowrap;overflow:hidden}
@@ -176,6 +187,7 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
   for (const [popup, label] of [[menu, uiText('简阅操作', 'Reading actions')], [searchPanel, uiText('搜索原文或译文', 'Search either view')], [status, uiText('翻译状态', 'Translation status')]] as const) { popup.setAttribute('aria-label', label); popup.setAttribute('role', 'dialog') }
   const group = (label: string) => { const node = element(doc, 'div', 'jdx-simple-group'); node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); menu.append(node); return node }
   const navigation = group(uiText('阅读与视图', 'Reading and view')), settings = group(uiText('翻译设置', 'Translation settings'))
+  cleanups.push(appearance.mount(navigation))
   const statusToggle = action(doc, uiText('正在读取', 'Loading'), () => {}); statusToggle.classList.add('jdx-simple-status-toggle')
   statusToggle.setAttribute('aria-label', uiText('翻译状态', 'Translation status'))
   const statusDot = element(doc, 'span', 'jdx-simple-status-dot'), statusLabel = element(doc, 'span', 'jdx-simple-status-label')
@@ -320,7 +332,6 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
       starting = false; render()
     } catch (error) { starting = false; render(); status.textContent = error instanceof Error ? error.message : uiText('无法开始翻译。', 'Could not start translation.'); statusLabel.textContent = uiText('翻译未开始', 'Could not translate'); bindings[2].close(); statusToggle.click(); layout() }
   }
-  let synchronizing = false
   const pageAtPDFTop = () => {
     let index = Math.max(0, native.pdf.currentPageNumber - 1)
     const top = native.pdf.container.scrollTop
@@ -403,16 +414,22 @@ async function mountSimpleReading(host: ZoteroLike, reader: SimpleReader, savedI
     detached = opened; opened.document.title = uiText('简阅译文', 'Reading translation')
     body.replaceChildren(); body.style.cssText = 'margin:0;display:flex;flex-direction:column;height:100vh'
     const detachedRoot = element(body.ownerDocument, 'section', 'jdx-simple-reading'), detachedToolbar = element(body.ownerDocument, 'div', 'jdx-simple-tools')
+    detachedToolbar.classList.add('jdx-simple-detached-tools')
     detachedRoot.setAttribute('data-jadense-reader-theme', '')
     const back = action(body.ownerDocument, uiText('返回对照阅读', 'Return to compare'), () => opened.close())
     const detachedSearch = element(body.ownerDocument, 'input'); detachedSearch.type = 'search'; detachedSearch.placeholder = search.placeholder; detachedSearch.setAttribute('aria-label', search.placeholder)
     const detachedFind = () => { search.value = detachedSearch.value; activeSide = 'translation'; find() }
     detachedSearch.addEventListener('keydown', event => { if (event.key === 'Enter') detachedFind() })
     detachedToolbar.append(back, detachedSearch, action(body.ownerDocument, uiText('查找下一个', 'Find next'), detachedFind))
+    const appearanceToggle = actionIcon(action(body.ownerDocument, uiText('文字大小', 'Text size'), () => {}), 'type')
+    const appearancePanel = element(body.ownerDocument, 'div', 'jdx-simple-budget')
+    appearancePanel.hidden = true; appearancePanel.setAttribute('role', 'dialog'); appearancePanel.setAttribute('aria-label', uiText('文字大小', 'Text size'))
+    detachedToolbar.append(appearanceToggle); detachedRoot.append(appearancePanel)
+    const removeAppearance = appearance.mount(appearancePanel), appearanceMenu = bindReaderControlPopover(appearanceToggle, appearancePanel, detachedRoot)
     frame = element(body.ownerDocument, 'iframe'); frame.setAttribute('sandbox', 'allow-same-origin'); frame.title = embeddedFrame.title; frame.src = 'about:blank'
     detachedRoot.append(body.ownerDocument.importNode(style, true), detachedToolbar, frame); body.append(detachedRoot); frame.style.cssText = 'flex:1;width:100%;min-height:0;border:0'; embeddedFrame.hidden = true
     const stopTheme = observeTheme(host, detachedRoot, updateMirrorTheme)
-    opened.addEventListener('unload', () => { stopTheme(); if (disposed) return; detached = undefined; frame = embeddedFrame; void buildMirror().then(render).catch(() => {}); layout() }, { once: true })
+    opened.addEventListener('unload', () => { stopTheme(); appearanceMenu.remove(); removeAppearance(); if (disposed) return; detached = undefined; frame = embeddedFrame; void buildMirror().then(render).catch(() => {}); layout() }, { once: true })
     await buildMirror(); mode = 'compare'; render()
   })().catch(error => { openingWindow = false; detached?.close(); viewSelect.setValue(mode); status.textContent = `${uiText('多屏视图无法打开，请继续在当前窗口阅读。', 'Separate window unavailable. Continue reading here.')}\n${error instanceof Error ? error.message : String(error)}`; statusLabel.textContent = uiText('视图打开失败', 'View unavailable') }) }); detach.disabled = true
   viewSelect.onChange(value => {

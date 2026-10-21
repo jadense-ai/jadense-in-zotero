@@ -10,6 +10,7 @@ import { action, badge, element, notice } from './ui/controls'
 import { uiText } from './ui-preferences'
 
 export function pdfFileStatus(task: PDFTranslationTask) {
+  if (task.status === 'waiting') return uiText('等待自动恢复', 'Waiting to resume')
   return task.status === 'partial' ? uiText('部分完成', 'Partially translated') : task.status === 'complete' ? uiText('已保存', 'Saved')
     : task.status === 'queued' || task.status === 'running' ? uiText('进行中', 'Running') : uiText('未完成', 'Incomplete')
 }
@@ -49,7 +50,8 @@ export function mountPDFTranslationFiles(root: HTMLElement, host: ZoteroLike, so
         const save = action(doc, label, () => { void perform(save, () => jobs.export(task.id, kind, doc.defaultView!)) })
         save.disabled = !jobs.hasOutput(task); controls.append(save)
       }
-      if (task.status !== 'complete') { const retry = action(doc, uiText('补译未完成部分', 'Translate remaining passages'), () => jobs.retry(task.id)); retry.disabled = jobs.isActive(task.id); controls.append(retry) }
+      if (task.status === 'waiting') controls.append(action(doc, uiText('取消', 'Cancel'), () => jobs.cancel(task.id)))
+      else if (task.status !== 'complete') { const retry = action(doc, uiText('补译未完成部分', 'Translate remaining passages'), () => jobs.retry(task.id)); retry.disabled = jobs.isActive(task.id); controls.append(retry) }
       open.disabled = !jobs.hasOutput(task); row.append(controls); list.append(row)
     }
     if (!tasks.length) list.append(element(doc, 'p', 'jdx-result-empty', uiText('暂无对照翻译。请在 PDF 阅读器工具条中使用“对照翻译”，完成后会自动显示在这里。', 'No bilingual PDFs yet. Use Bilingual PDF in the PDF reader toolbar. Completed files appear here automatically.')))

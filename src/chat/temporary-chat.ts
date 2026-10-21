@@ -50,6 +50,8 @@ export type TemporaryChatSendInput = {
   requireComplete?: boolean
   /** PDF 批次身份含持久化重试代次，可复用同一操作的完整回执。 */
   reuseCompletedOperation?: boolean
+  /** 仅拥有持久运行意图及显式远端停止的任务使用；普通窗口请求保持连接取消语义。 */
+  durableExecution?: boolean
   /** 仅用户明确要求重发未知 BYOK 执行时的一次性授权，不发送给 Provider。 */
   allowUnconfirmedRetry?: boolean
 }

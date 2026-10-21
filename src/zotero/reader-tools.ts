@@ -32,6 +32,7 @@ import {
 import { matchesReaderShortcut, readReaderShortcut } from "./reader-shortcuts"
 import { initializeUiLocale, observeTheme, uiText, type UiPreferenceHost } from "./ui-preferences"
 import { makeTranslationWindowInteractive, translationAppearanceControl, removeDocumentSurfaces } from "./document-ui"
+import { selectionTranslationAppearance } from './selection-translation-appearance'
 import type { ZoteroLike } from "./runtime"
 import { READER_UI_THEME_CSS } from "./reader-ui-theme"
 import { bindReaderActionMenu } from "./reader-toolbar-menu"
@@ -134,6 +135,7 @@ function selectionAnchor(reader: ReaderInstance, fallback: HTMLElement, annotati
   }
 }
 type AnnotationItem = {
+  parentItemID?: number
   annotationText?: string
   annotationPosition?: string
   getTags?: () => Array<{ tag: string }>
@@ -233,7 +235,7 @@ export type PdfAnalysisSnapshot = {
     warnings: string[]
   }
 }
-export type SavedAnalysisAnnotations = { created: number; skipped: number; failed: number; unprocessed: number; warnings: string[] }
+export type SavedAnalysisAnnotations = { created: number; skipped: number; failed: number; unprocessed: number; warnings: string[]; issueCode?: string }
 
 const MAX_PAGES = 80
 const MAX_PASSAGES = 1200
@@ -411,7 +413,7 @@ function paperMetadata(item: PdfItem): PaperAnalysisMetadata {
 export async function readPdfForAnalysis(
   zotero: ZoteroReaderHost,
   itemID: number,
-  options: { signal?: AbortSignal; onProgress?: (progress: { pagesRead: number; totalPages: number }) => void; onNotice?: (message: string) => void } = {},
+  options: { signal?: AbortSignal; onProgress?: (progress: { pagesRead: number; totalPages: number }) => void; onNotice?: (message: string) => void; onActivity?: () => void } = {},
 ): Promise<PdfAnalysisSnapshot> {
   const { signal, onProgress } = options
   abortIfNeeded(signal)
@@ -423,7 +425,11 @@ export async function readPdfForAnalysis(
   // 纯文字 OCR 适配不提供定位能力，解析无需先上传整篇再丢弃结果。
   const supportsLocations = ['local', 'mineru', 'glm'].includes(ocrEngine(zotero as unknown as ZoteroLike))
   if (useOCR && supportsLocations) {
-    const document = await readDocument(zotero as unknown as ZoteroLike, itemID, signal ?? new AbortController().signal, undefined, useOCR)
+    const document = await readDocument(zotero as unknown as ZoteroLike, itemID, signal ?? new AbortController().signal, message => {
+      // OCR 页进展必须送达外层空闲计时器；安装/识别仍受读取总时限约束。
+      options.onActivity?.()
+      options.onNotice?.(message)
+    }, useOCR)
     const candidates: PdfAnalysisPassage[] = document.pages.flatMap(page => page.paragraphs.flatMap((paragraph, index) => {
       const rects = paragraph.rects.filter(validRect)
       if (!paragraph.text.trim()) return []
@@ -534,23 +540,34 @@ function existingIdentities(annotations: AnnotationItem[]): Set<string> {
 
 /** 写入前重读权威附件；不能把旧文件坐标写到另一份文献或无编辑权限的文库。 */
 async function checkWritable(zotero: ZoteroReaderHost, snapshot: PdfAnalysisSnapshot): Promise<PdfItem> {
-  const item = await getPdfItem(zotero, snapshot.itemID)
-  if (item.key !== snapshot.itemKey || item.libraryID !== snapshot.libraryID || !item.isEditable?.()) {
-    throw new Error(uiText("PDF 已变更或当前文库不可编辑，已停止写入批注。", "The PDF changed or the library is not editable. Annotation saving stopped."))
+  const item = await validateAnalysisSource(zotero, snapshot)
+  if (!item.isEditable?.()) throw Object.assign(new Error(uiText("当前文库不可编辑，已停止写入批注。", "The library is not editable. Annotation saving stopped.")), { code: 'ANALYSIS_PERMISSION' })
+  return item
+}
+
+/** 恢复时重读附件身份/文件版本；读取不要求文库可编辑，写入另行核对权限。 */
+export async function validateAnalysisSource(zotero: ZoteroReaderHost, snapshot: PdfAnalysisSnapshot): Promise<PdfItem> {
+  let item: PdfItem
+  try { item = await getPdfItem(zotero, snapshot.itemID) } catch {
+    throw Object.assign(new Error(uiText('原 PDF 不可用；已保存解析仍可阅读。', 'The source PDF is unavailable; saved analysis remains readable.')), { code: 'ANALYSIS_SOURCE_CHANGED' })
+  }
+  if (item.key !== snapshot.itemKey || item.libraryID !== snapshot.libraryID) {
+    throw Object.assign(new Error(uiText("PDF 身份已变更，已停止继续任务。", "The PDF identity changed. Continuation stopped.")), { code: 'ANALYSIS_SOURCE_CHANGED' })
   }
   if (snapshot.attachmentModificationTime !== undefined
     && await item.attachmentModificationTime !== snapshot.attachmentModificationTime) {
-    throw new Error(uiText("PDF 文件在解析期间已更改，请重新打开并解析后再保存批注。", "The PDF changed during analysis. Reopen and analyze it again before saving annotations."))
+    throw Object.assign(new Error(uiText("PDF 文件在解析期间已更改，请重新打开并解析后再保存批注。", "The PDF changed during analysis. Reopen and analyze it again before saving annotations.")), { code: 'ANALYSIS_SOURCE_CHANGED' })
   }
   return item
 }
 
-/** 只新增本地原句对应的高亮；同一附件串行化，重复运行不会覆盖人工批注。 */
+export type AnalysisAnnotationLedger = Record<string, { key: string; status: 'pending' | 'saved' }>
+/** 只新增本地原句对应的高亮；同一附件串行化，持久 key 围栏允许安全补写。 */
 export async function saveAnalysisAnnotations(
   zotero: ZoteroReaderHost,
   snapshot: PdfAnalysisSnapshot,
   annotations: ReadonlyArray<Pick<PaperAnalysisAnnotation, "passageId" | "category" | "comment">>,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; ledger?: AnalysisAnnotationLedger; checkpoint?: () => Promise<void> } = {},
 ): Promise<SavedAnalysisAnnotations> {
   abortIfNeeded(options.signal)
   let locks = writes.get(zotero)
@@ -587,13 +604,25 @@ export async function saveAnalysisAnnotations(
       if (existing.has(identity)) { result.skipped++; result.unprocessed--; continue }
       let key: string
       try {
-        key = zotero.DataObjectUtilities.generateKey()
+        const pending = options.ledger?.[identity]
+        key = pending?.key ?? zotero.DataObjectUtilities.generateKey()
         // saveFromJSON 会按库内 key 更新旧条目；碰撞或无法核对时不写入，不能覆盖任何旧内容。
-        if (await zotero.Items.getByLibraryAndKey(snapshot.libraryID, key)) {
+        const found = await zotero.Items.getByLibraryAndKey(snapshot.libraryID, key) as AnnotationItem | undefined
+        if (found) {
+          if (pending && found.parentItemID === snapshot.itemID && existingIdentities([found]).has(identity)) {
+            pending.status = 'saved'; await options.checkpoint?.()
+            existing.add(identity); result.skipped++; result.unprocessed--; continue
+          }
           result.skipped++
           result.unprocessed--
+          result.issueCode = 'ANALYSIS_ANNOTATION_CONFLICT'
           result.warnings.push(uiText("批注标识发生冲突，已跳过该条，请重试。", "An annotation identifier conflicted. This annotation was skipped; please try again."))
           continue
+        }
+        if (options.ledger && !pending) {
+          options.ledger[identity] = { key, status: 'pending' }
+          // 新 key 必须在副作用前确认落盘；失败不执行 saveFromJSON。
+          await options.checkpoint?.()
         }
       } catch {
         result.failed++
@@ -604,6 +633,7 @@ export async function saveAnalysisAnnotations(
       // 异步标识核对后再验证附件，避免期间更换文件或文库权限后仍使用旧坐标。
       let current: PdfItem
       try { current = await checkWritable(zotero, snapshot) } catch (error) {
+        result.issueCode = (error as { code?: string }).code
         result.warnings.push(error instanceof Error ? error.message : uiText("附件状态改变，已停止写入。", "The attachment changed. Saving stopped."))
         break
       }
@@ -623,6 +653,10 @@ export async function saveAnalysisAnnotations(
           tags: [{ name: `${AI_TAG}/${category.id}` }, { name: category.label }],
         })
         result.created++
+        if (options.ledger?.[identity]) {
+          options.ledger[identity].status = 'saved'
+          await options.checkpoint?.()
+        }
       } catch {
         result.failed++
         result.warnings.push(uiText(`第 ${passage.pageIndex + 1} 页的「${category.label}」批注未确认保存；请先检查 PDF 中的批注再重试。`, `A “${category.id}” annotation on page ${passage.pageIndex + 1} could not be confirmed as saved. Check the PDF annotations before retrying.`))
@@ -837,7 +871,7 @@ const READER_TOOLS_CSS = `${READER_UI_THEME_CSS}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="running"] svg {transform-box:fill-box;transform-origin:center;animation:jdx-analysis-logo-spin 1.4s linear infinite;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="complete"] {color:var(--jdx-reader-text,CanvasText);box-shadow:inset 0 -2px #16cf8c;}
 [data-jadense-reader-tools] .jadense-reader-brand[data-runtime="error"] {box-shadow:inset 0 0 0 2px var(--jdx-reader-error,#b42318);}
-[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="retrying"] {box-shadow:inset 0 0 0 1px #c37d0d;}
+[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="retrying"],[data-jadense-reader-tools] .jadense-reader-brand[data-runtime="paused"] {box-shadow:inset 0 0 0 1px #c37d0d;}
 [data-jadense-reader-tools][data-compact="true"] .jadense-reader-brand[data-runtime]:not([data-runtime="idle"]) {width:auto;max-width:100px;padding:0 4px;gap:0;overflow:hidden;}
 [data-jadense-reader-tools] .jadense-reader-runtime-stop[hidden] {display:none!important;}
 .jadense-reader-runtime-label {overflow:hidden;text-overflow:ellipsis;}
@@ -1129,6 +1163,8 @@ export function registerReaderTools(
     copyTranslation.textContent = uiText("复制译文", "Copy translation")
     copyTranslation.disabled = true
     const appearance = translationAppearanceControl(zotero as unknown as ZoteroLike, doc)
+    const textAppearance = selectionTranslationAppearance(zotero, doc, resultText)
+    appearance.element.querySelector('.jdx-window-appearance-menu')?.append(textAppearance.element)
     translationActions.append(appearance.element, copyTranslation)
     translationPanel.append(translationHeader, translationContent, translationActions)
     noticeHost.append(translationPanel)
@@ -1216,6 +1252,7 @@ export function registerReaderTools(
       doc.removeEventListener("keydown", onKeyDown)
       doc.defaultView?.removeEventListener("pagehide", remove)
       style.remove()
+      textAppearance.remove()
       appearance.remove()
       interaction.remove()
       doc.defaultView?.clearInterval?.(progressTimer)
@@ -1497,12 +1534,15 @@ export function registerReaderTools(
         stop.addEventListener('click', () => runtime.stop(event.reader.itemID))
         const update = () => {
           const run = runtime.get(event.reader.itemID)
-          brand.dataset.runtime = run ? run.busy ? run.retrying ? 'retrying' : 'running' : run.error ? 'error' : 'complete' : 'idle'
+          brand.dataset.runtime = run ? run.retrying ? 'retrying' : run.busy ? 'running' : run.error ? 'error' : run.resumable ? 'paused' : 'complete' : 'idle'
           brand.setAttribute('aria-busy', String(Boolean(run?.busy)))
-          stateLabel.textContent = run ? run.busy ? run.message.replace('已收到 ', '').replace(' 字符', ' 字').replace('characters received', 'chars') : run.error ? uiText('解析异常 · 查看详情', 'Analysis issue · Details') : uiText('查看解析', 'View analysis') : ''
+          stateLabel.textContent = run ? run.busy ? run.message.replace('已收到 ', '').replace(' 字符', ' 字').replace('characters received', 'chars')
+            : run.retrying ? uiText('等待恢复 · 查看详情', 'Waiting to resume · Details')
+              : run.error ? uiText('解析异常 · 查看详情', 'Analysis issue · Details')
+                : run.resumable ? uiText('解析已暂停 · 继续', 'Analysis paused · Continue') : uiText('查看解析', 'View analysis') : ''
           brand.title = run ? `${run.message} · ${uiText('点击查看', 'Click to view')}` : uiText('打开攻玉工作台', 'Open Jadense workspace')
           brand.setAttribute('aria-label', brand.title)
-          stop.hidden = !run?.busy
+          stop.hidden = !(run?.busy || run?.retrying)
         }
         analysisCleanups.set(group, runtime.subscribe(update)); update()
         // 仅打开或聚焦工作台，不触发阅读器提问，也不附加当前文献。

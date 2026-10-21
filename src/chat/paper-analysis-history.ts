@@ -1,5 +1,6 @@
 import { readLiteratureIdentity, type LiteratureIdentity } from "@/zotero/document-identity"
 import { uiText } from "@/zotero/ui-preferences"
+import { splitAnalysisWarnings } from "./paper-analysis-warnings"
 /**
  * Zotero profile 中独立的文献解析历史。
  * 保存附件身份、元数据、总结与可读笔记备份；不读取或迁移本地对话记录，笔记不作为原生写入输入。
@@ -32,6 +33,8 @@ export type PaperAnalysisRecord = {
   summary: string
   notes?: string
   warnings?: string[]
+  /** 内部抽样诊断，不作为用户可见警告或解析失败依据。 */
+  coverageWarnings?: string[]
   referenceTaskID?: string
 }
 
@@ -94,9 +97,14 @@ function normalizeRecord(value: unknown): PaperAnalysisRecord | null {
   const title = text(source?.title, 500)
   const summary = text(row?.summary, MAX_SUMMARY_LENGTH)
   const notes = text(row?.notes, MAX_ANALYSIS_NOTES_LENGTH)
-  const warnings = Array.isArray(row?.warnings)
-    ? [...new Set(row.warnings.map((entry) => text(entry, 800)).filter(Boolean))].slice(0, 24)
-    : []
+  const splitWarnings = splitAnalysisWarnings(Array.isArray(row?.warnings)
+    ? row.warnings.map((entry) => text(entry, 800)).filter(Boolean)
+    : [])
+  const warnings = splitWarnings.warnings.slice(0, 24)
+  const coverageWarnings = [...new Set([
+    ...splitWarnings.coverageWarnings,
+    ...(Array.isArray(row?.coverageWarnings) ? row.coverageWarnings.map((entry) => text(entry, 800)).filter(Boolean) : []),
+  ])].slice(0, 24)
   if (!id || !createdAt || !Number.isFinite(Date.parse(createdAt))
     || itemID === undefined || libraryID === undefined || !itemKey || !title || !summary) return null
 
@@ -123,6 +131,7 @@ function normalizeRecord(value: unknown): PaperAnalysisRecord | null {
     ...(notes ? { notes: typeof row?.notes === "string" && row.notes.trim().length > MAX_ANALYSIS_NOTES_LENGTH
       ? `${notes.slice(0, -20)}\n…（笔记过长，后续已截断）` : notes } : {}),
     ...(warnings.length ? { warnings } : {}),
+    ...(coverageWarnings.length ? { coverageWarnings } : {}),
   }
 }
 

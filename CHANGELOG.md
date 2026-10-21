@@ -1,5 +1,16 @@
 # 更新说明 / Changelog
 
+## 0.6.13 — Unreleased / 尚未发布
+
+- 文献解析与 PDF 对照翻译保存任务进度；可恢复的暂时故障等待后继续，重启后恢复此前明确运行的任务，用户暂停的任务等待手动继续。已完成的模型结果只补本地保存、批注或 PDF 排版。
+- 解析完成状态不再被抽样说明误标为失败；保留缺页、生成与保存错误，解析详情提供「继续解析」，并区分暂停与等待恢复。
+- 选文浮窗与简阅新增 80%–200% 的独立文字大小；PDF 对照翻译新增 25%–500% 译文缩放，同步滚动开启时两侧一起缩放。调整显示不触发翻译。
+- PDF 来源或配置失效时，恢复入口明确为「按当前设置重新翻译」，保留旧成果；未确认的 BYOK 请求仍提示可能重复计费。未修改文件或设置却收到配置变化提示的原始原因仍在调查，本版不宣称已解决。
+- Paper analysis and bilingual PDF translation retain task progress, wait before resuming recoverable temporary failures, and restore previously running tasks after restart. User-paused tasks require manual continuation. Completed model results only need local saving, annotations or PDF typesetting.
+- Sampling notices no longer mark completed analysis as failed. Missing pages and generation/save errors remain visible; analysis details offer Continue analysis and distinguish paused tasks from tasks waiting to resume.
+- Add separate 80%–200% text size for selection translation and Reading mode, plus 25%–500% zoom for translated PDFs. Sync scroll zooms both PDFs together. Display changes do not request translation.
+- PDF tasks blocked by source or configuration checks offer Translate again with current settings while retaining old results. Unconfirmed BYOK requests still warn about possible duplicate charges. Reports of configuration-change errors without file or settings changes remain under investigation; this release does not claim to resolve their original cause.
+
 ## 0.6.12 — 2026-10-18
 
 - 发现前沿侧栏入口回到首页，进行与结果独立显示；进度页保留停止操作，历史在首页回看。

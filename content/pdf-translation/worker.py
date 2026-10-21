@@ -15,7 +15,7 @@ import tempfile
 import threading
 import uuid
 from concurrent.futures import Future
-from batch_adapter import install_adapter, IncompleteTranslation, ProviderFailure, atomic_replace, STRATEGY as ADAPTER
+from batch_adapter import install_adapter, IncompleteTranslation, ProviderFailure, LocalCheckpointError, atomic_replace, STRATEGY as ADAPTER
 
 ENGINE = "babeldoc-0.6.4-v1"
 OUTPUT = sys.stdout
@@ -102,7 +102,7 @@ async def run(config):
     with engine_workspace(config["source"]) as staged:
         try:
             await run_in_workspace(config, staged)
-        except IncompleteTranslation:
+        except (IncompleteTranslation, LocalCheckpointError):
             raise
         except Exception as error:
             # MuPDF 的定长错误缓冲可能被长路径填满；上下文独立附加，不能依赖原生消息尾部。
@@ -172,6 +172,8 @@ async def run_in_workspace(config, staged):
             if previous: self.previous_operations[operation] = previous
 
         def request(self, text, llm, operation=None):
+            if config.get('renderOnly'):
+                raise ProviderFailure('PDF_RENDER_ONLY', True)
             key = operation or hashlib.sha256(json.dumps([text, llm], ensure_ascii=True).encode()).hexdigest()
             # stdin 唯一读者按 ID 分发；只在登记和缓存落盘时持锁。
             with rpc_lock:
@@ -327,5 +329,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        emit(type="error", category='incomplete' if isinstance(error, IncompleteTranslation) else 'engine', missing=getattr(error, 'missing', None), message=str(error))
+        emit(type="error", category='incomplete' if isinstance(error, IncompleteTranslation) else 'engine', code=getattr(error, 'code', 'PDF_ENGINE_FAILED'), missing=getattr(error, 'missing', None), message=str(error))
         sys.exit(1)

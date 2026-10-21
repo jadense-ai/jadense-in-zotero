@@ -42,6 +42,26 @@ function record(index: number, overrides: Partial<PaperAnalysisRecord> = {}): Pa
 }
 
 describe("paper analysis history", () => {
+  it('moves legacy sampling warnings into internal metadata without changing saved prose', () => {
+    const sampling = '为控制解析长度，均匀选取 1200/4931 个可定位原句；结论仅基于这些原句。'
+    const failure = '第 2 页的文字坐标读取失败，未纳入解析。'
+    const legacy = record(1, { summary: `原有正文：${sampling}`, notes: `原有笔记：${sampling}`, warnings: [sampling, failure] })
+    const fixture = preferences({ [PAPER_ANALYSIS_HISTORY_PREF_KEY]: JSON.stringify({ version: 1, future: true, records: [legacy] }) })
+    const restored = readPaperAnalysisHistory(fixture.store).records[0]
+    expect(restored).toEqual({ ...legacy, warnings: [failure], coverageWarnings: [sampling] })
+    expect(appendPaperAnalysisRecord(fixture.store, restored)).toEqual(restored)
+    expect(readPaperAnalysisHistory(fixture.store).records).toEqual([restored])
+  })
+
+  it('contains malformed optional coverage metadata and bounds diagnostic strings', () => {
+    const fixture = preferences()
+    appendPaperAnalysisRecord(fixture.store, record(1, { coverageWarnings: [null as unknown as string, ' detail ', 'detail', 'x'.repeat(900)] }))
+    appendPaperAnalysisRecord(fixture.store, record(2, { coverageWarnings: { invalid: true } as unknown as string[] }))
+    const [newer, older] = readPaperAnalysisHistory(fixture.store).records
+    expect(newer).toEqual(record(2))
+    expect(older.coverageWarnings).toEqual(['detail', 'x'.repeat(800)])
+  })
+
   it("round-trips optional reference task identity and drops malformed/additive presentation fields locally", () => {
     const fixture = preferences(), id = "10000000-0000-4000-8000-000000000001"
     appendPaperAnalysisRecord(fixture.store, record(1, { referenceTaskID: id }))

@@ -62,6 +62,28 @@ function structured(summary = "总结") {
 }
 
 describe("independent paper analysis", () => {
+  it('keeps sampling diagnostics in the request and metadata but out of visible warnings', async () => {
+    const { zotero } = fakeZotero({ token: 'synthetic-token' })
+    const pdf = snapshot()
+    const sampling = '为控制解析长度，均匀选取 1200/4931 个可定位原句；结论仅基于这些原句。'
+    const pageFailure = '第 2 页的文字坐标读取失败，未纳入解析。'
+    pdf.coverage = { ...pdf.coverage, totalPages: 48, limited: true, warnings: [sampling, pageFailure] }
+    const send = vi.fn(async request => {
+      expect(request.messages[0].text).toContain(sampling)
+      expect(request.messages[0].text).toContain('不代表完整全文')
+      expect(request.messages[0].text).toContain('不要在 summary、sections 或 annotations 中复述均匀抽样计数')
+      return structured()
+    })
+    const result = await runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal,
+      services: { readPdf: async () => pdf, send, saveAnnotations: async () => ({ ...emptySaved(), created: 1 }) } })
+    expect(result.record.coverageWarnings).toEqual([sampling])
+    expect(result.record.warnings).toEqual([pageFailure])
+    expect(result.coverage).not.toContain(sampling)
+    expect(result.coverage).not.toContain('抽样')
+    expect(result.coverage).toContain(pageFailure)
+    expect(readPaperAnalysisHistory(zotero.Prefs!).records[0]).toMatchObject({ warnings: [pageFailure], coverageWarnings: [sampling] })
+  })
+
   it('times out a stalled PDF read and ignores its late result', async () => {
     vi.useFakeTimers()
     try {

@@ -16,6 +16,7 @@ import {
   saveAnalysisAnnotations,
   type PdfAnalysisSnapshot,
   type ZoteroReaderHost,
+  type AnalysisAnnotationLedger,
 } from "./reader-tools"
 
 function page(text: string) {
@@ -227,6 +228,40 @@ describe("Zotero PDF analysis snapshot", () => {
 })
 
 describe("append-only native analysis annotations", () => {
+  it('does not write before a native key checkpoint and reuses that key after local storage recovers', async () => {
+    const fixture = host(), snapshot = await readPdfForAnalysis(fixture.zotero, 11), ledger: AnalysisAnnotationLedger = {}
+    const checkpoint = vi.fn().mockRejectedValueOnce(new Error('Synthetic full disk')).mockResolvedValue(undefined)
+    const first = await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger, checkpoint })
+    expect(first.failed).toBe(1)
+    expect(fixture.saveFromJSON).not.toHaveBeenCalled()
+    const key = Object.values(ledger)[0].key
+    await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger, checkpoint })
+    expect(fixture.saveFromJSON).toHaveBeenCalledOnce()
+    expect(fixture.saveFromJSON.mock.calls[0][1].key).toBe(key)
+  })
+
+  it('reconciles a completed write whose acknowledgement was lost without adding a duplicate', async () => {
+    const fixture = host(), snapshot = await readPdfForAnalysis(fixture.zotero, 11), ledger: AnalysisAnnotationLedger = {}
+    const save = fixture.saveFromJSON.getMockImplementation()!
+    fixture.saveFromJSON.mockImplementationOnce(async (item, json) => { await save(item, json); throw new Error('Synthetic lost receipt') })
+    const first = await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger, checkpoint: async () => {} })
+    expect(first.failed).toBe(1)
+    const next = await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger: structuredClone(ledger), checkpoint: async () => {} })
+    expect(next.skipped).toBe(1)
+    expect(fixture.saveFromJSON).toHaveBeenCalledOnce()
+    expect(fixture.annotationItems).toHaveLength(1)
+  })
+
+  it('uses the saved key to reconcile after restart even before annotation enumeration refreshes', async () => {
+    const fixture = host(), snapshot = await readPdfForAnalysis(fixture.zotero, 11), ledger: AnalysisAnnotationLedger = {}
+    await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger, checkpoint: async () => {} })
+    const key = Object.values(ledger)[0].key, saved = fixture.keys.get(key) as object
+    fixture.keys.set(key, { ...saved, parentItemID: snapshot.itemID })
+    fixture.annotationItems.length = 0
+    const next = await saveAnalysisAnnotations(fixture.zotero, snapshot, [suggestion(snapshot)], { ledger: structuredClone(ledger), checkpoint: async () => {} })
+    expect(next.skipped).toBe(1)
+    expect(fixture.saveFromJSON).toHaveBeenCalledOnce()
+  })
   it.each([false, true])('deduplicates category-tagged annotations with legacy marker %s', async legacy => {
     const fixture = host(), snapshot = await readPdfForAnalysis(fixture.zotero, 11)
     fixture.annotationItems.push({ annotationText: snapshot.passages[0].text, annotationPosition: JSON.stringify(snapshot.passages[0].position),

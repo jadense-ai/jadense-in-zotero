@@ -2,6 +2,19 @@
 import { executionResult } from '@/chat/request-feedback'
 export type PDFRetryState = { attempt: number; until: number; recovering: boolean }
 
+/** 快速恢复耗尽后只保存等待计划；鉴权、未知 BYOK 和内容错误不自动产生新付费轮次。 */
+export function pdfRecoveryDelay(error: unknown, attempt = 0): number | undefined {
+  const issue = (error ?? {}) as { status?: number; code?: string; name?: string; retryAfter?: string | null }
+  if ([400, 401, 402, 403, 404, 422].includes(issue.status ?? 0) || issue.code === 'BYOK_EXECUTION_UNCONFIRMED') return
+  const transient = issue.status === 429 || (issue.status !== undefined && issue.status >= 500)
+    || issue.name === 'TypeError' || issue.name === 'AbortError'
+    || ['TRANSLATION_TIMEOUT', 'RECOVERY_PENDING', 'STREAM_EARLY_EOF', 'STREAM_INCOMPLETE', 'STREAM_FAILED', 'PDF_ENGINE_FAILED', 'PDF_LOCAL_SAVE_FAILED', 'PDF_RENDER_FAILED'].includes(issue.code ?? '')
+  if (!transient) return
+  const seconds = issue.retryAfter == null ? NaN : Number(issue.retryAfter)
+  const at = Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(issue.retryAfter ?? '')
+  return Math.max(1000, issue.status === 429 && Number.isFinite(at) ? at - Date.now() : Math.min(300_000, 15_000 * 2 ** Math.min(attempt, 5)))
+}
+
 /** 等待可随用户取消立即结束，不占用共享服务的并发槽。 */
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {

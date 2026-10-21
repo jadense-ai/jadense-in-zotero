@@ -389,7 +389,9 @@ describe("reader document conversation lifecycle", () => {
     const manager = readFileSync(new URL("./manager-page.ts", import.meta.url), "utf8")
     const analyze = manager.match(/async function analyzePaper[\s\S]*?\n}\s*\nfunction compactFigureText/)?.[0] ?? ""
     expect(bootstrap).toContain('openManager(action.kind === "analyze" || action.kind === "references" ? "analysis" : action.kind === "fullTranslate" ? "translations" : "chat", action)')
-    expect(analyze).toContain("runIndependentPaperAnalysis")
+    expect(analyze).toContain("runtime.start(itemID)")
+    expect(analyze).toContain("runtime.subscribe(update)")
+    expect(analyze).not.toContain("runIndependentPaperAnalysis")
     expect(analyze).not.toContain("createLocalChatSession")
     expect(analyze).not.toContain("appendLocalChatMessage")
     expect(analyze).not.toContain("addLocalChatSources")

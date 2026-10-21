@@ -99,12 +99,10 @@ import {
 import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureModelThinking, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from "./ai-model-select"
 import { rememberModelCatalog } from "./model-catalog"
 export { buildJadenseChatModelSelectOptions, jadenseChatModelSelectionIssue } from "./ai-model-select"
-import { paperAnalysisModelState, runIndependentPaperAnalysis } from "./paper-analysis-runner"
 import { formatJadenseSyncResult } from "./sync-result"
 import { summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
 import {} from "./document-ui"
-import { type AnalysisRunView } from "./analysis-workspace"
 import { mountLiteratureWorkspace } from "./literature-workspace"
 import { analysisPapers, paperKey } from "./analysis-workspace-model"
 import { documentJobs } from "./document-jobs"
@@ -457,7 +455,6 @@ let figureChatContexts = new Map<string, FigureChatContext>()
 const unsavedPaperAnalyses = new Map<string, PaperAnalysisRecord>()
 let analysisWorkspace: ReturnType<typeof mountLiteratureWorkspace> | undefined
 let preparingAnalysisItemID: number | undefined
-const analysisSessions = new Map<number, { controller: AbortController; recordID: string; view: AnalysisRunView }>()
 export const MANAGER_OPERATION_PREF_KEYS = [
   AI_MODEL_SETTINGS_PREF_KEY,
   "extensions.jadenseInZotero.baseUrl",
@@ -912,18 +909,12 @@ function linkAnalysisReference(zotero: ZoteroLike, recordID: string, task: Docum
 }
 
 function stopPaperAnalysis(zotero: ZoteroLike, source?: PaperAnalysisSource) {
-  if (source) analysisRuntime(zotero).stop(source.itemID)
-  const session = source ? analysisSessions.get(source.itemID) : analysisSessions.get(preparingAnalysisItemID!)
-  if (session && (!source || paperKey(session.view.source) === paperKey(source))) {
-    markDiagnosticAbort(session.controller.signal, "user_stop")
-    session.controller.abort()
-    if (session.view.referenceTaskID) documentJobs(zotero).pause(session.view.referenceTaskID)
-    session.view.message = uiText("正在停止，已取得内容会保留。", "Stopping. Received content will be retained.")
-    analysisWorkspace?.setRun(session.view)
-  } else if (source) {
+  const itemID = source?.itemID ?? preparingAnalysisItemID
+  if (itemID !== undefined) analysisRuntime(zotero).stop(itemID)
+  if (source) {
     const task = analysisPapers(paperAnalysisRecords(zotero), documentJobs(zotero).list("references")).find(paper => paper.key === paperKey(source))?.references
     if (task) documentJobs(zotero).pause(task.id)
-  } else if (activeOperation === "analysis") { markDiagnosticAbort(activeChatAbort?.signal, "user_stop"); activeChatAbort?.abort() }
+  }
 }
 
 function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLike) {
@@ -933,11 +924,11 @@ function renderPaperAnalysisHistory(elements: ManagerElements, zotero: ZoteroLik
     openSource: source => openPaperAnalysisHistoryRecord(zotero, { id: "", createdAt: "", source, summary: "" }),
     stop: source => stopPaperAnalysis(zotero, source),
     onReferenceTask: (source, task) => {
-      const session = analysisSessions.get(source.itemID)
-      if (session && paperKey(session.view.source) === paperKey(source)) {
-        session.view.referenceTaskID = task.id
-        session.view.references = undefined
-        analysisWorkspace?.setRun(session.view)
+      const run = analysisRuntime(zotero).get(source.itemID)
+      if (run && paperKey(run.source) === paperKey(source)) {
+        run.referenceTaskID = task.id
+        run.references = undefined
+        analysisWorkspace?.setRun(run)
       }
       const record = paperAnalysisRecords(zotero).filter(record => paperKey(record.source) === paperKey(source)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
       if (record) linkAnalysisReference(zotero, record.id, task)
@@ -1983,82 +1974,33 @@ async function sendChatMessage(elements: ManagerElements, zotero: ZoteroLike, op
   if (!window.closed) { renderChat(elements, zotero); void pruneUnusedChatImages(zotero); void drainReaderActions(elements, zotero) }
 }
 
-/** 独立解析不写 Chat；先备份可读笔记，再独立写入可验证的原生批注。 */
+/** 工作台与 Reader 共用持久解析任务；窗口只订阅，关闭窗口不取消已授权的执行。 */
 async function analyzePaper(elements: ManagerElements, zotero: ZoteroLike, itemID: number) {
   if (chatBusy || window.closed) return
   setActiveSection(elements, "analysis")
-  const operation = new AbortController()
+  const operation = new AbortController(), runtime = analysisRuntime(zotero)
   activeChatAbort = operation; activeOperation = "analysis"; preparingAnalysisItemID = itemID
   setChatBusy(elements, zotero, true)
-  let session: (typeof analysisSessions extends Map<number, infer T> ? T : never) | undefined
-  const model = paperAnalysisModelState(zotero, invalidConnectionToken)
-  const progress = (message: string, error = false) => {
-    setStatus(elements.analysisStatus, message, error ? "error" : "idle")
-    if (session) { session.view.message = message; session.view.error = error; analysisWorkspace?.setRun(session.view) }
-  }
-  try {
-    const source = await waitForSourceRead(collectSourceForItem(zotero, itemID, { includeText: false }), operation.signal)
-    operation.signal.throwIfAborted()
-    if (!source || source.kind !== "file") throw new Error(uiText("原 PDF 附件不可用。", "The original PDF attachment is unavailable."))
-    session = { controller: operation, recordID: `analysis-${crypto.randomUUID()}`, view: {
-      source: { itemID: source.itemID, libraryID: source.libraryID, itemKey: source.itemKey, title: source.parentItem?.title || source.title, authors: [] },
-      createdAt: new Date().toISOString(), message: uiText("正在准备文献解析…", "Preparing the analysis…"), busy: true,
-    } }
-    analysisSessions.set(itemID, session)
-    renderPaperAnalysisHistory(elements, zotero); analysisWorkspace!.setRun(session.view); analysisWorkspace!.open(session.view.source, "summary")
-    // 在实际调度时启动同篇引用。独立承诺不等待核心结果；错误只进入引用标签。
-    const current = session, jobs = documentJobs(zotero)
-    current.view.references = { running: true, message: uiText("正在读取参考文献…", "Reading references…") }
-    operation.signal.addEventListener("abort", () => { if (current.view.referenceTaskID) jobs.pause(current.view.referenceTaskID) }, { once: true })
-    void jobs.start("references", itemID, false, { signal: operation.signal, onProgress: message => {
-      current.view.references = { running: true, message }; analysisWorkspace?.setRun(current.view)
-    } }).then(task => {
-      current.view.referenceTaskID = task.id
-      if (operation.signal.aborted) jobs.pause(task.id)
-      else if (["paused", "error"].includes(task.status)) jobs.resume(task.id)
-      linkAnalysisReference(zotero, current.recordID, task)
-    }).catch(error => {
-      current.view.references = { running: false, ...(operation.signal.aborted ? { message: uiText("参考文献提取已停止", "Reference extraction stopped") } : { error: error instanceof Error ? error.message : String(error) }) }
-    }).finally(() => {
-      if (current.view.references) current.view.references.running = false
-      analysisWorkspace?.setRun(current.view)
-    })
-
-    if (!model.ready) {
-      analysisWorkspace?.open(current.view.source, "references")
-      throw new Error(model.issue)
-    }
-    const result = await runIndependentPaperAnalysis({
-      zotero, itemID, fetchImpl: managerFetch(), signal: operation.signal,
-      invalidJadenseToken: invalidConnectionToken, recordID: current.recordID, createdAt: current.view.createdAt,
-      onProgress: message => progress(message),
-    })
-    if (!result.historySaved || result.historyError) {
-      unsavedPaperAnalyses.set(result.record.id, result.record)
-      if (unsavedPaperAnalyses.size > 10) unsavedPaperAnalyses.delete(unsavedPaperAnalyses.keys().next().value!)
-    } else unsavedPaperAnalyses.delete(result.record.id)
-    current.view.source = result.record.source
-    if (current.view.referenceTaskID) {
-      const task = jobs.get(current.view.referenceTaskID)
-      if (task) linkAnalysisReference(zotero, current.recordID, task)
-    }
-    const saved = result.annotations
-    const annotationStatus = result.annotationError ?? uiText(
-      `PDF 批注：新增 ${saved.created} 条，跳过 ${saved.skipped} 条，失败 ${saved.failed} 条，未执行 ${saved.unprocessed} 条。`,
-      `PDF annotations: ${saved.created} added, ${saved.skipped} skipped, ${saved.failed} failed, ${saved.unprocessed} not attempted.`,
-    )
-    progress([result.historyError || uiText("解析结果已保留。", "Analysis results retained."), annotationStatus].filter(Boolean).join(" "),
-      !result.historySaved || Boolean(result.historyError) || Boolean(result.annotationError) || saved.failed > 0 || saved.unprocessed > 0)
+  let opened = false
+  const update = () => {
+    if (window.closed) return
+    const view = runtime.get(itemID)
+    if (!view) return
     renderPaperAnalysisHistory(elements, zotero)
+    setStatus(elements.analysisStatus, view.message, view.error ? "error" : "idle")
+    if (!opened && view.source.itemKey) { analysisWorkspace?.open(view.source, "summary"); opened = true }
+  }
+  const unsubscribe = runtime.subscribe(update)
+  try {
+    await runtime.start(itemID)
+    update()
   } catch (error) {
-    if (model.selection.route === "jadense" && classifyJadenseAccountError(error) === "invalid-token") recordInvalidConnection(elements, zotero, readConnection(zotero).token)
-    progress(operation.signal.aborted ? uiText("已停止文献解析，已保存的结果仍可阅读。", "Analysis stopped. Saved results remain readable.") : friendlyChatError(error), !operation.signal.aborted)
+    if (!window.closed) setStatus(elements.analysisStatus, friendlyChatError(error), "error")
   } finally {
-    if (session) { session.view.busy = false; analysisWorkspace?.setRun(session.view) }
+    unsubscribe()
     if (activeChatAbort === operation) { activeChatAbort = null; activeOperation = null }
     preparingAnalysisItemID = undefined
-    setChatBusy(elements, zotero, false)
-    void drainReaderActions(elements, zotero)
+    if (!window.closed) { setChatBusy(elements, zotero, false); void drainReaderActions(elements, zotero) }
   }
 }
 
@@ -3205,12 +3147,12 @@ export function initJadenseManagerPage() {
   const receive = (context: Pick<ManagerContext, "section" | "actions">) => {
     const actions = (context.actions ?? []).filter(action => {
       if (action.kind === "analyze") {
-        const session = analysisSessions.get(action.itemID)
-        if (preparingAnalysisItemID === action.itemID || session?.view.busy || session?.view.references?.running
-          || (session?.view.referenceTaskID && documentJobs(zotero).get(session.view.referenceTaskID)?.status === "running")
+        const run = analysisRuntime(zotero).get(action.itemID)
+        if (preparingAnalysisItemID === action.itemID || run?.busy || run?.references?.running
+          || (run?.referenceTaskID && documentJobs(zotero).get(run.referenceTaskID)?.status === "running")
           || readerActionQueue.some(queued => queued.kind === "analyze" && queued.itemID === action.itemID)) {
           setActiveSection(elements, "analysis")
-          if (session) analysisWorkspace?.open(session.view.source)
+          if (run) analysisWorkspace?.open(run.source)
           return false
         }
       }
@@ -3263,7 +3205,7 @@ export function initJadenseManagerPage() {
   window.addEventListener("unload", () => {
     stopObservingOperationPreferences()
     markDiagnosticAbort(activeChatAbort?.signal, "window_unload"); activeChatAbort?.abort()
-    analysisWorkspace?.remove(); analysisWorkspace = undefined; analysisSessions.clear()
+    analysisWorkspace?.remove(); analysisWorkspace = undefined
     ++accountRefreshGeneration
     cancelJadenseAccountRequests()
     ++chatModelCatalogGeneration

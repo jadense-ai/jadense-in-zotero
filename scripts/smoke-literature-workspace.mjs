@@ -21,13 +21,37 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   main.Zotero_Tabs.select(reader.tabID)
   // 真实工具条/侧栏，合成延迟 runner：验证启动与完成均不夺走阅读布局。
   const runtime = Zotero.__jadenseAnalysisRuntime, readerDoc = reader._iframeWindow.document
-  const originalRun = runtime.run, originalStart = jobs.start
+  const originalRun = runtime.run, originalStart = jobs.start, originalContext = runtime.options.context
+  const coverageWarnings = [
+    '为控制解析长度，均匀选取 1200/4931 个可定位原句；结论仅基于这些原句。',
+    'Analysis uses an evenly sampled 1200/4931 passages with usable coordinates; conclusions are limited to these passages.',
+  ]
+  // 旧记录仍携带技术抽样提示；真实状态投影及原生展示必须保持成功，内部诊断不能丢失。
+  const assertCoverageSuccess = (brand, label) => {
+    const state = runtime.get(reader.itemID)
+    assert(!state.error && !state.busy && !state.resumable, `${label}: coverage warning changed runtime success`)
+    assert(brand.dataset.runtime === 'complete', `${label}: coverage warning changed native toolbar success`)
+    assert(!coverageWarnings.some(warning => state.message.includes(warning) || brand.textContent.includes(warning)), `${label}: technical sampling notice leaked into status`)
+    const visibleNotices = [...doc.querySelectorAll('.jdx-reader-workspace .jdx-notice')].filter(node => node.getBoundingClientRect().height > 0)
+    assert(!visibleNotices.some(node => coverageWarnings.some(warning => node.textContent.includes(warning))), `${label}: technical sampling notice leaked into sidebar`)
+    const completed = [...runtime.tasks.values()].filter(task => task.itemID === reader.itemID && task.status === 'complete').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    const retained = runtime.records().find(record => record.id === completed?.record?.id)
+    assert(coverageWarnings.every(warning => [...(retained?.warnings || []), ...(retained?.coverageWarnings || [])].includes(warning)), `${label}: internal coverage diagnostics were lost`)
+  }
+  // 隔离夹具绕过账号探针，但任务存储、暂停/恢复与实际原生 UI 均使用生产实现。
+  runtime.options.context = async () => ({ account: 'synthetic-native-owner', configuration: 'synthetic-native-model', route: 'jadense' })
+  const completedAnalysis = input => {
+    const record = { ...JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.paperAnalysisHistory')).records[0],
+      id: input.task.id, createdAt: input.task.createdAt, warnings: [...coverageWarnings] }
+    input.task.generation = 'complete'; input.task.response = JSON.stringify({ summary: record.summary, annotations: [] }); input.task.stage = 'complete'
+    return { record, historySaved: true, annotations: { created: 0, skipped: 0, failed: 0, unprocessed: 0 } }
+  }
   const beforeManager = findManager(), beforeSidebar = doc.querySelector('.jdx-reader-workspace')?.getBoundingClientRect().width || 0
   let finishAnalysis, dispatches = 0
   runtime.run = async input => {
     dispatches++; input.onProgress('AI 正在解析 · 已收到 1,280 字符')
     await new Promise(resolve => { finishAnalysis = resolve })
-    return { record: JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.paperAnalysisHistory')).records[0], historySaved: true, annotations: { created: 0, skipped: 0, failed: 0, unprocessed: 0 } }
+    return completedAnalysis(input)
   }
   jobs.start = function(kind, ...args) { if (kind === 'references') return Promise.reject(new Error('Synthetic optional references unavailable')); return originalStart.call(this, kind, ...args) }
   try {
@@ -44,30 +68,66 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     assert((doc.querySelector('.jdx-reader-workspace')?.getBoundingClientRect().width || 0) === beforeSidebar, 'Completion expanded sidebar')
     brand.click()
     await waitFor(() => doc.querySelector('.jdx-reader-workspace[data-page="summary"]')?.textContent.includes('ANALYSIS_RESULT_VISIBLE'), 'analysis opens sidebar summary')
+    // 首次挂载先等待异步 CSS 和真实布局；正文出现不代表样式表已经生效。
+    const waitForAnalysisAppearance = async theme => {
+      await waitFor(() => {
+        const root = doc.querySelector('.jdx-reader-workspace[data-page="summary"]'), header = root?.querySelector('.jdx-reader-workspace-header'), icon = header?.querySelector('svg')
+        return ['ui', 'chat', 'analysis', 'reader-workspace'].every(file => doc.getElementById(`jdx-${file}-css`)?.sheet)
+          && root?.getBoundingClientRect().width > 0 && (!theme || root.dataset.theme === theme)
+          && header && main.getComputedStyle(header).display === 'grid'
+          && icon && icon.getBoundingClientRect().width > 0 && icon.getBoundingClientRect().width <= 32
+      }, `analysis sidebar styles and ${theme || 'initial'} appearance`)
+      await Zotero.Promise.delay(200)
+    }
+    await waitForAnalysisAppearance()
+    assertCoverageSuccess(brand, 'completed analysis')
     await screenshot('analysis-runtime-result', main)
     Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
-    await Zotero.Promise.delay(200)
+    await waitForAnalysisAppearance('light')
+    assertCoverageSuccess(brand, 'light completed analysis')
     await screenshot('analysis-runtime-result-light', main)
     Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'dark', true)
-    report.checks.push('analysis-background-no-layout-change', 'analysis-real-toolbar-progress', 'analysis-deduplicated', 'analysis-explicit-sidebar-result')
+    await waitForAnalysisAppearance('dark')
+    assertCoverageSuccess(brand, 'dark completed analysis')
+    await screenshot('analysis-runtime-completed-dark', main)
+    report.checks.push('analysis-background-no-layout-change', 'analysis-real-toolbar-progress', 'analysis-deduplicated', 'analysis-explicit-sidebar-result', 'analysis-coverage-success-toolbar', 'analysis-coverage-notices-hidden', 'analysis-coverage-diagnostics-retained')
     if (runtimeOnly) {
       const pref = 'extensions.jadenseInZotero.paperAnalysisHistory', saved = Zotero.Prefs.get(pref)
-      Zotero.Prefs.set(pref, JSON.stringify({ version: 1, records: [] }))
       finishAnalysis = undefined
       runtime.run = async input => { input.onProgress('AI 正在解析 · 已收到 2,560 字符'); await new Promise(resolve => { finishAnalysis = resolve }); input.signal.throwIfAborted(); throw new Error('Synthetic provider failure') }
       readerDoc.querySelector('[data-jadense-action="analyze"]').click()
       await waitFor(() => finishAnalysis, 'second analysis')
       brand.click()
-      await waitFor(() => /结果准备好|results will appear/.test(doc.querySelector('.jdx-analysis-summary')?.textContent || ''), 'running replaces empty summary')
+      await waitFor(() => doc.querySelector('.jdx-analysis-summary')?.textContent.includes('ANALYSIS_RESULT_VISIBLE'), 'rerun retains previous summary')
       assert(!doc.querySelector('.jdx-analysis-summary').textContent.includes('尚无解析'), 'Contradictory empty summary')
       await screenshot('analysis-runtime-pending', main)
       readerDoc.querySelector('.jadense-reader-runtime-stop').click(); finishAnalysis()
       await waitFor(() => !runtime.get(reader.itemID).busy, 'analysis stopped')
-      assert(brand.dataset.runtime === 'error', 'Stopped analysis reported success')
+      assert(brand.dataset.runtime === 'paused', 'Explicit pause must remain resumable rather than success/error')
+      const pausedTask = [...runtime.tasks.values()].find(task => task.status === 'paused')
+      assert(pausedTask?.pauseReason === 'user', 'User pause intent was not retained')
+      const resumeButton = await waitFor(() => [...doc.querySelectorAll('.jdx-detail-run button')].find(button => !button.hidden && /继续解析|Continue analysis/.test(button.textContent)), 'resume analysis action')
+      resumeButton.focus(); assert(doc.activeElement === resumeButton, 'Resume is not keyboard focusable')
       await screenshot('analysis-runtime-stopped', main)
-      runtime.run = async () => { throw new Error('Synthetic provider unavailable') }
+      const oldSize = [main.outerWidth, main.outerHeight]
+      main.resizeTo(900, 700); Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', '150', true)
+      await Zotero.Promise.delay(300)
+      assert(resumeButton.getBoundingClientRect().width > 0 && resumeButton.getBoundingClientRect().right <= main.innerWidth + 2, 'Resume action overflows narrow native window')
+      await screenshot('analysis-runtime-paused-narrow-150-dark', main)
+      Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
+      await Zotero.Promise.delay(200)
+      await screenshot('analysis-runtime-paused-narrow-150-light', main)
+      runtime.run = async input => { assert(input.task.id === pausedTask.id, 'Resume replaced the original task identity'); return completedAnalysis(input) }
+      resumeButton.click()
+      await waitFor(() => !runtime.get(reader.itemID).busy && !runtime.get(reader.itemID).resumable, 'analysis resumed to completion')
+      assert(brand.dataset.runtime === 'complete', 'Resumed analysis did not complete')
+      assert([...runtime.tasks.values()].find(task => task.id === pausedTask.id)?.status === 'complete', 'Completed continuation did not persist')
+      assertCoverageSuccess(brand, 'resumed analysis')
+      await screenshot('analysis-runtime-resumed', main)
+      main.resizeTo(...oldSize); Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', '100', true)
+      runtime.run = async () => { throw Object.assign(new Error('Synthetic provider unavailable'), { code: 'SYNTHETIC_PROVIDER_UNAVAILABLE' }) }
       readerDoc.querySelector('[data-jadense-action="analyze"]').click()
-      await waitFor(() => runtime.get(reader.itemID)?.message.includes('Synthetic provider unavailable'), 'failed analysis')
+      await waitFor(() => runtime.get(reader.itemID)?.message.includes('SYNTHETIC_PROVIDER_UNAVAILABLE'), 'safe classified analysis failure')
       assert(reader._iframeWindow.getComputedStyle(brand.querySelector('svg')).animationName === 'none', 'Failed analysis logo still spinning')
       assert(reader._iframeWindow.getComputedStyle(brand).boxShadow.includes('2px'), 'Failed analysis lacks error outline')
       await screenshot('analysis-runtime-error', main)
@@ -88,10 +148,34 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
       await screenshot('analysis-runtime-retry', main)
       finishRetry(); await waitFor(() => brand.dataset.runtime === 'error', 'retry exhausted')
       Zotero.Prefs.set(pref, saved)
-      report.checks.push('analysis-pending-no-empty-copy', 'analysis-stop', 'analysis-failure', 'analysis-error-outline-no-spin', 'analysis-retry-status')
+      report.checks.push('analysis-pending-retains-results', 'analysis-user-pause-persisted', 'analysis-same-task-resume', 'analysis-resume-keyboard-focus', 'analysis-pause-narrow-150-light-dark', 'analysis-failure', 'analysis-error-outline-no-spin', 'analysis-retry-status')
     }
-  } finally { runtime.run = originalRun; jobs.start = originalStart }
-  if (runtimeOnly) return
+  } finally { runtime.run = originalRun; runtime.options.context = originalContext; jobs.start = originalStart }
+  if (runtimeOnly) {
+    // 只向隔离 profile 写入完整模型结果，当前进程不注册/调度；下个进程必须由 bootstrap 自动补写。
+    const taskID = main.crypto.randomUUID(), requestID = main.crypto.randomUUID()
+    const snapshot = { itemID: attachment.id, libraryID: attachment.libraryID, itemKey: attachment.key, title: source.title,
+      attachmentModificationTime: await attachment.attachmentModificationTime,
+      metadata: { title: source.title, authors: ['Synthetic Author'] },
+      passages: [{ id: 'restart-p0', text: 'Our method reduces measured error by twenty percent.', pageIndex: 0, pageLabel: '1',
+        position: { pageIndex: 0, rects: [[50, 737, 400, 751]] }, sortIndex: '00000|000000|00001' }],
+      coverage: { pagesRead: 1, totalPages: 2, limited: true, pageNumbers: [1], warnings: [...coverageWarnings] } }
+    const response = JSON.stringify({ summary: 'COLD_RESTART_RETAINED_ANALYSIS', sections: [], annotations: [{ passageId: 'restart-p0', category: 'claim', comment: 'COLD_RESTART_LOCAL_ANNOTATION' }] })
+    assert(await runtime.store.save({ version: 1, id: taskID, itemID: attachment.id, createdAt: new Date().toISOString(),
+      requestID, status: 'waiting', stage: 'annotations', generation: 'complete', response, snapshot, annotations: {} }), 'Could not seed durable annotation checkpoint')
+    const legacyTaskID = main.crypto.randomUUID(), legacyRequestID = main.crypto.randomUUID()
+    const legacyRecord = { id: legacyTaskID, createdAt: new Date().toISOString(),
+      source: { ...source, itemID: sibling.id, itemKey: sibling.key, authors: ['Synthetic Author'] },
+      summary: 'COLD_RESTART_LEGACY_COVERAGE', notes: 'Retained legacy analysis notes.', warnings: [...coverageWarnings] }
+    assert(await runtime.store.save({ version: 1, id: legacyTaskID, itemID: sibling.id, createdAt: legacyRecord.createdAt,
+      requestID: legacyRequestID, status: 'complete', stage: 'complete', generation: 'complete',
+      response: JSON.stringify({ summary: legacyRecord.summary, sections: [], annotations: [] }), record: legacyRecord,
+      annotations: {} }), 'Could not seed legacy completed analysis with a coverage notice')
+    Zotero.Prefs.set('extensions.jadenseInZotero.analysisRestartSmoke', JSON.stringify({ taskID, requestID, itemID: attachment.id,
+      itemKey: attachment.key, annotationCount: attachment.getAnnotations().length, coverageWarnings, legacyTaskID, legacyItemID: sibling.id }))
+    report.checks.push('analysis-cold-restart-checkpoint-prepared')
+    return
+  }
 
   reader._iframeWindow.document.querySelector('[data-jadense-action="attach"]').click()
   const root = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), 'literature sidebar')
@@ -268,4 +352,42 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   await screenshot('literature-sibling-empty', main)
   report.checks.push('switch-pdf-history-isolation', 'empty-source-no-dispatch')
   report.checks.push('seven-sidebar-pages', 'source-markdown-local-images', 'no-translation-on-browse', 'current-pdf-isolation', 'analysis-sidebar', 'all-chat-reachable', 'legacy-markdown-task-translation', 'fixed-extraction-version', 'workbench-deep-link', 'paper-history-all-attachments', 'parent-paper-grouping', 'compact-light-dark-workbench')
+}
+
+/** 第二个真实 Zotero 进程：不注入 runner/context，验证插件启动自动只补本地批注。 */
+export async function verifyAnalysisRestart({ Zotero, assert, waitFor, report }) {
+  const fixture = JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.analysisRestartSmoke') || '{}')
+  assert(fixture.taskID && fixture.itemID, 'Missing isolated analysis restart checkpoint')
+  const runtime = await waitFor(() => Zotero.__jadenseAnalysisRuntime, 'analysis runtime after cold restart')
+  await runtime.ready
+  const task = await waitFor(() => [...runtime.tasks.values()].find(row => row.id === fixture.taskID), 'original analysis task after cold restart')
+  await waitFor(() => task.status === 'complete', 'automatic local annotation continuation', 60_000)
+  assert(task.itemID === fixture.itemID && task.requestID === fixture.requestID && task.snapshot.itemKey === fixture.itemKey, 'Cold restart changed analysis identity')
+  assert(task.generation === 'complete' && task.record.summary === 'COLD_RESTART_RETAINED_ANALYSIS', 'Cold restart lost retained model output')
+  const attachment = Zotero.Items.get(fixture.itemID), annotations = attachment.getAnnotations()
+  assert(annotations.length === fixture.annotationCount + 1, 'Cold restart duplicated or skipped a native annotation')
+  assert(annotations.filter(row => row.annotationComment.includes('COLD_RESTART_LOCAL_ANNOTATION')).length === 1, 'Cold restart did not save the pending native note exactly once')
+  const durable = (await runtime.store.list()).find(row => row.id === fixture.taskID)
+  assert(durable?.status === 'complete' && durable.stage === 'complete', 'Cold restart completion checkpoint was not saved')
+  assert(fixture.coverageWarnings.every(warning => durable.record.coverageWarnings?.includes(warning)), 'Cold restart lost internal sampling diagnostics')
+  // 同一真实宿主分别打开新补写成果和旧完成成果，覆盖启动投影、Reader 工具条及侧栏展示。
+  const main = Zotero.getMainWindow(), doc = main.document
+  for (const [itemID, summary] of [[fixture.itemID, 'COLD_RESTART_RETAINED_ANALYSIS'], [fixture.legacyItemID, 'COLD_RESTART_LEGACY_COVERAGE']]) {
+    const reader = await Zotero.Reader.open(itemID)
+    await reader._initPromise; await reader._internalReader._primaryView.initializedPromise
+    main.Zotero_Tabs.select(reader.tabID)
+    const brand = await waitFor(() => reader._iframeWindow.document.querySelector('.jadense-reader-brand'), 'restored analysis toolbar')
+    await waitFor(() => brand.dataset.runtime === 'complete', 'restored analysis successful toolbar')
+    assert(!runtime.get(itemID).error, 'Cold restart promoted sampling notice to error')
+    brand.click()
+    const panel = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${itemID}"][data-page="summary"]`), 'restored analysis sidebar')
+    await waitFor(() => panel.querySelector('.jdx-analysis-summary')?.textContent.includes(summary), 'restored analysis content')
+    const visibleNotices = [...panel.querySelectorAll('.jdx-notice')].filter(node => node.getBoundingClientRect().height > 0)
+    assert(!fixture.coverageWarnings.some(warning => runtime.get(itemID).message.includes(warning) || brand.textContent.includes(warning)
+      || visibleNotices.some(node => node.textContent.includes(warning))), 'Cold restart exposed technical sampling notice')
+  }
+  const legacy = [...runtime.tasks.values()].find(row => row.id === fixture.legacyTaskID)
+  assert(legacy.status === 'complete' && fixture.coverageWarnings.every(warning => [...(legacy.record.warnings || []), ...(legacy.record.coverageWarnings || [])].includes(warning)), 'Legacy completion lost its internal sampling diagnostics')
+  report.checks.push('analysis-native-cold-restart-auto-continue', 'analysis-native-cold-restart-same-task-source', 'analysis-native-cold-restart-model-output-retained', 'analysis-native-cold-restart-native-annotation-once')
+  report.checks.push('analysis-native-cold-restart-coverage-success', 'analysis-native-cold-restart-coverage-hidden', 'analysis-native-cold-restart-legacy-coverage-hidden', 'analysis-native-cold-restart-coverage-retained')
 }

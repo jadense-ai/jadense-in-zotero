@@ -9,6 +9,7 @@ export async function generateAnalysis(options: {
   recover: (signal: AbortSignal, progress: () => void, error: unknown) => Promise<string>
   onProgress?: (message: string) => void
   onRetry?: (retrying: boolean) => void
+  onThrottleRetry?: () => Promise<void>
 }) {
   let recovering = false, previous: unknown
   try {
@@ -29,6 +30,7 @@ export async function generateAnalysis(options: {
         const retryAt = Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(retryAfter ?? '')
         const delay = status === 429 ? Math.max(1000, Number.isFinite(retryAt) ? retryAt - Date.now() : 60_000) : 2000 * 2 ** attempt
         if (delay > 300_000) throw error
+        if (status === 429 && !recovering) await options.onThrottleRetry?.()
         options.onRetry?.(true)
         options.onProgress?.(uiText(`AI 暂未完成，${Math.ceil(delay / 1000)} 秒后自动${recovering ? '恢复' : '重试'}（${attempt + 1}/2）…`, `AI incomplete. Automatic ${recovering ? 'recovery' : 'retry'} in ${Math.ceil(delay / 1000)}s (${attempt + 1}/2)…`))
         await analysisStage(options.signal, 'Retry wait', delay + 1000, signal => new Promise<void>((resolve, reject) => {

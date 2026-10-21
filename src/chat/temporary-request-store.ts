@@ -7,6 +7,9 @@ export type LocalTemporaryRequest = {
 }
 type IO = { makeDirectory(path: string, options: { ignoreExisting: boolean }): Promise<unknown>; writeUTF8(path: string, text: string, options: { tmpPath: string }): Promise<unknown>; readUTF8(path: string): Promise<string>; getChildren(path: string): Promise<string[]> }
 type Paths = { profileDir: string; join(...parts: string[]): string; filename(path: string): string }
+// 同一宿主中短暂磁盘错误不丢弃已收到正文；磁盘 pending 仍是跨重启的执行围栏。
+const buffers = new WeakMap<IO, Map<string, LocalTemporaryRequest>>()
+const writers = new WeakMap<IO, Map<string, Promise<unknown>>>()
 export class TemporaryRequestStore {
   constructor(private io = (globalThis as unknown as { IOUtils?: IO }).IOUtils, private paths = (globalThis as unknown as { PathUtils?: Paths }).PathUtils) {}
   private root() { if (!this.io || !this.paths) throw new Error(uiText('无法保存请求身份，请检查本地存储后继续。', 'Cannot persist request identity. Check local storage before continuing.')); return this.paths.join(this.paths.profileDir, 'jadense-ai-requests') }
@@ -33,16 +36,37 @@ export class TemporaryRequestStore {
       rows.push(row)
       } catch (error) { if (scope) throw error /* 历史浏览局部降级；只有该任务的新 AI 派发需要身份完整。 */ }
     }
-    return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const merged = new Map(rows.map(row => [row.id, row]))
+    for (const [path, row] of buffers.get(this.io!) ?? []) {
+      if (!path.startsWith(`${root}|`) || scope && (row.account !== scope.account || row.body.temporaryConversationId !== scope.conversation)) continue
+      // 只补本地保存；失败仍可将真实正文交给文档自己的检查点，不再次访问模型。
+      await this.save(row).catch(() => {})
+      merged.set(row.id, structuredClone(row))
+    }
+    return [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
   async save(row: LocalTemporaryRequest) {
     if (!/^[a-f\d-]{36}$/i.test(row.id)) throw new Error('Invalid local request identity')
     if (!/^[a-f\d]{64}$/i.test(row.account) || typeof row.body.temporaryConversationId !== 'string') throw new Error('Invalid local request scope')
     const base = this.root(), account = this.paths!.join(base, row.account.slice(0, 24))
-    const root = this.paths!.join(account, (await requestHash(row.body.temporaryConversationId)).slice(0, 24))
-    for (const directory of [base, account, root]) await this.io!.makeDirectory(directory, { ignoreExisting: true })
-    const path = this.paths!.join(root, `${row.id}.json`)
-    await this.io!.writeUTF8(path, JSON.stringify(row), { tmpPath: `${path}.tmp` })
+    const key = `${base}|${row.account}|${row.id}`
+    let pending = buffers.get(this.io!)
+    if (!pending) { pending = new Map(); buffers.set(this.io!, pending) }
+    let tails = writers.get(this.io!)
+    if (!tails) { tails = new Map(); writers.set(this.io!, tails) }
+    const snapshot = structuredClone(row)
+    pending.set(key, snapshot)
+    const write = (tails.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      const root = this.paths!.join(account, (await requestHash(String(snapshot.body.temporaryConversationId))).slice(0, 24))
+      const path = this.paths!.join(root, `${snapshot.id}.json`)
+      for (const directory of [base, account, root]) await this.io!.makeDirectory(directory, { ignoreExisting: true })
+      await this.io!.writeUTF8(path, JSON.stringify(snapshot), { tmpPath: `${path}.tmp` })
+      if (pending.get(key) === snapshot) pending.delete(key)
+    })
+    tails.set(key, write)
+    try { await write } catch {
+      throw Object.assign(new Error(uiText('请求记录尚未保存，将保留已有结果并重试保存。', 'The request record is not saved yet. Existing output is retained for a storage retry.')), { code: 'LOCAL_REQUEST_PERSISTENCE_FAILED' })
+    } finally { if (tails.get(key) === write) tails.delete(key) }
   }
 }
 export async function requestHash(value: string) {

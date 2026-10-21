@@ -133,7 +133,7 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
           continue
         }
         if (!initial && message.type === 'progress' && message.stage !== 'retry') installationStage = String(message.stage ?? installationStage)
-        if (message.type === 'error') throw new Error(message.category === 'incomplete' ? uiText(`翻译已暂停：补缺一次后仍有 ${Number(message.missing) || 1} 个文段未完成，已保留成功译文。`, `Translation paused: ${Number(message.missing) || 1} passages remain incomplete after one repair. Successful translations were retained.`) : String(message.message ?? 'PDF translation failed'))
+        if (message.type === 'error') throw Object.assign(new Error(message.category === 'incomplete' ? uiText(`翻译已暂停：补译后仍有 ${Number(message.missing) || 1} 个文段未完成，已保留成功译文。`, `Translation paused: ${Number(message.missing) || 1} passages remain incomplete after repair. Successful translations were retained.`) : String(message.message ?? 'PDF translation failed')), { code: typeof message.code === 'string' ? message.code : message.category === 'incomplete' ? 'OUTPUT_FAILED' : 'PDF_ENGINE_FAILED' })
         if (message.type === 'complete') complete = true
         if (message.type !== 'translate') { await onMessage(message); continue }
         const operation = Promise.resolve().then(() => onMessage(message)).then(reply => {
@@ -153,8 +153,8 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     // 等待 stderr EOF 后再构造错误；避免快速退出时丢失最后一段安装日志。
     await limited(drain, 30_000, uiText('PDF 引擎日志管道未结束，请重试。', 'PDF engine output pipe did not close. Retry.'))
     checkCancelled(signal)
-    if (timedOut) throw new Error(finishSignal?.aborted ? uiText('保存已完成译文超时，已保留最近成果和译文缓存，请重试。', 'Saving translations timed out. The latest PDF and cached translations were retained. Retry.') : uiText('PDF 翻译阶段超时，请重试。', 'PDF translation stage timed out. Retry.'))
-    if (result.exitCode !== 0 || (initial && !complete)) throw new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎未完成，请修复引擎或重试。', 'PDF engine did not finish. Repair the engine or retry.'))
+    if (timedOut) throw Object.assign(new Error(finishSignal?.aborted ? uiText('保存已完成译文超时，已保留最近成果和译文缓存。', 'Saving translations timed out. The latest PDF and cached translations were retained.') : uiText('PDF 翻译阶段超时，稍后自动恢复。', 'PDF translation stage timed out; recovery will resume automatically.')), { code: 'PDF_ENGINE_FAILED' })
+    if (result.exitCode !== 0 || (initial && !complete)) throw Object.assign(new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎中断，稍后自动复用检查点继续。', 'PDF engine interrupted; saved checkpoints will resume automatically.')), { code: initial ? 'PDF_ENGINE_FAILED' : 'PDF_INSTALL_FAILED' })
   } catch (error) { kill(); throw error } finally {
     clearInterval(timer); signal.removeEventListener('abort', kill)
     if (finishTimer) clearTimeout(finishTimer)

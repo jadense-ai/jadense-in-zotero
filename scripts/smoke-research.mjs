@@ -4,7 +4,7 @@ import { verifyEngineStorage } from './smoke-engine-storage.mjs'
 import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
 import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
-import { verifyLiteratureWorkspace } from './smoke-literature-workspace.mjs'
+import { verifyLiteratureWorkspace, verifyAnalysisRestart } from './smoke-literature-workspace.mjs'
 import { verifyReaderChat } from "./smoke-reader-chat.mjs"
 import { verifyChatFiles } from './smoke-chat-files.mjs'
 import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-long-pdf.mjs'
@@ -14,6 +14,7 @@ import { verifyCloudOCR } from './smoke-cloud-ocr.mjs'
 import { verifyJadenseMode } from './smoke-jadense-mode.mjs'
 import { verifyPDFTranslation, verifyPDFTranslationRestart } from './smoke-pdf-translation.mjs'
 import { verifySimpleReading, verifySimpleReadingInterruption, verifySimpleReadingRestart } from './smoke-simple-reading.mjs'
+import { verifySelectionTranslationSize, verifySimpleReadingSize } from './smoke-translation-size.mjs'
 /**
  * 实际 XPI 的科研与 UI smoke：独立 profile/data + 合成 PDF/Markdown + localhost AI stub。
  * 临时伴随插件只驱动实际阅读器/Manager UI，不改 release XPI，不加入生产测试后门。
@@ -637,11 +638,15 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     Zotero.Prefs.set("extensions.jadenseInZotero.starInvitation", JSON.stringify({ uses: 0, lastPrompt: Date.now(), outcome: "later" }), true)
     Zotero.Prefs.set("extensions.jadenseInZotero.token", config.token)
     // 综合夹具显式选定合成目录模型；0.6.10 的一次性默认迁移不适用于后续全新安装。
-    if (!config.upgradeXpi && !config.resumeOnly && !config.simpleReadingResume && !config.pdfTranslationResume && !config.featureSettingsResume && !config.longPdfResume) {
+    if (!config.upgradeXpi && !config.resumeOnly && !config.simpleReadingResume && !config.pdfTranslationResume && !config.featureSettingsResume && !config.longPdfResume && !config.analysisResume) {
       const key = 'extensions.jadenseInZotero.aiModelSettings'
       const settings = JSON.parse(Zotero.Prefs.get(key, true) || '{}')
       Zotero.Prefs.set(key, JSON.stringify({ ...settings, version: 1, followChatModel: settings.followChatModel !== false,
         models: { ...settings.models, chat: { route: 'jadense', selection: { kind: 'model', modelId: 'qwen-3.8-flash' } } } }), true)
+    }
+    if (config.analysisResume) {
+      await verifyAnalysisRestart({ Zotero, waitFor, assert, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.simpleReadingResume) {
       await verifySimpleReadingRestart({ Zotero, waitFor, assert, report })
@@ -1199,6 +1204,80 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       report.checks.push("titlebar-close")
       report.state = "passed"; report.stage = "complete"; await persist(); return
     }
+    if (config.selectionOnly) {
+      const figureWindow = view._iframeWindow
+      await view._ensureBasicPageData(0)
+      const chars = view._pdfPages[0].chars.slice(0, 40)
+      const first = { annotationText: config.sentences[0][0] }
+      const position = { pageIndex: 0, rects: chars.map(char => char.rect) }
+      const showSelection = async () => {
+        figureWindow.document.body.dispatchEvent(new figureWindow.PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+        view._setSelectionRanges(Components.utils.cloneInto([], reader._iframeWindow))
+        await Zotero.Promise.delay(100)
+        view._setSelectionRanges(Components.utils.cloneInto([{ pageIndex: 0, position, sortIndex: '00000|000000|00000', text: first.annotationText, collapsed: false, anchor: true, head: true, anchorOffset: 0, headOffset: chars.length - 1 }], reader._iframeWindow))
+        return waitFor(() => readerDoc.querySelector('[data-jadense-reader-tools="renderTextSelectionPopup"]'), 'selection experience popup')
+      }
+      let popup = await showSelection()
+      await Zotero.Promise.delay(450)
+      assert(!translationState().records?.length, 'Default waiting dispatched translation')
+      popup.querySelector('[data-jadense-action="translate"]').click()
+      const translationPanel = await waitFor(() => {
+        const panel = readerDoc.querySelector('[data-jadense-translation-panel]:not([hidden])')
+        return panel?.querySelector('.jadense-translation-result')?.textContent.includes(config.translationMarker) ? panel : null
+      }, 'initial selection translation')
+      await verifySelectionTranslationSize({ Zotero, reader, panel: translationPanel, assert, waitFor, screenshot, report })
+      const main = Zotero.getMainWindow()
+      const pref = 'extensions.jadenseInZotero.selectionExperience'
+      const stored = () => JSON.parse(Zotero.Prefs.get(pref, true) || '{}')
+      const save = patch => Zotero.Prefs.set(pref, JSON.stringify({ ...stored(), ...patch }), true)
+      assert(stored().placement === 'remember' && stored().behavior === 'wait', 'Selection defaults changed')
+      const title = translationPanel.querySelector('header')
+      // 直接向可聚焦标题发送，保持合成事件目标与真实键盘路径一致。
+      title.dispatchEvent(new reader._iframeWindow.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+      const geometry = stored().geometry
+      assert(geometry?.width > 0 && geometry?.height > 0, 'User geometry was not saved')
+      translationPanel.querySelector('.jadense-translation-close').click()
+      popup = await showSelection()
+      popup.querySelector('[data-jadense-action="translate"]').click()
+      await waitFor(() => !translationPanel.hidden, 'reopened remembered panel')
+      assert(translationPanel.querySelector('[data-jdx-selection-translation-font-size]')?.value === '160'
+        && translationPanel.querySelector('.jadense-translation-result').style.fontSize === '160%', 'Reopened selection panel lost text size')
+      assert(Math.abs(translationPanel.getBoundingClientRect().left - geometry.left) <= 1, 'Panel did not restore user position')
+      const placement = translationPanel.querySelector('select[aria-label="浮窗位置"], select[aria-label="Panel position"]')
+      placement.value = 'selection'; placement.dispatchEvent(new reader._iframeWindow.Event('change', { bubbles: true }))
+      await Zotero.Promise.delay(150)
+      const rect = translationPanel.getBoundingClientRect()
+      assert(rect.left >= 7 && rect.top >= 7 && rect.right <= reader._iframeWindow.innerWidth - 7 && rect.bottom <= reader._iframeWindow.innerHeight - 7, 'Anchored panel escaped Reader viewport')
+      assert(rect.left < geometry.left - 50, 'Selection mode did not move the panel beside the selected text')
+      await screenshot('selection-experience-anchor')
+      const appearance = translationPanel.querySelector('.jdx-window-appearance')
+      appearance.open = true
+      for (const theme of ['light', 'dark']) {
+        Zotero.Prefs.set('extensions.jadenseInZotero.theme', theme, true)
+        await Zotero.Promise.delay(100)
+        assert(placement.getBoundingClientRect().width > 0, 'Position setting is not visible in Appearance')
+        await screenshot('selection-experience-settings-' + theme)
+      }
+      appearance.open = false
+      translationPanel.querySelector('.jadense-translation-close').click()
+      const count = translationState().records.length
+      save({ behavior: 'translate' })
+      await showSelection()
+      await waitFor(() => !translationPanel.hidden && translationState().records.length > count, 'automatic selection translation')
+      await Zotero.Promise.delay(500)
+      const before = localState().sessions?.length ?? 0
+      const previousIDs = (localState().sessions ?? []).map(session => session.id)
+      save({ behavior: 'quote' })
+      await showSelection()
+      await waitFor(() => localState().sessions?.length === before + 1 && localState().sessions.some(session => !previousIDs.includes(session.id) && session.sources.some(source => source.kind === 'quote' && source.text === first.annotationText)), 'automatic quote source association')
+      const session = localState().sessions.find(session => !previousIDs.includes(session.id))
+      assert(session.messages.length === 0 && session.sources.some(source => source.kind === 'file' && source.itemID === attachment.id), 'Auto quote sent a message or lost its PDF')
+      const sidebar = await waitFor(() => [...main.document.querySelectorAll('.jdx-reader-workspace')].find(root => !root.hidden && root.dataset.page === 'chat'), 'automatic quote sidebar')
+      assert(sidebar.querySelector('textarea')?.value.includes(first.annotationText), 'Quote draft is missing from sidebar')
+      await screenshot('selection-experience-quote', main)
+      report.checks.push('selection-preference-defaults', 'selection-geometry-reopen', 'selection-anchor-contained', 'selection-auto-translation', 'selection-auto-new-chat-quote-no-send')
+      report.state = 'passed'; await persist(); return
+    }
     if (config.appearanceLanguage) {
       await stage("appearance-and-language")
       const english = config.appearanceLanguage === "en-US"
@@ -1424,77 +1503,6 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       hostToast.querySelector('.jdx-toast-close').click()
       report.checks.push('native-model-lock-pointer-keyboard-toast-no-save', 'native-unlocked-model-save', 'native-model-toast-compact-150', 'native-zotero-host-document-error-toast')
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
-    }
-    if (config.selectionOnly) {
-      const figureWindow = view._iframeWindow
-      await view._ensureBasicPageData(0)
-      const chars = view._pdfPages[0].chars.slice(0, 40)
-      const first = { annotationText: config.sentences[0][0] }
-      const position = { pageIndex: 0, rects: chars.map(char => char.rect) }
-      const showSelection = async () => {
-        figureWindow.document.body.dispatchEvent(new figureWindow.PointerEvent('pointerdown', { bubbles: true, button: 0 }))
-        view._setSelectionRanges(Components.utils.cloneInto([], reader._iframeWindow))
-        await Zotero.Promise.delay(100)
-        view._setSelectionRanges(Components.utils.cloneInto([{ pageIndex: 0, position, sortIndex: '00000|000000|00000', text: first.annotationText, collapsed: false, anchor: true, head: true, anchorOffset: 0, headOffset: chars.length - 1 }], reader._iframeWindow))
-        return waitFor(() => readerDoc.querySelector('[data-jadense-reader-tools="renderTextSelectionPopup"]'), 'selection experience popup')
-      }
-      let popup = await showSelection()
-      await Zotero.Promise.delay(450)
-      assert(!translationState().records?.length, 'Default waiting dispatched translation')
-      popup.querySelector('[data-jadense-action="translate"]').click()
-      const translationPanel = await waitFor(() => {
-        const panel = readerDoc.querySelector('[data-jadense-translation-panel]:not([hidden])')
-        return panel?.querySelector('.jadense-translation-result')?.textContent.includes(config.translationMarker) ? panel : null
-      }, 'initial selection translation')
-      const main = Zotero.getMainWindow()
-      const pref = 'extensions.jadenseInZotero.selectionExperience'
-      const stored = () => JSON.parse(Zotero.Prefs.get(pref, true) || '{}')
-      const save = patch => Zotero.Prefs.set(pref, JSON.stringify({ ...stored(), ...patch }), true)
-      assert(stored().placement === 'remember' && stored().behavior === 'wait', 'Selection defaults changed')
-      const title = translationPanel.querySelector('header')
-      // 直接向可聚焦标题发送，保持合成事件目标与真实键盘路径一致。
-      title.dispatchEvent(new reader._iframeWindow.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
-      const geometry = stored().geometry
-      assert(geometry?.width > 0 && geometry?.height > 0, 'User geometry was not saved')
-      translationPanel.querySelector('.jadense-translation-close').click()
-      popup = await showSelection()
-      popup.querySelector('[data-jadense-action="translate"]').click()
-      await waitFor(() => !translationPanel.hidden, 'reopened remembered panel')
-      assert(Math.abs(translationPanel.getBoundingClientRect().left - geometry.left) <= 1, 'Panel did not restore user position')
-      const placement = translationPanel.querySelector('select[aria-label="浮窗位置"]')
-      placement.value = 'selection'; placement.dispatchEvent(new reader._iframeWindow.Event('change', { bubbles: true }))
-      await Zotero.Promise.delay(150)
-      const rect = translationPanel.getBoundingClientRect()
-      assert(rect.left >= 7 && rect.top >= 7 && rect.right <= reader._iframeWindow.innerWidth - 7 && rect.bottom <= reader._iframeWindow.innerHeight - 7, 'Anchored panel escaped Reader viewport')
-      assert(rect.left < geometry.left - 50, 'Selection mode did not move the panel beside the selected text')
-      await screenshot('selection-experience-anchor')
-      const appearance = translationPanel.querySelector('.jdx-window-appearance')
-      appearance.open = true
-      for (const theme of ['light', 'dark']) {
-        Zotero.Prefs.set('extensions.jadenseInZotero.theme', theme, true)
-        await Zotero.Promise.delay(100)
-        assert(placement.getBoundingClientRect().width > 0, 'Position setting is not visible in Appearance')
-        await screenshot('selection-experience-settings-' + theme)
-      }
-      appearance.open = false
-      translationPanel.querySelector('.jadense-translation-close').click()
-      const count = translationState().records.length
-      save({ behavior: 'translate' })
-      await showSelection()
-      await waitFor(() => !translationPanel.hidden && translationState().records.length > count, 'automatic selection translation')
-      await Zotero.Promise.delay(500)
-      const before = localState().sessions?.length ?? 0
-      const previousIDs = (localState().sessions ?? []).map(session => session.id)
-      save({ behavior: 'quote' })
-      await showSelection()
-      await waitFor(() => localState().sessions?.length === before + 1 && localState().sessions.some(session => !previousIDs.includes(session.id) && session.sources.some(source => source.kind === 'quote' && source.text === first.annotationText)), 'automatic quote source association')
-      const session = localState().sessions.find(session => !previousIDs.includes(session.id))
-      assert(session.messages.length === 0 && session.sources.some(source => source.kind === 'file' && source.itemID === attachment.id), 'Auto quote sent a message or lost its PDF')
-      const sidebar = await waitFor(() => [...main.document.querySelectorAll('.jdx-reader-workspace')].find(root => !root.hidden && root.dataset.page === 'chat'), 'automatic quote sidebar')
-      assert(sidebar.querySelector('textarea')?.value.includes(first.annotationText), 'Quote draft is missing from sidebar')
-      await screenshot('selection-experience-quote', main)
-      report.checks.push('selection-preference-defaults', 'selection-geometry-reopen', 'selection-anchor-contained', 'selection-auto-translation', 'selection-auto-new-chat-quote-no-send')
-      report.state = 'passed'; await persist(); return
     }
     if (config.chatSidebarOnly) {
       await verifyReaderChat({ Zotero, reader, manager, assert, waitFor, screenshot, report })
@@ -3152,6 +3160,8 @@ async function writeCompanion(extensionsDir, config) {
     verifyJadenseMode.toString(),
     verifyTranslationFiles.toString(),
     verifyPDFTranslation.toString(),
+    verifySelectionTranslationSize.toString(),
+    verifySimpleReadingSize.toString(),
     verifySimpleReading.toString(),
     verifySimpleReadingInterruption.toString(),
     verifySimpleReadingRestart.toString(),
@@ -3160,6 +3170,7 @@ async function writeCompanion(extensionsDir, config) {
     verifyEngineStorage.toString(),
     verifyFeatureSettingsRestart.toString(),
     verifyLiteratureWorkspace.toString(),
+    verifyAnalysisRestart.toString(),
     verifyAnalysisDetails.toString(),
     verifyTranslationSidebar.toString(),
     verifyTranslationPapers.toString(),
@@ -3326,6 +3337,24 @@ async function main() {
       await delay(250)
     }
     if (report?.state !== "passed") throw new Error(`Research smoke timed out at ${report?.stage ?? "companion startup"}`)
+    if (argv.includes('--analysis-runtime-only')) {
+      const before = stub.requests.filter(row => ['analysis-jadense', 'analysis-byok'].includes(row.kind)).length
+      await stopIsolatedProcess(child, profileDir); child = undefined
+      const restartReport = path.join(smokeRoot, 'analysis-restart-report.json')
+      await writeCompanion(extensionsDir, { ...companionConfig, analysisResume: true, reportPath: restartReport })
+      child = spawn(executable, ['-no-remote', '-profile', profileDir, '-datadir', dataDir, '-ZoteroDebugText'], { windowsHide: true, stdio: ['ignore', stdout.fd, stderr.fd] })
+      const until = Date.now() + timeoutMs
+      let restored
+      while (Date.now() < until) {
+        restored = await readFile(restartReport, 'utf8').then(JSON.parse).catch(() => undefined)
+        if (restored?.state === 'failed') throw new Error(restored.error)
+        if (restored?.state === 'passed') break
+        await delay(250)
+      }
+      if (restored?.state !== 'passed') throw new Error('Analysis cold restart timed out')
+      if (stub.requests.filter(row => ['analysis-jadense', 'analysis-byok'].includes(row.kind)).length !== before) throw new Error('Cold restart regenerated completed analysis')
+      report.checks.push(...restored.checks, 'analysis-native-cold-restart-no-model-request')
+    }
     if (argv.includes('--simple-reading-only')) {
       await stopIsolatedProcess(child, profileDir); child = undefined
       const restartReport = path.join(smokeRoot, 'simple-reading-restart-report.json')

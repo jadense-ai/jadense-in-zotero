@@ -52,16 +52,29 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     assert(Array.isArray(jobs.list()), 'PDF jobs must survive closing engine settings')
     if (config.pdfEngineSetupOnly) return
   }
-  let fixtureStarts = 0
+  let fixtureStarts = 0, fixtureCancels = 0, fixtureRetries = 0
+  const fixtureFreshStarts = [], fixtureHistory = new Map()
   let fixtureTask, notifyFixture = () => {}
   // UI 专项显式注入已生成的合成 PDF；不将其报告为真实引擎或冷启动缓存验收。
   if (config?.pdfViewerFixture) {
     const task = { id: 'viewer-fixture', status: 'running', pages: native.pagesCount, skipped: [], coverage: { total: 2, translated: 0, failed: 2, preserved: 0, failedPages: [0] } }
     fixtureTask = task
+    fixtureHistory.set(task.id, task)
     Zotero.__jadensePDFTranslationJobs = {
-      start: async () => { fixtureStarts++; return task }, openOrStart: async () => { fixtureStarts++; return task }, subscribe: callback => { notifyFixture = callback; return () => {} }, isActive: () => false,
+      start: async (itemID, mode, fresh) => {
+        fixtureStarts++
+        if (fresh) {
+          fixtureFreshStarts.push({ itemID, mode, fresh })
+          fixtureTask = { id: `viewer-fixture-fresh-${fixtureFreshStarts.length}`, source: { itemID }, mode, status: 'queued', stage: 'queued', desiredState: 'running', pages: 0, skipped: [], percent: 0 }
+          fixtureHistory.set(fixtureTask.id, fixtureTask)
+        }
+        return fixtureTask
+      }, openOrStart: async () => { fixtureStarts++; return fixtureTask }, subscribe: callback => { notifyFixture = callback; return () => {} }, isActive: () => false,
+      get: id => fixtureHistory.get(id), list: () => [...fixtureHistory.values()],
       speed: () => ({ active: 1, concurrency: 2, httpMinute: 3, rpm: 20, queued: 0, waitMs: 0 }),
-      hasOutput: () => true, bytes: () => globalThis.IOUtils.read(config.pdfViewerFixture), stop() {},
+      cancel: () => { fixtureCancels++; Object.assign(fixtureTask, { status: 'cancelled', desiredState: 'paused', recovery: undefined }); notifyFixture() },
+      retry: () => { fixtureRetries++; Object.assign(fixtureTask, { status: 'waiting', desiredState: 'running', recovery: { attempt: 1, nextAt: Date.now() + 15000, reason: 'PDF_RENDER_FAILED' } }); notifyFixture() },
+      hasOutput: candidate => candidate === task || Boolean(candidate?.artifact), bytes: () => globalThis.IOUtils.read(config.pdfViewerFixture), stop() {},
     }
   }
   const ai = Boolean(config?.pdfAI), starts = [], mixed = [], batchRows = []
@@ -213,8 +226,83 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       await screenshot('pdf-translation-partial-320-scaled', reader._iframeWindow)
       Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
       panel.style.width = '640px'
+      Object.assign(fixtureTask, { status: 'waiting', desiredState: 'running', phase: 'render', stage: 'waiting', requestProgress: undefined, retrying: {}, error: 'Synthetic disk unavailable', recovery: { attempt: 2, nextAt: Date.now() + 300000, reason: 'PDF_RENDER_FAILED' } })
+      notifyFixture()
+      assert(/自动继续|automatically/u.test(status.textContent) && /不会重新翻译|without translating again/u.test(status.textContent), 'Persistent recovery must explain saved translation and local-only regeneration')
+      assert(!control(panel, 'task-action').disabled && /取消|Cancel/u.test(control(panel, 'task-action').textContent), 'Waiting task must remain cancellable')
+      for (const theme of ['light', 'dark']) {
+        Zotero.Prefs.set('extensions.jadenseInZotero.theme', theme, true)
+        for (const [width, scale] of [[640, 100], [320, 150]]) {
+          panel.style.width = `${width}px`
+          Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', scale, true)
+          await new Promise(resolve => main.setTimeout(resolve, 300))
+          if (panel.querySelector('.jdx-pdf-translation-status-panel').hidden) chip().click()
+          const recoveryPanel = panel.querySelector('.jdx-pdf-translation-status-panel')
+          assert(toolbar.scrollWidth <= toolbar.clientWidth + 1 && toolbar.getBoundingClientRect().height <= 52, `${theme} waiting toolbar overflows ${width}px/${scale}%`)
+          assert(recoveryPanel.scrollWidth <= recoveryPanel.clientWidth + 1 && recoveryPanel.getBoundingClientRect().width <= panel.getBoundingClientRect().width, `${theme} waiting details overflow ${width}px/${scale}%`)
+          await screenshot(`pdf-translation-waiting-${theme}-${width}-${scale}`, reader._iframeWindow)
+        }
+      }
+      const startsBeforeContinue = fixtureStarts, requestsBeforeContinue = requests
+      control(panel, 'task-action').click()
+      await waitFor(() => fixtureCancels === 1 && fixtureTask.desiredState === 'paused', 'waiting task pause')
+      assert(/补译|Resume/u.test(control(panel, 'task-action').textContent), 'Paused task must offer resume')
+      control(panel, 'task-action').click()
+      await waitFor(() => fixtureRetries === 1 && fixtureTask.desiredState === 'running', 'same-task continue')
+      assert(fixtureStarts === startsBeforeContinue && requests === requestsBeforeContinue, 'Pause/continue created a task or dispatched synthetic Provider requests')
+      report.checks.push('pdf-durable-waiting-local-render-light-dark-640-320-150-pause-continue')
+      panel.querySelector('.jdx-pdf-translation-status-panel').dispatchEvent(new panel.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
+      panel.style.width = '640px'
+      fixtureTask.recovery = undefined
       Object.assign(fixtureTask, { status: 'complete' }); notifyFixture()
       report.checks.push('pdf-working-animation-countdown-progress-details-partial-state')
+      // 只注入合成失效成果，验证真实 Reader 的恢复动作；不冒充任务持久化或付费服务验收。
+      const staleCoverage = { total: 151, translated: 0, failed: 151, preserved: 1, failedPages: [0, 1, 2, 3, 4, 5, 6, 7, 8] }
+      for (const stale of [
+        { name: 'configuration', blockedReason: 'configuration', error: 'Synthetic translation configuration changed' },
+        { name: 'source', blockedReason: 'source', error: 'Synthetic source PDF changed' },
+        { name: 'legacy', error: '原 PDF 或翻译配置已变化，请重新点击翻译按钮。' },
+      ]) {
+        control(panel, 'close-main').click()
+        assert(!doc.querySelector('.jdx-pdf-translation'), 'Closing a stale fixture failed to restore the source reader')
+        fixtureTask = { id: `viewer-fixture-stale-${stale.name}`, source: { itemID: reader.itemID }, status: 'error', stage: 'error', desiredState: 'paused', mode: 'concise', pages: native.pagesCount, skipped: [], coverage: staleCoverage, artifact: { revision: 'c'.repeat(32), pages: native.pagesCount, skipped: [], coverage: staleCoverage }, ...(stale.blockedReason ? { blockedReason: stale.blockedReason } : {}), error: stale.error }
+        fixtureHistory.set(fixtureTask.id, fixtureTask)
+        const oldTask = fixtureTask, oldSnapshot = JSON.stringify(oldTask), beforeFresh = fixtureFreshStarts.length, beforeRetries = fixtureRetries, beforeRequests = requests
+        compare.click()
+        panel = await waitFor(() => doc.querySelector('.jdx-pdf-translation'), `reopened ${stale.name} fixture`)
+        await waitFor(() => panel.dataset.pdfTaskId === oldTask.id, `restored ${stale.name} task identity`)
+        const restart = control(panel, 'task-action'), staleStatus = panel.querySelector('.jdx-pdf-status-content'), staleToolbar = panel.querySelector('.jdx-pdf-translation-toolbar')
+        assert(!restart.hidden && !restart.disabled && /按当前设置重新翻译|Translate again with current settings/u.test(restart.getAttribute('aria-label')), 'Stale task must offer explicit retranslation as its primary action')
+        assert(staleStatus.textContent.includes('151') && panel.querySelector('iframe').hidden, 'Stale zero-translation coverage was lost or shown as a translation')
+        assert(fixtureFreshStarts.length === beforeFresh && fixtureRetries === beforeRetries && requests === beforeRequests, 'Reopening a stale task dispatched translation or retried the old task')
+        for (const theme of ['light', 'dark']) {
+          Zotero.Prefs.set('extensions.jadenseInZotero.theme', theme, true)
+          for (const [width, scale] of [[640, 100], [320, 150]]) {
+            panel.style.width = `${width}px`
+            Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', scale, true)
+            await new Promise(resolve => main.setTimeout(resolve, 300))
+            const staleDetails = panel.querySelector('.jdx-pdf-translation-status-panel')
+            if (staleDetails.hidden) control(panel, 'status-toggle').click()
+            assert(staleToolbar.scrollWidth <= staleToolbar.clientWidth + 1 && staleToolbar.getBoundingClientRect().height <= 52, `${stale.name} ${theme} retranslation toolbar overflows ${width}px/${scale}%`)
+            assert(staleDetails.scrollWidth <= staleDetails.clientWidth + 1 && staleDetails.getBoundingClientRect().width <= panel.getBoundingClientRect().width, `${stale.name} ${theme} details overflow ${width}px/${scale}%`)
+            assert(restart.getBoundingClientRect().width > 0, 'Retranslation action became inaccessible at narrow width')
+            await screenshot(`pdf-translation-stale-${stale.name}-${theme}-${width}-${scale}`, reader._iframeWindow)
+          }
+        }
+        panel.querySelector('.jdx-pdf-translation-status-panel').dispatchEvent(new panel.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        restart.focus()
+        assert(panel.ownerDocument.activeElement === restart, 'Retranslation action cannot receive keyboard focus')
+        restart.click()
+        await waitFor(() => fixtureFreshStarts.length === beforeFresh + 1 && panel.dataset.pdfTaskId !== oldTask.id, `explicit ${stale.name} retranslation`)
+        assert(fixtureFreshStarts.at(-1).itemID === reader.itemID && fixtureFreshStarts.at(-1).fresh === true && fixtureRetries === beforeRetries, 'Retranslation reused the stale retry path')
+        assert(fixtureHistory.get(oldTask.id) === oldTask && JSON.stringify(oldTask) === oldSnapshot, 'Retranslation mutated the historical task or artifact')
+        assert(!staleStatus.textContent.includes(stale.error) && !staleStatus.textContent.includes('151') && !fixtureTask.blockedReason && !fixtureTask.error, 'New task retained the old failure or coverage hint')
+        assert(requests === beforeRequests, 'Synthetic Reader recovery unexpectedly called a Provider')
+        Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', 100, true)
+        panel.style.width = '640px'
+        report.checks.push(`pdf-stale-${stale.name}-zero-coverage-reopen-no-dispatch-explicit-fresh-history-preserved-light-dark-640-320-150`)
+      }
       return
     }
     if (!config.pdfViewerFixture) {
@@ -354,6 +442,23 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     for (const top of [300, 450, 120]) await scroll(nativeWindow, native.container, top)
     sync.click()
     assert(sync.getAttribute('aria-pressed') === 'false', 'Cannot unlink scroll')
+    // 真实 PDF.js 缩放：菜单连续操作、独立缩放、百分比与恢复，不能重新派发翻译。
+    control(panel, 'more-toggle').click()
+    const zoomMenu = control(panel, 'zoom-in').closest('.jdx-pdf-translation-popover')
+    const originalScale = native.currentScale, zoomAnchor = JSON.parse(pdf.stateJSON())
+    const zoomInput = control(panel, 'zoom')
+    zoomInput.value = '140'; zoomInput.dispatchEvent(new doc.defaultView.Event('change'))
+    await waitFor(() => Math.abs(pdf.state().scale - 1.4) < .002, 'translation local zoom')
+    assert(native.currentScale === originalScale, 'Unlinked zoom changed the original size')
+    assert(pdf.state().page === zoomAnchor.page && Math.abs(pdf.state().fraction - zoomAnchor.fraction) < .02, 'Zoom lost the reading anchor')
+    control(panel, 'zoom-in').click()
+    await waitFor(() => Math.abs(pdf.state().scale - 1.5) < .002, 'translation zoom plus')
+    assert(!zoomMenu.hidden, 'Zoom button dismissed its controls')
+    await screenshot('pdf-translation-size-controls')
+    control(panel, 'zoom-reset').click()
+    await waitFor(() => Math.abs(pdf.state().scale - 1) < .002, 'translation reset zoom')
+    control(panel, 'more-toggle').click()
+    report.checks.push('pdf-local-zoom-controls-anchor-unlinked-no-dispatch')
     const leftTop = native.container.scrollTop
     await scroll(translatedWindow, translatedContainer, 380)
     assert(native.container.scrollTop === leftTop, 'Unlinked right scroll moved left')
@@ -402,6 +507,9 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
       if (message) (report.windowStatus ??= []).push(message)
     })
     windowStatus.observe(homePanel.querySelector('.jdx-pdf-status-content'), { childList: true })
+    control(panel, 'sync').click()
+    const scaleBeforeDetach = native.currentScale
+    control(panel, 'zoom').value = '160'; control(panel, 'zoom').dispatchEvent(new doc.defaultView.Event('change'))
     viewChoice(panel, /多屏模式|Multi-screen/u).click()
     const detachedPanelReady = () => {
       const browser = [...globalThis.Services.wm.getEnumerator(null)].map(window => window.document.getElementById('translation-host')).find(Boolean)
@@ -417,10 +525,23 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     })
     const detachedWindow = [...globalThis.Services.wm.getEnumerator(null)].find(window => window.document.getElementById('translation-host')?.contentDocument === panel.ownerDocument)
     assert(detachedWindow, 'Detached native window missing')
+    assert(Math.abs(native.currentScale - scaleBeforeDetach) < .002, 'Unlinked detach changed the original zoom')
+    control(panel, 'sync').click()
     assert(control(panel, 'view').hidden && control(panel, 'multi-screen').getBoundingClientRect().width > 0, 'Detached return action missing')
     assert(control(panel, 'status-toggle') && panel.querySelector('.jdx-pdf-status-content'), 'Detached status chip or content missing')
     if (config.pdfViewerFixture) {
       control(panel, 'more-toggle').click()
+      const detachedZoom = control(panel, 'zoom')
+      detachedZoom.focus(); detachedZoom.value = '170'; detachedZoom.dispatchEvent(new panel.ownerDocument.defaultView.Event('change'))
+      await waitFor(() => Math.abs(((panel.querySelector('iframe').contentWindow.wrappedJSObject ?? panel.querySelector('iframe').contentWindow).JadensePDFView.state().scale) - 1.7) < .002, 'detached translation zoom')
+      assert(control(homePanel, 'zoom').value === '170' && fixtureStarts === 1, 'Detached zoom did not synchronize without translation')
+      detachedZoom.value = '999'; detachedZoom.dispatchEvent(new panel.ownerDocument.defaultView.Event('change'))
+      assert(detachedZoom.value === '500', 'Detached focused input did not normalize')
+      detachedZoom.value = '180'; detachedZoom.dispatchEvent(new panel.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      assert(control(homePanel, 'zoom').value === '180', 'Detached Enter did not apply zoom')
+      detachedZoom.value = ''; detachedZoom.blur(); assert(detachedZoom.value === '180', 'Detached blur did not restore current zoom')
+      control(panel, 'zoom-reset').click()
+      report.checks.push('pdf-detached-zoom-input-forwarding-normalization-no-dispatch')
       const detachedScope = control(panel, 'scope'), detachedTrigger = detachedScope.querySelector('.jdx-select-trigger')
       const budgetInput = panel.querySelector('[data-reading-budget="pdf"]')
       budgetInput.value = '196608'; budgetInput.dispatchEvent(new panel.ownerDocument.defaultView.Event('change'))
@@ -460,7 +581,9 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     control(panel, 'search-toggle').click()
     await waitFor(() => !panel.querySelector('.jdx-pdf-translation-search').hidden, 'detached search popover')
     detachedSearch.focus()
-    detachedSearch.value = '科学'; detachedSearch.dispatchEvent(new panel.ownerDocument.defaultView.Event('input'))
+    const searchQuery = config.pdfViewerFixture ? panel.querySelector('iframe').contentDocument.querySelector('.textLayer')?.textContent?.match(/[A-Za-z]{3,}|[\u4e00-\u9fff]{2,}/u)?.[0] : '科学'
+    assert(searchQuery, 'Fixture must contain searchable translated text')
+    detachedSearch.value = searchQuery; detachedSearch.dispatchEvent(new panel.ownerDocument.defaultView.Event('input'))
     await waitFor(() => panel.querySelector('iframe').contentDocument.querySelector('.textLayer .highlight'), 'detached search control').catch(error => { throw new Error(`${error}; source=${control(homePanel, 'find').value}; copy=${detachedSearch.value}; text=${panel.querySelector('iframe').contentDocument.body.textContent.slice(0, 1500)}`) })
     detachedWindow.resizeTo(680, 600)
     // 部分宿主会忽略脚本 resizeTo；直接约束内容宿主并核对实际宽度，不能把宽屏截图当作窄屏验收。
@@ -495,7 +618,7 @@ export async function verifyPDFTranslation({ Zotero, reader, assert, waitFor, sc
     report.checks.push(config?.pdfViewerFixture ? 'pdf-export-controls-close-restore-and-fixture-reopen' : 'pdf-export-controls-close-restore-and-cache')
     const cachedPanel = doc.querySelector('.jdx-pdf-translation')
     const search = control(cachedPanel, 'find')
-    search.value = '科学'; search.dispatchEvent(new reader._iframeWindow.Event('input', { bubbles: true }))
+    search.value = searchQuery; search.dispatchEvent(new reader._iframeWindow.Event('input', { bubbles: true }))
     await waitFor(() => cachedPanel.querySelector('iframe').contentDocument.querySelector('.textLayer .highlight'), 'PDF translated text search')
     Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'dark', true)
     await waitFor(() => cachedPanel.dataset.theme === 'dark', 'dark PDF controls')

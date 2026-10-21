@@ -26,7 +26,7 @@ export function pdfCoverageText(coverage?: PDFCoverage) {
 
 /** 恢复过程按事件累计，明确区别于最终覆盖；诊断关闭时仍能凭任务编号定位。 */
 export function pdfFailureDetails(task: { id: string; status: string; diagnosticId?: string; failureCounts?: Record<string, number> }) {
-  if (!['partial', 'error', 'interrupted'].includes(task.status)) return ''
+  if (!['partial', 'error', 'interrupted', 'waiting'].includes(task.status)) return ''
   const labels: Record<string, string> = {
     OUTPUT_FAILED: uiText('模型批次失败', 'Model batch failed'),
     PLACEHOLDER_MISMATCH: uiText('公式或格式标记不匹配', 'Formula or formatting mismatch'),
@@ -47,6 +47,6 @@ export function pdfProviderFailure(error: unknown) {
   const value = error as { code?: unknown; status?: unknown }
   const code = typeof value?.code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/u.test(value.code) ? value.code : 'PROVIDER_FAILED'
   const status = typeof value?.status === 'number' ? value.status : undefined
-  const local = ['STREAM_EARLY_EOF', 'EMPTY_TRANSLATION', 'OUTPUT_TRUNCATED', 'OUTPUT_EMPTY', 'STREAM_INCOMPLETE', 'OUTPUT_RESOURCES_CHANGED', 'OUTPUT_PARTIAL', 'OUTPUT_FAILED', 'OUTPUT_CANCELLED'].includes(code)
+  const local = ['TRANSLATION_TIMEOUT', 'RECOVERY_PENDING', 'STREAM_EARLY_EOF', 'EMPTY_TRANSLATION', 'OUTPUT_TRUNCATED', 'OUTPUT_EMPTY', 'STREAM_INCOMPLETE', 'OUTPUT_RESOURCES_CHANGED', 'OUTPUT_PARTIAL', 'OUTPUT_FAILED', 'OUTPUT_CANCELLED'].includes(code)
   return { code, status, stop: !local || status === 401 || status === 402 || status === 403 || status === 429 || (status !== undefined && status >= 500) }
 }

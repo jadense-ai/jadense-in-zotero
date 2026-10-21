@@ -4,7 +4,7 @@ import { wireReadingBudgetSettings } from './translation-budget-settings'
 import type { ZoteroLike } from './runtime'
 import { pdfTranslationJobs, type PDFTranslationTask } from './pdf-translation-jobs'
 import { uiText } from './ui-preferences'
-import { pdfTranslationStatusView, type PDFStatusNotice } from './pdf-translation-status'
+import { pdfTranslationNeedsRetranslation, pdfTranslationStatusView, type PDFStatusNotice } from './pdf-translation-status'
 import { observeTheme } from './ui-preferences'
 import { READER_UI_THEME_CSS } from './reader-ui-theme'
 import { chromeContentUrl } from './chrome-registration'
@@ -95,6 +95,10 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
 .jdx-pdf-translation-popover .jdx-pdf-translation-group:last-child{border:0}
 .jdx-pdf-translation-popover .jdx-pdf-translation-group::before{content:attr(aria-label);padding:2px 8px;color:var(--jdx-reader-muted);font-size:calc(11px * var(--jdx-font-scale,1));font-weight:600}
 .jdx-pdf-translation-popover .jdx-pdf-translation-group>button{text-align:start;width:100%}
+.jdx-pdf-zoom{display:flex;flex-direction:column;gap:6px;padding:4px 8px}
+.jdx-pdf-zoom-controls{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.jdx-pdf-translation .jdx-pdf-zoom input{width:76px;min-width:0}
+.jdx-pdf-zoom-help{color:var(--jdx-reader-muted);font-size:.9em;line-height:1.5}
 .jdx-pdf-translation-search{min-width:210px}
 .jdx-pdf-scope{width:100%;padding:4px 0}
 .jdx-pdf-view{width:130px;min-width:100px;max-width:150px;flex:none;padding:0}
@@ -141,6 +145,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   let preparation = new AbortController()
   let linked = host.Prefs?.get('extensions.jadenseInZotero.pdfLinkedScroll', true) !== false
   let activeSide: 'native' | 'translation' = 'native'
+  let manualZoom = false
   const cleanups: (() => void)[] = []
   // 输入决定主导侧；目标视图延迟发出的 PDF.js 事件不能反向拉回正在操作的视图。
   const trackIntent = (target: Window, side: typeof activeSide) => {
@@ -183,7 +188,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   }
   const alignHeader = () => { const height = detached ? 0 : toolbar.offsetHeight; original.style.top = detached ? previousTop : `${height}px`; original.style.height = detached ? previousHeight : `calc(100% - ${height}px)` }
   const fit = () => {
-    if (!automaticPDFScale || native.currentScaleValue !== automaticPDFScale || currentMode !== 'compare' || detached || !api) return
+    if (manualZoom || !automaticPDFScale || native.currentScaleValue !== automaticPDFScale || currentMode !== 'compare' || detached || !api) return
     const current = nativeState()
     native.currentScaleValue = automaticPDFScale
     const state = { ...current, scale: native.currentScale }
@@ -199,7 +204,10 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     multiScreen.disabled = !api || openingWindow
     multiScreen.textContent = detached ? uiText('返回对照阅读', 'Return to comparison') : uiText('多屏模式', 'Multi-screen')
     multiScreen.title = detached ? uiText('关闭独立译文窗口，返回双栏对照阅读。', 'Close the separate translation window and return to comparison.') : uiText('在独立窗口阅读译文，可拖到另一块屏幕。', 'Read the translated PDF in a separate window that can be moved to another screen.')
-    alignHeader(); setNative(anchor); api?.set(anchor)
+    alignHeader()
+    // 独立滚动时，重挂载或进入多屏仍保留原文自己的缩放比例。
+    setNative(!linked ? { ...anchor, scale: native.currentScale } : anchor)
+    api?.set(anchor); updateZoom()
   }
   const viewHost = control(element('div'), 'view'); viewHost.className = 'jdx-pdf-scope jdx-pdf-view'; primary.append(viewHost)
   const viewSelect = createJdxSelect(viewHost, { ariaLabel: uiText('阅读视图', 'Reading view') })
@@ -225,6 +233,37 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     if (linked && api) { if (activeSide === 'translation') setNative(api.state()); else api.set(nativeState()) }
   }, 'sync')
   link.setAttribute('aria-pressed', String(linked)); link.title = uiText('开启后，两侧按页码和页内高度同步；关闭后可独立阅读。', 'Link page and relative vertical position, or scroll each PDF independently.')
+  const zoomGroup = element('div'), zoomLabel = element('div'), zoomControls = element('div'), zoomHelp = element('div')
+  zoomGroup.className = 'jdx-pdf-zoom'; zoomControls.className = 'jdx-pdf-zoom-controls'; zoomHelp.className = 'jdx-pdf-zoom-help'
+  zoomLabel.textContent = uiText('译文缩放', 'Translation zoom')
+  const zoom = control(element('input'), 'zoom'); zoom.type = 'number'; zoom.min = '25'; zoom.max = '500'; zoom.step = '10'
+  zoom.setAttribute('aria-label', uiText('译文缩放百分比', 'Translation zoom percent'))
+  const zoomOut = button('−', () => changeZoom((api?.state().scale ?? 1) * 100 - 10), 'zoom-out')
+  const zoomIn = button('+', () => changeZoom((api?.state().scale ?? 1) * 100 + 10), 'zoom-in')
+  const zoomReset = button('100%', () => changeZoom(100), 'zoom-reset')
+  for (const [node, label] of [[zoomOut, uiText('缩小译文', 'Zoom out translation')], [zoomIn, uiText('放大译文', 'Zoom in translation')], [zoomReset, uiText('恢复 100% 缩放', 'Reset zoom to 100%')]] as const) { node.title = label; node.setAttribute('aria-label', label) }
+  zoomLabel.append(zoomControls); zoomControls.append(zoomOut, zoom, '%', zoomIn, zoomReset)
+  zoomHelp.textContent = uiText('同步滚动开启时，两侧一起缩放。', 'With Sync scroll enabled, both PDFs zoom together.')
+  zoomGroup.append(zoomLabel, zoomHelp); navigation.prepend(zoomGroup)
+  /** 缩放只写阅读状态；保留页内锚点，未关联时不改动原文，也不触发翻译。 */
+  function changeZoom(percent: number) {
+    if (!api || showingOriginal || !Number.isFinite(percent)) { updateZoom(); return }
+    const anchor = { ...api.state(), scale: Math.round(Math.max(25, Math.min(500, percent))) / 100 }
+    manualZoom = true; activeSide = 'translation'
+    api.set(anchor)
+    if (linked) setNative(anchor)
+    updateZoom(); syncDetached()
+  }
+  function updateZoom() {
+    const percent = Math.round((lastReadingState?.scale ?? native!.currentScale) * 100), disabled = !api || showingOriginal
+    // 不覆盖正在编辑的数字；失焦或提交时再规范化显示。
+    const editing = doc.activeElement === zoom || Boolean(detachedPanel && detachedPanel.ownerDocument.activeElement === detachedPanel.querySelector('[data-pdf-control="zoom"]'))
+    if (!editing) zoom.value = String(percent)
+    zoom.disabled = zoomReset.disabled = disabled; zoomOut.disabled = disabled || percent <= 25; zoomIn.disabled = disabled || percent >= 500
+  }
+  zoom.addEventListener('change', () => { if (zoom.value.trim()) changeZoom(Number(zoom.value)); zoom.value = String(Math.round((lastReadingState?.scale ?? native.currentScale) * 100)); syncDetached() })
+  zoom.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); zoom.dispatchEvent(new win.Event('change')) } })
+  zoom.addEventListener('blur', () => { zoom.value = String(Math.round((lastReadingState?.scale ?? native.currentScale) * 100)); syncDetached() })
   const find = control(element('input'), 'find'); find.type = 'search'; find.placeholder = uiText('搜索译文', 'Find'); find.setAttribute('aria-label', find.placeholder); searchPanel.append(find)
   find.addEventListener('input', () => { activeSide = 'translation'; api?.find(find.value) }); find.addEventListener('keydown', event => { if (event.key === 'Enter') api?.find(find.value, true) })
   buttonGroup = saveGroup
@@ -239,11 +278,14 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   let detachedScope: JdxSelect | undefined
   scope.setOptions(scopeOptions, translationMode)
   scope.onChange(value => { translationMode = value as PDFTranslationMode; detachedScope?.setValue(value) })
-  const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), () => { savedTaskID = undefined; void start(true) }, 'regenerate')
+  const confirmUnconfirmed = () => win.confirm(uiText('原 BYOK 请求可能仍在执行，重新请求可能重复计费。是否继续？', 'The original BYOK request may still be running. A new request may incur duplicate charges. Continue?'))
+  // 新任务同样可能重复调用未确认的 BYOK 请求；与既有显式重试复用相同确认。
+  const retranslate = () => { if (task?.unconfirmed && !confirmUnconfirmed()) return; savedTaskID = undefined; void start(true) }
+  const regenerate = button(uiText('按当前设置重新翻译', 'Translate again with current settings'), retranslate, 'regenerate')
   cleanups.push(wireReadingBudgetSettings(host, configGroup, ['pdf']))
-  const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (task) jobs.retry(task.id); else void start() }, 'retry')
+  const retry = button(uiText('重试', 'Retry'), () => { if (task?.status === 'complete') void render(); else if (pdfTranslationNeedsRetranslation(task)) retranslate(); else if (task) jobs.retry(task.id); else void start() }, 'retry')
   const retryUnknown = button(uiText('重新请求未确认段落', 'Request unconfirmed passages again'), () => {
-    if (task && win.confirm(uiText('原 BYOK 请求可能仍在执行，重新请求可能重复计费。是否继续？', 'The original BYOK request may still be running. A new request may incur duplicate charges. Continue?'))) jobs.retry(task.id, true)
+    if (task && confirmUnconfirmed()) jobs.retry(task.id, true)
   }, 'retry-unconfirmed')
   retryUnknown.hidden = true; configGroup.append(retryUnknown)
   const cancel = button(uiText('取消', 'Cancel'), () => { if (task) jobs.cancel(task.id); preparation.abort() }, 'cancel')
@@ -258,7 +300,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   })
   const repair = control(element('button'), 'repair'); repair.type = 'button'; repair.textContent = uiText('修复引擎', 'Repair engine')
   repair.addEventListener('click', () => {
-    if (task?.status === 'running' || task?.status === 'queued') { notice = { text: uiText('请先取消当前任务，再修复引擎。', 'Cancel the current task before repairing the engine.'), tone: 'info' }; void render(); return }
+    if (task?.status === 'running' || task?.status === 'queued' || task?.status === 'waiting') { notice = { text: uiText('请先取消当前任务，再修复引擎。', 'Cancel the current task before repairing the engine.'), tone: 'info' }; void render(); return }
     preparation = new AbortController()
     void jobs.prepare(preparation.signal, stage => { notice = { text: stage === 'assets' ? uiText('准备模型和字体…', 'Preparing models and fonts…') : uiText('安装引擎…', 'Installing engine…'), tone: 'info' }; void render() }, true).then(() => { notice = { text: uiText('引擎已准备，请点击重试。', 'Engine ready. Click Retry.'), tone: 'info' }; void render() }).catch(error)
   })
@@ -281,7 +323,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     const statusPanel = root.querySelector<HTMLElement>('.jdx-pdf-translation-status-panel')!
     const menuBinding = bindReaderControlPopover(more, menu, root, () => select.close()), searchBinding = bindReaderControlPopover(search, searchBox, root), statusBinding = bindReaderControlPopover(statusChip, statusPanel, root)
     statusPopoverClosers.push(statusBinding.close)
-    const dismiss = (event: Event) => { if ((event.target as HTMLElement).closest('button[data-pdf-control]')) menuBinding.close() }
+    const dismiss = (event: Event) => { const target = event.target as HTMLElement; if (target.closest('button[data-pdf-control]') && !target.closest('.jdx-pdf-zoom')) menuBinding.close() }
     const moreClick = () => { searchBinding.close(); statusBinding.close() }, searchClick = () => { menuBinding.close(); statusBinding.close() }, statusClick = () => { menuBinding.close(); searchBinding.close() }
     more.addEventListener('click', moreClick); search.addEventListener('click', searchClick); statusChip.addEventListener('click', statusClick)
     menu.addEventListener('click', dismiss)
@@ -301,7 +343,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
         const value = source.getAttribute(name)
         if (value === null) copy.removeAttribute(name); else copy.setAttribute(name, value)
       }
-      if (source.localName === 'input') (copy as HTMLInputElement).value = (source as HTMLInputElement).value
+      if (source.localName === 'input' && (id !== 'zoom' || copy.ownerDocument.activeElement !== copy)) (copy as HTMLInputElement).value = (source as HTMLInputElement).value
     }
     // 状态徽章含 LED/chevron 子元素，不能用 textContent 压平；展开态由独立窗口本地弹层自管，不回写。
     const chipCopy = detachedPanel.querySelector<HTMLElement>('[data-pdf-control="status-toggle"]')!
@@ -312,7 +354,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     const chipLabelText = statusToggle.getAttribute('aria-label'); if (chipLabelText) chipCopy.setAttribute('aria-label', chipLabelText)
     const detachedReturn = detachedPanel.querySelector<HTMLButtonElement>('[data-pdf-control="multi-screen"]')
     if (detachedReturn) { detachedReturn.setAttribute('aria-label', detachedReturn.textContent || ''); detachedReturn.title = detachedReturn.textContent || '' }
-    detachedScope?.setValue(scope.getValue()); detachedScope?.setDisabled(task?.status === 'queued' || task?.status === 'running')
+    detachedScope?.setValue(scope.getValue()); detachedScope?.setDisabled(task?.status === 'queued' || task?.status === 'running' || task?.status === 'waiting')
     const statusContentCopy = detachedPanel.querySelector<HTMLElement>('.jdx-pdf-status-content')!
     const detailsOpen = statusContentCopy.querySelector('details')?.open
     statusContentCopy.replaceChildren(...Array.from(statusContent.childNodes, node => node.cloneNode(true)))
@@ -381,9 +423,10 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
          const id = copy.dataset.pdfControl!, source = controls.get(id)
          if (!source || id === 'scope' || id === 'more-toggle' || id === 'search-toggle' || id === 'close-main' || id === 'status-toggle') return
          if (copy.localName === 'button') copy.addEventListener('click', () => source.click())
-         else if (copy.localName === 'input') for (const name of ['input', 'change', 'keydown']) copy.addEventListener(name, event => {
+         else if (copy.localName === 'input') for (const name of ['input', 'change', 'keydown', 'blur']) copy.addEventListener(name, event => {
            (source as HTMLInputElement).value = (copy as HTMLInputElement).value
            source.dispatchEvent(name === 'keydown' ? new win.KeyboardEvent(name, cloneControlOptions({ key: (event as KeyboardEvent).key })) : new win.Event(name))
+           if (id === 'zoom' && (name === 'change' || name === 'blur' || name === 'keydown' && (event as KeyboardEvent).key === 'Enter')) (copy as HTMLInputElement).value = (source as HTMLInputElement).value
          })
        })
        const detachedScopeHost = detachedPanel.querySelector<HTMLElement>('[data-pdf-control="scope"]')!
@@ -408,7 +451,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
   const render = async () => {
     if (removed) return
     const detailsOpen = statusContent.querySelector('details')?.open
-    const busyTask = task && (task.status === 'queued' || task.status === 'running') ? task : undefined
+    const busyTask = task && (task.status === 'queued' || task.status === 'running' || task.status === 'waiting') ? task : undefined
     const view = pdfTranslationStatusView({ task, windowError, notice, hasOutput: task ? jobs.hasOutput(task) : false, speed: busyTask ? jobs.speed(busyTask.id) : undefined })
     notice = undefined
     statusToggle.hidden = !view.visible
@@ -429,15 +472,15 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
       details.open = Boolean(detailsOpen); summary.textContent = uiText('详细信息', 'Details'); detailBody.textContent = view.details; details.append(summary, detailBody); statusContent.append(details)
     }
     if (!task) return
-    const busy = task.status === 'queued' || task.status === 'running'
-    const hasOutput = jobs.hasOutput(task), resumeNeeded = !busy && task.status !== 'complete'
-    scope.setDisabled(busy); regenerate.disabled = busy; repair.hidden = hasOutput; cancel.hidden = !busy; retry.hidden = !resumeNeeded || hasOutput; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !hasOutput
-    retry.textContent = uiText('重试', 'Retry')
+    const busy = task.status === 'queued' || task.status === 'running' || task.status === 'waiting'
+    const hasOutput = jobs.hasOutput(task), resumeNeeded = !busy && task.status !== 'complete', needsRetranslation = pdfTranslationNeedsRetranslation(task)
+    scope.setDisabled(busy); regenerate.disabled = busy; repair.hidden = hasOutput; cancel.hidden = !busy; retry.hidden = !resumeNeeded || hasOutput && !needsRetranslation; retry.disabled = jobs.isActive(task.id); mono.disabled = dual.disabled = !hasOutput
+    retry.textContent = needsRetranslation ? regenerate.textContent : uiText('重试', 'Retry')
     retryUnknown.hidden = busy || !task.unconfirmed
     if (task.stage === 'finishing' && busy) cancel.disabled = true; else cancel.disabled = false
     taskAction.hidden = !busy && !resumeNeeded && mono.disabled
-    taskAction.textContent = busy ? uiText('取消', 'Cancel') : resumeNeeded ? hasOutput ? uiText('补译', 'Resume') : uiText('重试', 'Retry') : uiText('保存译文', 'Save PDF')
-    taskAction.title = busy ? uiText('取消翻译', 'Cancel translation') : resumeNeeded ? hasOutput ? uiText('补译未完成部分', 'Translate remaining passages') : retry.textContent || '' : uiText('保存译文', 'Save PDF')
+    taskAction.textContent = busy ? uiText('取消', 'Cancel') : resumeNeeded ? needsRetranslation ? retry.textContent : hasOutput ? uiText('补译', 'Resume') : uiText('重试', 'Retry') : uiText('保存译文', 'Save PDF')
+    taskAction.title = busy ? uiText('取消翻译', 'Cancel translation') : resumeNeeded ? needsRetranslation ? retry.textContent || '' : hasOutput ? uiText('补译未完成部分', 'Translate remaining passages') : retry.textContent || '' : uiText('保存译文', 'Save PDF')
     taskAction.setAttribute('aria-label', taskAction.title)
     taskAction.disabled = busy ? cancel.disabled : resumeNeeded ? retry.disabled : mono.disabled
     alignHeader()
@@ -473,9 +516,9 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
             const utils = (globalThis as unknown as { Components: { utils: { cloneInto<T>(data: T, target: Window): T; exportFunction<T extends (...args: never[]) => unknown>(callback: T, target: Window): T } } }).Components.utils
             const clone = <T,>(data: T) => utils.cloneInto(data, window)
             resolve({
-              open(data, notify, source) { return value.open(clone(data), utils.exportFunction((state: string) => { lastReadingState = normalizedPDFState(JSON.parse(state)); notify(lastReadingState); syncDetached() }, window), source) },
+              open(data, notify, source) { return value.open(clone(data), utils.exportFunction((state: string) => { lastReadingState = normalizedPDFState(JSON.parse(state)); notify(lastReadingState); updateZoom(); syncDetached() }, window), source) },
               state: () => lastReadingState = normalizedPDFState(JSON.parse(value.stateJSON())),
-              set: state => { lastReadingState = normalizedPDFState(state); value.set(clone(state)); syncDetached() },
+              set: state => { lastReadingState = normalizedPDFState(state); value.set(clone(state)); updateZoom(); syncDetached() },
               find: (query, again) => value.find(query, again),
               destroy: () => value.destroy(),
             })
@@ -489,7 +532,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
       frame.hidden = false
       const workerResponse = await hostWindow.fetch('chrome://jadense-pdf-reader/content/viewer-worker.js')
       const restoring = Boolean(restoredAnchor), anchor = previousAPI?.state() ?? restoredAnchor ?? nativeState()
-      const pages = await api.open(bytes, state => { if (!current() || !loadedID || activeSide !== 'translation') return; if (linked || currentMode === 'inplace') setNative(state) }, await workerResponse.text())
+      const pages = await api.open(bytes, state => { if (!current() || !loadedID || activeSide !== 'translation') return; if (linked || currentMode === 'inplace') setNative(linked ? state : { ...state, scale: native.currentScale }) }, await workerResponse.text())
       if (!current()) return
       if (pages !== renderingTask.pages) throw new Error('Translated PDF page count changed')
       const finalAnchor = previousAPI ? lastReadingState ?? anchor : anchor
@@ -497,7 +540,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
     } catch (value) { if (current()) { if (!previousAPI) { void api?.destroy(); api = undefined; frame.hidden = true } applyMode(); error(value); retry.hidden = false } } finally { if (current()) { loadingID = ''; if (`${task!.id}:${task!.artifact?.revision ?? 'legacy'}` !== artifactID) void render() } }
   }
   const unsubscribe = jobs.subscribe(() => { void render() })
-  const speedTimer = win.setInterval(() => { if (task?.status === 'running' || task?.status === 'queued') void render() }, 1000)
+  const speedTimer = win.setInterval(() => { if (task?.status === 'running' || task?.status === 'queued' || task?.status === 'waiting') void render() }, 1000)
   cleanups.push(() => win.clearInterval(speedTimer))
   let starting = false
   const start = async (fresh = false) => {
@@ -509,6 +552,7 @@ async function mountPDFTranslation(host: ZoteroLike, reader: Reader, mode: 'comp
         : savedTaskID ? jobs.get(savedTaskID) : await jobs.openOrStart(reader.itemID, translationMode)
       if (!next || (savedTaskID && next.source.itemID !== reader.itemID)) throw new Error(uiText('翻译记录不可用。', 'Translation record unavailable.'))
       if (removed) return
+      if (fresh) windowError = ''
       if (task && task.id !== next.id) { renderEpoch++; void api?.destroy(); api = undefined; loadedID = loadingID = ''; frame.hidden = true }
       task = next; translationMode = task.mode ?? 'full'; scope.setValue(translationMode); panel.dataset.pdfTaskId = next.id; applyMode(); await render()
     } catch (value) { error(value); retry.hidden = false }

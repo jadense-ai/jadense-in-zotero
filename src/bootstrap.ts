@@ -6,7 +6,7 @@ import { selectedClassificationIDs } from './zotero/classification'
 import { openClassificationWindow, closeClassificationWindow } from './zotero/classification-window'
 declare const __JADENSE_BUILD_ID__: string
 import { saveDiagnosticExport } from './zotero/diagnostics-panel'
-import { stopAnalysisRuntime } from './zotero/analysis-runtime'
+import { analysisRuntime, stopAnalysisRuntime } from './zotero/analysis-runtime'
 import { diagnostics, stopDiagnostics } from "@/zotero/diagnostics"
 import { installedPluginVersion } from "@/zotero/manager-help"
 import { chatRuntime, stopChatRuntime } from "@/zotero/chat-runtime"
@@ -393,9 +393,19 @@ async function startup(data: BootstrapData = {}) {
     void jobs.ready.catch(error => { if (active()) { const failure = lifecycleTrace(Zotero, 'initialization', 'document_restore'); failure.fail(error, 'document_restore_failed'); failure.end('error') } })
   })
   await step('chat_runtime', () => { chatRuntime(Zotero) })
+  await step('analysis_runtime', () => {
+    // 恢复以前明确运行的任务；异步磁盘/网络恢复不阻塞 Reader 注册。
+    void analysisRuntime(Zotero).restore().catch(error => {
+      if (active()) { const failure = lifecycleTrace(Zotero, 'initialization', 'analysis_restore'); failure.fail(error, 'analysis_restore_failed'); failure.end('error') }
+    })
+  })
   // 服务在插件后台 realm 创建；先在设置安装后关闭窗口，任务仍须可执行。
-  // 此处只创建队列，不下载、扫描用户文件或加载模型。
-  await step('pdf_runtime', () => { pdfTranslationJobs(Zotero) })
+  // 恢复记录中的运行意图，旧记录和用户暂停的任务只读展示。
+  await step('pdf_runtime', () => {
+    void pdfTranslationJobs(Zotero).initialize().catch(error => {
+      if (active()) { const failure = lifecycleTrace(Zotero, 'initialization', 'pdf_restore'); failure.fail(error, 'pdf_restore_failed'); failure.end('error') }
+    })
+  })
   await step('reader_tools', () => {
     unregisterReaderTools = registerReaderTools(Zotero, pluginContext.pluginID, (action, hooks) => {
       if (action.kind === "translate") {
@@ -428,10 +438,10 @@ async function startup(data: BootstrapData = {}) {
   log(degraded ? 'startup_degraded' : 'startup_complete'); log('started')
 }
 
-function shutdown() {
+async function shutdown() {
   stopped = true; lifecycleGeneration++; cancelStartupWait?.(); cancelStartupWait = undefined
   const trace = lifecycleTrace(Zotero, 'initialization', 'shutdown')
-  const cleanups: Array<[string, () => void]> = [
+  const cleanups: Array<[string, () => unknown]> = [
     ['optional', () => stopOptionalFeatures(Zotero)],
     ['analysis', () => stopAnalysisRuntime(Zotero)], ['chat', () => stopChatRuntime(Zotero)], ['documents', () => stopDocumentJobs(Zotero)],
     ['pdf', () => stopPDFTranslationJobs(Zotero)],
@@ -444,7 +454,7 @@ function shutdown() {
     ['chrome', () => { const handle = registeredChromeContent; registeredChromeContent = null; unregisterChromeContent(handle) }],
   ]
   let failed = false
-  for (const [stage, cleanup] of cleanups) { trace.event(stage); try { cleanup() } catch (error) { failed = true; trace.fail(error, stage, 'SHUTDOWN_COMPONENT_FAILED') } }
+  for (const [stage, cleanup] of cleanups) { trace.event(stage); try { await cleanup() } catch (error) { failed = true; trace.fail(error, stage, 'SHUTDOWN_COMPONENT_FAILED') } }
   trace.end(failed ? 'error' : 'success'); log('stopped')
   try { stopDiagnostics(Zotero) } catch { /* 诊断不能阻止卸载。 */ }
   smokeManagerOpened = false; smokeLocalizationProbed = false

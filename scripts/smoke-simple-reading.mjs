@@ -1,4 +1,5 @@
 /* global Services, PathUtils, IOUtils */
+import { verifySimpleReadingSize } from './smoke-translation-size.mjs'
 /** 隔离宿主简阅检查；缺私有 API 时只证明降级，不冒充完整 SDT 验收。 */
 export async function verifySimpleReading({ Zotero, reader, assert, waitFor, screenshot, report, config }) {
   const doc = reader._iframeWindow.document, internal = reader._internalReader
@@ -90,6 +91,7 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
     control(panel, /^翻译$|^Translate$/u).click()
     await waitFor(() => Zotero.__jadenseSimpleReading.list()[0]?.status === 'complete', 'simulated reading translation', 180000)
     await waitFor(() => mirror.textContent.includes('模拟译文'), 'incremental translated text')
+    await verifySimpleReadingSize({ Zotero, reader, panel, assert, waitFor, screenshot, report })
     assert(!language(panel, /译文|Translation/u).disabled, 'Translation language remained disabled after output')
     const requestsBeforeLanguage = requests
     language(panel, /原文|Original/u).click()
@@ -146,6 +148,7 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
     const detached = await waitFor(() => { const windows = Services.wm.getEnumerator(null); while (windows.hasMoreElements()) { const candidate = windows.getNext(); if (!candidate.closed && /简阅译文|Reading translation/u.test(candidate.document.title)) return candidate }; return null }, 'separate reading window').catch(error => { throw new Error(`${error}; status=${panel.querySelector('.jdx-simple-status')?.textContent}; toggle=${panel.querySelector('.jdx-simple-status-toggle')?.textContent}; option=${view(panel, /多屏阅读|Separate window/u)?.outerHTML}`) })
     const detachedFrame = await waitFor(() => detached.document.getElementById('translation-host')?.contentDocument?.querySelector('iframe'), 'separate reading iframe')
     await waitFor(() => detachedFrame.contentDocument?.body.textContent.includes('模拟译文'), 'separate translated text')
+    await verifySimpleReadingSize({ Zotero, reader, panel: detachedFrame.closest('.jdx-simple-reading'), detached, assert, waitFor, screenshot, report })
     await screenshot('simple-reading-detached', detached)
     detached.close()
     await waitFor(() => panel.querySelector('iframe')?.contentDocument?.body.textContent.includes('模拟译文'), 'return to compare')
@@ -193,6 +196,7 @@ export async function verifySimpleReading({ Zotero, reader, assert, waitFor, scr
     control(panel, /退出简阅|Close reading mode/u).click(); await waitFor(() => !doc.querySelector('.jdx-simple-reading'), 'close translated reading')
     button.click()
     const reopened = await waitFor(() => { const p = doc.querySelector('.jdx-simple-reading'); return p?.querySelector('iframe')?.contentDocument?.body.textContent.includes('模拟译文') ? p : null }, 'cached reading')
+    assert(reopened.querySelector('[data-simple-reading-font-scale]')?.value === '160', 'Reopened simple reading lost text size')
     assert(requests === count, 'Cache reopen contacted translation service')
     control(reopened, /退出简阅|Close reading mode/u).click(); await waitFor(() => !doc.querySelector('.jdx-simple-reading'), 'close cached reading')
     button.click(); await waitFor(() => doc.querySelector('.jdx-simple-reading'), 'reopen reading theme checks')
@@ -295,7 +299,9 @@ export async function verifySimpleReadingRestart({ Zotero, assert, waitFor, repo
     const doc = reader._iframeWindow.document, button = await waitFor(() => doc.querySelector('[data-jadense-simple-reading]'), 'restart reading entry')
     button.click()
     await waitFor(() => doc.querySelector('.jdx-simple-reading iframe')?.contentDocument?.body.textContent.includes('模拟译文'), 'cold cached reading')
+    assert(String(Zotero.Prefs.get('extensions.jadenseInZotero.simpleReadingFontScale', true)) === '160'
+      && doc.querySelector('[data-simple-reading-font-scale]')?.value === '160', 'Cold restart lost simple reading text size')
     assert(requests === 0, 'Cold cache contacted translation service')
-    report.checks.push('simple-reading-cold-restart-zero-provider-requests')
+    report.checks.push('simple-reading-cold-restart-zero-provider-requests', 'simple-reading-text-size-cold-restart')
   } finally { main.fetch = originalFetch }
 }

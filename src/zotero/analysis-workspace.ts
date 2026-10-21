@@ -2,6 +2,7 @@
 import { updateChatMarkdown } from "@/chat/markdown"
 import { parseResearchPresentation } from "@/chat/research-presentation"
 import type { PaperAnalysisRecord, PaperAnalysisSource } from "@/chat/paper-analysis-history"
+import { analysisWarningsForDisplay } from "@/chat/paper-analysis-warnings"
 import { analysisPapers, paperKey, type AnalysisPaper } from "./analysis-workspace-model"
 import { documentJobs } from "./document-jobs"
 import type { DocumentTask } from "./document-store"
@@ -9,9 +10,10 @@ import { mountReferenceDetails, type ReferencePreparation } from "./reference-wo
 import type { ZoteroLike } from "./runtime"
 import { getUiLocale, uiText } from "./ui-preferences"
 import { actionIcon, action, badge, bindTabs, element, notice } from "./ui/controls"
+import { analysisRuntime } from './analysis-runtime'
 
 export type AnalysisDetailTab = "summary" | "notes" | "references"
-export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; error?: boolean; retrying?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
+export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; resumable?: boolean; error?: boolean; retrying?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
 const timeText = (value: string) => new Date(value).toLocaleString(getUiLocale(), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 const metadataText = (source: PaperAnalysisSource) => [source.authors.join("、"), source.date || source.year, source.publicationTitle].filter(Boolean).join(" · ")
 /** 翻译固定展示标题，不改写已保存的模型正文或笔记备份。 */
@@ -41,7 +43,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
   const runs = new Map<string, AnalysisRunView>(), papers = new Map<string, AnalysisPaper>()
   const openedSources = new Map<string, PaperAnalysisSource>()
   const rows = new Map<string, { root: HTMLElement; title: HTMLButtonElement; meta: HTMLElement; preview: HTMLElement; state: HTMLElement; date: HTMLElement }>()
-  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; stop: HTMLButtonElement; summary: HTMLElement; notes: HTMLElement; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
+  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; summary: HTMLElement; notes: HTMLElement; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
   const details = new Map<string, Detail>()
   let selected: string | undefined, savedScroll = 0, disposed = false, detailSequence = 0
   const labels: Record<AnalysisDetailTab, string> = { summary: uiText("解析总结", "Summary"), notes: uiText("解析笔记", "Analysis notes"), references: uiText("参考文献", "References") }
@@ -89,7 +91,8 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     hero.append(eyebrow, title, meta, date)
     const run = element(doc, "div", "jdx-detail-run"), status = notice(doc), stop = action(doc, uiText("停止本次解析", "Stop analysis"), () => { reference.pause(); options.stop(papers.get(key)!.source) })
     actionIcon(backButton, "back"); actionIcon(nav.lastElementChild as HTMLButtonElement, "open"); actionIcon(stop, "stop")
-    run.append(status, stop)
+    const resume = action(doc, uiText('继续解析', 'Continue analysis'), () => { void analysisRuntime(host).start(papers.get(key)!.source.itemID) })
+    run.append(status, stop, resume)
     const warning = notice(doc), tablist = element(doc, "div", "jdx-tabs jdx-detail-tabs")
     tablist.setAttribute("role", "tablist"); tablist.setAttribute("aria-label", uiText("解析结果", "Analysis results"))
     const panels = tabNames.map(name => { const panel = element(doc, "section", "jdx-detail-panel"); panel.id = `${prefix}-${name}`; panel.setAttribute("role", "tabpanel"); panel.setAttribute("aria-labelledby", `${prefix}-tab-${name}`); return panel })
@@ -100,7 +103,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     if (options.embedded) { nav.hidden = true; hero.hidden = true }
     if (options.hideTabs) { tablist.hidden = true; panels.forEach(panel => { panel.removeAttribute("role"); panel.removeAttribute("aria-labelledby") }) }
     const reference = mountReferenceDetails(panels[2], host, paper.source, task => { options.onReferenceTask(paper.source, task); refresh() })
-    const detail: Detail = { root: container, title, meta, date, warning, status, stop, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
+    const detail: Detail = { root: container, title, meta, date, warning, status, stop, resume, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
     const cleanup = bindTabs(tabs, i => selectTab(detail, tabNames[i]))
     detail.cleanup = () => { cleanup(); reference.remove() }
     details.set(key, detail); root.append(container); container.hidden = true; selectTab(detail, "summary", false)
@@ -113,10 +116,11 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.date.textContent = [record ? uiText(`解析于 ${timeText(record.createdAt)}`, `Analyzed ${timeText(record.createdAt)}`) : uiText("尚未生成解析总结", "No analysis summary yet"), uiText("本地保存", "Stored locally")].join(" · ")
     if (!record) detail.date.textContent = run?.busy ? uiText('正在解析 · 可继续阅读', 'Analyzing · Keep reading') : ''
     detail.status.setAttribute('role', 'status')
-    detail.status.textContent = run?.busy || run?.error ? run.message : ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
-    detail.stop.hidden = !(run?.busy || run?.references?.running || paper.references?.status === "running")
-    detail.status.parentElement!.hidden = !detail.status.textContent && detail.stop.hidden
-    detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...(record?.warnings || [])].filter(Boolean).join("\n")
+    detail.status.textContent = run?.busy || run?.error || run?.resumable ? run.message : ""; detail.status.dataset.kind = run?.error ? "error" : run?.busy || run?.references?.running ? "running" : "neutral"
+    detail.stop.hidden = !(run?.busy || run?.retrying || run?.references?.running || paper.references?.status === "running")
+    detail.resume.hidden = !run?.resumable || run.busy || Boolean(run.retrying)
+    detail.status.parentElement!.hidden = !detail.status.textContent && detail.stop.hidden && detail.resume.hidden
+    detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...analysisWarningsForDisplay(record)].filter(text => text && text !== detail.status.textContent).join("\n")
     detail.warning.dataset.kind = record && options.unsaved(record.id) ? "error" : "neutral"
     const signature = JSON.stringify([record || null, Boolean(run?.busy), Boolean(run?.error)])
     if (signature !== detail.signature) {
@@ -160,8 +164,9 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
       row.title.textContent = paper.source.title; row.meta.textContent = metadataText(paper.source); row.meta.hidden = !row.meta.textContent
       row.date.textContent = timeText(paper.date)
       updateChatMarkdown(row.preview, paper.record?.summary || (running ? uiText("正在整理解析结果…", "Preparing analysis results…") : paper.references ? uiText("可进入详情查看参考文献。", "Open the details to view references.") : uiText("尚未生成解析结果。", "No analysis results yet.")))
-      row.state.textContent = running ? uiText("解析中", "In progress") : run?.error ? uiText("解析未完成", "Incomplete") : paper.record?.warnings?.length || (paper.record && options.unsaved(paper.record.id)) ? uiText("结果待核对", "Review needed") : paper.record ? uiText("已解析", "Analyzed") : uiText("参考文献", "References")
-      row.state.dataset.state = running ? "busy" : paper.record && !paper.record.warnings?.length ? "success" : "neutral"
+      const warnings = analysisWarningsForDisplay(paper.record)
+      row.state.textContent = running ? uiText("解析中", "In progress") : run?.error ? uiText("解析未完成", "Incomplete") : warnings.length || (paper.record && options.unsaved(paper.record.id)) ? uiText("结果待核对", "Review needed") : paper.record ? uiText("已解析", "Analyzed") : uiText("参考文献", "References")
+      row.state.dataset.state = running ? "busy" : paper.record && !warnings.length ? "success" : "neutral"
       if (details.has(paper.key)) updateDetail(paper, details.get(paper.key)!)
     }
     let cursor = list.firstElementChild

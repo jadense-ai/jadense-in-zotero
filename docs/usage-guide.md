@@ -2,10 +2,37 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.13 任务继续、解析状态与阅读字号（候选版）](#update-0613)
 - [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0613"></a>
+
+## 0.6.13：任务继续、解析状态与阅读字号（候选版，尚未发布）
+
+- **继续解析与对照翻译**：文献解析详情新增「继续解析」。网络、限流等可恢复故障会保留进度并等待恢复；重启 Zotero 后，此前明确运行的新版解析和 PDF 翻译任务可继续。主动点击停止或取消后保持暂停，需手动继续；关闭工作台或阅读面板不会停止后台任务。旧任务缺少运行记录时不会自动开始收费请求。
+- **复用已完成内容**：恢复优先核对原请求并复用已完成内容。解析模型结果完整保存后，只补本地历史与批注；PDF 译文已保存、但生成 PDF 或保存文件失败时，只重做本地排版或保存。账号、权限、原 PDF 或模型设置不匹配时，先按状态提示处理；未确认的 BYOK 执行需先核对提供商，不能保证自动恢复。补充缺失内容或主动重新翻译仍可能产生费用，攻玉请求恢复依赖相应服务端支持。
+- **看清解析状态**：正常完成不会仅因长文抽样说明显示「解析异常」。暂停、等待恢复与需处理的问题分别显示；影响阅读的缺页、模型失败和保存失败仍保留。长文覆盖策略不变，仍应对照原文核查结论；已有总结与笔记正文不会被改写。
+- **选文与简阅字号**：选文翻译浮窗左下角「外观 → 译文字号」支持 80%–200%，只调整译文正文。「简阅操作 → 阅读与视图 → 文字大小」支持相同范围；多屏简阅窗口也提供「文字大小」。两者各自保存，默认 100%，可恢复默认，不改变原 PDF 或重新请求翻译。
+- **PDF 译文缩放**：在对照翻译的「更多 → 阅读与视图 → 译文缩放」输入 25%–500%，或使用加减与 100% 按钮。开启「同步滚动」时两侧一起缩放；关闭后可单独调整译文。显示调整保留阅读位置，不改变译文内容，也不触发翻译。
+- **PDF 失效任务的操作**：若任务提示来源或翻译配置已变化，主按钮和重试入口改为「按当前设置重新翻译」，明确新建任务并保留旧成果。存在未确认 BYOK 请求时，会先提示重复计费风险。若你未修改 PDF 或设置却收到这一提示，原始原因仍在调查；此入口改进不代表根因已解决。可先保留成果并从「帮助 → 错误诊断」导出诊断，再决定是否重新翻译。
+- **安装与兼容**：0.6.13 尚未发布，当前正式下载仍为 [0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12)。正式发布后，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」覆盖安装本版 XPI 并重启。相同 .cn 身份保留设置和本地历史；已暂停任务不会因升级自动执行。官方完整包包含发现前沿，公开源码构建为基础版；官网自动更新渠道独立。
+
+### English
+
+Analysis details add **Continue analysis**. Recoverable network or rate-limit failures retain progress and wait before continuing. New analysis and PDF translation tasks that were running can resume after restarting Zotero; explicitly stopped or cancelled tasks remain paused until you continue them. Closing a workspace or reading panel does not stop background work. Older tasks without a saved running state do not automatically start paid requests.
+
+Recovery first checks the original request and reuses completed work. Once analysis output is fully saved, only local history or annotations need completion. If translated passages are saved but PDF generation or file saving fails, recovery only repeats local typesetting or saving. Resolve account, permission, source-PDF or model-setting issues as indicated. Check the provider before retrying an unconfirmed BYOK request; automatic recovery is not guaranteed. Generating missing content or translating again may incur fees, and Jadense request recovery requires matching server support.
+
+Sampling notices no longer mark completed analysis as failed. Paused, waiting and action-required states are distinct; missing pages and model/save failures remain visible. Long-paper coverage is unchanged, and existing summaries and notes are not rewritten. Continue checking conclusions against the original paper.
+
+Use **Appearance → Translation text size** in the selection-translation panel for 80%–200% text size. In Reading mode, use **Reading actions → Reading and view → Text size**; the separate window also provides Text size. Both settings are saved independently and default to 100%. In bilingual PDF translation, use **More → Reading and view → Translation zoom** for 25%–500% zoom. With Sync scroll enabled, both PDFs zoom together; otherwise only the translation changes. These controls do not change translation content or send model requests, and PDF zoom preserves the reading position.
+
+Tasks blocked by source or configuration checks now offer **Translate again with current settings**, which starts a new task and retains old results. Unconfirmed BYOK requests still require confirmation of possible duplicate charges. Reports of configuration-change errors without changes to the PDF or settings remain under investigation; the clearer action does not resolve that original cause. Preserve existing results and export diagnostics from **Help → Error diagnostics** before deciding whether to translate again.
+
+0.6.13 is not yet released; [0.6.12 remains the official download](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12). Once released, install the new XPI over the existing plugin and restart Zotero. Settings and local history for the same .cn identity are retained; paused tasks stay paused. Official full packages include Discover frontiers, while public-source builds are base distributions. Website updates are managed separately.
 
 <a id="update-0612"></a>
 
@@ -73,7 +100,7 @@ Reading/PDF translation better preserves partial results and reports stopped or 
   - [4.1 语言、主题与快捷键](#appearance)
   - [4.2 上传到攻玉](#upload)
 
-本指南适用于已发布的 0.6.10。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
+本指南包含 0.6.12 及之前的正式版操作；0.6.13 变化在上方单独标记为候选版。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
 
 <a id="install"></a>
 

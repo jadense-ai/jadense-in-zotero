@@ -43,7 +43,11 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   const files = new Map<string, string>()
   const platform = { IOUtils: { exists: async () => true, makeDirectory: async () => {}, writeUTF8: async (file: string, text: string) => { files.set(file, text) }, readUTF8: async (file: string) => files.get(file)!, getChildren: async () => [...files.keys()] }, PathUtils: { profileDir: 'test', join: (...parts: string[]) => parts.join('/'), filename: (file: string) => file.split('/').at(-1)! } } as unknown as PDFPlatform
   const jobs = new SimpleReadingJobs(new SimpleReadingStore(platform))
-  const host = { __jadenseSimpleReading: jobs } as ZoteroLike
+  const preferences = new Map<string, unknown>([['extensions.jadenseInZotero.simpleReadingFontScale', '120']])
+  const detachedWindow = new JSDOM('<iframe id="translation-host"></iframe>', { pretendToBeVisual: true }).window
+  const closeDetached = detachedWindow.close.bind(detachedWindow)
+  detachedWindow.close = () => { detachedWindow.dispatchEvent(new detachedWindow.Event('unload')); closeDetached() }
+  const host = { __jadenseSimpleReading: jobs, Prefs: { get: (key: string) => preferences.get(key), set: (key: string, value: unknown) => preferences.set(key, value) }, getMainWindow: () => Object.assign(window, { openDialog: () => detachedWindow }) } as unknown as ZoteroLike
   let release: (output: Record<string, string>) => void = () => {}
   const send = vi.fn<ReadingTransport['send']>().mockImplementationOnce(async () => new Promise(resolve => { release = resolve })).mockResolvedValue({})
   vi.mocked(readingTransport).mockResolvedValue({ configuration: 'test', limit: 10000, concurrency: 2, machine: false, cost: text => text.length, send })
@@ -78,8 +82,16 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   const readingDocument = panel.querySelector('iframe')!.contentDocument!
   expect(readingDocument.body.style.inlineSize).toBe('100%')
   expect(readingDocument.body.style.boxSizing).toBe('border-box')
+  const fontSize = panel.querySelector<HTMLInputElement>('[data-simple-reading-font-scale]')!
+  expect(fontSize, 'Reading content has an independent text-size control').not.toBeNull()
+  expect(fontSize.value).toBe('120')
+  expect(readingDocument.documentElement.style.getPropertyValue('--scale')).toBe('1.2')
   pdf.currentScale = 1.5; pdf.eventBus.dispatch('scalechanging')
-  await vi.waitFor(() => expect(readingDocument.documentElement.style.getPropertyValue('--scale')).toBe('1.5'))
+  await vi.waitFor(() => expect(readingDocument.documentElement.style.getPropertyValue('--scale')).toBe('1.8'))
+  fontSize.value = '130'; fontSize.dispatchEvent(new window.Event('input', { bubbles: true }))
+  expect(readingDocument.documentElement.style.getPropertyValue('--scale')).toBe('1.95')
+  expect(preferences.get('extensions.jadenseInZotero.simpleReadingFontScale')).toBe('130')
+  expect(pdf.currentScale).toBe(1.5)
   expect(frame.contentDocument?.body.textContent).toBe('Original PDF')
   expect(send).not.toHaveBeenCalled()
   button(/^(翻译|Translate)$/u).click()
@@ -95,12 +107,25 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   const requestsBeforeLanguage = send.mock.calls.length
   languageButton(/原文|Original/u).click()
   await vi.waitFor(() => expect(mirror.querySelector('[data-ref-path="0"]')?.textContent).toBe('First paragraph'))
-  expect(mirror.documentElement.style.getPropertyValue('--scale')).toBe('1.5')
+  expect(mirror.documentElement.style.getPropertyValue('--scale')).toBe('1.95')
   expect(languageButton(/原文|Original/u).getAttribute('aria-pressed')).toBe('true')
   expect(send).toHaveBeenCalledTimes(requestsBeforeLanguage)
   languageButton(/译文|Translation/u).click()
   await vi.waitFor(() => expect(mirror.querySelector('[data-ref-path="0"]')?.textContent).toBe('第一段译文'))
   expect(send).toHaveBeenCalledTimes(requestsBeforeLanguage)
+  viewOption(/多屏阅读|Separate window/u).click()
+  const detachedDocument = detachedWindow.document.querySelector('iframe')!.contentDocument!
+  await vi.waitFor(() => expect(detachedDocument.querySelector<HTMLIFrameElement>('.jdx-simple-reading iframe')?.contentDocument?.documentElement.style.getPropertyValue('--scale')).toBe('1.95'))
+  const detachedSize = detachedDocument.querySelector<HTMLInputElement>('[data-simple-reading-font-scale]')!
+  expect(detachedSize.value).toBe('130')
+  detachedSize.value = '160'; detachedSize.dispatchEvent(new detachedWindow.Event('input', { bubbles: true }))
+  expect(fontSize.value).toBe('160')
+  expect(detachedDocument.querySelector<HTMLIFrameElement>('.jdx-simple-reading iframe')?.contentDocument?.documentElement.style.getPropertyValue('--scale')).toBe('2.4')
+  expect(pdf.currentScale).toBe(1.5)
+  expect(send).toHaveBeenCalledTimes(requestsBeforeLanguage)
+  detachedWindow.close()
+  await vi.waitFor(() => expect(mirror.documentElement.style.getPropertyValue('--scale')).toBe('2.4'))
+  expect(mirror.querySelector('[data-ref-path="0"]')?.textContent).toBe('第一段译文')
   expect(root.textContent).toBe('First paragraphSecond paragraph')
   expect(frame.contentDocument?.body.textContent).toBe('Original PDF')
   viewOption(/简阅内容|Reading content/u).click(); expect(frame.style.visibility).toBe('hidden')
@@ -120,6 +145,8 @@ it('gates empty and loading views, marks missing paragraphs, and clears markers 
   expect(acquireNativeReading).toHaveBeenCalledTimes(acquisitions)
   restored(); await reopening
   expect(acquireNativeReading).toHaveBeenCalledTimes(acquisitions + 1)
+  expect(window.document.querySelector<HTMLInputElement>('[data-simple-reading-font-scale]')?.value).toBe('160')
+  expect(window.document.querySelector<HTMLIFrameElement>('.jdx-simple-reading iframe')?.contentDocument?.documentElement.style.getPropertyValue('--scale')).toBe('1.6')
   stopSimpleReadingReaders(); window.close()
 })
 

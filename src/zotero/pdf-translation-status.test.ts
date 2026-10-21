@@ -55,6 +55,14 @@ describe("pdfTranslationStatusView", () => {
     expect(waiting.details).toContain("等待 12 秒")
   })
 
+  it("持久等待展示自动恢复倒计时，本地排版重试说明不会重新翻译", () => {
+    const now = 1_000_000
+    const waiting = view({ now, hasOutput: true, task: makeTask({ status: 'waiting', phase: 'render', desiredState: 'running', recovery: { attempt: 3, nextAt: now + 30_000, reason: 'PDF_RENDER_FAILED' } }) })
+    expect(waiting).toMatchObject({ kind: 'waiting', led: 'warning', working: true })
+    expect(waiting.label).toContain('30 秒后自动继续')
+    expect(waiting.lines.join('\n')).toContain('不会重新翻译')
+  })
+
   it("运行中的临时错误不覆盖工作状态,错误与速度进入详情", () => {
     const running = view({ task: makeTask({ status: "running", completed: 3, total: 9, error: "Synthetic temporary warning" }), speed: makeSpeed() })
     expect(running.kind).toBe("working")

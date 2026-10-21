@@ -24,6 +24,8 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
+**v0.6.13 candidate, not yet released:** Paper analysis and bilingual PDF translation retain progress for continuation. Sampling notices no longer mark completed analysis as failed. Selection translation, Reading mode and translated PDFs gain separate text-size or zoom controls, with a clearer restart action for blocked PDF tasks. [Setup, upgrade and known limitations](docs/usage-guide.md#update-0613).
+
 **v0.6.12 is released:** Discover frontiers separates home, progress and results, refreshes paper cards and saving actions, and adds all-keyword / any-keyword search modes with help. The official full package includes Discover frontiers; public-source builds are base distributions. [Setup and upgrade notes](docs/usage-guide.md#update-0612) · [Download the official package](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12).
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
@@ -110,7 +112,7 @@ Choose **API access** to connect models to Zotero; choose **membership subscript
 | [Official plugin page](https://jadense.cn/plugin/zotero) | Get the `.xpi` from the page's download entry, then follow [Zotero's plugin installation instructions](https://www.zotero.org/support/plugins) | Use the version, compatibility range, and availability shown on the official page |
 | [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | Download the current official XPI, then open it from Zotero **Tools → Plugins → gear → Install Plugin From File…** | The latest official release is [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12), with metadata and SHA-256 checksums |
 | Zotero automatic update | In Zotero, open **Tools → Plugins → gear → Check for Updates** | Uses the [official Jadense update manifest](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json); this channel is maintained separately from GitHub Releases, so use a manual method if the new version is not listed |
-| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.12/jadense-in-zotero-v0.6.12.xpi` | The current public source builds the base distribution; Frontier Radar is available in official full packages |
+| Build from source | Follow the [contributor guide](CONTRIBUTING.md#开发与本机验证) with Node 24 and pnpm 10.19.0, then install `release/zotero/v0.6.13/jadense-in-zotero-v0.6.13.xpi` | The current source builds the unreleased 0.6.13 base distribution; Frontier Radar is available in official full packages |
 
 All methods ultimately install the Zotero `.xpi` plugin. Do not treat GitHub's **Source code** archive as an install package, and do not enable the legacy `.com` plugin identity alongside the current one. See [upgrade instructions](#upgrade) for migration details.
 

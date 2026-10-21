@@ -4,10 +4,11 @@ import re
 import unittest
 import tempfile
 import threading
+from unittest.mock import patch
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
-from batch_adapter import batches, fits, prompt, parse_outputs, split_row, valid_output, install_adapter, ProviderFailure, merge_fragments, preserved, repeated_margins
+from batch_adapter import batches, fits, prompt, parse_outputs, split_row, valid_output, install_adapter, ProviderFailure, LocalCheckpointError, merge_fragments, preserved, repeated_margins
 
 BUDGET = dict(batchTokens=1600, contextWindow=16384, maxOutputTokens=8192)
 measure = lambda text: (len(text) + 2) // 3
@@ -229,6 +230,84 @@ def document(paragraphs):
 
 
 class ResilienceTests(unittest.TestCase):
+    def test_automatic_restart_does_not_create_new_paid_cycles_for_exhausted_output_repairs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def request(text, llm, operation):
+                calls.append(operation); return '{"id":'
+            rows = [dict(id='a', text='Source', label='text')]
+            adapter, _ = self.adapter(directory, request)
+            adapter.translate_batch(rows)
+            self.assertEqual(len(calls), 3)
+            resumed, config = self.adapter(directory, request)
+            config['retryExhausted'] = False
+            resumed.stats['batchEndReasons'] = Counter()
+            for batch in resumed.scheduled_batches(rows): resumed.translate_batch(batch)
+            self.assertEqual(len(calls), 3)
+            config['retryExhausted'] = True
+            for batch in resumed.scheduled_batches(rows): resumed.translate_batch(batch)
+            self.assertEqual(len(calls), 6)
+
+    def test_unreadable_paid_checkpoint_does_not_fall_back_to_an_empty_request_ledger(self):
+        import babeldoc.format.pdf.document_il.midend.il_translator as translator_module
+        for payload in ('{"incomplete":', '[]'):
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as directory:
+                (Path(directory) / 'paragraphs-v3.json').write_text(payload)
+                with patch.object(translator_module, 'ILTranslator') as base:
+                    base.stage_name = 'translation'
+                    module = SimpleNamespace()
+                    install_adapter(module, dict(directory=directory), lambda **event: None)
+                    with self.assertRaises(LocalCheckpointError) as raised:
+                        module.ILTranslator(SimpleNamespace(), SimpleNamespace(lang_out='zh-CN'))
+                self.assertEqual(raised.exception.code, 'PDF_CACHE_UNREADABLE')
+                self.assertEqual((Path(directory) / 'paragraphs-v3.json').read_text(), payload)
+
+    def test_saved_provider_response_replays_same_operation_after_checkpoint_write_failure(self):
+        """响应已确认但段落落盘失败：重启沿用冻结请求，复用执行日志，不重复付费。"""
+        with tempfile.TemporaryDirectory() as directory:
+            executions, attempts = {}, []
+            def request(text, llm, operation):
+                attempts.append((operation, text))
+                if operation not in executions:
+                    rows = json.loads(text.split('\n', 1)[1])
+                    executions[operation] = '\n'.join(json.dumps({row['id']: 'Translated'}) for row in rows)
+                return executions[operation]
+            adapter, _ = self.adapter(directory, request)
+            rows = [dict(id='a', text='Source', label='text')]
+            original = Path.write_text
+            failed = False
+            def write(path, text, *args, **kwargs):
+                nonlocal failed
+                if not failed and '"a": "Translated"' in text:
+                    failed = True
+                    raise OSError('synthetic disk unavailable')
+                return original(path, text, *args, **kwargs)
+            with patch.object(Path, 'write_text', write):
+                with self.assertRaises(LocalCheckpointError) as raised:
+                    adapter.translate_batch(rows)
+                self.assertEqual(raised.exception.code, 'PDF_LOCAL_SAVE_FAILED')
+            resumed, _ = self.adapter(directory, request)
+            resumed.translate_batch(rows)
+            self.assertEqual(attempts[0], attempts[1])
+            self.assertEqual(len(executions), 1)
+            self.assertEqual(resumed.cache['a'], 'Translated')
+
+    def test_render_only_rebuilds_cached_passages_without_requesting_missing_ones(self):
+        with tempfile.TemporaryDirectory() as directory:
+            requests = []
+            def request(text, llm, operation):
+                requests.append(operation)
+                rows = json.loads(text.split('\n', 1)[1])
+                return '\n'.join(json.dumps({row['id']: 'Translated'}) for row in rows)
+            adapter, _ = self.adapter(directory, request, mode='full')
+            adapter.translate(document([paragraph('Saved text.')]))
+            self.assertEqual(len(requests), 1)
+            resumed, config = self.adapter(directory, request, mode='full')
+            resumed.translate(document([paragraph('Saved text.'), paragraph('Untranslated text.', y=550)]), render_only=True)
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(config['coverage']['translated'], 1)
+            self.assertEqual(config['coverage']['failed'], 1)
+
     def test_context_budget_batches_62_paragraphs_and_repairs_only_missing_together(self):
         budget = dict(contextWindow=131072, batchTokens=32512, maxOutputTokens=96000, policy='context-v1')
         rows = [dict(id=str(i), text='Scientific evidence and coherent context. ' * 20, label='text') for i in range(62)]

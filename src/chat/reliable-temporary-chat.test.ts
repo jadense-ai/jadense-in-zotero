@@ -227,7 +227,7 @@ it('reuses the exact request identity after client recreation and receives its r
   await expect(new ReliableTemporaryChatClient(options, disk).send(input)).rejects.toThrow('connection lost')
   expect((await disk.list())[0].body.clientRequestId).toBe('request-1')
   await expect(new ReliableTemporaryChatClient(options, disk).send({ ...input, clientRequestId: 'new-ui-id' })).resolves.toBe('recovered')
-  expect(posts).toBe(2)
+  expect(posts).toBe(1)
 })
 it('persists a definitive rejection and does not automatically retry it', async () => {
   const disk = store()
@@ -280,7 +280,7 @@ it('BYOK reuses a completed response and never resends an uncertain request afte
   await expect(new ReliableByokChatClient(options, disk).send(next)).rejects.toThrow('offline')
   await expect(new ReliableByokChatClient(options, disk).send({ ...next, clientRequestId: 'new-ui-id' })).rejects.toThrow()
   expect(fetchImpl).toHaveBeenCalledTimes(2)
-  await expect(new ReliableByokChatClient({ ...options, config: { ...config, apiKey: 'rotated-synthetic' } }, disk).send(next)).rejects.toThrow('different input')
+  await expect(new ReliableByokChatClient({ ...options, config: { ...config, apiKey: 'rotated-synthetic' } }, disk).send(next)).rejects.toMatchObject({ executionState: 'unknown', code: 'BYOK_EXECUTION_UNCONFIRMED' })
   expect(fetchImpl).toHaveBeenCalledTimes(2)
 })
 it('bounds a hanging recovery request at 60 seconds without redispatching', async () => {
