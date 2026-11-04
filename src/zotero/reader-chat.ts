@@ -7,6 +7,7 @@ import { renderUploadDraft } from './chat-attachment-ui'
 import { JadenseApiClient, type JadenseChatModelCatalog } from '@/jadense/api'
 import { chatRuntime, type SelectionQuote } from './chat-runtime'
 import { mountChatComposer } from './chat-composer-ui'
+import { bindChatEvidenceToggle } from './chat-evidence-settings'
 import { renderMessage, nearLatest, followMessageUpdate, updateLatestButton } from './chat-message-ui'
 import { createJdxSelect } from './ui/select'
 import { element } from './ui/controls'
@@ -29,6 +30,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   messageList.setAttribute('role', 'log'); messageList.setAttribute('aria-live', 'polite'); messageList.tabIndex = 0
   const chatLatest = element(doc, 'button', 'jdx-chat-latest', uiText('↓ 回到最新', '↓ Back to latest')); chatLatest.type = 'button'
   const dock = element(doc, 'div', 'jdx-chat-dock'); mountChatComposer(dock, prefix)
+  cleanups.push(bindChatEvidenceToggle(dock, host))
   const get = <T extends HTMLElement>(suffix: string) => dock.querySelector<T>(`#${prefix}-chat-${suffix}`)!
   const chatStatus = get<HTMLElement>('status'), input = get<HTMLTextAreaElement>('input'), form = get<HTMLFormElement>('form')
   const send = get<HTMLButtonElement>('send'), stop = get<HTMLButtonElement>('stop'), attach = get<HTMLButtonElement>('attach-image')

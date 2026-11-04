@@ -4,8 +4,34 @@
  */
 import MarkdownIt from "markdown-it"
 import katex from "katex"
+import type { ChatEvidence } from './evidence'
+import { uiText } from '@/zotero/ui-preferences'
 
 const markdown = new MarkdownIt({ html: false, xhtmlOut: true, breaks: true, linkify: true })
+
+// 只有消息拥有本地索引时才赋予定位能力；代码块和普通外链不会进入此规则。
+markdown.inline.ruler.before('link', 'evidence', (state, silent) => {
+  if (silent || !state.env?.chatEvidence || state.linkLevel > 0 || !state.src.startsWith('[[evidence:', state.pos)) return false
+  const match = /^\[\[evidence:([^\]\r\n]*)\]\]/u.exec(state.src.slice(state.pos))
+  if (!match) {
+    // 流式标记尚未闭合，不在用户面前闪烁内部 ID。
+    if (!state.src.slice(state.pos).includes(']]') && state.src.length - state.pos < 80) { state.pos = state.src.length; return true }
+    return false
+  }
+  if (!silent) { const token = state.push('evidence', '', 0); token.content = match[1] }
+  state.pos += match[0].length
+  return true
+})
+markdown.renderer.rules.evidence = (tokens, index, _options, env) => {
+  const entry = (env?.chatEvidence as ChatEvidence | undefined)?.entries.find(row => row.id === tokens[index].content)
+  const escape = markdown.utils.escapeHtml
+  if (!entry) return `<span class="jdx-evidence-unavailable" title="${escape(uiText('没有可核验的本地原文位置', 'No verifiable local passage is available'))}">${escape(uiText('来源不可用', 'Source unavailable'))}</span>`
+  const numbers = env!.evidenceNumbers as Map<string, number>
+  if (!numbers.has(entry.id)) numbers.set(entry.id, numbers.size + 1)
+  const number = numbers.get(entry.id)!
+  const label = uiText(`引用 ${number}：${entry.source.title}，第 ${entry.pageLabel} 页，${entry.rects.length ? '定位原文段落' : '仅定位到页'}`, `Citation ${number}: ${entry.source.title}, page ${entry.pageLabel}, ${entry.rects.length ? 'open original passage' : 'page location only'}`)
+  return `<span class="jdx-evidence-link" data-evidence-id="${escape(entry.id)}" data-evidence-number="${number}" aria-label="${escape(label)}">${number}</span>`
+}
 
 function mathHtml(source: string, displayMode: boolean) {
   try {
@@ -124,9 +150,9 @@ markdown.renderer.rules.image = (tokens, index, _options, env) => {
 }
 
 /** 格式异常只降级这一段展示，不改变消息原文、存储或对话执行结果。 */
-export function renderChatMarkdown(text: string, documentAssets?: Record<string, string>): string {
+export function renderChatMarkdown(text: string, documentAssets?: Record<string, string>, chatEvidence?: ChatEvidence): string {
   try {
-    return markdown.render(text, { documentAssets })
+    return markdown.render(text, { documentAssets, chatEvidence, evidenceNumbers: new Map<string, number>() })
   } catch {
     const escaped = markdown.utils.escapeHtml(text).replace(/\r?\n/g, "<br />")
     return `<p>${escaped}</p>`
@@ -157,15 +183,23 @@ function syncMarkdownChildren(target: Node, source: Node) {
 }
 
 /** 使用惰性 HTML 模板承接已禁用 HTML/危险资源的解析结果，兼容 Manager 的 XHTML 文档。 */
-export function updateChatMarkdown(target: HTMLElement, text: string, documentAssets?: Record<string, string>) {
+export function updateChatMarkdown(target: HTMLElement, text: string, documentAssets?: Record<string, string>, chatEvidence?: ChatEvidence) {
   const template = target.ownerDocument.createElement("template")
   try {
-    template.innerHTML = renderChatMarkdown(text, documentAssets)
+    template.innerHTML = renderChatMarkdown(text, documentAssets, chatEvidence)
   } catch {
     // XHTML 中不可解析的控制字符只影响格式；仍保留这条消息，不中断对话。
     const paragraph = target.ownerDocument.createElement("p")
     paragraph.textContent = text
     template.content.append(paragraph)
+  }
+  // Gecko 的特权 HTML 解析器会移除 form/button；先解析无行为占位，再用本地索引创建按钮。
+  if (chatEvidence) for (const span of Array.from(template.content.querySelectorAll<HTMLElement>('span[data-evidence-id]'))) {
+    if (!chatEvidence.entries.some(entry => entry.id === span.dataset.evidenceId)) continue
+    const button = target.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'button')
+    for (const attribute of Array.from(span.attributes)) button.setAttribute(attribute.name, attribute.value)
+    button.setAttribute('type', 'button'); button.textContent = span.textContent
+    span.replaceWith(button)
   }
   syncMarkdownChildren(target, template.content)
 }

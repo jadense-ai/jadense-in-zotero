@@ -10,6 +10,7 @@ import { diagnostics, markDiagnosticAbort } from "./diagnostics"
 import { wireDiagnosticsPanel } from "./diagnostics-panel"
 import { wireOCRSettings } from './ocr-settings'
 import { mountChatComposer } from "./chat-composer-ui"
+import { bindChatEvidenceToggle } from './chat-evidence-settings'
 import { chatRuntime, friendlyChatError, type PreparedChat } from "./chat-runtime"
 import { ReliableByokChatClient as ByokChatClient } from '@/chat/reliable-byok-chat'
 /**
@@ -111,6 +112,8 @@ import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, 
 import { localizeManagerStaticContent } from "./manager-localization"
 import { wireManagerHelp } from "./manager-help"
 import { wireManagerQuickStart } from "./manager-quick-start"
+import { checkOnboardingEngines, sendOnboardingHello } from './manager-onboarding-actions'
+import { selectSettingsGroup } from './settings-navigation'
 import { wireStarInvitation } from "./star-invitation"
 import { wireManagerTitlebar } from "./manager-titlebar"
 
@@ -3023,6 +3026,7 @@ export function initJadenseManagerPage() {
   wireManagerTitlebar(document)
   const dock = document.getElementById("jadense-chat-dock")
   if (dock) mountChatComposer(dock)
+  if (dock && zotero) window.addEventListener('unload', bindChatEvidenceToggle(dock, zotero), { once: true })
   const elements = readElements()
   const section = initialSection()
   if (zotero) {
@@ -3059,10 +3063,6 @@ export function initJadenseManagerPage() {
   wireConnectionTabs(elements, zotero)
   wireSettingsTabs(elements, zotero, section === "settings-ocr" ? "ocr" : section === "settings-connection" ? "connection" : section === "settings-features" ? "features" : "general")
   wireStarInvitation(document, zotero)
-  wireManagerQuickStart(document, zotero, () => {
-    elements.navSettings.click()
-    elements.settingsTabFeatures.click()
-  })
   for (const panel of ["details"] as const) {
     applyChatPanelCollapsed(elements, panel, readChatPanelCollapsed(zotero, panel))
     const toggle = elements.detailsToggle
@@ -3144,6 +3144,42 @@ export function initJadenseManagerPage() {
   renderTranslationHistory(elements, zotero)
   renderPaperAnalysisHistory(elements, zotero)
   wireEvents(elements, zotero)
+  // 教学仅连接既有业务入口；失败只影响教学提示，不参与工作台启动或真实任务准入。
+  try {
+    const engineCheck = new AbortController()
+    const onboarding = wireManagerQuickStart(document, zotero, {
+      openSettings(section) {
+        elements.navSettings.click()
+        if (section === 'connection') { elements.settingsTabConnection.click(); elements.tokenEdit.focus() }
+        else if (section === 'ai') elements.settingsTabAi.click()
+        else if (section === 'features') elements.settingsTabFeatures.click()
+        else { elements.settingsTabOcr.click(); selectSettingsGroup(elements.settingsPanelOcr, section); elements.settingsPanelOcr.querySelector<HTMLButtonElement>(`[data-settings-target="${section}"]`)?.focus() }
+      },
+      getChatReadiness() {
+        const ai = featureModelState(zotero, 'chat', invalidConnectionToken)
+        if (chatBusy || runtime.busy) return { ready: false, route: ai.route, issue: uiText('请等待当前对话完成后再继续教学。', 'Wait for the current conversation to finish before continuing the guide.') }
+        const issue = !ai.ready ? ai.issue : ai.route === 'jadense' && chatModelCatalogStatus === 'ready'
+          ? jadenseChatModelSelectionIssue(chatModelCatalog, ai.selection.route === 'jadense' ? ai.selection.selection ?? { kind: 'default' } : { kind: 'default' }) : ''
+        return { ready: ai.ready && !issue, route: ai.route, issue }
+      },
+      async sendHello() {
+        if (chatBusy) return { success: false, error: uiText('请等待当前操作完成后再试。', 'Wait for the current operation to finish.') }
+        const keepDraft = !currentChatSessionID(zotero) && Boolean(elements.chatInput.value.trim() || sessionImageDrafts.has('') || draftChatSources.get(zotero)?.length)
+        // 重开教学时保留尚未提交的新对话；教学会话仍独立保存在列表中。
+        if (keepDraft) newConversationDrafts.add(zotero)
+        return sendOnboardingHello(zotero, () => {
+          if (!keepDraft) newConversationDrafts.delete(zotero)
+          setActiveSection(elements, 'chat')
+          renderChat(elements, zotero)
+        })
+      },
+      checkEngines: () => checkOnboardingEngines(zotero, engineCheck.signal),
+      openChat() { setActiveSection(elements, 'chat'); elements.chatInput.focus() },
+    })
+    document.getElementById('jadense-help-onboarding')?.addEventListener('click', onboarding.restart)
+    document.getElementById('jadense-manager-onboarding')?.addEventListener('click', onboarding.restart)
+    window.addEventListener('unload', () => { engineCheck.abort(); onboarding.dispose() }, { once: true })
+  } catch { /* 可选教学不可阻断普通配置和对话。 */ }
   const receive = (context: Pick<ManagerContext, "section" | "actions">) => {
     const actions = (context.actions ?? []).filter(action => {
       if (action.kind === "analyze") {

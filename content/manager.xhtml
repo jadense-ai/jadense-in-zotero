@@ -10,6 +10,7 @@
     <script defer="defer" src="manager.js"></script>
     <link rel="stylesheet" href="chat.css"/>
     <link rel="stylesheet" href="settings.css"/>
+    <link rel="stylesheet" href="onboarding.css"/>
   </head>
   <body>
     <main id="jadense-manager-shell" class="jdx-manager-shell">
@@ -28,6 +29,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4C6.5 2.5 4 2.5 1.5 3v10c2.5-.5 5-.5 6.5 1 1.5-1.5 4-1.5 6.5-1V3C12 2.5 9.5 2.5 8 4zm0 0v10"/></svg>
             <span data-ui-en="Getting started">上手指南</span>
           </button>
+            <button id="jadense-help-onboarding" type="button" role="menuitem" data-ui-en="Interactive tutorial">入门教学</button>
             <button id="jadense-help-about" type="button" role="menuitem" data-ui-en="About">关于</button>
             <button id="jadense-help-update" type="button" role="menuitem" data-ui-en="Check for updates">检查更新</button>
           </div>
@@ -70,6 +72,9 @@
           <span id="jadense-manager-connection-status" class="jdx-manager-connection-status" role="status" tabindex="0" title="未连接攻玉" data-ui-en-title="Not connected to Jadense" aria-label="未连接攻玉" data-ui-en-aria-label="Not connected to Jadense" data-kind="idle"></span>
           <button id="jadense-manager-theme-toggle" class="jdx-manager-icon-button jdx-manager-theme-toggle" type="button" aria-pressed="false" aria-label="切换主题" data-ui-en-aria-label="Change theme" title="切换为深色模式" data-ui-en-title="Switch to dark mode" data-jdx-animated-nav="true">
             <span class="jdx-manager-nav-icon jdx-manager-theme-icon" data-jdx-icon-id="theme" aria-hidden="true"></span>
+          </button>
+          <button id="jadense-manager-onboarding" class="jdx-manager-icon-button" type="button" aria-haspopup="dialog" aria-controls="jadense-quick-start-dialog" aria-label="入门教学" data-ui-en-aria-label="Interactive tutorial" title="入门教学" data-ui-en-title="Interactive tutorial">
+            <svg xmlns="http://www.w3.org/2000/svg" class="jdx-manager-nav-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4C6.5 2.5 4 2.5 1.5 3v10c2.5-.5 5-.5 6.5 1 1.5-1.5 4-1.5 6.5-1V3C12 2.5 9.5 2.5 8 4zm0 0v10"/></svg>
           </button>
           <button id="jadense-manager-nav-settings" class="jdx-manager-icon-button" type="button" role="tab" aria-controls="jadense-manager-section-settings" aria-label="设置" data-ui-en-aria-label="Settings" title="设置" data-ui-en-title="Settings" data-jdx-animated-nav="true">
             <span class="jdx-manager-nav-icon" data-jdx-icon-id="settings" aria-hidden="true"></span>

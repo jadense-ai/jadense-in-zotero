@@ -214,6 +214,42 @@ button.jdx-analysis-page:focus-visible { outline: 2px solid var(--jdx-green); ou
 /* 提示可换行，发送/停止始终并排留在底栏。 */
 .jdx-chat-composer-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 8px 8px; }
 .jdx-chat-composer-meta { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.jdx-chat-composer-meta { flex-wrap: wrap; }
+.jdx-chat-evidence-toggle { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex-shrink: 0; padding: 4px 9px; border: 1px solid var(--jdx-line); border-radius: 999px; background: transparent; color: var(--jdx-muted); font: inherit; font-size: calc(11px * var(--jdx-font-scale, 1)); cursor: pointer; }
+.jdx-chat-evidence-toggle svg { flex-shrink: 0; }
+.jdx-chat-evidence-toggle:hover { background: var(--jdx-subtle); color: var(--jdx-text); }
+.jdx-chat-evidence-toggle[aria-pressed="true"] { background: var(--jdx-active-bg); color: var(--jdx-active-text); border-color: var(--jdx-green); }
+.jdx-chat-evidence-toggle:focus-visible, .jdx-markdown .jdx-evidence-link:focus-visible, .jdx-evidence-sources :is(button):focus-visible, .jdx-chat-message-actions .jdx-evidence-sources-toggle:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 2px; }
+.jdx-markdown .jdx-evidence-link { appearance: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 1.65em; height: 1.65em; margin: 0 .18em; padding: 0 .35em; border: 0; border-radius: 999px; background: var(--jdx-subtle); color: var(--jdx-muted); font: inherit; font-size: .72em; font-weight: 600; line-height: 1; vertical-align: .08em; white-space: nowrap; word-break: normal; cursor: pointer; }
+.jdx-markdown .jdx-evidence-link:hover, .jdx-markdown .jdx-evidence-link:focus-visible { background: var(--jdx-active-bg); color: var(--jdx-active-text); }
+.jdx-evidence-unavailable { margin: 0 3px; color: var(--jdx-muted); font-size: .75em; }
+.jdx-evidence-summary { margin-top: 4px; color: var(--jdx-muted); font-size: calc(11px * var(--jdx-font-scale, 1)); }
+.jdx-chat-message-actions .jdx-evidence-sources-toggle { width: auto; gap: 5px; margin-inline-start: auto; padding: 0 8px; border-radius: 999px; white-space: nowrap; }
+.jdx-chat-message-actions .jdx-evidence-sources-toggle::before { width: 14px; height: 14px; }
+.jdx-chat-message-actions .jdx-evidence-sources-toggle[aria-expanded="true"] { background: var(--jdx-subtle); color: var(--jdx-text); }
+.jdx-evidence-sources { position: fixed; z-index: 10000; display: flex; flex-direction: column; box-sizing: border-box; width: 400px; max-height: min(440px, calc(100vh - 24px)); padding: 6px; border: 1px solid var(--jdx-line-strong); border-radius: 10px; background: var(--jdx-surface); color: var(--jdx-text); box-shadow: 0 8px 28px rgb(0 0 0 / .12); font-size: calc(12px * var(--jdx-font-scale, 1)); }
+.jdx-evidence-sources-heading { display: flex; flex: none; align-items: center; gap: 7px; padding: 4px 6px 8px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
+.jdx-evidence-sources-heading strong { color: var(--jdx-text); font-weight: 600; }
+.jdx-evidence-sources-close { appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; margin-inline-start: auto; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--jdx-muted); cursor: pointer; }
+.jdx-evidence-sources-close:hover { background: var(--jdx-subtle); color: var(--jdx-text); }
+.jdx-evidence-sources-count { font-variant-numeric: tabular-nums; opacity: .8; }
+.jdx-evidence-source-list { display: block; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 2px; }
+.jdx-evidence-source-item { min-width: 0; }
+.jdx-evidence-source-item + .jdx-evidence-source-item { margin-top: 2px; }
+.jdx-evidence-sources .jdx-evidence-source { appearance: none; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; box-sizing: border-box; gap: 9px; width: 100%; min-width: 0; height: auto; margin: 0; padding: 9px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--jdx-text); text-align: start; font: inherit; line-height: 1.5; cursor: pointer; }
+.jdx-evidence-sources .jdx-evidence-source:hover { background: var(--jdx-subtle); }
+.jdx-evidence-source-number { display: inline-flex; align-items: center; justify-content: center; min-width: 1.7em; height: 1.7em; border-radius: 999px; background: var(--jdx-subtle); color: var(--jdx-muted); font-size: .85em; font-variant-numeric: tabular-nums; }
+.jdx-evidence-source-content { min-width: 0; }
+.jdx-evidence-source-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jdx-evidence-source-quote { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin-top: 4px; color: var(--jdx-muted); font-size: .92em; line-height: 1.6; }
+.jdx-evidence-preview { position: fixed; z-index: 10000; display: grid; gap: 8px; box-sizing: border-box; width: 344px; padding: 14px; border: 1px solid var(--jdx-line-strong); border-radius: 8px; background: var(--jdx-surface); color: var(--jdx-text); box-shadow: 0 8px 28px rgb(0 0 0 / .12); font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; max-height: calc(100vh - 24px); overflow: auto; overflow-wrap: anywhere; }
+.jdx-evidence-preview-label, .jdx-evidence-preview-hint { color: var(--jdx-muted); font-size: calc(11px * var(--jdx-font-scale, 1)); }
+.jdx-evidence-preview-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-weight: 600; }
+.jdx-evidence-preview-quote { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--jdx-green); white-space: pre-wrap; }
+@container reader-chat (max-width: 380px) {
+  .jdx-chat-evidence-toggle { width: 32px; height: 32px; padding: 0; }
+  .jdx-chat-evidence-toggle span { display: none; }
+}
 .jdx-chat-composer button { min-height: 32px; }
 .jdx-chat-composer .jdx-chat-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--jdx-muted); cursor: pointer; }
 .jdx-chat-icon-button[hidden] { display: none; }

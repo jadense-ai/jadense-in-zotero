@@ -8,6 +8,7 @@ import { lifecycleTrace } from './lifecycle-diagnostics'
 import { wireCloudOCRSettings } from './cloud-ocr-settings'
 import { wirePDFEngineSettings } from './pdf-translation-settings'
 import { wireEngineStorageSettings } from './engine-storage-settings'
+import { appendOnboardingEngineHelp } from './onboarding-engine-help'
 
 /** 卸载只停止 UI 更新，不取消其他窗口共享的准备任务。 */
 export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | null) {
@@ -45,6 +46,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   const stop = make('button', uiText('停止', 'Stop')); stop.type = 'button'; stop.className = 'jdx-button'; stop.dataset.ocrAction = 'stop'; stop.hidden = true
   repair.title = uiText('重新同步依赖并验证模型，保留已下载模型。', 'Synchronize dependencies and verify models, retaining downloaded models.')
   announcement.append(state, status, stage); actions.append(install, check, repair, offline, stop); panel.append(announcement, progressBar, metrics, elapsed, actions); overview.append(heading, panel)
+  const offlineHelp = appendOnboardingEngineHelp(doc, host, overview); offlineHelp.element.hidden = true
 
   const source = make('section'); source.className = 'jdx-ocr-section'
   const sourceTitle = make('h4', uiText('模型下载源', 'Model download source'))
@@ -148,6 +150,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   try { observer = host.Prefs?.registerObserver?.(OCR_MODEL_SOURCE_PREF, syncSource, true) } catch { /* 可选跨窗同步不阻断设置。 */ }
   const render = (value: OCREnvironment) => {
     const ready = value.ready && value.modelsReady
+    if (ready) offlineHelp.element.hidden = true
     showState(ready ? 'ready' : 'missing', ready ? uiText('已就绪 · 可以开始全文任务', 'Ready · You can start full-document tasks') : value.ready ? uiText('识别组件已安装 · 还需准备模型', 'Components installed · Models need preparation') : uiText('尚未启用', 'Not enabled'),
       ready ? uiText('可直接使用全文 Markdown、全文翻译和参考文献解析。', 'Full Markdown, full translation and reference extraction are available.') : value.ready ? uiText('继续下载并验证模型，已下载内容会复用。', 'Continue downloading and verifying models. Existing downloads will be reused.') : uiText('首次启用将自动安装识别组件、下载并验证模型，可能需要数分钟。', 'First setup installs components, downloads and verifies models. This may take several minutes.'))
     install.hidden = !!ready
@@ -197,6 +200,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
           return
         }
         const modelStage = ['models', 'download', 'verify', 'offline', 'cache'].includes(currentStage)
+        offlineHelp.element.hidden = false
         const guidance = modelStage ? uiText('模型准备失败：检查模型下载源后继续准备，或重新验证已有模型。', 'Model setup failed: check the model source and continue, or verify existing models.') : uiText('组件准备失败：请查看当前阶段的错误详情并修复识别组件。模型下载源不影响 uv、Python 或依赖安装。', 'Component setup failed: inspect this stage and repair components. The model source does not affect uv, Python or dependency installation.')
         showState('error', setup ? uiText('准备未完成 · 已下载内容会保留', 'Setup incomplete · Downloads are retained') : uiText('暂时无法读取状态', 'Status temporarily unavailable'), setup ? guidance : uiText('请重新读取状态；此操作不会安装或下载。错误详情见“环境与故障排查”。', 'Read the status again; this will not install or download files. See Environment and troubleshooting for error details.'))
         errorDetails.textContent = `${uiText('最近错误：', 'Latest error: ')}${error instanceof Error ? error.message : String(error)}`; errorDetails.hidden = false
@@ -232,7 +236,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
       picker.init(host.getMainWindow?.() ?? doc.defaultView!, uiText('选择 OCR 离线引擎包', 'Choose OCR offline engine package'), picker.modeOpen)
       picker.appendFilter('ZIP', '*.zip')
       if (await picker.show() !== picker.returnCancel && picker.file) await run(true, false, true, picker.file)
-    } catch (error) { if (!disposed) showState('error', uiText('离线导入失败', 'Offline import failed'), error instanceof Error ? error.message : String(error)) }
+    } catch (error) { if (!disposed) { showState('error', uiText('离线导入失败', 'Offline import failed'), error instanceof Error ? error.message : String(error)); offlineHelp.element.hidden = false } }
   })
   remove.addEventListener('click', () => { confirmation.hidden = false; remove.hidden = true; removeModels.checked = false; cancelRemove.focus() })
   cancelRemove.addEventListener('click', () => { confirmation.hidden = true; remove.hidden = false; remove.focus() })
@@ -273,5 +277,5 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   })
   const stopNavigation = wireSettingsNavigation(root, '[data-external-dependency]', 'ocr')
   return () => {
-    stopNavigation(); stopEngine(); stopStorage(); layout.remove(); headingPage.remove(); disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
+    stopNavigation(); stopEngine(); stopStorage(); offlineHelp.dispose(); layout.remove(); headingPage.remove(); disposed = true; stopCloud(); unobserve(); doc.defaultView?.removeEventListener('focus', refresh); if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); sourceSelect.destroy(); body.remove() }
 }

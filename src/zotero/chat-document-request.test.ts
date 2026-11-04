@@ -38,16 +38,20 @@ describe('PDF request preparation', () => {
     expect(input.messages[0].text.length).toBeGreaterThan(100000)
     expect(request.reading?.notice).toContain('省略较早对话')
     expect(request.sources.every(source => !source.text)).toBe(true)
+    const traced = await prepareDocumentRequest({ ...input, evidenceEnabled: true })
+    expect(traced.evidence?.entries.length).toBeGreaterThan(0)
+    expect(documentTokenCost(JSON.stringify(localChatMessages(traced.messages, traced.sources))) + 4096).toBeLessThanOrEqual(chatDocumentCapacity(f.host, 'chat').input)
   })
   it('removes stale material when a PDF changes during intermediate generation', async () => {
     const f = setup()
     saveChatDocumentMode(f.host, 'summarize')
-    const request = await prepareDocumentRequest({ host: f.host, feature: 'chat', sources: [f.docs[0].source], messages: [{ id: 'q', role: 'user', text: '请全面总结第 81 页是什么？' }],
+    const request = await prepareDocumentRequest({ host: f.host, feature: 'chat', evidenceEnabled: true, sources: [f.docs[0].source], messages: [{ id: 'q', role: 'user', text: '请全面总结第 81 页是什么？' }],
       imageCount: 0, signal: new AbortController().signal, modelIdentity: 'platform', progress: vi.fn(), update: vi.fn(),
       generate: async () => { f.items.get(1)!.attachmentModificationTime = 2; return 'summary' } })
     expect(request.messages[0].text).toBe('请全面总结第 81 页是什么？')
     expect(request.reading?.notice).toContain('已变化')
     expect(request.reading?.sources).toEqual([])
+    expect(request.evidence?.entries).toEqual([])
   })
   it('answers a figure from the relevant PDF page without waiting for long-document summaries', async () => {
     const f = setup()

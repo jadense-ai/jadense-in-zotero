@@ -19,6 +19,8 @@ import { uiText } from './ui-preferences'
 import { recordStarInvitationUse } from './star-invitation'
 import { chatDocumentCapacity, prepareDocumentRequest } from './chat-document-request'
 import { refreshLocalChatSource } from '@/chat/local-chat-store'
+import { usedChatEvidence, withoutEvidenceMarkers, type ChatEvidence } from '@/chat/evidence'
+import { readChatEvidenceEnabled } from './chat-evidence-settings'
 
 export type PreparedChat = {
   requestText: string
@@ -165,6 +167,8 @@ export class ChatRuntime {
     this.controller = controller; this.activeSessionID = input.sessionID
     this.status = uiText('正在准备消息…', 'Preparing message…'); this.statusKind = 'idle'; this.changed()
     const assistantID = id('assistant')
+    const evidenceEnabled = readChatEvidenceEnabled(this.host)
+    let evidence: ChatEvidence | undefined
     let accepted = false
     try {
       if (input.itemID !== undefined) await this.associate(input.sessionID, input.itemID, signal)
@@ -208,9 +212,10 @@ export class ChatRuntime {
         : new ReliableTemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: ai.selection.route === 'jadense' ? ai.selection.selection : undefined, fetchImpl: this.fetchImpl })
       const intermediateClient = ai.route === 'byok' ? new ReliableByokChatClient({ config: { ...ai.config!, maxOutputTokens: Math.min(768, capacity.output) }, fetchImpl: this.fetchImpl }) : client
       const request = await interruptible(prepareDocumentRequest({ host: this.host, feature, signal,
+        evidenceEnabled: evidenceEnabled && !prepared.isolated,
         sources: prepared.isolated ? [] : requestSession.sources,
         messages: requestSession.messages.filter(message => message.id !== assistantID && message.status === 'complete' && message.text.trim() && (!prepared.isolated || message.id === userID))
-          .map(message => ({ id: message.id, role: message.role, text: message.id === userID ? requestText : message.text })),
+          .map(message => ({ id: message.id, role: message.role, text: message.id === userID ? requestText : message.role === 'assistant' && message.evidence ? withoutEvidenceMarkers(message.text) : message.text })),
         imageCount: image ? 1 : 0, modelIdentity: JSON.stringify({ selection: ai.selection, config: ai.route === 'byok' ? ai.config : undefined, baseUrl: connection.baseUrl, token: ai.route === 'jadense' ? connection.token : undefined }),
         progress: text => { this.status = text; this.changed() },
         update: source => { signal.throwIfAborted(); refreshLocalChatSource(this.preferences, session.id, source) },
@@ -220,16 +225,18 @@ export class ChatRuntime {
       }), signal)
       signal.throwIfAborted()
       if (request.reading) updateLocalChatMessage(this.preferences, session.id, assistantID, { reading: request.reading })
+      evidence = evidenceEnabled && !prepared.isolated ? request.evidence ?? { entries: [] } : undefined
+      if (evidence) updateLocalChatMessage(this.preferences, session.id, assistantID, { evidence })
       this.status = uiText('正在生成…', 'Generating…'); this.changed()
       const finalText = await boundedChatRequest(signal, (requestSignal, activity) => client.send({
         clientFeature: feature, taskId: session.id, operationId: assistantID, clientRequestId: id('request'), conversationId: session.id,
         messages: request.messages,
         sources: request.sources, ...(image ? { images: [image] } : {}), signal: requestSignal, requireComplete: prepared.requireComplete,
-        onTextDelta: (_delta, text) => { activity(); if (!requestSignal.aborted && prepared.streamVisible !== false) { updateLocalChatMessage(this.preferences, session.id, assistantID, { text }); this.changed() } },
+        onTextDelta: (_delta, text) => { activity(); if (!requestSignal.aborted && prepared.streamVisible !== false) { updateLocalChatMessage(this.preferences, session.id, assistantID, { text, ...(evidence ? { evidence: usedChatEvidence(evidence, text) } : {}) }); this.changed() } },
       }), this.idleTimeoutMs)
       signal.throwIfAborted()
       const result = finalText && prepared.finish ? await prepared.finish(finalText, signal) : null
-      updateLocalChatMessage(this.preferences, session.id, assistantID, { text: result?.text ?? (finalText || uiText('回答中没有可显示文本。', 'The answer contains no displayable text.')), status: finalText ? 'complete' : 'failed', ...(result?.research ? { research: result.research } : {}) })
+      updateLocalChatMessage(this.preferences, session.id, assistantID, { text: result?.text ?? (finalText || uiText('回答中没有可显示文本。', 'The answer contains no displayable text.')), status: finalText ? 'complete' : 'failed', ...(result?.research ? { research: result.research } : {}), ...(evidence ? { evidence: usedChatEvidence(evidence, result?.text ?? finalText) } : {}) })
       this.status = result?.status ?? uiText('回答完成。', 'Answer complete.')
       if (request.reading) this.status += ` ${request.reading.notice}`
       if (attachment && !image) this.status += uiText(' 历史图片不可用，本次仅发送文字。', ' Previous image unavailable; only text was sent.')
