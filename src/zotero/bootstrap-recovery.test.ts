@@ -11,7 +11,11 @@ vi.mock('./chat-runtime', () => ({ chatRuntime: mock.chat, stopChatRuntime: mock
 vi.mock('./analysis-runtime', () => ({ analysisRuntime: () => ({ restore: mock.restore }), stopAnalysisRuntime: mock.stopAnalysis }))
 vi.mock('./pdf-translation-jobs', () => ({ pdfTranslationJobs: () => ({ initialize: mock.initializePDF }), stopPDFTranslationJobs: vi.fn() }))
 vi.mock('./manager-window', () => ({ openManagerWindow: vi.fn(), closeManagerWindow: vi.fn() }))
-vi.mock('./manager-help', () => ({ installedPluginVersion: async () => '0.4.10' }))
+// 保留帮助模块的公开链接常量，让入门引导依赖使用真实导出；仅隔离安装版本查询。
+vi.mock('./manager-help', async importOriginal => ({
+  ...await importOriginal<typeof import('./manager-help')>(),
+  installedPluginVersion: async () => '0.4.10',
+}))
 vi.mock('./chrome-registration', () => ({ registerChromeContent: () => ({}), ensureJadenseLocalization: () => true, unregisterChromeContent: vi.fn() }))
 vi.mock('./ui-preferences', () => ({ initializeUiLocale: vi.fn(), uiText: (_cn: string, en: string) => en }))
 type Boot = { startup(): Promise<void>; shutdown(): Promise<void> }
