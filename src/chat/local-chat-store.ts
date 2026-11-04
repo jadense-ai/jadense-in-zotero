@@ -9,6 +9,7 @@ import { normalizeLocalChatImage, type LocalChatImage } from "./image-input"
 import { normalizeLocalChatFile, type LocalChatFile } from "./file-input"
 import { normalizeResearchMessageContext, type ResearchMessageContext } from "./research-presentation"
 import type { DocumentReading } from './long-document-context'
+import { normalizeChatEvidence, type ChatEvidence } from './evidence'
 
 export const LOCAL_CHAT_PREF_KEY = "extensions.jadenseInZotero.localChatState"
 
@@ -31,6 +32,7 @@ export type LocalChatMessage = {
   image?: LocalChatImage
   file?: LocalChatFile
   reading?: DocumentReading
+  evidence?: ChatEvidence
 }
 
 export type LocalChatSession = {
@@ -129,6 +131,7 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
   const image = normalizeLocalChatImage(row.image)
   const file = normalizeLocalChatFile(row.file)
   const reading = normalizeDocumentReading(row.reading)
+  const evidence = normalizeChatEvidence(row.evidence)
   return {
     id,
     role,
@@ -139,6 +142,7 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
     ...(image ? { image } : {}),
     ...(file ? { file } : {}),
     ...(reading ? { reading } : {}),
+    ...(evidence ? { evidence } : {}),
   }
 }
 
@@ -196,12 +200,13 @@ function fitSerializedState(state: LocalChatState) {
   while (serialized.length > MAX_SERIALIZED_LENGTH) {
     const oldestSession = next.sessions[next.sessions.length - 1]
     if (!oldestSession) return JSON.stringify(emptyState())
-    const messageWithResearch = oldestSession.messages.find((message) => message.research || message.reading)
+    const messageWithResearch = oldestSession.messages.find((message) => message.research || message.reading || message.evidence?.entries.length)
     const sourceWithText = oldestSession.sources.find((source) => source.text.length > 0)
     if (messageWithResearch) {
       // 页码导航是可选展示数据；超出总预算时先舍弃它，不因此删除原有解析正文。
       delete messageWithResearch.research
       delete messageWithResearch.reading
+      if (messageWithResearch.evidence) messageWithResearch.evidence = { entries: [] }
     } else if (sourceWithText) {
       // JSON 转义可放大正文；先缩减可重建的来源文本，且每轮都必须实际减小状态。
       sourceWithText.text = sourceWithText.text.slice(0, Math.floor(sourceWithText.text.length / 2))
@@ -330,7 +335,7 @@ export function updateLocalChatMessage(
   preferences: LocalChatPreferenceStore,
   sessionId: string,
   messageId: string,
-  patch: Pick<Partial<LocalChatMessage>, "text" | "status" | "research" | "reading">,
+  patch: Pick<Partial<LocalChatMessage>, "text" | "status" | "research" | "reading" | "evidence">,
 ) {
   const state = readLocalChatState(preferences)
   state.sessions = state.sessions.map((session) => session.id === sessionId
@@ -343,6 +348,7 @@ export function updateLocalChatMessage(
               ...(patch.status !== undefined ? { status: status(patch.status) } : {}),
               ...(Object.hasOwn(patch, "research") ? { research: normalizeResearchMessageContext(patch.research) } : {}),
               ...(Object.hasOwn(patch, "reading") ? { reading: normalizeDocumentReading(patch.reading) } : {}),
+              ...(Object.hasOwn(patch, "evidence") ? { evidence: normalizeChatEvidence(patch.evidence) } : {}),
             }
           : message),
       }

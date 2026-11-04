@@ -1,5 +1,16 @@
 # 更新说明 / Changelog
 
+## 0.6.14 — 2026-11-04
+
+- 新增默认关闭的「证据溯源」：开启后，AI 回复可显示行内数字引用，预览原句并跳转 PDF 对应文段；同一原文重复引用沿用编号。
+- 回复操作栏新增按需展开的来源列表，区分不同论文与原文片段；改善窄侧栏、跨 PDF 定位和浮层关闭，移除旧阅读范围与页码列表。
+- 新增三步互动入门教学：选择攻玉或 BYOK、主动发送「你好」、按需准备文档引擎；进度可继续，老用户不会被升级强制打断。
+- 入门教学与 OCR／PDF 引擎设置提供统一离线安装帮助，包含下载渠道、两个引擎分别导入及就绪检查说明。
+- Add opt-in evidence tracing: inline citation numbers preview original passages and navigate to the corresponding PDF text. Repeated citations to the same passage reuse their number.
+- Add an on-demand source list in reply actions, distinguishing papers and passages. Improve narrow sidebars, navigation across PDFs and popover dismissal; remove the old reading-coverage and page lists.
+- Add resumable, three-step onboarding: choose Jadense or BYOK, explicitly send Hello, and optionally prepare document engines. Existing users are not forced through the guide after upgrading.
+- Share offline installation help across onboarding and OCR/PDF engine settings, covering download channels, separate engine imports and readiness checks.
+
 ## 0.6.13 — 2026-10-21
 
 - 文献解析与 PDF 对照翻译保存任务进度；可恢复的暂时故障等待后继续，重启后恢复此前明确运行的任务，用户暂停的任务等待手动继续。已完成的模型结果只补本地保存、批注或 PDF 排版。

@@ -123,7 +123,7 @@ for (const fileName of ['manager.css', 'status.css', 'classification.css', 'clas
 await writeFile(classificationHtmlPath, classificationHtml)
 const managerHtmlPath = path.join(buildDir, "content/manager.xhtml")
 let managerHtml = await readFile(managerHtmlPath, "utf8")
-for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "classification.css", "settings.css", "manager.js"]) {
+for (const fileName of ["manager.css", "ui.css", "chat.css", "analysis.css", "classification.css", "settings.css", "onboarding.css", "manager.js"]) {
   const revision = sha256(await readFile(path.join(buildDir, "content", fileName))).slice(0, 12)
   managerHtml = managerHtml.replace(`"${fileName}"`, `"${fileName}?v=${revision}"`)
 }

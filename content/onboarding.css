@@ -1,0 +1,30 @@
+/* 入门教学复用 Manager 主题、字号与按钮；配置期间显示紧凑进度。 */
+.jdx-onboarding-dialog { width: min(600px, calc(100vw - 40px)); max-width: calc(100vw - 40px); max-height: calc(100vh - 48px); box-sizing: border-box; overflow: auto; font-size: calc(13px * var(--jdx-font-scale, 1)); overflow-wrap: anywhere; }
+.jdx-onboarding-dialog h2 { margin: 0 0 10px; font-size: calc(19px * var(--jdx-font-scale, 1)); line-height: 1.35; }
+.jdx-onboarding-dialog .jdx-onboarding-eyebrow { margin: 0 0 12px; color: var(--jdx-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); }
+.jdx-onboarding-description { color: var(--jdx-muted); margin: 0 0 16px; }
+.jdx-onboarding-dialog .jdx-onboarding-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.jdx-onboarding-dialog button, .jdx-onboarding-progress button { min-height: 34px; white-space: normal; overflow-wrap: anywhere; }
+.jdx-onboarding-dialog button.jdx-manager-primary { color: var(--jdx-active-text); background: var(--jdx-active-bg); border: 1px solid var(--jdx-green); }
+.jdx-onboarding-dialog button.jdx-manager-primary:hover:not(:disabled) { background: var(--jdx-press-bg); }
+.jdx-onboarding-dialog button:disabled { opacity: .55; cursor: default; }
+.jdx-onboarding-options { display: grid; gap: 10px; margin: 18px 0; }
+.jdx-onboarding-dialog .jdx-onboarding-options button { padding: 14px; text-align: start; border: 1px solid var(--jdx-line); background: var(--jdx-surface-sunken); }
+.jdx-onboarding-options strong { display: block; margin-bottom: 4px; }
+.jdx-onboarding-options span { display: block; color: var(--jdx-muted); line-height: 1.6; }
+.jdx-onboarding-footer { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--jdx-line); }
+.jdx-onboarding-footer button { color: var(--jdx-muted); }
+.jdx-onboarding-engine-list { display: grid; gap: 12px; margin: 16px 0; }
+.jdx-onboarding-engine-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.jdx-onboarding-engine-row > span:first-child { font-weight: 600; }
+.jdx-onboarding-engine-state { color: var(--jdx-muted); }
+.jdx-onboarding-engine-row > button { margin-inline-start: auto; }
+.jdx-onboarding-dialog .jdx-onboarding-community { font-size: calc(22px * var(--jdx-font-scale, 1)); font-weight: 600; user-select: text; }
+.jdx-onboarding-offline { border-top: 1px solid var(--jdx-line); margin-top: 16px; padding-top: 8px; }
+.jdx-manager-content[data-onboarding-active="true"] { grid-template-rows: auto minmax(0, 1fr); }
+.jdx-onboarding-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; box-sizing: border-box; margin: 8px 8px 0; padding: 8px 10px; color: var(--jdx-text); background: var(--jdx-surface); border: 1px solid var(--jdx-line); border-radius: 6px; font-size: calc(12px * var(--jdx-font-scale, 1)); }
+.jdx-onboarding-progress[hidden] { display: none !important; }
+.jdx-onboarding-progress-label { flex: 1 1 180px; }
+.jdx-onboarding-progress button { font: inherit; color: var(--jdx-text); background: var(--jdx-subtle); border: 1px solid var(--jdx-line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.jdx-onboarding-progress button:focus-visible { outline: 2px solid var(--jdx-green); outline-offset: 2px; }
+@media (max-width: 520px) { .jdx-onboarding-dialog { padding: 18px; } .jdx-onboarding-engine-row > button { flex-basis: 100%; margin-inline-start: 0; text-align: start; } }

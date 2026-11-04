@@ -2,11 +2,25 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.14 证据溯源与互动入门](#update-0614)
 - [0.6.13 任务继续、解析状态与阅读字号](#update-0613)
 - [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0614"></a>
+## 0.6.14 证据溯源与互动入门 / Evidence tracing and onboarding
+
+在工作台或 PDF 阅读器的输入区开启「证据溯源」，关联可提取正文的 PDF 后提问。默认关闭，只影响后续请求；旧回复不会自动补造引用。行内数字可预览原句并定位 PDF，底部来源入口按需列出文献与原文片段。同一原句重复引用沿用编号，不同论文和段落分别定位；没有准确矩形时按页定位。来源失效只影响该引用，不阻断问答。来源原文不等于结论得到证明，仍需人工核对；普通摘要不能代替原文证据。
+
+从「帮助 → 入门教学」或侧栏底部教学图标打开三步引导，选择攻玉或 BYOK、主动发送「你好」、按需准备 OCR 与 PDF 引擎。进度保存在本机，可继续或跳过；旧用户升级不强制重新教学。发送「你好」可能计费，浏览引导不自动请求模型或安装引擎。离线帮助列出下载渠道，完整套装解压后需要分别导入其中两个引擎 ZIP。
+
+Enable **Evidence tracing** in the workbench or Reader composer and ask about a linked PDF with extractable text. It is off by default and affects future requests only. Inline numbers preview passages and navigate to the original PDF; reply actions open the source list on demand. Repeated citations reuse their number, and different papers/passages retain separate navigation targets. Missing coordinates fall back to page navigation. Unavailable references do not block chat, and a cited passage is not proof that the model's claim is correct.
+
+Open **Help → Getting started** or the tutorial icon at the bottom of the sidebar for resumable onboarding: choose Jadense/BYOK, explicitly send Hello, then optionally prepare document engines. Existing users are not forced to repeat it after upgrading. Sending Hello may incur model charges; browsing the guide does not automatically call a model or install engines. Offline help explains downloading the complete kit and importing its two engine ZIP files separately.
+
+更新保留设置和本地历史。完整离线套装适用 Windows x64；证据溯源开发验证覆盖 Windows / Zotero 10.0.7 的双语、主题、窄侧栏、跨 PDF 定位与历史恢复，其他系统及真实服务的引用遵循性未实测。详见 [v0.6.14 发布说明](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14)。
 
 <a id="update-0613"></a>
 

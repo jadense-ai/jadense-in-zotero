@@ -9,10 +9,10 @@ import { openChatSource } from './research-context'
 import { copyTextToClipboard } from './connection-display'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
-import { navigateDocument, type DocumentHost } from './pdf-document'
+import { renderEvidenceSources, updateEvidenceInteractions } from './chat-evidence-ui'
 export type ChatMessageElements = { messageList: HTMLElement; chatStatus: HTMLElement; chatLatest: HTMLButtonElement }
 const renderedMessageText = new WeakMap<HTMLElement, string>()
-const renderedReading = new WeakMap<HTMLElement, string>()
+const renderedEvidence = new WeakMap<HTMLElement, string>()
 function setStatus(node: HTMLElement, text: string, kind: string) { node.textContent = text; node.dataset.state = kind }
 export function nearLatest(elements: ChatMessageElements) { const log = elements.messageList; return log.scrollHeight - log.scrollTop - log.clientHeight < 64 }
 export function updateLatestButton(elements: ChatMessageElements) { elements.chatLatest.hidden = nearLatest(elements) }
@@ -173,34 +173,9 @@ export function renderMessage(elements: ChatMessageElements, zotero: ZoteroLike,
     }
     wrapper.append(actions)
   }
-  const readingKey = JSON.stringify(message.reading)
-  if (renderedReading.get(wrapper) !== readingKey) {
-    wrapper.querySelector('[data-document-reading]')?.remove()
-    if (message.reading) {
-      const details = create('details'), summary = create('summary')
-      details.dataset.documentReading = 'true'
-      summary.textContent = uiText('本轮 PDF 阅读范围与页码', 'PDF coverage and pages for this answer')
-      const notice = create('p'); notice.textContent = message.reading.notice
-      details.append(summary, notice)
-      for (const entry of message.reading.sources) {
-        const title = create('p'); title.textContent = entry.source.title; details.append(title)
-        for (const page of entry.pages) {
-          const button = create('button', 'jdx-analysis-page') as HTMLButtonElement
-          button.type = 'button'; button.textContent = uiText(`第 ${page.pageLabel} 页`, `Page ${page.pageLabel}`)
-          button.title = uiText(`物理页 ${page.pageIndex + 1}`, `Physical page ${page.pageIndex + 1}`)
-          button.addEventListener('click', () => {
-            void navigateDocument(zotero as unknown as DocumentHost, entry.source, { pageIndex: page.pageIndex }).catch(() => {
-              setStatus(elements.chatStatus, uiText('原 PDF 不可用或版本已变化，请重新关联。', 'The original PDF is unavailable or changed. Link it again.'), 'error')
-            })
-          })
-          details.append(button)
-        }
-      }
-      wrapper.append(details)
-    }
-    renderedReading.set(wrapper, readingKey)
-  }
-  if (renderedMessageText.get(wrapper) === message.text && wrapper.dataset.status === message.status) return wrapper
+  const evidence = message.role === 'assistant' ? message.evidence : undefined
+  const evidenceKey = JSON.stringify(evidence)
+  if (renderedMessageText.get(wrapper) === message.text && wrapper.dataset.status === message.status && renderedEvidence.get(wrapper) === evidenceKey) return wrapper
   const body = wrapper.querySelector<HTMLElement>(".jdx-chat-message-body")!
   const isAnalysis = message.role === "assistant" && message.status === "complete"
     && renderAnalysisBody(body, message, elements, zotero)
@@ -209,8 +184,10 @@ export function renderMessage(elements: ChatMessageElements, zotero: ZoteroLike,
   wrapper.dataset.stopped = String(message.status === "failed" && /^(已停止|对话已中止|Generation stopped\.|Chat was stopped\.)/.test(message.text))
   body.classList.toggle("jdx-markdown", !isAnalysis)
   if (!isAnalysis) {
-    updateChatMarkdown(body, message.text || (message.status === "streaming" ? uiText("正在处理…", "Working…") : ""))
+    updateChatMarkdown(body, message.text || (message.status === "streaming" ? uiText("正在处理…", "Working…") : ""), undefined, evidence)
   }
+  updateEvidenceInteractions(wrapper, zotero, elements.chatStatus, evidence)
+  renderEvidenceSources(wrapper, evidence, message.status === 'complete')
   const actions = wrapper.querySelector<HTMLElement>(".jdx-chat-message-actions")!
   const copy = actions.querySelector<HTMLButtonElement>('[data-copy-message]')!
   copy.disabled = !message.text
@@ -222,6 +199,7 @@ export function renderMessage(elements: ChatMessageElements, zotero: ZoteroLike,
     actions.prepend(open)
   }
   renderedMessageText.set(wrapper, message.text)
+  renderedEvidence.set(wrapper, evidenceKey)
   return wrapper
 }
 

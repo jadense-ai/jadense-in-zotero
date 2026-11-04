@@ -81,18 +81,14 @@ export async function verifyLongPdf({ Zotero, manager, config, assert, waitFor, 
   await send()
   const summaryState = JSON.parse(await IOUtils.readUTF8(PathUtils.join(root, 'chat.json')))
   assert(Object.values(summaryState.summaries).some(row => row.text), 'Explicit long-document summary was not saved')
-  await waitFor(() => doc.querySelector('[data-document-reading]'), 'reading coverage UI')
-  const details = [...doc.querySelectorAll('[data-document-reading]')].at(-1); details.open = true
-  const button = [...details.querySelectorAll('button')].find(row => row.textContent.includes('81'))
-  assert(button, 'Tail-page navigation button missing'); button.click()
-  await waitFor(() => reader._internalReader._primaryView._iframeWindow.PDFViewerApplication.pdfViewer.currentPageNumber === 81, 'native navigation to page 81')
+  assert(!doc.querySelector('[data-document-reading]'), 'Reading coverage disclosure must not appear in the message list')
   doc.getElementById('jadense-quick-start-close')?.click()
   assert(!doc.getElementById('jadense-chat-source-summary')?.textContent.includes('无可读正文'), 'Cached PDF incorrectly displayed as unreadable')
   await screenshot('long-pdf-reading-coverage', manager)
   Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
   await Zotero.Promise.delay(200)
   await screenshot('long-pdf-reading-coverage-light', manager)
-  report.checks.push('native-81-page-extraction', 'native-tail-page-cache', 'native-long-pdf-budgeted-request', 'native-default-long-pdf-no-summary', 'native-opt-in-summary-cache', 'native-followup-tail-evidence', 'native-page-81-navigation')
+  report.checks.push('native-81-page-extraction', 'native-tail-page-cache', 'native-long-pdf-budgeted-request', 'native-default-long-pdf-no-summary', 'native-opt-in-summary-cache', 'native-followup-tail-evidence', 'native-chat-without-reading-disclosure')
 }
 
 /** 第二次原生启动直接恢复会话与磁盘缓存；启动/浏览不能发起整理调用。 */

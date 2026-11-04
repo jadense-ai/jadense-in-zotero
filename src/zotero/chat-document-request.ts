@@ -9,6 +9,7 @@ import { requestHash } from '@/chat/temporary-request-store'
 import { validateDocument, type DocumentHost } from './pdf-document'
 import { readChatDocumentMode } from './chat-document-policy'
 import { featureModelMetadata } from './model-catalog'
+import type { ChatEvidence } from '@/chat/evidence'
 
 export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature) {
   const ai = featureModelState(host, feature)
@@ -22,9 +23,10 @@ export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature) {
 export async function prepareDocumentRequest(input: {
   host: ZoteroLike; feature: AiFeature; sources: readonly ChatSource[]; messages: TemporaryChatMessage[]; imageCount: number
   signal: AbortSignal; modelIdentity: string; progress(text: string): void
+  evidenceEnabled?: boolean
   update(source: ChatSource): void
   generate(prompt: string, requestId: string, conversationId: string): Promise<string>
-}): Promise<{ messages: TemporaryChatMessage[]; sources: ChatSource[]; reading?: DocumentReading }> {
+}): Promise<{ messages: TemporaryChatMessage[]; sources: ChatSource[]; reading?: DocumentReading; evidence?: ChatEvidence }> {
   const sources = input.sources.map(source => ({ ...source }))
   if (!sources.some(source => source.kind === 'file' && source.contentType === 'application/pdf')) return { messages: input.messages, sources }
   const cache = chatDocuments(input.host), documents: ChatDocument[] = [], numbers: number[] = []
@@ -60,6 +62,7 @@ export async function prepareDocumentRequest(input: {
   const question = last.text
   const recent = messages.slice(0, -1).slice(-4).map(row => row.text).join('\n').slice(-3000)
   const result = await buildLongDocumentContext({ documents, sourceNumbers: numbers, question, recent, budget,
+    evidenceEnabled: input.evidenceEnabled,
     mode: readChatDocumentMode(input.host),
     summaryInputBudget: Math.max(256, capacity.input - documentTokenCost(question) - 1024),
     modelKey: await requestHash(input.modelIdentity), signal: input.signal, progress: input.progress,
@@ -79,9 +82,10 @@ export async function prepareDocumentRequest(input: {
   input.signal.throwIfAborted()
   if (!current) {
     result.context = ''; result.reading = { notice: 'PDF 在准备期间已变化，本轮未附加原文；请重新关联后提问。', sources: [] }
+    result.evidence = undefined
   }
   if (result.context) last.text += `\n\n${result.context}`
   if (dropped) result.reading.notice += ' 本轮省略较早对话，完整历史仍保留。'
   if (sources.some(source => source.contentType === 'application/pdf' && !documents.some(document => document.source.id === source.id))) result.reading.notice += ' 部分 PDF 当前不可读取。'
-  return { messages, sources, reading: result.reading }
+  return { messages, sources, reading: result.reading, ...(input.evidenceEnabled ? { evidence: result.evidence ?? { entries: [] } } : {}) }
 }

@@ -5,12 +5,14 @@ import { capacitySlices, tokenCost } from '@/zotero/translation-chunks'
 import { requestHash } from './temporary-request-store'
 import { ByokResponseError } from './byok-chat'
 import { JadenseApiError } from '@/jadense/api'
+import { EVIDENCE_RULES, type ChatEvidence, type ChatEvidenceEntry } from './evidence'
 
 export type DocumentReading = { notice: string; sources: Array<{ source: DocumentIdentity; pages: Array<{ pageIndex: number; pageLabel: string }> }> }
-export type DocumentChunk = { id: string; source: number; pages: Array<{ pageIndex: number; pageLabel: string }>; text: string; document: ChatDocument }
+export type DocumentChunk = { id: string; source: number; pages: Array<{ pageIndex: number; pageLabel: string }>; text: string; document: ChatDocument; evidence?: ChatEvidenceEntry }
 export type LongDocumentInput = {
   documents: ChatDocument[]; sourceNumbers: number[]; question: string; recent: string; budget: number; modelKey: string
   mode?: 'truncate' | 'summarize'; summaryInputBudget?: number
+  evidenceEnabled?: boolean
   signal: AbortSignal; progress(text: string): void
   save(document: ChatDocument): Promise<void>
   generate(prompt: string, requestId: string, conversationId: string): Promise<string>
@@ -22,7 +24,7 @@ export const documentTokenCost = cost
 const evidence = (chunks: Array<Pick<DocumentChunk, 'id' | 'source' | 'pages' | 'text'>>) => JSON.stringify(chunks.map(({ id, source, pages, text }) => ({ id, source, pages, text })))
 
 /** 连续段落打包；概括批次允许跨标题填充，超长段落只内部切片。 */
-export function documentChunks(documents: ChatDocument[], sourceNumbers: number[], limit = 2000, splitOnHeading = true): DocumentChunk[] {
+export function documentChunks(documents: ChatDocument[], sourceNumbers: number[], limit = 2000, splitOnHeading = true, evidenceEnabled = false): DocumentChunk[] {
   const chunks: DocumentChunk[] = []
   documents.forEach((document, index) => {
     let current: DocumentChunk | undefined
@@ -30,9 +32,15 @@ export function documentChunks(documents: ChatDocument[], sourceNumbers: number[
       if (!paragraph.text.trim()) continue
       for (const piece of capacitySlices(paragraph.text, Math.max(64, limit - 160), cost)) {
         const pagePrefix = (block: DocumentChunk | undefined) => block?.pages.at(-1)?.pageIndex === page.pageIndex ? '' : `[第 ${page.pageLabel} 页，物理页 ${page.pageIndex + 1}]\n`
-        if (!current || (splitOnHeading && paragraph.heading) || cost(current.text + (current.text ? '\n' : '') + pagePrefix(current) + piece.text) > limit - 160) {
+        if (evidenceEnabled || !current || (splitOnHeading && paragraph.heading) || cost(current.text + (current.text ? '\n' : '') + pagePrefix(current) + piece.text) > limit - 160) {
           current = { id: `s${sourceNumbers[index]}b${chunks.length + 1}`, source: sourceNumbers[index], pages: [], text: '', document }
           chunks.push(current)
+        }
+        if (evidenceEnabled) {
+          // 一个证据块对应一个原文段落（超长段落按容量切片）；坐标绝不来自模型。
+          const location = paragraph.locations?.[0] ?? paragraph
+          current.evidence = { id: current.id, sourceNumber: current.source, source: { ...document.state.source, title: document.source.parentItem?.title ?? document.state.source.title },
+            pageIndex: location.pageIndex, pageLabel: location.pageLabel, rects: location.rects, quote: piece.text }
         }
         current.text += (current.text ? '\n' : '') + pagePrefix(current) + piece.text
         if (!current.pages.some(row => row.pageIndex === page.pageIndex)) current.pages.push({ pageIndex: page.pageIndex, pageLabel: page.pageLabel })
@@ -83,17 +91,18 @@ async function generated(input: LongDocumentInput, document: ChatDocument, promp
 }
 
 /** 所有分支都带真实覆盖说明；可选摘要失败降级为原文检索，不把局部结果称为全文。 */
-export async function buildLongDocumentContext(input: LongDocumentInput): Promise<{ context: string; reading: DocumentReading }> {
-  const chunks = documentChunks(input.documents, input.sourceNumbers, Math.min(2000, Math.max(256, input.budget / 3)))
+export async function buildLongDocumentContext(input: LongDocumentInput): Promise<{ context: string; reading: DocumentReading; evidence?: ChatEvidence }> {
+  const chunks = documentChunks(input.documents, input.sourceNumbers, Math.min(2000, Math.max(256, input.budget / 3)), true, input.evidenceEnabled)
+  const evidenceIndex = (used: DocumentChunk[]) => input.evidenceEnabled ? { evidence: { entries: used.flatMap(chunk => chunk.evidence ? [chunk.evidence] : []) } } : {}
   const coverage = input.documents.map((document, i) => ({ source: input.sourceNumbers[i], title: document.source.title,
     totalPages: document.state.totalPages, extractedPages: document.pages.length,
     missingPages: document.pages.filter(page => !page.paragraphs.some(row => row.text.trim()) || page.warning).map(page => page.pageLabel), warning: document.source.warning }))
-  const wrap = (body: string) => `${RULES}\n覆盖信息：${JSON.stringify(coverage)}\n${body}`
+  const wrap = (body: string) => `${RULES}${input.evidenceEnabled ? `\n${EVIDENCE_RULES}` : ''}\n覆盖信息：${JSON.stringify(coverage)}\n${body}`
   const reading = (used: DocumentChunk[], notice: string): DocumentReading => ({ notice, sources: input.documents.map(document => ({ source: document.state.source,
     pages: [...new Map(used.filter(chunk => chunk.document === document).flatMap(chunk => chunk.pages).map(page => [page.pageIndex, page])).values()].sort((a, b) => a.pageIndex - b.pageIndex) })).filter(row => row.pages.length) })
   const full = wrap(`本轮提供全部可读正文：${evidence(chunks)}`)
   if (!chunks.length) return { context: cost(wrap('本轮无可读正文，仅有来源信息。')) <= input.budget ? wrap('本轮无可读正文，仅有来源信息。') : '', reading: reading([], '本轮没有可读 PDF 正文；缺页或不可读附件不能视为已读。') }
-  if (cost(full) <= input.budget) return { context: full, reading: reading(chunks, '本轮已提供全部可读正文；缺页不视为已读。') }
+  if (cost(full) <= input.budget) return { context: full, reading: reading(chunks, '本轮已提供全部可读正文；缺页不视为已读。'), ...evidenceIndex(chunks) }
   if (input.budget < 1200) return { context: '', reading: reading([], '当前消息和历史占用较多，本轮未能附加 PDF 正文；请缩短问题或开启新对话。') }
 
   // 默认只按容量截取相关原文；只有功能配置明确开启时才发起额外概括请求。
@@ -107,7 +116,7 @@ export async function buildLongDocumentContext(input: LongDocumentInput): Promis
       used.push(chunk)
       if (cost(context()) > input.budget) used.pop()
     }
-    return { context: cost(context()) <= input.budget ? context() : '', reading: reading(used, '本轮按容量截取部分 PDF 原文；未整理全文。') }
+    return { context: cost(context()) <= input.budget ? context() : '', reading: reading(used, '本轮按容量截取部分 PDF 原文；未整理全文。'), ...evidenceIndex(used) }
   }
 
   input.progress('正在按模型容量整理长文…')
@@ -154,7 +163,7 @@ export async function buildLongDocumentContext(input: LongDocumentInput): Promis
   }
   const ordered = ranked
   const used: DocumentChunk[] = []
-  let overviewText = !failure ? evidence(overview) : ''
+  let overviewText = !failure ? evidence(input.evidenceEnabled ? overview.map(chunk => ({ ...chunk, id: `summary-${chunk.id}` })) : overview) : ''
   const build = () => wrap(`阅读方式：${!failure ? '全部可读正文已分段处理；分层概括不是原文。' : '本轮仅提供问题相关原文，不代表通读全文。'}${failure ? ' 自动整理未完成；不能据此声称全文覆盖。' : ''}\n分层概括：${overviewText}\n本轮原文：${evidence(used)}`)
   if (cost(build()) > input.budget) overviewText = ''
   for (const { chunk } of ordered) {
@@ -171,5 +180,5 @@ export async function buildLongDocumentContext(input: LongDocumentInput): Promis
   const unique = [...new Set(used)]
   used.splice(0, used.length, ...unique)
   const notice = `${!failure && overviewText ? '全部可读正文已分段整理，本轮附带分层概括与部分原文。' : '本轮按问题读取部分原文。'}${failure ? ' 自动整理未完成，可继续提问重试缺口。' : ''}`
-  return { context: cost(build()) <= input.budget ? build() : '', reading: reading(!failure && overviewText ? summaryChunks : used, notice) }
+  return { context: cost(build()) <= input.budget ? build() : '', reading: reading(!failure && overviewText ? summaryChunks : used, notice), ...evidenceIndex(used) }
 }

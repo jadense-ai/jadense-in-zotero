@@ -6,6 +6,7 @@ import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
 import { verifyLiteratureWorkspace, verifyAnalysisRestart } from './smoke-literature-workspace.mjs'
 import { verifyReaderChat } from "./smoke-reader-chat.mjs"
+import { verifyEvidence } from './smoke-evidence.mjs'
 import { verifyChatFiles } from './smoke-chat-files.mjs'
 import { longPdfFixture, verifyLongPdf, verifyLongPdfRestart } from './smoke-long-pdf.mjs'
 import { verifyMachineTranslation } from './smoke-machine-translation.mjs'
@@ -215,7 +216,7 @@ export function createResearchFixturePdf(withReferences = false, translationLayo
   return Buffer.from(pdf, "ascii")
 }
 
-async function startStub(selectionOnly = false) {
+async function startStub(selectionOnly = false, evidenceOnly = false) {
   const requests = []
   const failures = []
   const account = { signedToday: false, balancePoints: 36, currentStreakDays: 4, rewardPoints: 2 }
@@ -241,6 +242,7 @@ async function startStub(selectionOnly = false) {
             { kind: "model", modelId: "locked-model", displayName: "受限模型", description: "示例不可用模型", sortOrder: 40, minimumPlanCode: "max", locked: true, lockReason: "升级后可直接选择。", capabilities: ["text"], labels: [], icons: { mode: "shared", src: "/icons/logo-padded.png" }, consumptionMultiplier: 2 },
           ],
           defaultSelection: { kind: "route", routeTier: "standard" },
+          ...(evidenceOnly ? { thinkingContractVersion: 1 } : {}),
         }))
         return
       }
@@ -524,6 +526,13 @@ async function startStub(selectionOnly = false) {
           if (!prompt.includes(PDF_SENTENCES[0][0])) throw new Error('File request lost PDF evidence')
           output = 'SYNTHETIC_FILE_UPLOAD_VERIFIED'
           requests.push({ kind: 'chat-file', temporary: true, evidenceVerified: true })
+        } else if (prompt.includes('SYNTHETIC_EVIDENCE_QUESTION')) {
+          if (!prompt.includes('证据溯源已开启')) throw new Error('Evidence instructions missing')
+          const match = /"id":"(s\d+b\d+)"/.exec(prompt)
+          if (!match) throw new Error('No evidence passage was sent')
+          const second = [...prompt.matchAll(/"id":"(s\d+b\d+)"/g)].find(row => row[1].split('b')[0] !== match[1].split('b')[0])?.[1] ?? match[1]
+          output = `## 主要发现\n\n这项研究通过实验评估了方法的测量表现，并报告了改进效果。[[evidence:${match[1]}]]\n\n**核对原文**\n\n引用直接关联本轮读取的 PDF 文段，可查看研究条件与结论的适用范围。[[evidence:${second}]]\n\n这些结果应结合实验条件理解，不能直接推广到其他情境。[[evidence:${match[1]}]]`
+          requests.push({ kind: 'evidence', localPassage: match[1] })
         } else if (prompt.includes('SYNTHETIC_SIDEBAR_QUESTION')) {
           output = createMarkdownFixture('assistant', `http://127.0.0.1:${server.address().port}`)
           markdownStream = true
@@ -760,8 +769,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         const captureWindow = Components.utils.unwaiveXrays(win)
         const browsingContext = captureWindow.browsingContext || captureWindow.docShell?.browsingContext
         if (!browsingContext) throw new Error("The isolated target window has no accessible browsingContext")
-        // drawSnapshot 会忽略 WebRender backdrop-filter；成对毛玻璃截图从目标窗口 compositor 读取，不采桌面。
-        const readback = name.includes("-translucent-")
+        // drawSnapshot 会忽略 backdrop-filter，并可能保留切换 PDF 前的侧栏绘制；这些场景直接读目标窗口 compositor，不采桌面。
+        const readback = name.includes("-translucent-") || name === "evidence-multiple-pdfs-narrow"
         if (readback) {
           const main = Zotero.getMainWindow()
           ;(report.compositorTabs ??= []).push({ name, readerTab: reader.tabID, selectedTabBefore: main.Zotero_Tabs.selectedID })
@@ -1063,6 +1072,14 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       await verifyCloudOCR({ Zotero, reader, assert, waitFor, screenshot, report, findManager })
       report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
+    if (config.evidenceOnly) {
+      await stage('evidence-tracing')
+      Zotero.Prefs.set('extensions.jadenseInZotero.onboardingProgress', JSON.stringify({ stage: 'completed', helloCompleted: true }), true)
+      readerDoc.querySelector('.jadense-reader-brand').click()
+      manager = await waitFor(() => findManager()?.receiveJadenseContext && findManager(), 'Evidence Manager')
+      await verifyEvidence({ Zotero, reader, manager, assert, waitFor, screenshot, report })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
+    }
     if (config.longPdfOnly) {
       await stage('long-pdf-chat')
       readerDoc.querySelector('.jadense-reader-brand').click()
@@ -1101,7 +1118,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       const doc = manager.document, element = id => doc.getElementById("jadense-" + id)
       const quickStart = element("quick-start-dialog")
       await waitFor(() => quickStart.open || Zotero.Prefs.get("extensions.jadenseInZotero.quickStartShown") === true, "quick-start dialog before shell checks")
-      if (quickStart.open) element("quick-start-close")?.click()
+      if (quickStart.open) {
+        quickStart.querySelector('[data-onboarding-action="skip"]').click()
+        await waitFor(() => quickStart.dataset.onboardingStep === 'skip', 'onboarding skip warning')
+        quickStart.querySelector('[data-onboarding-action="confirm-skip"]').click()
+        await waitFor(() => quickStart.dataset.onboardingStep === 'community', 'onboarding community invitation')
+        quickStart.querySelector('[data-onboarding-action="close-community"]').click()
+      }
       await waitFor(() => !quickStart.open, "quick-start dismissal before shell checks")
       report.shellHost = { os: Services.appinfo.OS, version: Services.appinfo.version, build: Services.sysinfo.getProperty("build"), dpi: manager.devicePixelRatio, customtitlebar: doc.documentElement.getAttribute("customtitlebar") }
       report.shellHost.capabilities = [typeof manager.ChromeUtils, typeof manager.Services, typeof manager.minimize, typeof manager.maximize, typeof manager.restore]
@@ -1448,7 +1471,13 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const quickStart = manager.document.getElementById("jadense-quick-start-dialog")
     if (quickStart) {
       await waitFor(() => quickStart.open || Zotero.Prefs.get("extensions.jadenseInZotero.quickStartShown") === true, "quick-start dialog")
-      if (quickStart.open) manager.document.getElementById("jadense-quick-start-close")?.click()
+      if (quickStart.open) {
+        quickStart.querySelector('[data-onboarding-action="skip"]').click()
+        await waitFor(() => quickStart.dataset.onboardingStep === 'skip', 'onboarding skip warning')
+        quickStart.querySelector('[data-onboarding-action="confirm-skip"]').click()
+        await waitFor(() => quickStart.dataset.onboardingStep === 'community', 'onboarding community invitation')
+        quickStart.querySelector('[data-onboarding-action="close-community"]').click()
+      }
       await waitFor(() => !quickStart.open, "quick-start dismissal")
     }
     const logoSession = currentSession()
@@ -3151,6 +3180,7 @@ async function writeCompanion(extensionsDir, config) {
     verifyClassification.toString(),
     verifyDiagnostics.toString(),
     verifyReaderChat.toString(),
+    verifyEvidence.toString(),
     verifyChatFiles.toString(),
     verifyLongPdf.toString(),
     verifyLongPdfRestart.toString(),
@@ -3237,7 +3267,7 @@ async function main() {
   const referencePdfPath = path.join(smokeRoot, "synthetic-references.pdf")
   const translationPdfPath = path.join(smokeRoot, "synthetic-translation.pdf")
   const extensionsDir = path.join(profileDir, "extensions")
-  const stub = await startStub(argv.includes('--selection-only'))
+  const stub = await startStub(argv.includes('--selection-only'), argv.includes('--evidence-only'))
   let child
   let stdout
   let stderr
@@ -3277,6 +3307,7 @@ async function main() {
       simpleReadingOnly: argv.includes('--simple-reading-only'),
       simpleReadingInterruptionOnly: argv.includes('--simple-reading-interruption-only'), closeBeforePanel: argv.includes('--simple-reading-close-before-panel'), closeDelayMs: Number(argValue(argv, '--simple-reading-close-delay-ms') ?? 0), secondPdfPath,
       longPdfOnly: argv.includes('--long-pdf-only'), longPdfPath,
+      evidenceOnly: argv.includes('--evidence-only'),
       wordBytes: argv.includes('--chat-files-only') ? Array.from(await wordFixture.generateAsync({ type: 'uint8array' })) : undefined,
       pluginID, profileDir, dataDir, pdfPath, referencePdfPath, translationPdfPath, reportPath, origin: stub.origin, upgradeXpi,
       translationPapers: argValue(argv, '--translation-papers') ? path.resolve(argValue(argv, '--translation-papers')) : undefined,
