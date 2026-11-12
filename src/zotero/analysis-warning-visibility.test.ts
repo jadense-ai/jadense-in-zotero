@@ -22,11 +22,12 @@ afterEach(() => {
 /** 用隔离 DOM 挂载真实解析界面，仅替换无关引用任务和运行调度。 */
 function mount(record: PaperAnalysisRecord, unsaved = false) {
   const dom = new JSDOM('<!doctype html><main></main>'), root = dom.window.document.querySelector('main')!
+  const stop = vi.fn()
   const workspace = mountAnalysisWorkspace(root, {}, { records: () => [record], unsaved: () => unsaved,
-    openSource: async () => true, stop: () => {}, onReferenceTask: () => {} })
+    openSource: async () => true, stop, onReferenceTask: () => {} })
   workspace.open(record.source)
   disposals.push(() => { workspace.remove(); dom.window.close() })
-  return { root, workspace }
+  return { root, workspace, stop }
 }
 
 function record(warnings: string[]): PaperAnalysisRecord {
@@ -61,5 +62,48 @@ describe('analysis warning visibility', () => {
     expect(root.querySelector('.jdx-analysis-summary')?.textContent).toContain(fixture.summary)
     expect(root.querySelector('.jdx-analysis-detail')?.textContent).toContain('最新结果尚未完整保存')
     expect([...root.querySelectorAll('.jdx-notice')].every(notice => !notice.textContent?.includes(sampling))).toBe(true)
+  })
+
+  it.each(['zh-CN', 'en-US'])('explains reference-only work and keeps its labelled stop action in %s', locale => {
+    initializeUiLocale({ locale })
+    const fixture = record([]), { root, workspace, stop } = mount(fixture)
+    const banner = root.querySelector<HTMLElement>('.jdx-detail-run')!
+    expect(banner.hidden).toBe(true)
+    workspace.setRun({ source: fixture.source, message: '', busy: false, references: { running: true }, createdAt: fixture.createdAt })
+    expect(banner.hidden).toBe(false)
+    expect(banner.querySelector('.jdx-analysis-status-title')?.textContent).toBe(locale === 'zh-CN' ? '正在整理参考文献' : 'Preparing references')
+    expect(banner.querySelector('.jdx-analysis-status-description')?.textContent).not.toBe('')
+    const actions = banner.querySelector<HTMLElement>('[role=group]')!
+    const visible = [...actions.querySelectorAll('button')].filter(button => !button.hidden)
+    expect(visible).toHaveLength(1)
+    expect(visible[0].textContent).toBe(locale === 'zh-CN' ? '停止本次解析' : 'Stop analysis')
+    visible[0].click()
+    expect(stop).toHaveBeenCalledWith(fixture.source)
+    workspace.setRun({ source: fixture.source, message: 'Completed', busy: false, createdAt: fixture.createdAt })
+    expect(banner.hidden).toBe(true)
+    expect(root.querySelector('.jdx-analysis-summary')?.textContent?.trim()).toBe(fixture.summary)
+  })
+
+  it('replaces running actions with a single continue action when paused', () => {
+    const fixture = record([]), { root, workspace } = mount(fixture)
+    workspace.setRun({ source: fixture.source, message: 'Reading page 2', busy: true, createdAt: fixture.createdAt })
+    workspace.setRun({ source: fixture.source, message: 'Paused by reader', busy: false, resumable: true, createdAt: fixture.createdAt })
+    const banner = root.querySelector<HTMLElement>('.jdx-detail-run')!
+    expect(banner.dataset.kind).toBe('neutral')
+    expect(banner.querySelector('.jdx-analysis-status-title')?.textContent).toBe('解析已暂停')
+    expect(banner.querySelector('.jdx-analysis-status-description')?.textContent).toBe('Paused by reader')
+    const visible = [...banner.querySelectorAll('button')].filter(button => !button.hidden)
+    expect(visible.map(button => button.textContent)).toEqual(['继续解析'])
+    expect(visible[0].classList.contains('jdx-button-primary')).toBe(true)
+  })
+
+  it('retains error feedback without reserving space for unavailable actions', () => {
+    const fixture = record([]), { root, workspace } = mount(fixture)
+    workspace.setRun({ source: fixture.source, message: pageFailure, busy: false, error: true, createdAt: fixture.createdAt })
+    const banner = root.querySelector<HTMLElement>('.jdx-detail-run')!
+    expect(banner.hidden).toBe(false)
+    expect(banner.dataset.kind).toBe('error')
+    expect(banner.querySelector('.jdx-analysis-status-title')?.textContent).toBe('解析未完成')
+    expect(banner.querySelector<HTMLElement>('.jdx-analysis-run-actions')?.hidden).toBe(true)
   })
 })

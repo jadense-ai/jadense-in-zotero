@@ -12,7 +12,9 @@ vi.mock('./manager-window', () => ({ openManagerWindow: vi.fn() }))
 vi.mock('./ui-preferences', () => ({ observeTheme: () => () => {}, uiText: (_cn: string, en: string) => en }))
 vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ setOptions() {}, setValue() {}, close() {}, destroy() {}, onChange() {} }) }))
 vi.mock('./chat-message-ui', () => ({ messageAction: (doc: Document) => doc.createElement('button') }))
-import { openChatSidebar, openTranslationSidebar, removeReaderSidebars, renderNativeReaderSidebar } from './reader-sidebar'
+import { openAnalysisSidebar, openChatSidebar, openTranslationSidebar, removeReaderSidebars, renderNativeReaderSidebar } from './reader-sidebar'
+import { mountDocumentResults } from './document-results'
+import { openManagerWindow } from './manager-window'
 
 class Node extends EventTarget {
   children: Node[] = []; parentElement: Node | null = null; dataset: Record<string, string> = {}; attributes = new Map<string, string>()
@@ -263,4 +265,23 @@ it('abandons a pending open when the user switches tabs', async () => {
   f.detail.render.mockImplementation(() => new Promise<void>(done => { resolve = done }))
   const opened = f.open(); tabs.selectedID = 'other'; resolve(); await opened
   expect(mocks.chat).not.toHaveBeenCalled()
+})
+
+it('opens the selected analysis version from the header and hides that action in chat', async () => {
+  const f = fixture(true), selectedRecordID = vi.fn(() => 'latest-analysis')
+  mocks.jobs.mockReturnValue({ ready: Promise.resolve(), list: () => [{ source: { itemID: 1, title: 'Synthetic PDF' } }] })
+  vi.mocked(mountDocumentResults).mockReturnValueOnce({ refresh: vi.fn(), selectedRecordID, setRun: vi.fn(), remove: vi.fn() })
+  await openAnalysisSidebar(f.host, f.pdf as unknown as Document, 1, f.reader as never)
+  const header = f.doc.querySelector('.jdx-reader-header-right')!
+  const workbench = header.children[1] as unknown as HTMLButtonElement
+  expect(workbench.hidden).toBe(false)
+  workbench.onclick?.(new Event('click') as MouseEvent)
+  expect(openManagerWindow).toHaveBeenLastCalledWith(expect.objectContaining({ action: { kind: 'fullTranslate', itemID: 1, taskID: 'latest-analysis', resultMode: 'summary' } }))
+  selectedRecordID.mockReturnValue('older-analysis')
+  workbench.onclick?.(new Event('click') as MouseEvent)
+  expect(openManagerWindow).toHaveBeenLastCalledWith(expect.objectContaining({ action: expect.objectContaining({ taskID: 'older-analysis' }) }))
+  expect(vi.mocked(mountDocumentResults).mock.calls.at(-1)?.[4]).not.toHaveProperty('onWorkbench')
+  await f.open()
+  expect(workbench.hidden).toBe(true)
+  expect(header.children[0].hidden).toBe(false)
 })

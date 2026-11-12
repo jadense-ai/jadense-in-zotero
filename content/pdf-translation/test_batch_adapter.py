@@ -15,6 +15,14 @@ measure = lambda text: (len(text) + 2) // 3
 
 
 class BatchingTests(unittest.TestCase):
+    def test_context_v2_uses_the_actual_request_output_ceiling(self):
+        budget = dict(contextWindow=1048576, batchTokens=200000, maxOutputTokens=1024, policy='context-v2')
+        self.assertTrue(fits([dict(id='a', text='Short source.', label='body')], measure, budget, 'zh-CN'))
+        self.assertFalse(fits([dict(id='a', text='Long source. ' * 1000, label='body')], measure, budget, 'zh-CN'))
+        groups = list(batches([dict(id=str(i), text='Evidence sentence. ' * 8, label='body') for i in range(20)], measure, budget, 'zh-CN'))
+        self.assertGreater(len(groups), 1)
+        self.assertTrue(all(fits(group, measure, budget, 'zh-CN') for group in groups))
+
     def test_publisher_radical_fonts_are_formula_fonts_without_capturing_text_ligatures(self):
         from batch_adapter import formula_font_pattern
         from babeldoc.format.pdf.document_il.utils.formular_helper import is_formulas_font

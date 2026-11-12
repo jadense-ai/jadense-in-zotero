@@ -1,5 +1,5 @@
 /** 工作台顶栏的唯一模式入口；临时反馈限时清理，连接完成前保持 off。 */
-import { JADENSE_BRAND_PARTS } from './jadense-brand'
+import { createJadenseBrandIcon } from './jadense-brand'
 import type { ZoteroLike } from './runtime'
 import { jadenseAiClient } from './jadense-ai'
 import { localOCRReadiness } from './local-ocr'
@@ -13,9 +13,8 @@ export function wireJadenseMode(host: ZoteroLike, root: HTMLElement, openConnect
   button.setAttribute('aria-label', uiText('攻玉模式', 'Jadense mode'))
   const track = doc.createElementNS(ns, 'span'); track.className = 'jdx-mode-track'; track.setAttribute('aria-hidden', 'true')
   const thumb = doc.createElementNS(ns, 'span'); thumb.className = 'jdx-mode-thumb'
-  const svgNS = 'http://www.w3.org/2000/svg', logo = doc.createElementNS(svgNS, 'svg')
-  logo.setAttribute('class', 'jdx-mode-logo'); logo.setAttribute('viewBox', '0 0 575 552'); logo.setAttribute('focusable', 'false')
-  for (const part of JADENSE_BRAND_PARTS) { const path = doc.createElementNS(svgNS, 'path'); path.setAttribute('d', part.path); logo.append(path) }
+  const logo = createJadenseBrandIcon(doc, { size: 12, monochrome: true })
+  logo.setAttribute('class', 'jdx-mode-logo')
   thumb.append(logo); track.append(thumb)
   const label = doc.createElementNS(ns, 'span'); label.className = 'jdx-mode-label'; label.textContent = uiText('攻玉模式', 'Jadense mode'); button.append(track, label)
   const status = doc.createElementNS(ns, 'span') as HTMLSpanElement; status.setAttribute('role', 'status'); status.className = 'jdx-mode-status'

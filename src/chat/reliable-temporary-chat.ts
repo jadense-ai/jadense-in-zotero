@@ -195,6 +195,7 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
       origin: this.base(), taskId: input.taskId ?? input.conversationId, operationId: input.operationId ?? input.clientRequestId,
       ...(input.durableExecution ? { durableExecution: true } : {}),
       ...(input.previousRequestId ? { previousRequestId: input.previousRequestId } : {}),
+      ...(input.maxOutputTokens ? { maxOutputTokens: input.maxOutputTokens } : {}),
       messages: temporaryChatMessages(responseFormatMessages(input.messages, input.responseFormat), input.sources, input.images),
       ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}), ...jadenseChatSelectionBody(this.options.selection) }
     const capability = await temporaryAccountCapability({ ...this.options, signal: input.signal })
@@ -202,6 +203,7 @@ export class ReliableTemporaryChatClient extends TemporaryChatClient {
     // UI 重新构造消息 UUID 不应使未完成的同一输入丢失身份；完成记录不会拦截主动再次执行。
     const fingerprint = await requestHash(JSON.stringify({ conversation: input.conversationId, feature: input.clientFeature ?? 'chat', selection: this.options.selection,
       messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images,
+      ...(input.maxOutputTokens ? { maxOutputTokens: input.maxOutputTokens } : {}),
       ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}) }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
     const legacyAccount = await requestHash(this.base() + '\n' + this.options.token.trim())

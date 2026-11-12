@@ -4,10 +4,11 @@
  * 只保留定位、元数据和有界文本，不保留路径、二进制或连接凭据。
  */
 
+import { localMessageBodies } from './local-message-bodies'
+
 export const MAX_CHAT_SOURCES = 24
+/** 兼容历史导出；当前正文使用独立存储和模型预算，不再按此值截断。 */
 export const MAX_SOURCE_TEXT_LENGTH = 60_000
-const MAX_TOTAL_SOURCE_TEXT_LENGTH = 180_000
-const MAX_QUOTE_TEXT_LENGTH = 12_000
 const MAX_WARNING_LENGTH = 600
 
 export type ChatSourceParentItem = {
@@ -26,6 +27,7 @@ export type ChatSource = {
   title: string
   citation: string
   text: string
+  textRef?: string
   pageIndex?: number
   pageLabel?: string
   contentType?: string
@@ -101,7 +103,7 @@ export function normalizeChatSources(value: unknown): ChatSource[] {
       itemKey,
       title: limitedText(row.title, 500) || "未命名 Zotero 来源",
       citation: limitedText(row.citation, 2_000),
-      text: limitedText(row.text, row.kind === "quote" ? MAX_QUOTE_TEXT_LENGTH : MAX_SOURCE_TEXT_LENGTH),
+      ...localMessageBodies.restore({ text: typeof row.text === 'string' ? row.text.trim() : '', ...(typeof row.textRef === 'string' ? { textRef: row.textRef } : {}) }),
       ...(nonNegativeInteger(row.pageIndex) ? { pageIndex: row.pageIndex } : {}),
       ...(limitedText(row.pageLabel, 80) ? { pageLabel: limitedText(row.pageLabel, 80) } : {}),
       ...(limitedText(row.contentType, 120) ? { contentType: limitedText(row.contentType, 120) } : {}),
@@ -131,14 +133,6 @@ export function normalizeChatSources(value: unknown): ChatSource[] {
       break
     }
     sources.set(source.id, source)
-  }
-  let remainingText = MAX_TOTAL_SOURCE_TEXT_LENGTH
-  for (const source of sources.values()) {
-    if (source.text.length > remainingText) {
-      source.text = source.text.slice(0, remainingText)
-      addWarning(source, "受对话来源总长度限制，此来源文本已截断；未提供部分不可视为已读。")
-    }
-    remainingText -= source.text.length
   }
   return [...sources.values()]
 }
@@ -220,7 +214,7 @@ export function createQuoteSource(
     itemKey: source.itemKey,
     title: source.title,
     citation: source.citation,
-    text: input.text.trim().slice(0, MAX_QUOTE_TEXT_LENGTH),
+    text: input.text.trim(),
     ...(nonNegativeInteger(input.pageIndex) ? { pageIndex: input.pageIndex } : {}),
     ...(limitedText(input.pageLabel, 80) ? { pageLabel: limitedText(input.pageLabel, 80) } : {}),
     ...(source.contentType ? { contentType: source.contentType } : {}),

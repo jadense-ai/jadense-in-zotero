@@ -16,8 +16,9 @@ export class ReliableByokChatClient extends ByokChatClient {
     const account = await requestHash('jadense-profile-byok-executions')
     const semanticConfig = { ...this.options.config, apiKey: undefined }
     const content = { conversation: input.conversationId, messages: input.messages.map(({ role, text }) => ({ role, text })), sources: input.sources, images: input.images, ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}) }
-    const fingerprint = await requestHash(JSON.stringify({ config: semanticConfig, ...content }))
-    const legacyFingerprint = await requestHash(JSON.stringify({ config: this.options.config, ...content }))
+    const budgetedContent = { ...content, ...(input.maxOutputTokens ? { maxOutputTokens: input.maxOutputTokens } : {}) }
+    const fingerprint = await requestHash(JSON.stringify({ config: semanticConfig, ...budgetedContent }))
+    const legacyFingerprint = await requestHash(JSON.stringify({ config: this.options.config, ...budgetedContent }))
     const rows = await this.store.list({ account, conversation: input.conversationId })
     for (const row of rows) if (row.fingerprint === legacyFingerprint) { row.fingerprint = fingerprint; await this.store.save(row) }
     const completed = input.reuseCompletedOperation && input.operationId ? rows.find(row => row.account === account && row.body.operationId === input.operationId && row.status === 'completed' && row.fingerprint === fingerprint) : undefined

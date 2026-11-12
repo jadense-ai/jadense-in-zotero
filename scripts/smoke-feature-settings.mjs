@@ -126,6 +126,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   const native = preferences.document.querySelector('[data-settings-section="features"]')
   assert(native.querySelector('[data-settings-task="chat"] [data-chat-document-mode="chat"]') && !native.querySelector('[data-settings-task="figure"] [data-chat-document-mode]'), 'Native long-PDF setting is outside AI Chat')
   await waitFor(() => native.querySelector('[data-classification-settings-host] input'), 'native classification')
+  preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
   assert(native.querySelectorAll('[data-settings-task]').length === 7, 'Native groups differ')
   openGroup(native, 'chat')
   const nativeModel = native.querySelector('#jadense-in-zotero-feature-chat-model')

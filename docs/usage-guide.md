@@ -2,12 +2,42 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.15 模型容量与设置体验](#update-0615)
 - [0.6.14 证据溯源与互动入门](#update-0614)
 - [0.6.13 任务继续、解析状态与阅读字号](#update-0613)
 - [0.6.0 对照翻译与引擎配置](#pdf-translation-060)
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0615"></a>
+## 0.6.15 模型容量与设置体验 / Model capacity and settings
+
+### 操作与配置
+
+在「设置 → 功能配置」选择各功能使用的模型。翻译预算留空时按可获取的模型能力自动规划；已有数字限额继续保留，可清空恢复自动。BYOK 模型可填写上下文窗口和输出上限。文献解析按可读原文和模型容量分批执行，分批处理可能产生多次调用及费用；查看覆盖提示并核对原文，不代表任意长文都能在一次请求中完整读取。
+
+原生 Zotero 设置使用独立页签和自然滚动，与工作台共享同一偏好数据。通过原有入口调整模型、主题和引擎配置即可，无需重新录入现有设置。完整离线 ZIP 解压后，在外置依赖配置中分别导入 PDF 与 OCR 引擎 ZIP；已安装且就绪的引擎无需重装。
+
+### 升级与兼容
+
+在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」选择 `jadense-in-zotero-v0.6.15.xpi`，按提示重启。相同 .cn 插件身份保留已有设置和本地历史。Manifest 声明 Zotero 8.0–10.0.*；完整离线套装仅适用 Windows x64。官方完整包包含发现前沿，公开源码独立构建为基础版。AI 仍调用所选在线服务。
+
+攻玉 Auto 模型容量和平台输出预算需要配套服务端更新；本次只发布插件，不包含服务端部署，旧服务端环境不能据此保证这两项能力。具体模型与 BYOK 的本地容量规划可使用已知能力；目录暂不可用时不因缺失可选信息阻断普通功能。旧未确认的付费请求保留原执行身份，不因升级盲目重发。
+
+Jadense Auto capacity and platform output budgets require a matching server update, which is not deployed as part of this plugin release. Existing numeric translation limits remain manual until cleared. Old truncated text cannot be restored, and model capacity is estimated with headroom rather than guaranteed for every provider.
+
+### 验证与下载
+
+复用开发阶段记录：模型容量修复的 1596 项插件测试、相关静态与类型检查和 18 项隔离原生验证；品牌相关 136 项测试及原生验证；设置相关 90 项测试与中英文各 19 项最终宿主检查。原生环境覆盖 Windows 11 / Zotero 10.0.8（各记录范围不同），使用隔离 profile 和合成服务。未实测其他系统、Zotero 8/9、真实付费 Provider 或完整付费 PDF 翻译。既有综合 feature-settings 脚本与当前统一翻译模型界面不符，不能声称该旧套件通过。
+
+发行阶段仅核对 production/full 包身份、引擎匹配、摘要与渠道传输，不重复插件功能测试。正式标签与附件保持不可变。
+
+- [下载 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.15/jadense-in-zotero-v0.6.15.xpi)
+- [下载 Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.15/jadense-in-zotero-v0.6.15-windows-x64-offline.zip)
+- [全部制品校验和](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.15/DISTRIBUTION-SHA256SUMS)
+- [百度网盘](https://pan.baidu.com/s/1YXrqXBao6uEA2BZKz1WlTw?pwd=4sci)（提取码 4sci） · [夸克网盘](https://pan.quark.cn/s/15513357f57d?pwd=H2RJ)（提取码 H2RJ）
+
 
 <a id="update-0614"></a>
 ## 0.6.14 证据溯源与互动入门 / Evidence tracing and onboarding

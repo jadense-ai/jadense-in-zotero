@@ -10,6 +10,7 @@ import { normalizeLocalChatFile, type LocalChatFile } from "./file-input"
 import { normalizeResearchMessageContext, type ResearchMessageContext } from "./research-presentation"
 import type { DocumentReading } from './long-document-context'
 import { normalizeChatEvidence, type ChatEvidence } from './evidence'
+import { localMessageBodies } from './local-message-bodies'
 
 export const LOCAL_CHAT_PREF_KEY = "extensions.jadenseInZotero.localChatState"
 
@@ -17,7 +18,6 @@ const LOCAL_CHAT_VERSION = 1 as const
 const MAX_LOCAL_SESSIONS = 20
 const MAX_MESSAGES_PER_SESSION = 200
 const MAX_MESSAGE_TEXT_LENGTH = 20_000
-const MESSAGE_TRUNCATION_NOTICE = "\n\n【本地消息长度受限，后续内容未保存】"
 const MAX_SERIALIZED_LENGTH = 1_000_000
 
 export type LocalChatMessageStatus = "complete" | "streaming" | "failed"
@@ -26,6 +26,7 @@ export type LocalChatMessage = {
   id: string
   role: "user" | "assistant"
   text: string
+  textRef?: string
   createdAt: string
   status: LocalChatMessageStatus
   research?: ResearchMessageContext
@@ -82,10 +83,7 @@ function text(value: unknown, maxLength = MAX_MESSAGE_TEXT_LENGTH) {
 
 /** 正文截断时在同一长度预算内提示缺失；已保存的正文再次读取不会重复添加尾注。 */
 function messageText(value: unknown) {
-  if (typeof value !== "string") return ""
-  return value.length > MAX_MESSAGE_TEXT_LENGTH
-    ? value.slice(0, MAX_MESSAGE_TEXT_LENGTH - MESSAGE_TRUNCATION_NOTICE.length) + MESSAGE_TRUNCATION_NOTICE
-    : value
+  return typeof value === 'string' ? value : ''
 }
 
 function nonEmptyText(value: unknown, maxLength = 200) {
@@ -135,7 +133,7 @@ function normalizeMessage(value: unknown): LocalChatMessage | null {
   return {
     id,
     role,
-    text: messageText(row.text),
+    ...localMessageBodies.restore({ text: messageText(row.text), ...(typeof row.textRef === 'string' ? { textRef: row.textRef } : {}) }),
     createdAt,
     status: status(row.status),
     ...(research ? { research } : {}),
@@ -196,6 +194,8 @@ function createId(prefix: string) {
 
 function fitSerializedState(state: LocalChatState) {
   const next = structuredClone(state)
+  for (const session of next.sessions) for (const message of session.messages) Object.assign(message, localMessageBodies.project(message))
+  for (const session of next.sessions) for (const source of session.sources) Object.assign(source, localMessageBodies.project(source))
   let serialized = JSON.stringify(next)
   while (serialized.length > MAX_SERIALIZED_LENGTH) {
     const oldestSession = next.sessions[next.sessions.length - 1]
@@ -234,7 +234,13 @@ function fitSerializedState(state: LocalChatState) {
 }
 
 function saveLocalChatState(preferences: LocalChatPreferenceStore, state: LocalChatState) {
-  preferences.set(LOCAL_CHAT_PREF_KEY, fitSerializedState(normalizeState(state)))
+  // 显式更新的正文先发布到引用缓存；否则规范化会把新流式正文还原成旧缓存值。
+  const prepared = structuredClone(state)
+  for (const session of prepared.sessions) {
+    for (const message of session.messages) Object.assign(message, localMessageBodies.project(message))
+    for (const source of session.sources) Object.assign(source, localMessageBodies.project(source))
+  }
+  preferences.set(LOCAL_CHAT_PREF_KEY, fitSerializedState(normalizeState(prepared)))
 }
 
 export function readLocalChatState(preferences: LocalChatPreferenceStore): LocalChatState {
@@ -265,6 +271,7 @@ export function createLocalChatSession(
     .slice(0, MAX_LOCAL_SESSIONS)
   state.activeSessionId = session.id
   saveLocalChatState(preferences, state)
+  if (state.sessions.length === MAX_LOCAL_SESSIONS) void localMessageBodies.prune(() => readLocalChatState(preferences).sessions.flatMap(session => [...session.messages, ...session.sources]))
   return session
 }
 
@@ -281,6 +288,7 @@ export function deleteLocalChatSession(preferences: LocalChatPreferenceStore, se
   state.sessions = state.sessions.filter((session) => session.id !== sessionId)
   if (state.activeSessionId === sessionId) state.activeSessionId = state.sessions[0]?.id ?? null
   saveLocalChatState(preferences, state)
+  void localMessageBodies.prune(() => readLocalChatState(preferences).sessions.flatMap(session => [...session.messages, ...session.sources]))
   return state
 }
 
@@ -397,5 +405,6 @@ export function removeLocalChatSource(
   session.sources = session.sources.filter((source) => source.id !== sourceId)
   session.updatedAt = new Date().toISOString()
   saveLocalChatState(preferences, state)
+  void localMessageBodies.prune(() => readLocalChatState(preferences).sessions.flatMap(session => [...session.messages, ...session.sources]))
   return readLocalChatState(preferences)
 }

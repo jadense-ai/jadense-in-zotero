@@ -73,6 +73,9 @@
 .jdx-reader-header-left,.jdx-reader-header-right { display:flex; align-items:center; min-width:0; }
 .jdx-reader-header-right { justify-content:flex-end; }
 .jdx-reader-header-center { min-width:0; text-align:center; }
+/* 解析页延续白色阅读面，以主题细边框分隔标题栏，沿用现有功能切换菜单。 */
+.jdx-reader-workspace:is([data-page=summary],[data-page=notes],[data-page=references]) .jdx-reader-workspace-header { min-height:44px; height:auto; padding-block:6px; border-bottom:1px solid var(--jdx-line); background:var(--jdx-background); }
+.jdx-reader-workspace:is([data-page=summary],[data-page=notes],[data-page=references]) .jdx-reader-header-center strong { font-size:calc(14px * var(--jdx-font-scale,1)); font-weight:600; }
 .jdx-reader-header-center .jdx-select-trigger { justify-content:center; border:0; background:transparent; }
 .jdx-reader-header-center .jdx-select-value { flex:0 1 auto; }
 .jdx-reader-workspace-header .jdx-button,.jdx-select-icon-only { width:28px; min-width:28px; flex:none; }

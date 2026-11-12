@@ -58,6 +58,7 @@ async function verifyByokThinking({ Zotero, manager, waitFor, assert, screenshot
   await Promise.resolve(Zotero.Utilities.Internal.openPreferences('jadense-in-zotero-preferences'))
   const preferences = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'native BYOK Preferences')
   const nativeDoc = preferences.document
+  nativeDoc.getElementById('jadense-in-zotero-settings-tab-byok').click()
   const native = id => nativeDoc.getElementById(id)
   const nativeList = native('jadense-in-zotero-byok-model-select')
   const nativeRow = await waitFor(() => nativeList.querySelector(`button[data-model-id="${modelId}"]`), 'native BYOK model row')

@@ -3,6 +3,8 @@
  * 使用本地 SSE 代替 Provider，仅替换 PDF 读取和原生写入，确保协议失败不能变成批注写入。
  */
 import { describe, expect, it, vi } from "vitest"
+// 本文件隔离模型执行/恢复；目录冷启动、断网和容量读取由 model-budget 与 translation-budget 接缝回归覆盖。
+vi.mock('./model-catalog', async original => ({ ...await original<typeof import('./model-catalog')>(), refreshModelCatalog: async () => {} }))
 
 import { readPaperAnalysisHistory } from "@/chat/paper-analysis-history"
 import { runIndependentPaperAnalysis } from "./paper-analysis-runner"

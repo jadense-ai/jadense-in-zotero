@@ -402,7 +402,8 @@ export class ByokChatClient {
     let response!: Response
     for (const [index, mode] of modes.entries()) {
       input.signal?.throwIfAborted()
-      const outbound = request(this.config, messages, input.images, input.responseFormat, mode)
+      const budget = typeof input.maxOutputTokens === 'number' && Number.isFinite(input.maxOutputTokens) && Math.floor(input.maxOutputTokens) > 0 ? Math.floor(input.maxOutputTokens) : this.config.maxOutputTokens
+      const outbound = request({ ...this.config, maxOutputTokens: Math.min(this.config.maxOutputTokens, budget) }, messages, input.images, input.responseFormat, mode)
       try {
         response = await diagnosticFetch(input.diagnostic, this.fetchImpl, byokEndpoint(this.config.protocol, this.config.baseUrl), {
           method: 'POST', headers: outbound.headers, body: JSON.stringify(outbound.body), signal: input.signal,

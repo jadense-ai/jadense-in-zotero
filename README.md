@@ -20,12 +20,12 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **非商业自用免费 · 禁止商用 · 支持自带 API Key（BYOK）· 攻玉账号可选**
 
-**[下载 v0.6.14 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.14/jadense-in-zotero-v0.6.14.xpi)** · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.14/jadense-in-zotero-v0.6.14-windows-x64-offline.zip) · [先看依赖与安装方式](#requirements) · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
+**[下载 v0.6.15 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.15/jadense-in-zotero-v0.6.15.xpi)** · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.15/jadense-in-zotero-v0.6.15-windows-x64-offline.zip) · [先看依赖与安装方式](#requirements) · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
 
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.14 已发布：**可选证据溯源将回复引用连接到原文预览与 PDF 定位，来源列表按需展开；新增可继续的互动入门教学和统一离线引擎安装帮助。[操作、升级与已知限制](docs/usage-guide.md#update-0614)。
+**v0.6.15：**按模型容量规划长文输入、完整保存本地长正文，修复原生设置并统一 Logo。[操作、升级与已知限制](docs/usage-guide.md#update-0615)。
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -34,16 +34,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.15](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15) — 按模型容量规划输入，完整保留本地长正文，修复原生设置并统一 Logo。
 - [v0.6.14](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14) — 新增可选证据溯源、原文预览与 PDF 定位，来源列表按需展开，提供可继续的入门教学和统一离线安装帮助。
 - [v0.6.13](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13) — 解析与对照翻译保留进度并支持继续，区分解析状态，新增独立字号与译文缩放，明确 PDF 失效任务操作。
 - [v0.6.12](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.12) — 发现前沿分离首页、进行与结果，更新文献卡片和收藏操作，新增交集／并集检索与帮助。
 - [v0.6.11](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.11) — 发现前沿欢迎、扫描与历史布局更新，修复文本居中，改进收藏 PDF 上传恢复与翻译反馈。
-- [v0.6.10](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.10) — PDF 与 OCR 引擎可分别选择存储位置；BYOK 可按功能设置思考档位，攻玉对话模型一次性设为 `qwen-3.8-flash`。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-开发阶段验证、兼容范围及本次发布说明见 [v0.6.14 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14)。公开 main 的自动 CI 已通过；正式附件复用 production/full 包，完整离线套装仅适用于 Windows x64。
+开发验证、兼容范围及服务端依赖见 [v0.6.15 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15)。正式附件使用 production/full 包，完整离线套装仅适用于 Windows x64。
 
 <a id="api-recommendation"></a>
 

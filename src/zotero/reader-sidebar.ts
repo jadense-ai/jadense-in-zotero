@@ -110,7 +110,8 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))], 'chat')
   const sessionHost = element(doc, 'div'), heading = element(doc, 'strong'); center.append(sessionHost, heading)
   const newChat = messageAction(doc, uiText('新建对话', 'New conversation'), 'M12 5v14M5 12h14'); newChat.classList.add('jdx-button')
-  right.append(newChat); header.append(left, center, right)
+  const workbench = messageAction(doc, uiText('在工作台查看', 'Open in workbench'), 'M3 4h18v16H3zM9 4v16M3 9h6'); workbench.classList.add('jdx-button'); workbench.hidden = true
+  right.append(newChat, workbench); header.append(left, center, right)
   const pages = element(doc, 'section', 'jdx-reader-workspace-pages'), chat = element(doc, 'section', 'jdx-reader-workspace-content')
   pages.append(chat); root.append(header, pages)
   const chatView = mountReaderChat(chat, sessionHost, host, itemID)
@@ -125,6 +126,7 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
     page = next; const generation = ++sequence
     root.dataset.page = next; pageSelect.setValue(next); pageSelect.close(); chatView.closeMenus()
     chat.hidden = next !== 'chat'; sessionHost.hidden = chat.hidden; newChat.hidden = chat.hidden; heading.hidden = !chat.hidden
+    workbench.hidden = !chat.hidden
     for (const [mode, view] of views) view.root.hidden = mode !== next
     if (next === 'chat') { chatView.refresh(); return }
     const resultPage = next as ResultPage
@@ -156,10 +158,6 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
       const panel = element(doc, 'section', 'jdx-reader-workspace-content')
       const view = mountDocumentResults(panel, host, source, mode, { recordID, readerDocument: options.readerDocument, analysisTab, hideAnalysisTabs: true,
         onTranslate: id => { void setPage('translation', id).catch(() => navigate('translation')) },
-        onWorkbench: (resultMode, taskID) => {
-          openManagerWindow({ zotero: host, win: host.getMainWindow?.() as Parameters<typeof openManagerWindow>[0]['win'],
-            context: { pluginID: 'jadense-in-zotero@jadense.cn', rootURI: '' }, section: 'analysis', action: { kind: 'fullTranslate', itemID, taskID, resultMode: analysisTab || resultMode } })
-        },
       })
       pages.append(panel); views.set(resultPage, { root: panel, view })
     } catch (error) { if (!removed && generation === sequence) {
@@ -172,6 +170,13 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
     if (!removed) recovery(pages, host, () => navigate(next), trace.id)
   }) }
   newChat.onclick = () => { void chatView.newSession().catch(() => navigate('chat')) }
+  // 工作台入口属于页面导航，固定在标题栏；按当前页面读取所选成果版本。
+  workbench.onclick = () => {
+    if (page === 'chat') return
+    const resultPage = page as ResultPage, taskID = views.get(resultPage)?.view.selectedRecordID()
+    openManagerWindow({ zotero: host, win: host.getMainWindow?.() as Parameters<typeof openManagerWindow>[0]['win'],
+      context: { pluginID: 'jadense-in-zotero@jadense.cn', rootURI: '' }, section: 'analysis', action: { kind: 'fullTranslate', itemID, taskID, resultMode: resultPage } })
+  }
   pageSelect.onChange(navigate); root.dataset.page = page
   const value: Surface = {
     itemID, doc, root,

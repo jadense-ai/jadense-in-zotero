@@ -1,5 +1,16 @@
 # 更新说明 / Changelog
 
+## 0.6.15 — 2026-11-12
+
+- 对话、文献解析与翻译按所选模型的上下文容量和输出预算安排输入；解析按容量分批处理可读全文，并保存分批进度。
+- 长消息和关联来源正文完整保存在本机，请求时选取适合本轮问题的材料；覆盖不足会提示，旧版已经截断的内容无法自动恢复。
+- 修复 Zotero 原生设置的布局、滚动、关闭后重开与 OCR 进度显示，改善中英文、大字号及 BYOK 思考档位弹层。
+- 统一阅读器、工作台和原生侧栏的 Jadense Logo，改善浅深主题下的图标一致性。
+- Plan chat, analysis and translation input around the selected model's context and output budgets. Analysis processes readable text in batches and retains batch progress.
+- Keep long messages and linked source text locally in full, selecting material for the current question and reporting incomplete coverage. Text already truncated by older versions cannot be recovered automatically.
+- Fix native Zotero settings layout, scrolling, reopening and OCR progress; improve Chinese/English, enlarged text and BYOK thinking controls.
+- Unify the Jadense logo across the Reader, workspace and native sidebar, improving consistency in light and dark themes.
+
 ## 0.6.14 — 2026-11-04
 
 - 新增默认关闭的「证据溯源」：开启后，AI 回复可显示行内数字引用，预览原句并跳转 PDF 对应文段；同一原文重复引用沿用编号。

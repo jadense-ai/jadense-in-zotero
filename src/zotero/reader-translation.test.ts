@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+// 本文件隔离模型执行/恢复；目录冷启动、断网和容量读取由 model-budget 与 translation-budget 接缝回归覆盖。
+vi.mock('./model-catalog', async original => ({ ...await original<typeof import('./model-catalog')>(), refreshModelCatalog: async () => {} }))
 import { initializeUiLocale } from "./ui-preferences"
 beforeEach(() => initializeUiLocale({ locale: "zh-CN" }))
 

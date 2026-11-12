@@ -2,23 +2,18 @@
 import type { PdfTextDocument, PdfParagraph } from './pdf-document'
 import type { TranslationPage } from './document-store'
 import type { ZoteroLike } from './runtime'
-import { featureModelState, readByokSettings } from './ai-settings'
+import { translationModelBudget, textTokenCost } from './model-budget'
 
 export const OCR_EXTRACTION_VERSION = 5
 export const TRANSLATION_CAPACITY_PREF = 'extensions.jadenseInZotero.translationCapacity'
 export const DEFAULT_TRANSLATION_CONTEXT_WINDOW = 131072
 export const FORMULA_MARKER = /⟦F\d+⟧/gu
-export const tokenCost = (text: string) => [...text].reduce((sum, c) => sum + (c.charCodeAt(0) < 128 ? 1 / 3 : 1.5), 0)
+export const tokenCost = textTokenCost
 
 export function translationCapacity(host: ZoteroLike) {
   let local: { contextWindow?: number } = {}
   try { local = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* 可选容量降级。 */ }
-  const valid = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value >= 1024 ? Math.floor(value) : fallback
-  const selection = featureModelState(host, 'fullTranslation').selection
-  const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : undefined
-  const contextWindow = valid(model?.contextWindow, valid(local.contextWindow, DEFAULT_TRANSLATION_CONTEXT_WINDOW))
-  // 只按上下文预留译文空间；实际生成上限由模型配置负责，不另设翻译输出预算。
-  return { contextWindow, sourceTokens: Math.max(32, Math.floor((contextWindow - 1024) / 4)) }
+  return translationModelBudget(host, local.contextWindow)
 }
 
 /** 优先采用容量最后 20% 中的句界/空白；没有边界则按 Unicode 字符切开。 */

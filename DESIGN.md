@@ -4,6 +4,14 @@ This document defines the current design of the Zotero XPI: the independent Mana
 
 ## Design Direction
 
+### 解析阅读界面
+
+解析详情沿用插件现有主题：白色／深色阅读表面、主题文字颜色、1px 主题边框及 6–8px 圆角。正文、提示区、按钮和版本选择器保留可辨识的边界，不使用粗黑描边、硬投影或点击平移。标题采用 600–650 字重；绿色只用于运行态、选中态、焦点和主操作，不给普通正文添加装饰性色带。
+
+状态区依次显示结论、说明和操作组，停止／继续按钮保留图标与文字，从左侧连续排列，窄栏可换行。只有参考文献仍在后台整理时，也必须显示明确状态，不能只剩一个停止图标。完成后隐藏状态区；警告只保留一份，正文仍可选择复制。
+
+Reader「在工作台查看」属于导航，放在标题栏右侧，以图标、悬停提示和可访问名称呈现，不独占成果工具栏一行。切换页面时按当前附件、页面及所选成果版本打开工作台；聊天页该位置恢复新建对话。只有多个成果版本需要选择时才显示版本栏。窄栏和大字号下为状态操作保留空间，正文使用剩余高度滚动。
+
 ### Chevron 图标（强制）
 
 所有仍在使用的页面（Manager、Reader、原生设置、独立窗口、弹窗与私有功能）禁止直接使用 `>` 作为 chevron。`<`、`›`、`‹`、`»`、`«`、`⌄`、`▾`、`▸` 等文字替代及 HTML/Unicode 转义同样禁止，包括文本节点、模板、`textContent` 和 CSS `content`；不得作为临时占位或降级方案。
@@ -17,6 +25,7 @@ This document defines the current design of the Zotero XPI: the independent Mana
 #### 页面结构与对齐
 
 - 工作台沿用「设置标题与一句说明 → 一级页签 → 当前页内容」。已有页签不随意改名、不重排；OCR 页已升级为「外置依赖配置」。新增选项优先放入所属页，不为单个功能增加一级页签。页签保留 `tablist/tab/tabpanel`、选中态、方向键与 Home/End 导航。
+- Zotero 原生偏好使用独立的 HTML 文档外壳和「常规 / 功能配置 / 外置依赖配置 / 连接攻玉 / BYOK」页签，每次仅显示当前分类。沿用 Zotero 提供的标题和纵向滚动，目录在页内粘性显示，不套工作台导航、固定高度或第二层纵向滚动。原生内容占满宿主可用宽度，目录和 BYOK 按内容容器宽度折叠；基础控件样式不得覆盖共用的容器断点。切换保留表单草稿，关闭窗口后只恢复已保存值。
 - 普通设置采用一层 `jdx-manager-settings-card`。列表型卡片同时使用 `jdx-settings-list`：占满当前内容宽度，内边距 20px、纵向间距由设置行负责；不另设 680/720px 的整页限宽，不在卡片内再次套带背景的卡片。
 - 每个可独立理解的配置项使用 `jdx-feature-model-row`。始终采用标题在上、配置组件在下的单列表单，共用 `minmax(0, 1fr)`，标题与组件间距 8px、行上下内边距 10px；宽屏也不使用标题/控件左右分列。普通设置行无分隔线，说明紧贴所属控件。
 - 标题下有输入和多项操作时，使用 `jdx-settings-controls` 纵向排列，间距 8px；按钮进入 `jdx-manager-actions`，间距 8px、允许换行、从左侧连续排列。按钮位于所属输入下方，不推到标题另一侧或卡片另一角。
@@ -45,6 +54,7 @@ This document defines the current design of the Zotero XPI: the independent Mana
 - 快捷键：一个动作一行，左侧动作名称与适用范围，右侧录制输入及保存、恢复默认、停用。录制后明确提示保存生效，Esc 取消录制、Tab 可离开；恢复和停用沿用需要保存的草稿语义，保留重复组合键校验。
 - 连接攻玉：按「攻玉令牌 → 令牌获取与权限 → 连接管理」排列。令牌标题只出现一次；显示/编辑互斥，复制/编辑与保存/取消各自成组；生成令牌按钮随获取说明排列，断开连接独立成行。
 - OCR 状态机、BYOK 提供商/模型主从布局、文献分类的单列密钥表单是现有任务特例，沿用各自下文契约。特例只调整任务结构，不另创字体、按钮、状态和主题体系。OCR 页面用顶部页签切换，不增加「返回功能配置」。
+- BYOK 思考档位弹层展开后应整体进入可视区；英文或大字号导致高度增加时，弹层自身可滚动。密钥显示图标保留真实 SVG 命名空间与完整 15px 图形空间，不受通用按钮内边距挤压。
 
 #### 新页面最小骨架
 
@@ -209,7 +219,7 @@ The composer always exposes both model sources and is the authoritative current 
 
 `BYOK 配置` separates Provider connection records from their model catalogs. The Provider list is an embedded, keyboard-accessible sidebar: users can browse, switch, add, edit, and delete providers without opening a dropdown. A Provider owns display name, protocol, an initially empty API Base URL, and one password-style API key field with a small show/hide-eye control. Each model owns a local display name, exact Provider Model ID, optional context window, output cap, and optional thinking-effort list. The list defaults to low / medium / high; a searchable multi-select offers common values and accepts custom values, with an explicit reset to defaults. The model catalog stays visible as a compact list in the normal state; adding inserts an unsaved single-column form below the catalog header and before the list, while clicking an existing model keeps its row visible and expands the editor directly beneath it. Existing saved URLs and keys remain readable, while new providers never imply OpenAI by pre-populating an address.
 
-Native Zotero Preferences remains the fallback configuration surface when Manager cannot open. It starts with `常规`, then the AI Chat selector, automatic-follow toggle, and the remaining feature selectors, followed by `连接攻玉` and `BYOK 配置`, backed by the same local preferences. Account, points/check-in status, and upload remain Manager-only.
+Native Zotero Preferences remains the fallback configuration surface when Manager cannot open. Its `常规 / 功能配置 / 外置依赖配置 / 连接攻玉 / BYOK` tabs open General by default and display one section at a time, backed by the same local preferences. Feature and dependency links select the destination tab before focusing its controls. Account, points/check-in status, and upload remain Manager-only.
 
 Saving an empty replacement keeps the corresponding Provider key. Deleting a Provider also deletes only its models. Changing a token, the automatic-follow toggle, a running feature’s model selection, or saved BYOK configuration cancels affected pending reading/AI actions so material from an earlier operation cannot be sent to a new destination. Clearing BYOK does not clear Jadense or change feature selections. Saving is offline; Test uses the unsaved active Provider/model form for one real, potentially billable request capped at 3,000 output tokens and never changes history or saved configuration. A valid streamed response that ends at this probe cap proves connectivity. BYOK Chat still reports truncated generation as a failure; paper analysis retains received text for reading while withholding native annotation writes.
 
@@ -283,7 +293,7 @@ Panel copy should make it clear that upload lives in the Manager `攻玉学术` 
 - Manager controls stay readable at 760px by 620px and larger.
 - Missing token, missing default folder, and missing selected collection each produce distinct disabled states.
 - Disconnected, loading, connected, invalid-token, missing-scope, and optional account/status failures remain distinguishable without shifting the layout or disabling unrelated capabilities.
-- Settings contains `常规 / 功能配置 / OCR配置 / 快捷键设置 / 连接攻玉 / BYOK`, with General first/default, an enabled-by-default automatic-follow toggle, four model selectors matching the Chat selector, editable screenshot/translation chords, and a gear entry. Native Preferences starts with General, then feature, OCR, connection, and BYOK sections.
+- Settings contains `常规 / 功能配置 / 外置依赖配置 / 快捷键设置 / 连接攻玉 / BYOK`, with General first/default, an enabled-by-default automatic-follow toggle, four model selectors matching the Chat selector, editable screenshot/translation chords, and a gear entry. Native Preferences uses General, feature, external-dependency, connection, and BYOK tabs, displaying only the current section.
 - Verify Chinese/English labels, tooltips, accessible names, and dynamic states after restart; changing UI language must preserve source text, AI output, translation direction, and existing history. Verify light/dark/following across open plugin surfaces and cleanup on unload, without recoloring Zotero/PDF roots.
 - `你的攻玉` retains account, balance, and read-only check-in status; `打开签到页` launches the website without a token in the URL. No plugin UI interaction submits a direct check-in request.
 - Reader analysis adds one post-0.3.1 record with a default summary and expandable/selectable notes to the independent history and no Chat session/message. Verify local format repair, partial-stream retention with zero native writes, per-annotation failure isolation, final write status, old summary-only records, and the unsaved-result copy warning. A stale saved analysis BYOK selection fails before dispatch without changing other model selections or unrelated features.

@@ -3,7 +3,7 @@ import type { TranslationService } from '@/chat/machine-translation'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { createJdxSelect } from './custom-select'
-import { DEFAULT_TRANSLATION_CONTEXT_WINDOW, TRANSLATION_CAPACITY_PREF } from './translation-chunks'
+import { translationCapacity, TRANSLATION_CAPACITY_PREF } from './translation-chunks'
 import { wireReadingBudgetSettings } from './translation-budget-settings'
 import { featureModelDescription, observeAiModelSettings } from './ai-settings'
 
@@ -54,11 +54,18 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
   capacityTitle.textContent = uiText('翻译上下文预算', 'Translation context budgets'); capacity.append(capacityTitle)
   const stopBudgets = wireReadingBudgetSettings(host, capacity)
   const capacityInputs: HTMLInputElement[] = []
-  for (const [key, title, fallback] of [['contextWindow', uiText('上下文窗口 tokens', 'Context window tokens'), DEFAULT_TRANSLATION_CONTEXT_WINDOW]] as const) {
-    const label = element('label'), input = element('input'); input.type = 'number'; input.min = '1024'; input.step = '1024'; input.value = String(fallback); input.dataset.capacity = key
+  for (const [key, title, fallback] of [['contextWindow', uiText('上下文窗口 tokens', 'Context window tokens'), '']] as const) {
+    const label = element('label'), input = element('input'); input.type = 'number'; input.min = '1'; input.step = '1'; input.value = String(fallback); input.dataset.capacity = key
     try { const saved = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')); if (Number.isFinite(saved[key]) && saved[key] >= 1024) input.value = String(saved[key]) } catch { /* optional */ }
     label.textContent = uiText('全文 Markdown · ', 'Full Markdown · ') + title; label.append(input); capacity.append(label); capacityInputs.push(input)
-    input.addEventListener('change', () => { const values = Object.fromEntries(capacityInputs.map(field => [field.dataset.capacity, Number(field.value)])); try { host.Prefs?.set?.(TRANSLATION_CAPACITY_PREF, JSON.stringify(values), true) } catch { status.textContent = uiText('容量设置保存失败', 'Could not save capacity') } finally { sync() } })
+    input.addEventListener('change', () => {
+      try {
+        let values: Record<string, unknown> = {}
+        try { const saved = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')); if (saved && typeof saved === 'object' && !Array.isArray(saved)) values = saved } catch { /* optional */ }
+        if (input.value && Number(input.value) > 0) values.contextWindow = Number(input.value); else delete values.contextWindow
+        host.Prefs?.set?.(TRANSLATION_CAPACITY_PREF, JSON.stringify(values), true)
+      } catch { status.textContent = uiText('容量设置保存失败', 'Could not save capacity') } finally { sync() }
+    })
   }
   modelRow.before(container)
   modelRow.after(capacity)
@@ -73,7 +80,7 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
     try { limits = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* optional */ }
     for (const field of capacityInputs) {
       const value = Number(limits[field.dataset.capacity!])
-      field.value = String(Number.isFinite(value) && value >= 1024 ? value : DEFAULT_TRANSLATION_CONTEXT_WINDOW)
+      field.value = Number.isFinite(value) && value > 0 ? String(value) : ''; field.placeholder = uiText('自动跟随模型 · ', 'Automatic · ') + translationCapacity(host).contextWindow.toLocaleString()
     }
     kind.help.textContent = value.kind === 'machine'
       ? uiText('仅返回译文，不进行额外的术语解析、歧义理清或公式恢复。适用于选文和全文翻译。', 'Returns translation only, without extra terminology analysis, ambiguity clarification or formula recovery. Applies to selected text and full documents.')

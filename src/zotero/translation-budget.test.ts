@@ -24,13 +24,13 @@ function fixture(byok = false) {
 }
 
 describe('reading translation budgets', () => {
-  it('defaults both modes to 128K instead of filling a larger model context', async () => {
+  it('automatically follows both model context and real temporary output capacity', async () => {
     const { host, fetch } = fixture()
     await Promise.all([refreshTranslationLimits(host), refreshTranslationLimits(host)])
     expect(fetch).toHaveBeenCalledOnce()
-    expect(readingTranslationBudget(host, 'pdf')).toMatchObject({ requested: 131072, contextWindow: 131072, maximum: 262144, maxOutputTokens: 96000 })
-    expect(readingTranslationBudget(host, 'simple').contextWindow).toBe(131072)
-    expect(pdfTranslationBudget(host).batchTokens).toBeGreaterThan(30000)
+    expect(readingTranslationBudget(host, 'pdf')).toMatchObject({ requested: 262144, contextWindow: 262144, maximum: 262144, maxOutputTokens: 65536, automatic: true })
+    expect(readingTranslationBudget(host, 'simple').contextWindow).toBe(262144)
+    expect(pdfTranslationBudget(host).batchTokens).toBeGreaterThan(20000)
   })
   it('uses platform recorded limits and preserves independent budgets and additive preferences', async () => {
     const { host, prefs } = fixture()
@@ -42,11 +42,11 @@ describe('reading translation budgets', () => {
     expect(readingTranslationBudget(host, 'pdf').contextWindow).toBe(262144)
     expect(readingTranslationBudget(host, 'simple').contextWindow).toBe(65536)
   })
-  it('does not validate BYOK values against model metadata or fetch platform metadata', async () => {
+  it('uses BYOK capacity locally without fetching the platform directory', async () => {
     const { host, fetch } = fixture(true)
     await refreshTranslationLimits(host)
     saveReadingTranslationBudget(host, 'pdf', 2000000)
-    expect(readingTranslationBudget(host, 'pdf')).toMatchObject({ route: 'byok', requested: 2000000, contextWindow: 2000000, maximum: undefined })
+    expect(readingTranslationBudget(host, 'pdf')).toMatchObject({ route: 'byok', requested: 4096, contextWindow: 4096, maximum: 4096 })
     expect(fetch).not.toHaveBeenCalled()
   })
   it('contains missing or failed optional catalog data without replacing user budgets', async () => {
@@ -69,13 +69,14 @@ describe('reading translation budgets', () => {
     const stop = wireReadingBudgetSettings(host, root)
     const pdf = root.querySelector<HTMLInputElement>('[data-reading-budget="pdf"]')!
     const simple = root.querySelector<HTMLInputElement>('[data-reading-budget="simple"]')!
-    expect(pdf.value).toBe('131072'); expect(simple.value).toBe('131072')
-    expect(pdf.hasAttribute('max')).toBe(false)
-    pdf.value = '999999'; pdf.dispatchEvent(new window.Event('change'))
-    expect(readingTranslationBudget(host, 'pdf').contextWindow).toBe(999999)
-    expect(simple.value).toBe('131072')
-    saveReadingTranslationBudget(host, 'simple', 65536)
-    expect(simple.value).toBe('65536')
+    expect(pdf.value).toBe(''); expect(simple.value).toBe(''); expect(pdf.placeholder).toContain('4,096')
+    expect(pdf.max).toBe('4096')
+    pdf.value = '2048'; pdf.dispatchEvent(new window.Event('change'))
+    expect(readingTranslationBudget(host, 'pdf').contextWindow).toBe(2048)
+    expect(simple.value).toBe('')
+    saveReadingTranslationBudget(host, 'simple', 1024)
+    expect(simple.value).toBe('1024')
+    pdf.value = ''; pdf.dispatchEvent(new window.Event('change')); expect(readingTranslationBudget(host, 'pdf').automatic).toBe(true)
     expect(fetch).not.toHaveBeenCalled()
     stop(); expect(observers.size).toBe(0); window.close()
   })

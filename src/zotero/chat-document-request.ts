@@ -3,32 +3,30 @@ import { buildSourceContext, type ChatSource } from '@/chat/research-context'
 import { buildLongDocumentContext, documentTokenCost, type DocumentReading } from '@/chat/long-document-context'
 import type { TemporaryChatMessage } from '@/chat/temporary-chat'
 import { chatDocuments, type ChatDocument } from './chat-documents'
-import { featureModelState, readByokSettings, type AiFeature } from './ai-settings'
+import { type AiFeature, type FeatureModelSelection } from './ai-settings'
 import type { ZoteroLike } from './runtime'
 import { requestHash } from '@/chat/temporary-request-store'
 import { validateDocument, type DocumentHost } from './pdf-document'
 import { readChatDocumentMode } from './chat-document-policy'
-import { featureModelMetadata } from './model-catalog'
+import { modelRequestBudget } from './model-budget'
+import { fitTextContext } from '@/chat/token-budget'
+import { uiText } from './ui-preferences'
 import type { ChatEvidence } from '@/chat/evidence'
 
-export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature) {
-  const ai = featureModelState(host, feature)
-  const selection = ai.selection
-  const model = selection.route === 'byok' ? readByokSettings(host).models.find(row => row.id === selection.modelId) : featureModelMetadata(host, feature)
-  const context = model?.contextWindow ?? 16384
-  const output = Math.max(1, Math.min(model?.maxOutputTokens ?? 4096, Math.floor(context / 4)))
-  return { context, output, input: Math.floor(context * .85) - output - 512 }
+export function chatDocumentCapacity(host: ZoteroLike, feature: AiFeature, selection?: FeatureModelSelection) {
+  const budget = modelRequestBudget(host, feature, { selection })
+  return { ...budget, context: budget.contextWindow }
 }
 
 export async function prepareDocumentRequest(input: {
   host: ZoteroLike; feature: AiFeature; sources: readonly ChatSource[]; messages: TemporaryChatMessage[]; imageCount: number
   signal: AbortSignal; modelIdentity: string; progress(text: string): void
   evidenceEnabled?: boolean
+  capacity?: ReturnType<typeof chatDocumentCapacity>
   update(source: ChatSource): void
   generate(prompt: string, requestId: string, conversationId: string): Promise<string>
 }): Promise<{ messages: TemporaryChatMessage[]; sources: ChatSource[]; reading?: DocumentReading; evidence?: ChatEvidence }> {
   const sources = input.sources.map(source => ({ ...source }))
-  if (!sources.some(source => source.kind === 'file' && source.contentType === 'application/pdf')) return { messages: input.messages, sources }
   const cache = chatDocuments(input.host), documents: ChatDocument[] = [], numbers: number[] = []
   for (const [index, source] of sources.entries()) {
     if (source.kind !== 'file' || source.contentType !== 'application/pdf') continue
@@ -42,22 +40,29 @@ export async function prepareDocumentRequest(input: {
       input.update(sources[index])
     }
   }
-  const capacity = chatDocumentCapacity(input.host, input.feature)
+  const capacity = input.capacity ?? chatDocumentCapacity(input.host, input.feature)
   const messages = input.messages.map(message => ({ ...message }))
   const last = messages.at(-1)
   if (!last) return { messages, sources }
   const imageBudget = input.imageCount * 4096
   const messageCost = () => documentTokenCost(JSON.stringify(messages.map(({ role, text }) => ({ role, content: text }))))
   let dropped = false
-  while (messages.length > 1 && messageCost() > Math.max(0, (capacity.input - imageBudget) / 2)) {
+  // 当前用户指令不可静默截短；只对已知模型做本地容量提示，目录故障不能成为新准入条件。
+  if (capacity.maximum && documentTokenCost(JSON.stringify(last.text)) + imageBudget + 64 > capacity.input) {
+    throw Object.assign(new Error(uiText('当前消息超过所选模型的输入容量，请缩短指令或把长正文作为文件附加。', 'The current message exceeds this model’s input capacity. Shorten the instruction or attach the long text as a file.')), { code: 'AI_INPUT_CONTEXT_LIMIT' })
+  }
+  while (messages.length > 1 && messageCost() > Math.max(0, (capacity.input - imageBudget) / (documents.length ? 2 : 1) - 512)) {
     messages.shift(); dropped = true
     if (messages.length > 1 && messages[0].role === 'assistant') messages.shift()
   }
   // 可选来源过多时只裁减本轮附加正文，不改变保存的选区和元数据。
-  for (const source of [...sources].reverse()) {
-    if (documentTokenCost(buildSourceContext(sources)) + messageCost() + imageBudget < capacity.input / 2) break
-    if (source.text) { source.text = ''; source.warning = `${source.warning ?? ''} 本轮容量有限，此来源正文未附加。` }
+  for (const source of sources) {
+    delete source.textRef // 本轮片段投影不能再从正文引用自动恢复全文。
+    const fitted = fitTextContext(source.text, Math.max(0, (capacity.input - imageBudget - messageCost() - 768) / Math.max(1, sources.length) / (documents.length ? 2 : 1)), last.text)
+    source.text = fitted.text
+    if (fitted.limited) source.warning = `${source.warning ?? ''} 本轮仅附与问题相关的部分原文，不代表已读全文。`
   }
+  if (!documents.length) return { messages, sources, ...(dropped ? { reading: { notice: uiText('本轮省略较早对话，完整历史仍保留。', 'Earlier turns were omitted from this request; full history is retained.'), sources: [] } } : {}) }
   const budget = capacity.input - imageBudget - messageCost() - documentTokenCost(buildSourceContext(sources)) - 256
   const question = last.text
   const recent = messages.slice(0, -1).slice(-4).map(row => row.text).join('\n').slice(-3000)

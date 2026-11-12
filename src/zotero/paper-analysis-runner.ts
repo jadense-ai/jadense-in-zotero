@@ -25,6 +25,9 @@ import { analysisStage } from './analysis-stage'
 import { generateAnalysis } from './analysis-generation'
 import { canRepairExecution, executionResult, requestIssue, requestActivityText, RequestExecutionError } from '@/chat/request-feedback'
 import { AnalysisStorageError, type AnalysisTask } from './analysis-task-store'
+import { refreshModelCatalog } from './model-catalog'
+import { modelRequestBudget } from './model-budget'
+import { planAnalysisInput, nextAnalysisLevel } from './analysis-input'
 
 export const PAPER_ANALYSIS_MISSING_SUMMARY = "本次解析未返回总结。"
 
@@ -140,6 +143,8 @@ export async function runIndependentPaperAnalysis(input: {
     if (task && input.checkpoint && !(await input.checkpoint(task))) { task.storageWarning = true; throw new AnalysisStorageError() }
     if (task) task.storageWarning = false
   }
+  if (!task || task.generation === 'new' && !task.inputPlan) await refreshModelCatalog(input.zotero, 'analysis', input.fetchImpl)
+  input.signal.throwIfAborted()
   const model = paperAnalysisModelState(input.zotero, input.invalidJadenseToken)
   if (!model.ready && task?.generation !== 'complete') throw Object.assign(new Error(model.issue), { code: 'AI_NOT_CONFIGURED' })
   const defaults = defaultServices(input.zotero, input.fetchImpl)
@@ -162,20 +167,38 @@ export async function runIndependentPaperAnalysis(input: {
     passages: snapshot.passages,
     coverage: coverageText(snapshot, false),
   })
-  const prompt = task?.repair ? analysisRepairPrompt(task.repair.retained, snapshot) : basePrompt
+  // 已派发旧任务没有plan，继续使用原提示与预算；新策略不得改写原执行身份。
+  let plan = task?.inputPlan
+  if (!plan && (!task || task.generation === 'new' && !task.repair)) {
+    const budget = modelRequestBudget(input.zotero, 'analysis', { structured: true, selection: model.selection })
+    plan = planAnalysisInput(snapshot, Math.max(1, budget.input - 512), budget.output, coverageText(snapshot, false))
+    if (task) { task.inputPlan = plan; await persist() }
+  }
+  let prompt = plan ? plan.prompts[plan.results.length] : task?.repair ? analysisRepairPrompt(task.repair.retained, snapshot) : basePrompt
   if (task?.generation === 'new') await services.validateSource(input.zotero, snapshot)
 
   notify(input.onProgress, uiText(`正在使用${model.label}按结构解析文献…`, `Analyzing the paper with ${model.label}…`))
-  let response = task?.generation === 'complete' ? task.response ?? '' : ""
+  let response = task?.generation === 'complete' || plan?.incomplete ? task?.response ?? '' : ""
   let partialText = task?.response ?? ""
   let lastProgress = 0
-  let generationWarning: string | undefined
+  let generationWarning: string | undefined = plan?.incomplete ? uiText('分段结果已保留，完整汇总未完成；请核对各段结果。', 'Section results were retained, but the combined analysis is incomplete. Review the section results.') : undefined
   let generationFinished = false
   let generationError: unknown
   let lastCheckpoint = 0
   let streamCheckpoint = Promise.resolve()
   try {
     if (!response) {
+    while (true) {
+    if (plan) {
+      prompt = plan.prompts[plan.results.length]
+      if (task?.repair && plan.level === 0) {
+        const material = JSON.parse(prompt.slice(prompt.lastIndexOf('\n') + 1)) as { passages: Array<{ id: string; text: string }> }
+        const byID = new Map(snapshot.passages.map(passage => [passage.id, passage]))
+        prompt = analysisRepairPrompt(task.repair.retained, { ...snapshot, passages: material.passages.flatMap(row => {
+          const original = byID.get(row.id); return original ? [{ ...original, text: row.text }] : []
+        }) })
+      }
+    }
     if (task) { task.generation = 'pending'; await persist() }
     const request = (signal: AbortSignal, progress: () => void): TemporaryChatSendInput => ({
       clientRequestId: task?.requestID ?? taskId("analysis-request"),
@@ -187,6 +210,7 @@ export async function runIndependentPaperAnalysis(input: {
       sources: [],
       signal,
       requireComplete: true,
+      ...(plan ? { maxOutputTokens: plan.outputTokens } : {}),
       ...(task ? { durableExecution: true, reuseCompletedOperation: true } : {}),
       ...(!task?.repair && model.selection.route !== 'byok' ? { responseFormat: PAPER_ANALYSIS_RESPONSE_FORMAT } : {}),
       onProgress: state => {
@@ -220,12 +244,38 @@ export async function runIndependentPaperAnalysis(input: {
       onThrottleRetry: task ? async () => { task.previousRequestID = task.requestID; task.requestID = crypto.randomUUID(); await persist() } : undefined,
     })
     input.signal.throwIfAborted()
-    if (task) {
-      if (task.repair) {
+      if (task?.repair) {
         if (parsePaperAnalysis(response, snapshot.passages).rawText) throw new RequestExecutionError(uiText('补齐响应格式不完整，已保留此前结果。', 'The repair response was incomplete. Prior results were retained.'), 'partial', response, { code: 'ANALYSIS_OUTPUT_INCOMPLETE' })
         response = mergeAnalysisResponses(task.repair.retained, response, snapshot)
       }
-      task.response = response; task.generation = 'complete'; task.stage = 'annotations'
+    if (!plan) break
+    const accepted = parsePaperAnalysis(response, snapshot.passages)
+    if (!accepted.summary || accepted.rawText) throw new RequestExecutionError(uiText('本批解析结构尚未完整，已保留结果并准备补齐。', 'This analysis batch is incomplete. Results were retained for repair.'), 'partial', response, { code: 'ANALYSIS_OUTPUT_INCOMPLETE' })
+    if (task) delete task.repair
+    await streamCheckpoint
+    plan.results.push(response)
+    if (plan.results.length === plan.prompts.length) {
+      if (plan.results.length === 1) break
+      const next = nextAnalysisLevel(plan)
+      if (!next) {
+        response = plan.results.reduce((before, after) => mergeAnalysisResponses(before, after, snapshot), '')
+        plan.incomplete = true
+        generationWarning = uiText('分段结果已保留，完整汇总未完成；请核对各段结果。', 'Section results were retained, but the combined analysis is incomplete. Review the section results.')
+        break
+      }
+      plan = next
+      if (task) task.inputPlan = plan
+    }
+    response = ''; partialText = ''
+    if (task) {
+      task.response = ''; task.generation = 'new'; task.previousRequestID = task.requestID; task.requestID = crypto.randomUUID()
+      task.operationID = `${task.id}:context-v1:${plan.level}:${plan.results.length}`
+    }
+    await persist()
+    notify(input.onProgress, uiText(`正在${plan.level ? '汇总' : '解析'}第 ${plan.results.length + 1}/${plan.prompts.length} 批…`, `${plan.level ? 'Combining' : 'Analyzing'} batch ${plan.results.length + 1}/${plan.prompts.length}…`))
+    }
+    if (task) {
+      task.response = response; task.generation = generationWarning ? 'terminal' : 'complete'; task.stage = generationWarning ? 'generating' : 'annotations'
     }
     }
   } catch (error) { diagnostics()?.record("paper-analysis-runner", "operation_error", error);
@@ -299,7 +349,8 @@ export async function runIndependentPaperAnalysis(input: {
     if (task && generationWarning) {
       if (!input.signal.aborted && mayRepair(generationError) && (task.repair?.attempt ?? 0) < 2) {
         task.repair = { attempt: (task.repair?.attempt ?? 0) + 1, retained: mergeAnalysisResponses(task.repair?.retained ?? '', response, snapshot) }
-        task.previousRequestID = task.requestID; task.requestID = crypto.randomUUID(); task.operationID = `${task.id}:repair:${task.repair.attempt}`
+        task.previousRequestID = task.requestID; task.requestID = crypto.randomUUID(); task.operationID = task.inputPlan && (task.inputPlan.prompts.length > 1 || task.inputPlan.level > 0)
+          ? `${task.id}:context-v1:${task.inputPlan.level}:${task.inputPlan.results.length}:repair:${task.repair.attempt}` : `${task.id}:repair:${task.repair.attempt}`
         task.response = ''; task.generation = 'new'
         task.resumeRequested = false
         continuation = 'waiting'
@@ -356,7 +407,7 @@ function analysisRepairPrompt(retained: string, snapshot: PdfAnalysisSnapshot) {
 Preserve prior work: do not repeat or rewrite retained fields. If a summary is retained, return summary:"". If a section category is retained, omit that category. Only add annotations for the supplied unused passage IDs. If nothing is missing, return {"summary":"","sections":[],"annotations":[]}. Never invent evidence or coordinates.
 Use coverage to respect evidence boundaries; do not claim to have read missing pages. Do not repeat sampling counts, implementation limits, or system notices in generated fields. Describe only missing material or uncertainty that affects the conclusions in natural language.
 Retained fields: ${JSON.stringify({ summary: parsed.summary, sections: parsed.sections, annotatedPassageIds: [...used] })}
-Source: ${JSON.stringify({ title: snapshot.metadata.title, coverage: coverageText(snapshot, false), passages: snapshot.passages.filter(row => !used.has(row.id)) })}
+Source: ${JSON.stringify({ title: snapshot.metadata.title, coverage: coverageText(snapshot, false), passages: snapshot.passages.filter(row => !used.has(row.id)).map(({ id, text, pageIndex, pageLabel }) => ({ id, text, pageIndex, pageLabel })) })}
 Format: {"summary":"missing summary only","sections":[{"category":"claim","summary":"missing section"}],"annotations":[{"passageId":"source id","category":"claim","comment":"evidence note"}]}`
 }
 

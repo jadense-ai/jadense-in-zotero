@@ -140,7 +140,7 @@ describe("independent paper analysis", () => {
       `data: ${JSON.stringify({ type: "text-delta", delta: structured() })}\n\ndata: {"type":"finish"}\n\n`, { status: 200 }))
     await runIndependentPaperAnalysis({ zotero, itemID: 42, fetchImpl, signal: new AbortController().signal,
       services: { readPdf: async () => snapshot(), saveAnnotations: async () => emptySaved() } })
-    const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))
+    const body = JSON.parse(String(fetchImpl.mock.calls.find(([, init]) => init?.method === 'POST')?.[1]?.body))
     expect(body.clientContext).toEqual({ version: expect.any(String), feature: "analysis" })
     expect(body).toMatchObject(selection.kind === "route" ? { routeTier: "premium" } : { modelId: selection.kind === "model" ? "analysis-model" : "deepseek-v4-flash-vision-exp" })
     expect(body).not.toHaveProperty(selection.kind === "route" ? "modelId" : "routeTier")

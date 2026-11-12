@@ -2,18 +2,19 @@
 @import url("ui.css");
 @import url("translation-interface.css");
 @import url("status.css");
-#jadense-in-zotero-preferences-pane .jdx-ocr-section { margin-top:20px; padding-top:16px; border-top:1px solid var(--jdx-pref-line); }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings h4 { font-size:13px; margin:0 0 8px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-tip { margin-top:20px; padding:14px 16px; background:var(--jdx-pref-subtle); border-radius:8px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings summary { cursor:pointer; font-weight:600; padding-block:4px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings details[open] summary { margin-bottom:16px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings button[hidden] { display:none!important; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-section { margin-top:20px; padding-top:16px; border-top:1px solid var(--jdx-pref-line); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings h4 { font-size:13px; margin:0 0 8px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-tip { margin-top:20px; padding:14px 16px; background:var(--jdx-pref-subtle); border-radius:8px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings summary { cursor:pointer; font-weight:600; padding-block:4px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings details[open] summary { margin-bottom:16px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings button[hidden] { display:none!important; }
 /* 原生偏好复用同一 OCR 内容，沿用本 pane 的按钮与主题变量。 */
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings .jdx-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-path { color: var(--jdx-pref-muted); font-size: 12px; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-settings [data-tone="error"] { color: var(--jdx-pref-error); }
-/* 仅插件 vbox 覆盖主题；Zotero 设置窗口外框继续使用宿主主题。 */
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings .jdx-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-path { color: var(--jdx-pref-muted); font-size: 12px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-settings [data-tone="error"] { color: var(--jdx-pref-error); }
+/* 原生基础控件降低选择器权重，避免覆盖 settings.css 的共用尺度与容器断点。 */
+/* 仅插件 HTML 根节点覆盖主题；Zotero 设置窗口外框继续使用宿主主题。 */
 #jadense-in-zotero-preferences-pane {
   /* 共享模型控件只继承本 pane 的主题，不改变 Zotero 外框。 */
   --jdx-text: var(--jdx-pref-text);
@@ -75,29 +76,61 @@
 }
 
 #jadense-in-zotero-preferences-pane {
-  max-width: 680px;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  container-type: inline-size;
+  padding: 12px 16px;
+  line-height: 1.5;
 }
 
-#jadense-in-zotero-preferences-pane [hidden] {
+:where(#jadense-in-zotero-preferences-pane) [hidden] {
   display: none !important;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-note {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-note {
   margin: 0 0 14px;
   color: var(--jdx-pref-text);
   opacity: 0.72;
   line-height: 1.45;
 }
 
-#jadense-in-zotero-preferences-pane :is(label, input, select, button):not(.jdx-model-select *) { font-size: inherit; }
+:where(#jadense-in-zotero-preferences-pane) :is(label, input, select, button):not(.jdx-model-select *) { font-size: inherit; }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-grid {
-  display: grid;
-  gap: 14px;
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-grid {
+  display: block;
+  min-width: 0;
 }
 
+/* 原生偏好是 Zotero 内容区内的普通文档；不引入固定高度或第二个纵向滚动条。 */
+#jadense-in-zotero-preferences-pane .jdx-pref-tabs {
+  display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0;
+  position: sticky; top: 0; z-index: 5; background: var(--jdx-pref-surface);
+  border-bottom: 1px solid var(--jdx-pref-line);
+}
+#jadense-in-zotero-preferences-pane :is([role="tabpanel"], .jdx-settings-task) { scroll-margin-block-start: var(--jdx-pref-tabs-height, 100px); }
+#jadense-in-zotero-preferences-pane .jdx-pref-tabs button {
+  position: relative; min-width: 0; min-height: 38px; height: auto; margin: 0;
+  border: 0; border-radius: 0; padding: 10px 2px; background: transparent;
+  color: var(--jdx-pref-muted); font: inherit; line-height: 1.5; white-space: normal; cursor: pointer;
+}
+#jadense-in-zotero-preferences-pane .jdx-pref-tabs button[aria-selected="true"] {
+  color: var(--jdx-pref-green-text); font-weight: 600;
+}
+#jadense-in-zotero-preferences-pane .jdx-pref-tabs button[aria-selected="true"]::after {
+  content: ""; position: absolute; inset: auto 2px 0; height: 2px; background: currentColor;
+}
+#jadense-in-zotero-preferences-pane .jdx-pref-grid > .jdx-pref-card {
+  border: 0; border-radius: 0; padding: 16px 0; background: transparent;
+}
+#jadense-in-zotero-preferences-pane .jdx-pref-grid > .jdx-pref-card > h3:first-child { display: none; }
+#jadense-in-zotero-preferences-pane .jdx-pref-grid > .jdx-pref-card:has(> .jdx-settings-layout) { padding: 16px 0 0; }
+#jadense-in-zotero-preferences-pane :is(.jdx-pref-grid, .jdx-pref-card, .jdx-pref-byok-layout) > * { min-width: 0; }
+
 /* 卡片:显示与编辑分离的容器,每个关注点一张卡 */
-#jadense-in-zotero-preferences-pane .jdx-pref-card {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-card {
   display: grid;
   gap: 10px;
   align-content: start;
@@ -107,33 +140,33 @@
   background: var(--jdx-pref-surface);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-card-title {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-card-title {
   margin: 0;
   font-size: calc(13px * var(--jdx-font-scale,1));
   font-weight: 650;
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-card-note {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-card-note {
   margin: 0;
   color: var(--jdx-pref-muted);
   font-size: calc(12px * var(--jdx-font-scale,1));
   line-height: 1.5;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-card-footer {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-card-footer {
   display: flex;
   justify-content: flex-end;
   border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 10px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-field {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-field {
   display: grid;
   gap: 6px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-panel {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-panel {
   display: grid;
   gap: 10px;
   border-top: 1px solid var(--jdx-pref-line-subtle);
@@ -141,63 +174,66 @@
   background: transparent;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-panel-header {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-panel-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-layout {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-layout {
   display: grid;
   grid-template-columns: minmax(145px, 0.34fr) minmax(0, 1fr);
   gap: 14px;
   min-width: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar,
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-editor {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-sidebar,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-editor {
   display: grid;
   align-content: start;
   gap: 10px;
   min-width: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-sidebar {
   align-self: start;
   border-right: 1px solid var(--jdx-pref-line);
   padding-right: 12px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-byok-sidebar .jdx-pref-byok-panel-header {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-byok-sidebar .jdx-pref-byok-panel-header {
   align-items: center;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-icon-button {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-icon-button {
   min-width: 28px;
   padding-inline: 8px;
   font-size: 1.1em;
   line-height: 1;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list {
   max-height: 220px;
   overflow-y: auto;
   padding-right: 3px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list .jdx-pref-model-item {
   display: grid;
   gap: 2px;
   min-width: 0;
+  height: auto;
+  min-height: 48px;
+  max-height: none;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 7px 8px;
@@ -207,32 +243,32 @@
   cursor: pointer;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list .jdx-pref-model-item {
   min-height: 44px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button:hover,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item:hover {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button:hover,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list .jdx-pref-model-item:hover {
   background: var(--jdx-pref-subtle);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button[aria-selected="true"],
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list .jdx-pref-model-item[aria-current="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button[aria-selected="true"],
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list .jdx-pref-model-item[aria-current="true"] {
   border-color: rgb(22 207 140 / 0.4);
   color: var(--jdx-pref-green-text);
   background: var(--jdx-pref-active);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button strong,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-item-name {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button strong,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-item-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-provider-list button small,
-#jadense-in-zotero-preferences-pane .jdx-pref-model-item-meta {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button small,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-item-meta {
   overflow: hidden;
   color: var(--jdx-pref-muted);
   font-size: .88em;
@@ -240,45 +276,45 @@
   white-space: nowrap;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-inline-actions {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-inline-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-metrics {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-metrics {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-endpoint,
-#jadense-in-zotero-preferences-pane .jdx-pref-key-summary {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-endpoint,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-key-summary {
   display: grid;
   gap: 4px;
   color: var(--jdx-pref-muted);
   font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-endpoint code,
-#jadense-in-zotero-preferences-pane .jdx-pref-key-summary code {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-endpoint code,
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-key-summary code {
   overflow-wrap: anywhere;
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-input {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 32px;
   min-width: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-input input {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-input input {
   min-width: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -290,16 +326,17 @@
   cursor: pointer;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle:hover {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-toggle:hover {
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle:focus-visible {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-toggle:focus-visible {
   outline: 2px solid var(--jdx-pref-green-text);
   outline-offset: -2px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-secret-toggle svg {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-secret-toggle svg {
+  flex: 0 0 15px;
   width: 15px;
   height: 15px;
   fill: none;
@@ -309,22 +346,24 @@
   stroke-linejoin: round;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-editor {
+#jadense-in-zotero-preferences-pane button.jdx-pref-secret-toggle { min-width: 32px; padding: 0; }
+
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-editor {
   display: grid;
   gap: 9px;
   border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 9px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-editor[hidden] { display: none; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-editor[hidden] { display: none; }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-fields {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-fields {
   display: grid;
   gap: 9px;
   padding-top: 9px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-model-list:empty::after {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list:empty::after {
   content: "尚未添加模型";
   padding: 7px 8px;
   color: var(--jdx-pref-muted);
@@ -335,7 +374,7 @@
   content: "No models added";
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-warning {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-warning {
   margin: 0;
   border-left: 3px solid var(--jdx-pref-warning);
   padding-left: 9px;
@@ -344,7 +383,7 @@
   line-height: 1.5;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-actions {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -354,7 +393,7 @@
 }
 
 /* 连接状态行 */
-#jadense-in-zotero-preferences-pane .jdx-pref-connection-status {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-connection-status {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -362,7 +401,7 @@
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-status-dot {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-status-dot {
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -370,37 +409,37 @@
   background: var(--jdx-pref-faint);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="connected"] .jdx-pref-status-dot {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-connection-status[data-state="connected"] .jdx-pref-status-dot {
   background: #16cf8c;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="checking"] .jdx-pref-status-dot {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-connection-status[data-state="checking"] .jdx-pref-status-dot {
   background: var(--jdx-pref-warning);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-connection-status[data-state="failed"] .jdx-pref-status-dot {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-connection-status[data-state="failed"] .jdx-pref-status-dot {
   background: var(--jdx-pref-error);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-connection-updated {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-connection-updated {
   color: var(--jdx-pref-muted);
   font-size: calc(12px * var(--jdx-font-scale,1));
   font-weight: 400;
 }
 
 /* 令牌:显示行(掩码 + 操作)与编辑行(输入 + 保存/取消)互斥切换 */
-#jadense-in-zotero-preferences-pane .jdx-pref-token-row {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-field-label {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-field-label {
   font-weight: 600;
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-token-mask {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-mask {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -415,36 +454,36 @@
   white-space: nowrap;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-token-mask[data-empty="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-mask[data-empty="true"] {
   color: var(--jdx-pref-faint);
   font-family: inherit;
   letter-spacing: normal;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-token-actions {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-actions {
   display: flex;
   flex: 0 0 auto;
   gap: 6px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-token-actions button {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-actions button {
   min-height: 28px;
   padding: 4px 10px;
   font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-token-row input {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-token-row input {
   flex: 1;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-folder-status-row {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-folder-status-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 /* 重试:内联链接式按钮,只在加载失败时出现 */
-#jadense-in-zotero-preferences-pane .jdx-pref-link {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-link {
   min-height: 0;
   border: 0;
   padding: 0;
@@ -454,20 +493,20 @@
   text-decoration: underline;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-link:hover {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-link:hover {
   background: none;
   color: #16cf8c;
 }
 
 /* 帮助区:嵌入连接攻玉 section,避免把同一关注点拆成额外卡片。 */
-#jadense-in-zotero-preferences-pane .jdx-pref-help {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-help {
   display: grid;
   gap: 7px;
   border-top: 1px solid var(--jdx-pref-line-subtle);
   padding-top: 10px;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-help-steps {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-help-steps {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -477,7 +516,7 @@
   line-height: 1.55;
 }
 
-#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input) {
+:where(#jadense-in-zotero-preferences-pane) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.jdx-model-select input) {
   box-sizing: border-box;
   min-height: 34px;
   width: 100%;
@@ -491,17 +530,17 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input):hover:not(:disabled) {
+:where(#jadense-in-zotero-preferences-pane) input:not(.jdx-model-select input):hover:not(:disabled) {
   border-color: var(--jdx-pref-line-strong);
 }
 
-#jadense-in-zotero-preferences-pane input:not(.jdx-model-select input):focus {
+:where(#jadense-in-zotero-preferences-pane) input:not(.jdx-model-select input):focus {
   border-color: #16cf8c;
   outline: 2px solid rgb(22 207 140 / 0.18);
   outline-offset: 0;
 }
 
-#jadense-in-zotero-preferences-pane input::placeholder {
+:where(#jadense-in-zotero-preferences-pane) input::placeholder {
   color: var(--jdx-pref-faint);
 }
 
@@ -622,7 +661,7 @@
   color: var(--jdx-pref-muted);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-checkbox {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-checkbox {
   display: flex;
   gap: 8px;
   align-items: flex-start;
@@ -630,29 +669,33 @@
   color: var(--jdx-pref-text);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-checkbox input {
-  width: auto;
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-checkbox input {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   min-height: 0;
   margin-top: 3px;
   accent-color: #16cf8c;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-status {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-status {
   min-height: 18px;
   color: var(--jdx-pref-muted);
   font-size: calc(12px * var(--jdx-font-scale,1));
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="error"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-status[data-kind="error"] {
   color: var(--jdx-pref-error);
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-status[data-kind="success"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-status[data-kind="success"] {
   color: var(--jdx-pref-success);
 }
 
-#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button) {
+:where(#jadense-in-zotero-preferences-pane) button:not(.jdx-model-select button) {
   min-height: 34px;
+  height: auto;
+  white-space: normal;
   border: 1px solid var(--jdx-pref-line);
   border-radius: 6px;
   padding: 6px 12px;
@@ -662,49 +705,49 @@
   cursor: pointer;
 }
 
-#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):hover {
+:where(#jadense-in-zotero-preferences-pane) button:not(.jdx-model-select button):hover {
   border-color: var(--jdx-pref-line-strong);
   background: var(--jdx-pref-hover);
 }
 
-#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):focus-visible {
+:where(#jadense-in-zotero-preferences-pane) button:not(.jdx-model-select button):focus-visible {
   border-color: #16cf8c;
   outline: 2px solid rgb(22 207 140 / 0.18);
   outline-offset: 0;
 }
 
-#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):active:not(:disabled) {
+:where(#jadense-in-zotero-preferences-pane) button:not(.jdx-model-select button):active:not(:disabled) {
   background: var(--jdx-pref-disabled);
 }
 
-#jadense-in-zotero-preferences-pane button:not(.jdx-model-select button):disabled {
+:where(#jadense-in-zotero-preferences-pane) button:not(.jdx-model-select button):disabled {
   cursor: default;
   opacity: 0.65;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-primary {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-primary {
   border-color: #16d78f;
   background: #16d78f;
   color: var(--jdx-pref-button-text);
   font-weight: 650;
 }
 
-#jadense-in-zotero-preferences-pane .jdx-pref-danger {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-danger {
   color: var(--jdx-pref-error);
 }
 
 /* 与原生常规卡片共用字体、主题和下拉组件；滑块保留平台键盘操作。 */
-#jadense-in-zotero-preferences-pane .jdx-reading-preferences { display: grid; min-width: 0; }
-#jadense-in-zotero-preferences-pane .jdx-reading-preference-row { display: grid; min-width: 0; gap: 8px; padding: 14px 0; border-top: 1px solid var(--jdx-pref-line-subtle); }
-#jadense-in-zotero-preferences-pane .jdx-reading-preference-row:last-of-type { padding-bottom: 0; }
-#jadense-in-zotero-preferences-pane .jdx-reading-preference-row h3 { margin: 0 0 4px; font-size: inherit; font-weight: 600; }
-#jadense-in-zotero-preferences-pane .jdx-reading-preference-row p { margin: 0; font-size: .92em; line-height: 1.5; color: var(--jdx-pref-muted); }
-#jadense-in-zotero-preferences-pane .jdx-reading-font-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls { display: flex; min-width: 0; align-items: center; gap: 12px; }
-#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls input { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; accent-color: var(--jdx-pref-green-text); background: transparent; cursor: pointer; }
-#jadense-in-zotero-preferences-pane .jdx-reading-opacity-controls output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--jdx-pref-muted); }
-#jadense-in-zotero-preferences-pane .jdx-reading-preferences-status { margin: 0; color: var(--jdx-pref-error); font-size: .92em; }
-#jadense-in-zotero-preferences-pane .jdx-reading-preferences-status:empty { display: none; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preferences { display: grid; min-width: 0; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preference-row { display: grid; min-width: 0; gap: 8px; padding: 14px 0; border-top: 1px solid var(--jdx-pref-line-subtle); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preference-row:last-of-type { padding-bottom: 0; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preference-row h3 { margin: 0 0 4px; font-size: inherit; font-weight: 600; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preference-row p { margin: 0; font-size: .92em; line-height: 1.5; color: var(--jdx-pref-muted); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-font-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-opacity-controls { display: flex; min-width: 0; align-items: center; gap: 12px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-opacity-controls input { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; accent-color: var(--jdx-pref-green-text); background: transparent; cursor: pointer; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-opacity-controls output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--jdx-pref-muted); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preferences-status { margin: 0; color: var(--jdx-pref-error); font-size: .92em; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-preferences-status:empty { display: none; }
 
 /* 参考文献 AI 设置与本地恢复：独立功能行，继承现有明暗主题。 */
 .jdx-reference-ai-setting { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 16px 0; border-top: 1px solid var(--jdx-line, var(--jdx-pref-line)); cursor: pointer; }
@@ -719,16 +762,16 @@
 }
 
 /* 功能用途仍在同一张原生设置卡内，字段复用常规页的纵向排列。 */
-#jadense-in-zotero-preferences-pane .jdx-settings-task { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--jdx-pref-line-subtle); }
-#jadense-in-zotero-preferences-pane .jdx-settings-task h3 { margin: 0; font-size: inherit; font-weight: 500; }
-#jadense-in-zotero-preferences-pane .jdx-settings-task > h3 { font-size: 16px; font-weight: 650; padding-block: 8px; }
-#jadense-in-zotero-preferences-pane .jdx-settings-task .jdx-feature-model-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-block: 8px; }
-#jadense-in-zotero-preferences-pane .jdx-settings-task .jdx-translation-interface { padding: 0; }
-#jadense-in-zotero-preferences-pane .jdx-ocr-summary { font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); }
-#jadense-in-zotero-preferences-pane .jdx-classification-settings { display: grid; gap: 10px; }
-#jadense-in-zotero-preferences-pane .jdx-classification-settings p { margin: 0; font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); line-height: 1.5; }
-#jadense-in-zotero-preferences-pane .jdx-classification-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--jdx-pref-line-subtle); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task h3 { margin: 0; font-size: inherit; font-weight: 500; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task > h3 { font-size: 16px; font-weight: 650; padding-block: 8px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task .jdx-feature-model-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-block: 8px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task .jdx-translation-interface { padding: 0; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-ocr-summary { font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); }
+:where(#jadense-in-zotero-preferences-pane) .jdx-classification-settings { display: grid; gap: 10px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-classification-settings p { margin: 0; font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--jdx-pref-muted); line-height: 1.5; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-classification-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
-#jadense-in-zotero-preferences-pane .jdx-settings-task + .jdx-settings-task { margin-top: 24px; border-top-width: 2px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-settings-task + .jdx-settings-task { margin-top: 24px; border-top-width: 2px; }
 
-#jadense-in-zotero-preferences-pane .jdx-reading-font-slider { flex: 1 1 180px; max-width: 280px; }
+:where(#jadense-in-zotero-preferences-pane) .jdx-reading-font-slider { flex: 1 1 180px; max-width: 280px; }

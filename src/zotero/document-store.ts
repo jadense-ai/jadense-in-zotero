@@ -6,12 +6,13 @@ import type { TranslationReadingIndex, TranslationReadingPosition } from "./tran
 import type { ChatDocumentState } from './chat-documents'
 
 export type DocumentTask = {
-  referenceAI?: { unavailable?: boolean; pausedReason?: string; batches: Array<{ id: string; requestId: string; previousRequestId?: string; entryIds: string[]; prompt: string; model: string; status: 'pending' | 'complete' | 'failed' }> }
+  referenceAI?: { unavailable?: boolean; pausedReason?: string; batches: Array<{ id: string; requestId: string; previousRequestId?: string; entryIds: string[]; prompt: string; model: string; outputTokens?: number; status: 'pending' | 'complete' | 'failed' }> }
   version: 1; id: string; kind: "translation" | "references" | "extraction"; source: DocumentIdentity; createdAt: string
   status: "running" | "paused" | "complete" | "partial" | "error"; totalPages: number; completed: number; total: number
   languages?: TranslationLanguages; models: string[]; warnings: string[]; storageWarning?: boolean; error?: string; extractionVersion?: number
   issue?: import("./document-notices").DocumentIssue
   chunkVersion?: number
+  translationBudget?: { contextWindow: number; sourceTokens: number; maxOutputTokens: number }
   extractionID?: string
 }
 export type ExtractedDocument = { version: 1; markdown: string; pages: DocumentPage[]; assets: string[]; ocr?: import('./pdf-document').PdfTextDocument['ocr'] }

@@ -62,6 +62,7 @@ export async function verifyEngineStorage({ Zotero, assert, waitFor, screenshot,
   await Promise.resolve(Zotero.Utilities.Internal.openPreferences('jadense-in-zotero-preferences'))
   const preferences = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'native engine preferences')
   const nativeDoc = preferences.document
+  nativeDoc.getElementById('jadense-in-zotero-settings-tab-ocr').click()
   await waitFor(() => rows(nativeDoc, 'ocr') && rows(nativeDoc, 'pdf'), 'native engine storage rows')
   for (const [kind, root] of [['pdf', paths.join(config.profileDir, 'jadense-pdf-translation')], ['ocr', paths.join(config.profileDir, 'jadense-ocr', 'v1')]]) {
     if (kind === 'ocr') await waitFor(() => nativeDoc.querySelector('[data-ocr-action="stop"]')?.hidden, 'idle native OCR settings', 120000)

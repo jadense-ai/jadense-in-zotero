@@ -1,5 +1,7 @@
 /** 0.4.2 行为回归：完整来源覆盖、零 AI 常规引用、无副作用核验与恢复。 */
 import { describe, it, expect, vi } from "vitest"
+// 本文件隔离模型执行/恢复；目录冷启动、断网和容量读取由 model-budget 与 translation-budget 接缝回归覆盖。
+vi.mock('./model-catalog', async original => ({ ...await original<typeof import('./model-catalog')>(), refreshModelCatalog: async () => {} }))
 // 旧文字层/JSON 协议的历史回归使用 v4 适配器；v5 OCR 主路径在 ocr-translation.test.ts 覆盖。
 vi.mock('./local-ocr', async () => ({ ensureLocalOCR: async () => {}, readOCRDocument: async (host: unknown, id: number, signal: AbortSignal) => (await import('./pdf-document')).readTextDocument(host as never, id, signal), stopLocalOCR: () => {} }))
 vi.mock('./translation-chunks', async importOriginal => ({ ...await importOriginal<typeof import('./translation-chunks')>(), OCR_EXTRACTION_VERSION: 4 }))
