@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { JSDOM } from "jsdom"
 
 import { describe, expect, it } from "vitest"
 import { selectPreferencesStrings } from "./connection-display"
@@ -6,6 +7,15 @@ import { selectPreferencesStrings } from "./connection-display"
 const xhtml = readFileSync(new URL("../../content/preferences.xhtml", import.meta.url), "utf8")
 
 describe("preferences pane markup", () => {
+  it('uses an HTML shell and real SVG elements when Zotero parses the XML fragment', () => {
+    const dom = new JSDOM(xhtml, { contentType: 'application/xhtml+xml' })
+    const root = dom.window.document.documentElement
+    expect(root.namespaceURI).toBe('http://www.w3.org/1999/xhtml')
+    const icon = root.querySelector('#jadense-in-zotero-byok-key-toggle svg')!
+    expect(icon.namespaceURI).toBe('http://www.w3.org/2000/svg')
+    expect(icon.querySelector('path')!.namespaceURI).toBe('http://www.w3.org/2000/svg')
+    dom.window.close()
+  })
   it("provides General controls with labels, restart guidance, and complete bilingual static copy", () => {
     expect(xhtml).toContain('data-settings-section="general"')
     expect(xhtml).toContain('id="jadense-in-zotero-display-language" aria-labelledby="jadense-in-zotero-display-language-label"')

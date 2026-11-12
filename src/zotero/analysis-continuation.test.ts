@@ -1,5 +1,7 @@
 /** 真实运行时/runner/磁盘格式的故障注入；模型、PDF 和 Zotero 原生写入使用合成边界。 */
 import { afterEach, expect, it, vi } from 'vitest'
+// 本文件只注入执行/磁盘故障；目录冷启动和断网由容量接缝测试覆盖，不访问公网元数据。
+vi.mock('./model-catalog', async original => ({ ...await original<typeof import('./model-catalog')>(), refreshModelCatalog: async () => {} }))
 import { AnalysisRuntime } from './analysis-runtime'
 import { AnalysisTaskStore, newAnalysisTask, type AnalysisTask } from './analysis-task-store'
 import { runIndependentPaperAnalysis } from './paper-analysis-runner'
@@ -20,6 +22,18 @@ const pdf: PdfAnalysisSnapshot = { itemID: 42, libraryID: 1, itemKey: 'PDF42', t
   coverage: { pagesRead: 1, totalPages: 1, limited: false, pageNumbers: [1], warnings: [] } }
 const complete = JSON.stringify({ summary: 'Retained synthetic summary', sections: [{ category: 'claim', summary: 'Retained claim' }], annotations: [{ passageId: 'p0', category: 'claim', comment: 'Retained note' }] })
 const written = (): SavedAnalysisAnnotations => ({ created: 1, skipped: 0, failed: 0, unprocessed: 0, warnings: [] })
+
+it('does not advance an incomplete batch or reset the repair limit for valid JSON without a summary', async () => {
+  const f = fixture(), svc = services(), task = newAnalysisTask(42), store = f.store()
+  svc.send.mockResolvedValue('{"summary":"","sections":[{"category":"claim","summary":"Retained claim"}],"annotations":[]}')
+  const run = () => runIndependentPaperAnalysis({ zotero: f.host, itemID: 42, signal: new AbortController().signal, fetchImpl: vi.fn(), task, checkpoint: value => store.save(value), services: svc })
+  expect((await run()).continuation).toBe('waiting')
+  expect((await run()).continuation).toBe('waiting')
+  expect((await run()).continuation).toBe('needs_action')
+  expect(task.inputPlan?.results).toHaveLength(0)
+  expect(svc.send).toHaveBeenCalledTimes(3)
+  expect(svc.saveAnnotations).not.toHaveBeenCalled()
+})
 function fixture() {
   const prefs = new Map<string, unknown>([[AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, false], ['extensions.jadenseInZotero.token', 'synthetic'],
     ['extensions.jadenseInZotero.paperAnalysisModel', JSON.stringify({ route: 'jadense', selection: { kind: 'model', modelId: 'fixture' } })]])

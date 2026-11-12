@@ -5,6 +5,7 @@ export type ChatFileInput = { name: string; mimeType: string; size: number; text
 export type ChatUploadInput = ChatImageInput | ChatFileInput
 export type LocalChatFile = Omit<ChatFileInput, 'text'> & { id: string }
 export const MAX_CHAT_FILE_BYTES = 20 * 1024 * 1024
+/** 兼容旧调用者的历史阈值；新文件读取、保存和发送不再以此截断正文。 */
 export const MAX_CHAT_FILE_TEXT = 60_000
 export const CHAT_FILE_ACCEPT = '.pdf,.docx,.html,.htm,.md,.markdown,.txt,.csv,.tsv,.json,.bib,.tex,.xml,.yaml,.yml,.ris,image/png,image/jpeg'
 export const isChatFile = (value: ChatUploadInput): value is ChatFileInput => 'text' in value

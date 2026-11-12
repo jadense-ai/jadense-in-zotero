@@ -1,5 +1,5 @@
+import { createJadenseBrandIcon as brandIcon } from './jadense-brand'
 import { requestStageLabel, type RequestProgress, type RequestProgressListener } from '@/chat/request-feedback'
-import { JADENSE_BRAND_PARTS } from './jadense-brand'
 import { lifecycleTrace } from './lifecycle-diagnostics'
 import { show as showToast, type ToastHandle } from './ui/toast'
 import { analysisRuntime } from './analysis-runtime'
@@ -237,9 +237,6 @@ export type PdfAnalysisSnapshot = {
 }
 export type SavedAnalysisAnnotations = { created: number; skipped: number; failed: number; unprocessed: number; warnings: string[]; issueCode?: string }
 
-const MAX_PAGES = 80
-const MAX_PASSAGES = 1200
-const MAX_TEXT_CHARS = 120_000
 const AI_TAG = "Jadense AI"
 const writes = new WeakMap<ZoteroReaderHost, Map<number, Promise<SavedAnalysisAnnotations>>>()
 
@@ -350,24 +347,6 @@ function pagePassages(page: PdfPage, pageIndex: number, pageLabel: string): PdfA
   return passages
 }
 
-function sampleIndexes(total: number, count: number): number[] {
-  if (count === 1) return [0]
-  return Array.from({ length: count }, (_, index) => Math.round(index * (total - 1) / (count - 1)))
-}
-
-/** 均匀保留前中后原句；输入上限归本地拥有，模型包装层不再暗中截断。 */
-function boundedPassages(passages: PdfAnalysisPassage[]): PdfAnalysisPassage[] {
-  let count = Math.min(passages.length, MAX_PASSAGES)
-  let selected = sampleIndexes(passages.length, count).map((index) => passages[index])
-  let size = selected.reduce((sum, passage) => sum + passage.text.length, 0)
-  while (size > MAX_TEXT_CHARS && count > 1) {
-    count = Math.max(1, Math.min(count - 1, Math.floor(count * MAX_TEXT_CHARS / size)))
-    selected = sampleIndexes(passages.length, count).map((index) => passages[index])
-    size = selected.reduce((sum, passage) => sum + passage.text.length, 0)
-  }
-  return selected
-}
-
 function metadataField(item: PdfMetadataItem, field: string, maxLength: number) {
   try {
     const value = item.getField?.(field)
@@ -437,7 +416,7 @@ export async function readPdfForAnalysis(
         position: { pageIndex: page.pageIndex, rects }, sortIndex: `${String(page.pageIndex).padStart(5, '0')}|${String(index).padStart(6, '0')}|00000` }]
     }))
     if (candidates.some(passage => passage.position.rects.length)) {
-      const passages = boundedPassages(candidates), metadata = paperMetadata(item)
+      const passages = candidates, metadata = paperMetadata(item)
       return { itemID: item.id, libraryID: item.libraryID, itemKey: item.key, title: metadata.title, metadata,
         ...(typeof document.source.modificationTime === 'number' ? { attachmentModificationTime: document.source.modificationTime } : {}), passages,
         coverage: { pagesRead: document.pages.length, totalPages: document.pages.length, pageNumbers: document.pages.map(page => page.pageIndex + 1),
@@ -462,7 +441,8 @@ export async function readPdfForAnalysis(
   }
   let labels: string[] | null = null
   try { labels = pdf.getPageLabels ? await withAbort(pdf.getPageLabels(), signal) : null } catch { abortIfNeeded(signal) }
-  const pageIndexes = sampleIndexes(pdf.numPages, Math.min(MAX_PAGES, pdf.numPages))
+  // 提取完整原文；模型容量仅影响后续请求规划，不永久抽样或丢弃页/句子。
+  const pageIndexes = Array.from({ length: pdf.numPages }, (_, index) => index)
   const pageNumbers: number[] = []
   const emptyPages: number[] = []
   const candidates: PdfAnalysisPassage[] = []
@@ -488,7 +468,7 @@ export async function readPdfForAnalysis(
   if (!candidates.length) {
     throw new Error([...warnings, uiText("未找到可定位的 PDF 原句。扫描件请先完成 OCR；本次没有生成高亮或批注。", "No PDF passages with usable coordinates were found. Run OCR for scanned documents first. No highlights or annotations were created.")].join('\n'))
   }
-  const passages = boundedPassages(candidates)
+  const passages = candidates
   const limited = passages.length < candidates.length || pageNumbers.length < pdf.numPages || emptyPages.length > 0
   if (emptyPages.length) warnings.push(uiText(`第 ${emptyPages.join("、")} 页无可定位原句，可能是图像、空白页或缺少文字层，未纳入句子解析。`, `Pages ${emptyPages.join(", ")} contain no passages with usable coordinates and were omitted. They may be images, blank, or lack a text layer.`))
   if (pageIndexes.length < pdf.numPages) warnings.push(uiText(`长文献均匀抽取 ${pageIndexes.length}/${pdf.numPages} 页（包括末页），未读取全部正文。`, `This long document was sampled evenly across ${pageIndexes.length}/${pdf.numPages} pages, including the last page. Not all text was read.`))
@@ -954,39 +934,6 @@ const READER_ACTION_ICONS: Record<ReaderToolbarAction["kind"], string> = {
   analyze: "M11 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v3 M14 2v6h6 M8 12h2 M8 16h1 M20 16a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M19 19l3 3",
   translate: "M3 5h12 M9 3v2 M5 5c0 5 6 9 8 9 M13 5c0 5-6 9-8 9 M14 21l4-10 4 10 M15.5 17h5",
   quote: "M4 6h6v7H6c0 3-1 5-3 6 M4 6v7 M14 6h6v7h-4c0 3-1 5-3 6 M14 6v7",
-}
-
-let readerBrandSequence = 0
-
-/** 用 reader 自己的 document 构建品牌 SVG；独立渐变 ID 避免多次渲染相互引用。 */
-function brandIcon(doc: Document): SVGSVGElement {
-  const namespace = "http://www.w3.org/2000/svg"
-  const svg = doc.createElementNS(namespace, "svg")
-  for (const [name, value] of Object.entries({
-    viewBox: "0 0 575 552", width: "20", height: "20", "aria-hidden": "true", focusable: "false",
-  })) svg.setAttribute(name, value)
-  const definitions = doc.createElementNS(namespace, "defs")
-  svg.append(definitions)
-  const prefix = `jadense-reader-brand-${++readerBrandSequence}`
-  JADENSE_BRAND_PARTS.forEach((part, index) => {
-    const gradient = doc.createElementNS(namespace, "linearGradient")
-    const id = `${prefix}-${index}`
-    for (const [name, value] of Object.entries({ id, gradientUnits: "userSpaceOnUse", ...part.coordinates })) {
-      gradient.setAttribute(name, value)
-    }
-    for (const [offset, color] of part.stops) {
-      const stop = doc.createElementNS(namespace, "stop")
-      stop.setAttribute("offset", offset)
-      stop.setAttribute("stop-color", color)
-      gradient.append(stop)
-    }
-    definitions.append(gradient)
-    const path = doc.createElementNS(namespace, "path")
-    path.setAttribute("d", part.path)
-    path.setAttribute("fill", `url(#${id})`)
-    svg.append(path)
-  })
-  return svg
 }
 
 /** 简阅入口沿用工作台「阅读」的书本图形，同一语义在插件各处保持同一图标。 */

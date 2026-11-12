@@ -24,6 +24,9 @@ import { uiText } from "./ui-preferences"
 import { recordStarInvitationUse } from "./star-invitation"
 import { readTranslationInterface } from './translation-interface'
 import { translateMachineText } from '@/chat/machine-translation'
+import { refreshModelCatalog } from './model-catalog'
+import { translationModelBudget, textTokenCost } from './model-budget'
+import { capacitySlices } from './translation-chunks'
 import { translationScheduler } from '@/chat/translation-queue'
 
 function createId(prefix: string) {
@@ -66,11 +69,14 @@ export async function translateReaderSelection(input: {
   const title = source?.parentItem?.title ?? source?.title
   const citation = source?.citation
   const config = readTranslationInterface(input.zotero, 'selection')
-  const model = config.kind === 'ai' ? featureModelState(input.zotero, 'translation') : null
-  if (model && !model.ready) throw new Error(model.issue)
+  const configured = config.kind === 'ai' ? featureModelState(input.zotero, 'translation') : null
+  if (configured && !configured.ready) throw new Error(configured.issue)
   if (!source || source.kind !== "file" || source.itemID !== input.action.itemID) {
     throw new Error(uiText("无法确认当前 PDF 附件身份；本次翻译未发送，也不会写入历史。", "The current PDF attachment could not be verified. No translation request was sent and no history was saved."))
   }
+  if (config.kind === 'ai') await refreshModelCatalog(input.zotero, 'translation', input.fetchImpl)
+  const model = config.kind === 'ai' ? featureModelState(input.zotero, 'translation') : null
+  if (model && !model.ready) throw new Error(model.issue)
   const languages = normalizeTranslationLanguages(
     "languages" in input.action ? input.action.languages : undefined,
     await readArticleTranslationLanguages(input.zotero, input.action.itemID),
@@ -83,33 +89,35 @@ export async function translateReaderSelection(input: {
       translatedText = await translateMachineText({ host: input.zotero, service: config.service, text: selectedText, ...languages, fetchImpl: input.fetchImpl, onText: input.onTextDelta, signal: input.signal })
     } else {
       const connection = readConnection(input.zotero)
-      translatedText = await translationScheduler(input.zotero).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: id, signal: input.signal, fetchImpl: input.fetchImpl }, async (network, signal) => {
+      const budget = translationModelBudget(input.zotero)
+      const prompt = (text: string) => buildTranslationPrompt({ text, title, citation, pageLabel: input.action.pageLabel, ...languages })
+      const limit = Math.max(1, Math.min(budget.sourceTokens, budget.contextWindow - budget.maxOutputTokens - Math.max(256, Math.ceil(budget.contextWindow * .02)) - textTokenCost(JSON.stringify(prompt(''))) - 64))
+      const parts = capacitySlices(selectedText, limit, text => Math.max(0, textTokenCost(JSON.stringify(text)) - 2 / 3))
+      const results: string[] = []
+      for (const [index, part] of parts.entries()) {
+      const result = await translationScheduler(input.zotero).run({ address: model.route === 'byok' ? model.config!.baseUrl : connection.baseUrl, task: id, signal: input.signal, fetchImpl: input.fetchImpl }, async (network, signal) => {
       const client = model.route === "byok"
         ? new ByokChatClient({ config: model.config!, fetchImpl: network })
         : new TemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl: network })
       return client.send({
-        onProgress: input.onProgress, requireComplete: true,
+        onProgress: input.onProgress, requireComplete: true, maxOutputTokens: budget.maxOutputTokens,
         clientFeature: "translation", clientOperation: "selection_translation",
         clientRequestId: createId("request"),
         conversationId: id,
         taskId: id,
-        operationId: id,
+        operationId: parts.length === 1 ? id : `${id}:selection-v1:${index}`,
         signal,
         messages: [{
           id: createId("user"),
           role: "user",
-          text: buildTranslationPrompt({
-            text: selectedText,
-            title,
-            citation,
-            pageLabel: input.action.pageLabel,
-            ...languages,
-          }),
+          text: prompt(part.text),
         }],
-        onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.(normalizeSelectionTranslation(accumulatedText)),
+        onTextDelta: (_delta, accumulatedText) => input.onTextDelta?.([...results, normalizeSelectionTranslation(accumulatedText)].join('\n\n')),
       })
       })
-      translatedText = normalizeSelectionTranslation(translatedText)
+      results.push(normalizeSelectionTranslation(result))
+      }
+      translatedText = results.join('\n\n')
     }
   } catch (error) { diagnostics()?.record("reader-translation", "operation_error", error);
     if (error instanceof Error && error.name === 'AbortError') throw error

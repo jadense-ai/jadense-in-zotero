@@ -39,12 +39,12 @@ describe('chat files', () => {
     await pruneChatFiles([]); expect(files.size).toBe(0)
     expect(await readChatFile(restored)).toBeNull()
   })
-  it('contains storage failures, bounds contents, and never reads or deletes arbitrary paths', async () => {
+  it('contains storage failures, preserves full text, and never reads or deletes arbitrary paths', async () => {
     const { files, io } = storage()
     io.writeUTF8.mockRejectedValueOnce(Error('disk unavailable'))
     const saved = await saveChatFile({ ...file, text: 'x'.repeat(MAX_CHAT_FILE_TEXT + 1) })
     expect(saved.saved).toBe(false)
-    expect((await readChatFile(saved.attachment))?.text).toHaveLength(MAX_CHAT_FILE_TEXT)
+    expect((await readChatFile(saved.attachment))?.text).toHaveLength(MAX_CHAT_FILE_TEXT + 1)
     expect(normalizeLocalChatFile({ id: '../../private' })).toBeUndefined()
     expect(await readChatFile({ ...saved.attachment, id: '../../private' })).toBeNull()
     expect(io.readUTF8).not.toHaveBeenCalled()
@@ -53,7 +53,7 @@ describe('chat files', () => {
     expect(files.size).toBe(1)
     expect(await readChatFile(saved.attachment)).toBeNull()
   })
-  it('reads BOM text, bounds long text with a visible warning, and rejects oversize before reading', async () => {
+  it('reads BOM and full long text while retaining the independent file byte limit', async () => {
     class Reader {
       result: ArrayBuffer | null = null
       onload?: () => void
@@ -63,7 +63,7 @@ describe('chat files', () => {
     const result = await readChatUpload(new File([new Uint8Array([255, 254, 65, 0, 66, 0])], 'notes.txt'), doc)
     expect(result).toMatchObject({ text: 'AB', name: 'notes.txt' })
     const long = await readChatUpload(new File(['x'.repeat(MAX_CHAT_FILE_TEXT + 10)], 'notes.md'), doc)
-    expect(long).toMatchObject({ text: 'x'.repeat(MAX_CHAT_FILE_TEXT), warning: expect.stringContaining('60,000') })
+    expect(long).toMatchObject({ text: 'x'.repeat(MAX_CHAT_FILE_TEXT + 10) })
     await expect(readChatUpload({ size: 21 * 1024 * 1024 } as File, doc)).rejects.toThrow('20 MB')
     await expect(readChatUpload(new File(['old'], 'notes.doc'), doc)).rejects.toThrow('.docx')
   })

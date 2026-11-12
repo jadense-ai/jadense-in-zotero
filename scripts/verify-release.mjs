@@ -5,6 +5,7 @@ import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 
 import JSZip from "jszip"
+import { loadBrandMaster, renderBrandAssets } from './brand-assets.mjs'
 
 import {
   buildArtifactChecksum,
@@ -88,6 +89,19 @@ check(bundledFiles.includes("_locales/zh/messages.json"), "XPI is missing Chines
 check(bundledFiles.includes("icons/jadense-16.svg"), "XPI is missing item pane header icon.")
 check(bundledFiles.includes("icons/jadense-20.svg"), "XPI is missing item pane sidenav icon.")
 check(bundledFiles.includes("content/icons/logo-padded.png"), "XPI is missing Jadense brand logo.")
+// 核对内容而非仅检查文件名存在，防止打包目录遗留旧 Logo。
+const brand = await renderBrandAssets(await loadBrandMaster())
+for (const [fileName, expected] of brand.files) {
+  if (fileName.startsWith('src/')) continue
+  const entry = zip.file(fileName)
+  check(Boolean(entry) && (await entry.async('nodebuffer')).equals(expected),
+    `XPI ${fileName} does not match the current brand master.`)
+}
+for (const fileName of ['bootstrap.js', 'content/manager.js']) {
+  const entry = zip.file(fileName)
+  check(Boolean(entry) && (await entry.async('string')).includes(brand.sourceSha256),
+    `XPI ${fileName} does not contain the current shared brand renderer.`)
+}
 for (const fileName of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
   const entry = zip.file(fileName)
   check(Boolean(entry), `XPI is missing ${fileName}.`)

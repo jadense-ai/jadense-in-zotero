@@ -1,5 +1,7 @@
 /** 实际可靠客户端 + 内存执行日志：丢失 POST 响应后只 GET 原执行，不重复派发模型。 */
 import { expect, it, vi } from 'vitest'
+// 本文件隔离模型执行/恢复；目录冷启动、断网和容量读取由 model-budget 与 translation-budget 接缝回归覆盖。
+vi.mock('./model-catalog', async original => ({ ...await original<typeof import('./model-catalog')>(), refreshModelCatalog: async () => {} }))
 import { runIndependentPaperAnalysis } from './paper-analysis-runner'
 import { AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
 import type { PdfAnalysisSnapshot } from './reader-tools'

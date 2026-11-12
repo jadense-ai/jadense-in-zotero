@@ -29,6 +29,8 @@ export type TemporaryChatClientOptions = {
 }
 
 export type TemporaryChatSendInput = {
+  /** 本次内部预算，只能缩小模型上限；纳入执行身份，不是第二个用户设置。 */
+  maxOutputTokens?: number
   responseFormat?: ChatResponseFormat
   clientOperation?: "full_translation" | "selection_translation" | "reference_identification"
   chunkIndex?: number
@@ -269,6 +271,7 @@ export class TemporaryChatClient {
         agentId: "browser-extension",
         clientContext: { version: clientVersion, feature: input.clientFeature ?? "chat", ...(input.clientOperation ? { operation: input.clientOperation, taskId: input.taskId, chunkId: input.operationId, chunkIndex: input.chunkIndex, chunkTotal: input.chunkTotal } : {}) },
         clientRequestId: input.clientRequestId,
+        ...(input.maxOutputTokens ? { maxOutputTokens: input.maxOutputTokens } : {}),
         taskId: input.taskId, operationId: input.operationId,
         messages: temporaryChatMessages(gatewayOwnsFormatPrompt ? input.messages : responseFormatMessages(input.messages, input.responseFormat), input.sources, input.images),
         ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),

@@ -13,7 +13,7 @@ import { readConnection, type ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { markDiagnosticAbort } from './diagnostics'
 import { analysisStage } from './analysis-stage'
-import { FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY } from './ai-settings'
+import { FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, AI_MODEL_SETTINGS_PREF_KEY } from './ai-settings'
 
 type Context = { account: string; configuration: string; route: 'jadense' | 'byok' }
 type RuntimeOptions = { store?: Pick<AnalysisTaskStore, 'list' | 'save'>; context?: (signal: AbortSignal) => Promise<Context>; retryDelay?: number }
@@ -69,14 +69,22 @@ export class AnalysisRuntime {
       for (const task of rows) { this.tasks.set(task.id, task); if (task.record) this.retained.set(task.record.id, task.record); if (!this.runs.has(task.itemID)) this.show(task) }
       this.emit()
     })
-    for (const key of ['extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig', AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, FEATURE_MODEL_PREF_KEYS.analysis]) {
+    let selection = ''
+    try { selection = JSON.stringify(paperAnalysisModelState(host).selection) } catch { /* 可选观察器不能因偏好暂不可读而阻断阅读器。 */ }
+    for (const key of ['extensions.jadenseInZotero.token', 'extensions.jadenseInZotero.baseUrl', 'extensions.jadenseInZotero.byokConfig', AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, FEATURE_MODEL_PREF_KEYS.analysis, AI_MODEL_SETTINGS_PREF_KEY]) {
       try {
         const id = host.Prefs?.registerObserver?.(key, () => {
+          if (key === AI_MODEL_SETTINGS_PREF_KEY) {
+            let current = ''
+            try { current = JSON.stringify(paperAnalysisModelState(host).selection) } catch { return }
+            if (selection === current) return
+            selection = current
+          }
           for (const itemID of this.controllers.keys()) this.stop(itemID, 'configuration')
           for (const task of this.tasks.values()) if (task.status !== 'complete' && task.pauseReason !== 'user') {
             task.status = 'waiting'; this.schedule(task)
           }
-        })
+        }, key === AI_MODEL_SETTINGS_PREF_KEY)
         if (id !== undefined) this.observers.push(id)
       } catch { /* 旧宿主可能不支持偏好监听，派发前仍核对上下文。 */ }
     }

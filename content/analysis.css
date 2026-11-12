@@ -100,3 +100,73 @@
   .jdx-reference-destination { grid-template-columns:minmax(0,1fr) minmax(0,1fr); flex-basis:100%; }
   .jdx-detail-tabs button { padding-inline:10px; }
 }
+
+/* 解析阅读面沿用插件主题：细边框、适度圆角，正文与状态保留清晰边界。 */
+.jdx-analysis-workspace {
+  container:analysis-results / inline-size;
+  min-width:0;
+}
+.jdx-analysis-workspace [hidden] { display:none!important; }
+.jdx-analysis-workspace .jdx-analysis-detail { box-sizing:border-box; }
+.jdx-analysis-workspace .jdx-analysis-hero { padding:20px; margin:0 0 20px; border:1px solid var(--jdx-line-strong); border-radius:8px; background:var(--jdx-background); }
+.jdx-analysis-workspace .jdx-analysis-eyebrow { color:var(--jdx-muted); font-weight:600; }
+.jdx-analysis-workspace .jdx-analysis-hero h2 { font-weight:650; }
+
+/* 状态先给结论、再给解释；动作独立成行，从左到右连续排列。 */
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-run {
+  display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start;
+  flex:0 0 auto; gap:12px; max-height:45%; overflow:auto;
+  padding:14px; margin:0 0 16px;
+  border:1px solid var(--jdx-line-strong); border-radius:8px;
+  background:var(--jdx-surface-sunken);
+}
+.jdx-analysis-workspace .jdx-detail-run[data-kind=running] { border-inline-start:3px solid var(--jdx-green); }
+.jdx-analysis-workspace .jdx-detail-run[data-kind=error] { border-inline-start:3px solid var(--jdx-red); }
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-run>.jdx-notice { flex:none; margin:0; padding:0; color:var(--jdx-text); }
+.jdx-analysis-status-title { display:block; margin-bottom:5px; font-size:calc(13px * var(--jdx-font-scale,1)); font-weight:600; line-height:1.5; }
+.jdx-analysis-status-description { display:block; color:var(--jdx-muted); font-size:calc(12px * var(--jdx-font-scale,1)); line-height:1.7; }
+.jdx-analysis-run-actions { display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; min-width:0; padding-top:12px; border-top:1px solid var(--jdx-line); }
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-analysis-run-actions>.jdx-button {
+  display:inline-flex; align-items:center; justify-content:center; flex:0 1 auto;
+  width:auto; min-width:0; max-width:100%; height:auto; min-height:34px;
+  gap:7px; padding:7px 10px!important; font-size:calc(12px * var(--jdx-font-scale,1))!important;
+  font-weight:600; line-height:1.5; white-space:normal; overflow-wrap:anywhere;
+  border:1px solid var(--jdx-line-strong); border-radius:6px;
+  background:var(--jdx-surface); color:var(--jdx-text);
+}
+.jdx-analysis-run-actions .jdx-icon-action::before { flex:0 0 15px; width:15px; height:15px; }
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-analysis-run-actions>.jdx-button-primary { border-color:var(--jdx-green); background:var(--jdx-green); color:#07351f; }
+.jdx-analysis-workspace .jdx-analysis-run-actions>.jdx-button:hover:not(:disabled) { background:var(--jdx-press-bg); }
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-analysis-run-actions>.jdx-button-primary:hover:not(:disabled) { background:var(--jdx-green); filter:brightness(1.05); }
+.jdx-analysis-workspace .jdx-analysis-detail>.jdx-analysis-warning:not(:empty) {
+  flex:0 0 auto; max-height:26%; overflow:auto; margin:0 0 16px; padding:12px 14px;
+  border:1px solid var(--jdx-line-strong); border-radius:6px;
+  background:var(--jdx-surface-sunken); color:var(--jdx-text); line-height:1.75;
+}
+.jdx-analysis-workspace .jdx-analysis-detail>.jdx-analysis-warning[data-kind=error] { border-inline-start:3px solid var(--jdx-red); color:var(--jdx-red); }
+
+.jdx-analysis-workspace .jdx-detail-tabs { gap:6px; padding:0 0 10px; margin-bottom:12px; border-bottom:1px solid var(--jdx-line); }
+.jdx-analysis-workspace .jdx-detail-tabs>.jdx-button { border:1px solid var(--jdx-line-strong); border-radius:6px; font-weight:600; color:var(--jdx-text); }
+.jdx-analysis-workspace .jdx-detail-tabs>.jdx-button[aria-selected=true] { border-color:var(--jdx-green); background:var(--jdx-active-bg); color:var(--jdx-active-text); }
+.jdx-analysis-workspace .jdx-analysis-detail>.jdx-detail-panel { flex:1 1 0; padding:0 0 8px; }
+.jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-panel .jdx-reading-body {
+  box-sizing:border-box; width:100%; max-width:78ch; margin:0 auto; padding:18px;
+  border:1px solid var(--jdx-line-strong); border-radius:8px;
+  background:var(--jdx-background);
+  font-size:calc(14px * var(--jdx-font-scale,1)); line-height:1.85;
+}
+.jdx-analysis-workspace .jdx-reading-body>:first-child { margin-top:0; }
+.jdx-analysis-workspace .jdx-reading-body>:last-child { margin-bottom:0; }
+.jdx-analysis-workspace .jdx-note-heading { padding-bottom:9px; border-bottom:1px solid var(--jdx-line); font-weight:600; }
+.jdx-analysis-workspace .jdx-note-entry blockquote { border-inline-start:2px solid var(--jdx-line-strong); }
+.jdx-analysis-workspace :focus-visible { outline:2px solid var(--jdx-green); outline-offset:2px; }
+
+/* 仅有多个成果版本时显示版本栏；工作台入口由 Reader 标题栏承载。 */
+.jdx-document-results[data-result-mode=analysis]>.jdx-result-tools { gap:10px; padding:10px 16px; border-bottom:1px solid var(--jdx-line); background:var(--jdx-background); }
+.jdx-document-results[data-result-mode=analysis] .jdx-result-version { flex:1 1 180px; order:0; }
+.jdx-document-results[data-result-mode=analysis] .jdx-result-version .jdx-select-trigger { border:1px solid var(--jdx-line-strong); border-radius:6px; }
+.jdx-reader-workspace .jdx-document-results[data-result-mode=analysis]>.jdx-result-content { padding:16px; }
+@container analysis-results (max-width:360px) {
+  .jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-panel .jdx-reading-body { padding:14px; }
+  .jdx-analysis-run-actions>.jdx-button { flex-grow:1!important; }
+}

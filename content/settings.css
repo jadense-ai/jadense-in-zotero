@@ -113,6 +113,8 @@
   position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: min(100%, 340px);
   box-sizing: border-box; display: grid; gap: 7px; padding: 8px; border: 1px solid var(--settings-line);
   border-radius: 7px; background: var(--settings-surface); box-shadow: 0 10px 28px rgb(0 0 0 / .16);
+  max-height: calc(100vh - var(--jdx-pref-tabs-height, 8px) - 24px); overflow-y: auto;
+  scroll-margin-block-start: var(--jdx-pref-tabs-height, 8px);
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-popup[hidden] { display: none; }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-options {

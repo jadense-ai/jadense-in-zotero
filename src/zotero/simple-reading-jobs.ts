@@ -18,7 +18,7 @@ import type { TranslationLanguages } from '@/chat/translation-languages'
 import { readingBatch, readingReply, machineReadingText, machineReadingReply, SIMPLE_READING_STRATEGY, validBlockOutput, type ReadingBlock } from './simple-reading-blocks'
 import { SimpleReadingStore, readingIdentityKey, sameReadingSource, usableReadingOutputs, type ReadingIdentity, type ReadingTask, type ReadingRequest } from './simple-reading-store'
 
-export type ReadingTransport = { configuration: string; limit: number; concurrency: number; machine: boolean; cost(text: string): number; send(task: ReadingTask, request: ReadingRequest, signal: AbortSignal, onProgress?: RequestProgressListener, allowUnconfirmedRetry?: boolean): Promise<Record<string, string>> }
+export type ReadingTransport = { configuration: string; limit: number; outputTokens?: number; concurrency: number; machine: boolean; cost(text: string): number; send(task: ReadingTask, request: ReadingRequest, signal: AbortSignal, onProgress?: RequestProgressListener, allowUnconfirmedRetry?: boolean): Promise<Record<string, string>> }
 
 /** 请求参数只沿用全文翻译配置；共享 scheduler 仍拥有实际 HTTP 启动与限流。 */
 export async function readingTransport(host: ZoteroLike): Promise<ReadingTransport> {
@@ -30,7 +30,7 @@ export async function readingTransport(host: ZoteroLike): Promise<ReadingTranspo
   const machine = translation.kind === 'machine'
   // PDF 逐页排版的 batchTokens 不是 SDT 的容量约束；整篇按模型输入/输出预算组批。
   const limit = machine ? TRANSLATION_LIMITS[translation.service] - 100 : budget.sourceTokens
-  return { configuration, limit, concurrency: machine ? 1 : translationSpeed(host, service).concurrency, machine, cost: machine ? text => text.length : tokenCost,
+  return { configuration, limit, outputTokens: budget.maxOutputTokens, concurrency: machine ? 1 : translationSpeed(host, service).concurrency, machine, cost: machine ? text => text.length : tokenCost,
     async send(task, request, signal, onProgress, allowUnconfirmedRetry) {
       checkCancelled(signal)
       const win = host.getMainWindow?.(), network = (win?.fetch?.bind(win) ?? globalThis.fetch) as typeof fetch
@@ -48,7 +48,7 @@ export async function readingTransport(host: ZoteroLike): Promise<ReadingTranspo
         const client = model.route === 'byok' ? new ReliableByokChatClient({ config: model.config!, fetchImpl }) : new ReliableTemporaryChatClient({ baseUrl: connection.baseUrl, token: connection.token, selection: model.selection.selection, fetchImpl })
         reportProgress(onProgress, { stage: 'sent' })
         return retryPDFTranslation({ route: model.route === 'byok' ? 'byok' : 'jadense', signal,
-          run: () => { const allow = allowUnconfirmedRetry; allowUnconfirmedRetry = false; return client.send({ allowUnconfirmedRetry: allow, diagnostic: tracked.diagnostic, onProgress, clientFeature: 'translation', clientOperation: 'full_translation', clientRequestId: request.id, conversationId: `sdt-${task.id}`, taskId: `sdt-${task.id}`, operationId: request.operation,
+          run: () => { const allow = allowUnconfirmedRetry; allowUnconfirmedRetry = false; return client.send({ maxOutputTokens: request.maxOutputTokens, allowUnconfirmedRetry: allow, diagnostic: tracked.diagnostic, onProgress, clientFeature: 'translation', clientOperation: 'full_translation', clientRequestId: request.id, conversationId: `sdt-${task.id}`, taskId: `sdt-${task.id}`, operationId: request.operation,
             previousOperationId: request.previousOperation, messages: [{ id: request.id, role: 'user', text: prompt }], signal, requireComplete: true, reuseCompletedOperation: true }) },
           recover: async error => {
             if (!(client instanceof ReliableTemporaryChatClient)) throw error
@@ -164,7 +164,7 @@ export class SimpleReadingJobs {
     }
     const make = (rows: ReadingBlock[], single = false): ReadingRequest => task.requests.find(request => Boolean(request.single) === single && JSON.stringify(request.blocks) === JSON.stringify(rows)
       && (request.state === 'pending' || request.state === 'complete' && rows.every(block => validBlockOutput(block, request.output?.[block.id]))))
-      ?? { id: crypto.randomUUID(), operation: crypto.randomUUID(), blocks: rows, state: 'pending', single, promptVersion: 3,
+      ?? { id: crypto.randomUUID(), operation: crypto.randomUUID(), blocks: rows, state: 'pending', single, promptVersion: 3, maxOutputTokens: transport.outputTokens,
         previousOperation: [...task.requests].reverse().find(request => request.state !== 'pending' && request.blocks.some(block => rows.some(row => row.id === block.id)))?.operation }
     let failure: unknown
     let round = 0

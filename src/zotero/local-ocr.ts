@@ -67,16 +67,21 @@ export type OCRProgress = { stage: string; file?: string; completed?: number; to
 /** 多个设置窗口订阅同一准备进程，重新打开也能看到当前阶段。 */
 export function observeOCRProgress(host: ZoteroLike, listener: (value: OCRProgress) => void) {
   const shared = host as SharedHost
-  const listeners = shared.__jadenseOCRProgressObservers ??= new Set()
+  // 设置 pane 的沙箱会被 Zotero 直接销毁；共享集合由持续存在的主窗口持有。
+  const listeners = shared.__jadenseOCRProgressObservers ??= new (host.getMainWindow?.()?.Set ?? Set)<(value: OCRProgress) => void>()
   listeners.add(listener)
-  const value = shared.__jadenseOCRProgress
-  if (value) listener(value)
+  try {
+    const value = shared.__jadenseOCRProgress
+    if (value) listener(value)
+  } catch { /* 旧缓存可能来自已销毁的偏好沙箱；丢弃该次可选展示，等待下一条进度。 */ }
   return () => { listeners.delete(listener) }
 }
 function reportOCRProgress(host: ZoteroLike, value: OCRProgress) {
   const shared = host as SharedHost
-  shared.__jadenseOCRProgress = value
-  shared.__jadenseOCRProgressObservers?.forEach(listener => { try { listener(value) } catch { /* 已关闭窗口的显示错误不能影响准备。 */ } })
+  // 不把短命设置沙箱中的对象留在 Zotero 单例上，供下次打开或其他窗口回读。
+  const snapshot = (host.getMainWindow?.()?.JSON ?? JSON).parse(JSON.stringify(value)) as OCRProgress
+  shared.__jadenseOCRProgress = snapshot
+  shared.__jadenseOCRProgressObservers?.forEach(listener => { try { listener(snapshot) } catch { /* 已关闭窗口的显示错误不能影响准备。 */ } })
 }
 /** 只在实际失败或用户显式检查时撤销成功凭据，不扫描权重或按时间过期。 */
 function invalidateOCR(host: ZoteroLike) {
@@ -145,7 +150,7 @@ export async function movedOCRNeedsHealthCheck(host: ZoteroLike) {
 
 /** 设置窗口可各自离开；显式停止会通知同一宿主中仍在运行的准备或检查。 */
 export function registerOCRSettingsOperation(host: ZoteroLike, controller: AbortController) {
-  const operations = ((host as SharedHost).__jadenseOCRSettingsOperations ??= new Set())
+  const operations = ((host as SharedHost).__jadenseOCRSettingsOperations ??= new (host.getMainWindow?.()?.Set ?? Set)<AbortController>())
   operations.add(controller)
   return () => { operations.delete(controller) }
 }

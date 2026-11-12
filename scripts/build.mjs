@@ -5,6 +5,7 @@ import path from "node:path"
 import { build as esbuild } from "esbuild"
 import { existsSync } from 'node:fs'
 import JSZip from "jszip"
+import { syncBrandAssets } from './brand-assets.mjs'
 
 import {
   buildArtifactChecksum,
@@ -22,6 +23,8 @@ import {
   zipEntryDate,
 } from "./release-common.mjs"
 
+// 打包入口自行同步，直接调用 release:package 也不会漏掉任何品牌派生资源。
+await syncBrandAssets()
 const { facts, version, manifest } = await loadReleaseContext()
 // 可选模块只从本机私有目录装配；公开源码仍可独立构建基础发行。
 const optionalEntry = path.join(projectRoot, 'private/entry.ts')

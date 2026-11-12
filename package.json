@@ -1,6 +1,6 @@
 {
   "name": "jadense-in-zotero",
-  "version": "0.6.14",
+  "version": "0.6.15",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@10.19.0",
@@ -9,7 +9,9 @@
   },
   "type": "module",
   "scripts": {
-    "build": "npm run typecheck && npm run release:package && npm run release:verify",
+    "brand:sync": "node ./scripts/brand-assets.mjs",
+    "brand:check": "node ./scripts/brand-assets.mjs --check",
+    "build": "npm run brand:sync && npm run typecheck && npm run release:package && npm run release:verify",
     "lint": "eslint .",
     "release:package": "node ./scripts/build.mjs",
     "release:verify": "node ./scripts/verify-release.mjs",
@@ -29,6 +31,7 @@
     "globals": "^16.5.0",
     "jsdom": "28.1.0",
     "jszip": "^3.10.1",
+    "sharp": "0.34.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.0",
     "vitest": "^2.1.9"

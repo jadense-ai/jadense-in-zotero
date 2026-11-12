@@ -31,17 +31,17 @@ describe("Zotero source context", () => {
     expect(JSON.stringify(result)).not.toMatch(/private|do-not-store|AA==|future/)
   })
 
-  it("bounds each source, total evidence, and count while retaining missing-text references", () => {
+  it("preserves full source text while retaining the independent source count limit", () => {
     const result = normalizeChatSources(Array.from({ length: 30 }, (_, index) => source({
       itemID: index + 1,
       itemKey: `PAPER${index}`,
       text: "x".repeat(80_000),
     })))
     expect(result).toHaveLength(MAX_CHAT_SOURCES)
-    expect(result.every((entry) => entry.text.length <= 60_000)).toBe(true)
-    expect(result.reduce((sum, entry) => sum + entry.text.length, 0)).toBe(180_000)
+    expect(result.some((entry) => entry.text.length > 60_000)).toBe(true)
+    expect(result.reduce((sum, entry) => sum + entry.text.length, 0)).toBeGreaterThan(180_000)
     expect(result.at(-1)?.warning).toContain("未加入")
-    expect(result[3]).toMatchObject({ text: "", warning: expect.stringContaining("未提供") })
+    expect(result[3].text).toHaveLength(80000)
     expect(normalizeChatSources(result)).toEqual(result)
   })
 

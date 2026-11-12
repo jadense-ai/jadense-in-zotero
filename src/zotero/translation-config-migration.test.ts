@@ -87,6 +87,6 @@ describe('translation configuration migration', () => {
     saveFeatureModelSelection(host, 'translation', oldModel)
     saveFeatureModelSelection(host, 'fullTranslation', otherModel)
     expect(translationCapacity(host)).toMatchObject({ contextWindow: 64000 })
-    expect(translationCapacity(host)).not.toHaveProperty('maxOutputTokens')
+    expect(translationCapacity(host).maxOutputTokens).toBe(16000)
   })
 })

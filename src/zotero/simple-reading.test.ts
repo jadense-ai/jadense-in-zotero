@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { readingBlocks, applyReadingOutput, readingReply, machineReadingReply, machineReadingText, validBlockOutput } from './simple-reading-blocks'
 import { SimpleReadingJobs, splitReadingBlock, readingTransport, readingPrompt, type ReadingTransport } from './simple-reading-jobs'
+import { readingTranslationBudget } from './translation-budget'
 import { translationScheduler, saveTranslationSpeed } from '@/chat/translation-queue'
 import type { ZoteroLike } from './runtime'
 import { observeReadingCrops, readingBlockPages } from './simple-reading-native'
@@ -151,12 +152,12 @@ describe('atomic jobs, partial output and explicit execution', () => {
     values.set('extensions.jadenseInZotero.byokConfig', JSON.stringify(config))
     expect((await readingTransport(host)).limit).toBeLessThanOrEqual((2048 - 256) / 3)
   })
-  it('defaults to 128K while honoring the independently configured reading budget', async () => {
+  it('uses the automatic capacity and honors the independent manual reading cap', async () => {
     const values = new Map<string, unknown>()
     const host = { Prefs: { get: (key: string) => values.get(key) } } as unknown as ZoteroLike
-    expect((await readingTransport(host)).limit).toBe((131072 - 1024) / 4)
+    expect((await readingTransport(host)).limit).toBe(readingTranslationBudget(host, 'simple').sourceTokens)
     values.set('extensions.jadenseInZotero.readingTranslationBudgets', JSON.stringify({ simple: 8192, pdf: 262144, future: true }))
-    expect((await readingTransport(host)).limit).toBe((8192 - 1024) / 4)
+    expect((await readingTransport(host)).limit).toBe(readingTranslationBudget(host, 'simple').sourceTokens)
   })
   it('bounds malformed-output repair and does not retry an uncertain transport failure', async () => {
     const { store } = storage(), jobs = new SimpleReadingJobs(store), send = vi.fn(async () => ({}))

@@ -6,6 +6,7 @@ import type { PaperAnalysisRecord } from '@/chat/paper-analysis-history'
 import type { RequestIssue } from '@/chat/request-feedback'
 import type { PdfAnalysisSnapshot, AnalysisAnnotationLedger } from './reader-tools'
 import { uiText } from './ui-preferences'
+import type { AnalysisInputPlan } from './analysis-input'
 
 export type AnalysisTask = {
   version: 1; id: string; itemID: number; createdAt: string
@@ -15,6 +16,7 @@ export type AnalysisTask = {
   requestID: string; previousRequestID?: string; generation: 'new' | 'pending' | 'complete' | 'terminal'
   operationID?: string; repair?: { attempt: number; retained: string }
   snapshot?: PdfAnalysisSnapshot; response?: string; record?: PaperAnalysisRecord
+  inputPlan?: AnalysisInputPlan
   annotations: AnalysisAnnotationLedger
   referenceTaskID?: string; issue?: RequestIssue; retries?: number; retryAt?: number
   pauseReason?: 'user' | 'shutdown' | 'configuration'; storageWarning?: boolean

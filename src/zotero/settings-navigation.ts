@@ -1,6 +1,62 @@
 /** 设置目录共用布局：只切换现有 DOM，不重建控件、不保存业务偏好。 */
 import { uiText } from './ui-preferences'
 
+/** 原生窗口只展示一个一级配置页；滚动交给 Zotero，表单节点在切换时保留。 */
+export function wirePreferencesNavigation(root: HTMLElement) {
+  const doc = root.ownerDocument
+  const panels = Array.from(root.querySelectorAll<HTMLElement>('.jdx-pref-grid > [data-settings-section]'))
+  const labels: Record<string, string> = {
+    general: uiText('常规', 'General'), features: uiText('功能配置', 'Feature settings'),
+    ocr: uiText('外置依赖配置', 'External dependencies'), jadense: uiText('连接攻玉', 'Connect Jadense'), byok: 'BYOK',
+  }
+  const nav = doc.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  nav.className = 'jdx-pref-tabs'
+  nav.setAttribute('role', 'tablist')
+  nav.setAttribute('aria-label', uiText('设置', 'Settings'))
+  const buttons = panels.map(panel => {
+    const key = panel.dataset.settingsSection!
+    const button = doc.createElementNS('http://www.w3.org/1999/xhtml', 'button') as HTMLButtonElement
+    button.type = 'button'; button.textContent = labels[key]
+    button.id = `jadense-in-zotero-settings-tab-${key}`
+    button.dataset.preferencesTarget = key
+    panel.id ||= `jadense-in-zotero-settings-panel-${key}`
+    panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', button.id)
+    button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', panel.id)
+    button.addEventListener('click', () => {
+      panels.forEach((node, index) => {
+        const selected = node === panel
+        node.hidden = !selected
+        buttons[index].tabIndex = selected ? 0 : -1
+        buttons[index].setAttribute('aria-selected', String(selected))
+      })
+    })
+    nav.append(button)
+    return button
+  })
+  const onKey = (event: KeyboardEvent) => {
+    const index = buttons.indexOf(event.target as HTMLButtonElement)
+    if (index < 0) return
+    let next = index
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % buttons.length
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index + buttons.length - 1) % buttons.length
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = buttons.length - 1
+    else return
+    event.preventDefault(); buttons[next].focus(); buttons[next].click()
+  }
+  nav.addEventListener('keydown', onKey)
+  root.querySelector('.jdx-pref-grid')!.before(nav)
+  // 换行和字号缩放后，定位表单时为原生窗口中的粘性目录预留真实高度。
+  const Resize = doc.defaultView?.ResizeObserver
+  const resize = Resize ? new Resize(() => root.style.setProperty('--jdx-pref-tabs-height', `${nav.getBoundingClientRect().height + 12}px`)) : null
+  resize?.observe(nav)
+  buttons[0]?.click()
+  return {
+    select: (key: string) => buttons.find(button => button.dataset.preferencesTarget === key)?.click(),
+    destroy: () => { resize?.disconnect(); nav.removeEventListener('keydown', onKey); nav.remove(); panels.forEach(panel => { panel.hidden = false }) },
+  }
+}
+
 /** 依赖跳转先选择目录，再由调用方滚动并聚焦对应控件。 */
 export function selectSettingsGroup(root: HTMLElement, key: string) {
   root.querySelector<HTMLButtonElement>(`[data-settings-target="${key}"]`)?.click()

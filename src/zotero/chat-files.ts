@@ -1,6 +1,6 @@
 /** 本机附件解析与 UUID 存储；文档永不作为 HTML 插入宿主，外部资源不加载。 */
 import { unzipSync } from 'fflate'
-import { MAX_CHAT_FILE_BYTES, MAX_CHAT_FILE_TEXT, normalizeLocalChatFile, type ChatFileInput, type ChatUploadInput, type LocalChatFile } from '@/chat/file-input'
+import { MAX_CHAT_FILE_BYTES, normalizeLocalChatFile, type ChatFileInput, type ChatUploadInput, type LocalChatFile } from '@/chat/file-input'
 import { normalizeFigureImage } from './reader-figure-tools'
 import { uiText } from './ui-preferences'
 
@@ -74,7 +74,6 @@ export async function readChatUpload(file: File, doc: Document): Promise<ChatUpl
         const value = content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('').trim()
         if (!value) emptyPages++
         text += `\n\n[${uiText('第', 'Page')} ${page} ${uiText('页', '')}]\n${value}`
-        if (text.length > MAX_CHAT_FILE_TEXT) { warning = uiText('内容较长，仅提取前 60,000 字符。', 'Long document: only the first 60,000 characters were extracted.'); break }
       }
       if (emptyPages) warning += uiText(` ${emptyPages} 页无可提取文字，扫描内容需先 OCR。`, ` ${emptyPages} pages have no extractable text; scanned content needs OCR.`)
     } finally { await task.destroy() }
@@ -99,14 +98,13 @@ export async function readChatUpload(file: File, doc: Document): Promise<ChatUpl
       text = html.textContent || ''
     }
   }
-  if (text.length > MAX_CHAT_FILE_TEXT && !warning.includes('60,000')) warning += uiText(' 内容较长，仅提取前 60,000 字符。', ' Long document: only the first 60,000 characters were extracted.')
   if (!text.trim()) warning = uiText('文件没有可提取文字，请检查内容或先执行 OCR。', 'No extractable text. Check the content or run OCR first.')
-  return { name: file.name, size: file.size, mimeType, text: text.slice(0, MAX_CHAT_FILE_TEXT), ...(warning ? { warning: warning.trim() } : {}) }
+  return { name: file.name, size: file.size, mimeType, text, ...(warning ? { warning: warning.trim() } : {}) }
 }
 
 export async function saveChatFile(file: ChatFileInput) {
   const attachment = normalizeLocalChatFile({ ...file, id: crypto.randomUUID() })!
-  const canonical = { ...attachment, text: file.text.slice(0, MAX_CHAT_FILE_TEXT) }
+  const canonical = { ...attachment, text: file.text }
   try {
     await cleanup
     const { io, paths, directory } = storage()
@@ -123,7 +121,7 @@ export async function readChatFile(value: LocalChatFile): Promise<ChatFileInput 
   try {
     const { io, paths, directory } = storage()
     const row = JSON.parse(await io.readUTF8(paths.join(directory, `${attachment.id}.json`)))
-    return typeof row.text === 'string' ? { ...attachment, text: row.text.slice(0, MAX_CHAT_FILE_TEXT) } : null
+    return typeof row.text === 'string' ? { ...attachment, text: row.text } : null
   } catch { return null }
 }
 

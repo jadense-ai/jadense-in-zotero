@@ -13,9 +13,9 @@ export function wireReadingBudgetSettings(host: ZoteroLike, root: HTMLElement, m
     const row = element(doc, 'div', 'jdx-feature-model-row jdx-reading-budget-row'), label = element(doc, 'label'), input = element(doc, 'input'), help = element(doc, 'p', 'jdx-manager-settings-note jdx-pref-card-note')
     const title = element(doc, 'span', 'jdx-reading-budget-label')
     title.textContent = mode === 'pdf' ? uiText('对照翻译上下文', 'PDF translation context') : uiText('简阅翻译上下文', 'Reading translation context')
-    input.type = 'number'; input.step = '1'; input.dataset.readingBudget = mode; input.style.cssText = 'display:block;width:100%;box-sizing:border-box;min-width:0'
+    input.type = 'number'; input.min = '1'; input.step = '1'; input.dataset.readingBudget = mode; input.style.cssText = 'display:block;width:100%;box-sizing:border-box;min-width:0'
     help.style.cssText = 'white-space:normal;font-size:12px;line-height:1.6'; label.append(title, input); row.append(label, help); container.append(row)
-    input.addEventListener('change', () => { saveReadingTranslationBudget(host, mode, Number(input.value)); input.value = String(readingTranslationBudget(host, mode).contextWindow); sync() })
+    input.addEventListener('change', () => { saveReadingTranslationBudget(host, mode, input.value ? Number(input.value) : undefined); sync() })
     inputs.set(mode, { input, help })
   }
   const summary = element(doc, 'div', 'jdx-reading-model-summary'), summaryLabel = element(doc, 'span', 'jdx-reading-budget-label'), summaryValue = element(doc, 'strong', 'jdx-reading-model-value'), summaryHint = element(doc, 'span', 'jdx-reading-model-hint')
@@ -28,11 +28,11 @@ export function wireReadingBudgetSettings(host: ZoteroLike, root: HTMLElement, m
     for (const [mode, { input, help }] of inputs) {
       input.disabled = service.kind === 'machine'
       const budget = readingTranslationBudget(host, mode)
-      if (doc.activeElement !== input) input.value = String(budget.contextWindow)
+      if (doc.activeElement !== input) input.value = budget.automatic ? '' : String(budget.contextWindow)
+      input.placeholder = uiText(`自动 · ${budget.contextWindow.toLocaleString()} tokens`, `Automatic · ${budget.contextWindow.toLocaleString()} tokens`)
       if (budget.maximum) input.max = String(budget.maximum); else input.removeAttribute('max')
-      help.textContent = uiText('默认 128K，包含原文、提示与译文空间；下次翻译生效。', 'Default 128K, including source, prompt and output space. Applies to the next translation.') + ' ' + (budget.route === 'byok'
-        ? uiText('BYOK 自行填写，不校验模型容量上限。', 'BYOK accepts your value without a model-capacity limit.')
-        : budget.maximum ? uiText(`当前攻玉模型上限：${budget.maximum.toLocaleString()}。`, `Jadense model limit: ${budget.maximum.toLocaleString()}.`) : uiText('模型容量暂未读取，使用已设预算。', 'Model capacity is unavailable; using your budget.'))
+      help.textContent = uiText('留空自动跟随模型；填写数字可减小使用上限。包含提示、原文与译文空间，下次新任务生效。', 'Leave blank to follow the model automatically, or enter a smaller cap. Includes prompt, source and output space; applies to new tasks.') + ' ' +
+        (budget.maximum ? uiText(`模型上限：${budget.maximum.toLocaleString()} tokens。`, `Model limit: ${budget.maximum.toLocaleString()} tokens.`) : uiText('模型容量暂不可用，使用兼容预算。', 'Model capacity is unavailable; using a compatibility budget.'))
     }
   }
   let disposed = false

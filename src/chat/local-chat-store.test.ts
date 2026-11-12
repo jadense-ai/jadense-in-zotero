@@ -86,7 +86,7 @@ describe("local Zotero chat store", () => {
     expect(readLocalChatState(prefs).sessions[0].messages[0]).toEqual(completed.sessions[0].messages[0])
   })
 
-  it("keeps the same bounded prefix and explicit omission notice through streaming, completion, and reload", () => {
+  it("preserves the full body through streaming, completion, and reload with a bounded Prefs preview", () => {
     const prefs = preferences()
     const session = createLocalChatSession(prefs, { id: "truncated" })
     const firstParagraph = "已保存的解析结果：此处保留首段、原始顺序与可用信息。\n\n"
@@ -95,19 +95,20 @@ describe("local Zotero chat store", () => {
       id: "answer", role: "assistant", text: longText, status: "streaming", createdAt: "2026-08-31T00:00:00.000Z",
     })
     const canonicalText = appended.sessions[0].messages[0].text
-    expect(canonicalText).toHaveLength(20_000)
+    expect(canonicalText).toBe(longText)
     expect(canonicalText.startsWith(firstParagraph)).toBe(true)
-    expect(canonicalText.endsWith("\n\n【本地消息长度受限，后续内容未保存】")).toBe(true)
+    expect(canonicalText).not.toContain("【本地消息长度受限，后续内容未保存】")
     const streaming = updateLocalChatMessage(prefs, session.id, "answer", { text: longText + "后续流式内容" })
-    expect(streaming.sessions[0].messages[0].text).toBe(canonicalText)
+    expect(streaming.sessions[0].messages[0].text).toBe(longText + "后续流式内容")
     const completed = updateLocalChatMessage(prefs, session.id, "answer", { status: "complete" })
-    expect(completed.sessions[0].messages[0]).toMatchObject({ text: canonicalText, status: "complete" })
+    expect(completed.sessions[0].messages[0]).toMatchObject({ text: streaming.sessions[0].messages[0].text, status: "complete" })
     const reloaded = readLocalChatState(preferences(String(prefs.values.get("extensions.jadenseInZotero.localChatState"))))
     expect(reloaded.sessions[0].messages[0]).toEqual(completed.sessions[0].messages[0])
-    expect(canonicalText.split("本地消息长度受限")).toHaveLength(2)
+    expect(canonicalText.split("本地消息长度受限")).toHaveLength(1)
 
     // 旧版偏好中的超长正文与新增消息遵循同一规则，不需要更改状态版本或增加字段。
     reloaded.sessions[0].messages[0].text = longText
+    delete reloaded.sessions[0].messages[0].textRef
     const legacy = readLocalChatState(preferences(JSON.stringify(reloaded)))
     expect(legacy.version).toBe(1)
     expect(legacy.sessions[0].messages[0].text).toBe(canonicalText)

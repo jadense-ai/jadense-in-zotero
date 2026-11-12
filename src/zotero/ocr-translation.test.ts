@@ -1,7 +1,7 @@
 import { saveFeatureModelSelection } from './ai-settings'
 /** 新版真实调度契约：OCR 边界用有序块夹具，网络用可控流；不安装模型。 */
 import { describe, expect, it, vi } from 'vitest'
-import { DocumentJobs as RuntimeDocumentJobs } from './document-jobs'
+import { DocumentJobs as RuntimeDocumentJobs, estimateTokens } from './document-jobs'
 import { TemporaryRequestStore, type LocalTemporaryRequest } from '@/chat/temporary-request-store'
 import { DocumentStore, type TaskIO } from './document-store'
 import { renderChatMarkdown } from '@/chat/markdown'
@@ -27,6 +27,7 @@ class DocumentJobs extends RuntimeDocumentJobs {
     const requests = requestStores.get(network) ?? new RequestFixtureStore()
     requestStores.set(network, requests)
     super(host, async (url, init) => {
+      if (String(url).endsWith('/api/extension/chat/models')) return Response.json({ options: [], defaultSelection: null })
       if (init?.method === 'HEAD') return new Response(null, { headers: { 'x-jadense-temporary-protocol': '1' } })
       const response = await network(url, init)
       response.headers.set('x-jadense-temporary-protocol', '1')
@@ -46,6 +47,35 @@ function fixture(texts = ['First sentence.', 'Second sentence.']) {
   return { host, prefs, document }
 }
 const reply = (text: string) => new Response(`data: ${JSON.stringify({ type: 'text-delta', delta: text })}\n\ndata: {"type":"finish"}\n\n`)
+
+it('loads platform limits on a cold Markdown task and budgets the actual paid HTTP bodies', async () => {
+  const counts: number[] = []
+  for (const contextWindow of [8192, 1048576]) {
+    const { host, prefs } = fixture(['Source evidence '.repeat(2400)])
+    const selection = { route: 'jadense', selection: { kind: 'model', modelId: 'capacity-model' } }
+    prefs.set('extensions.jadenseInZotero.aiModelSettings', JSON.stringify({ version: 1, followChatModel: false, models: { chat: selection, translation: selection, analysis: selection, figure: selection } }))
+    const paid: Array<{ messages: unknown; maxOutputTokens: number }> = []
+    const catalog = vi.fn()
+    const network: typeof fetch = async (url, init) => {
+      if (String(url).endsWith('/api/extension/chat/models')) {
+        catalog()
+        return Response.json({ options: [{ kind: 'model', modelId: 'capacity-model', displayName: 'Synthetic', contextWindow, maxOutputTokens: Math.min(96000, contextWindow / 2) }], defaultSelection: { kind: 'model', modelId: 'capacity-model' } })
+      }
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'x-jadense-temporary-protocol': '1' } })
+      const body = JSON.parse(String(init?.body)); paid.push(body)
+      const response = reply('完整译文'); response.headers.set('x-jadense-temporary-protocol', '1'); response.headers.set('content-type', 'text/event-stream'); return response
+    }
+    const jobs = new RuntimeDocumentJobs(host, network, durableStore().store, new RequestFixtureStore())
+    const task = await jobs.start('translation', 1); await jobs.idle()
+    expect(task.status).toBe('complete'); expect(catalog).toHaveBeenCalledOnce()
+    expect(task.translationBudget?.contextWindow).toBe(contextWindow)
+    for (const body of paid) {
+      expect(estimateTokens(JSON.stringify(body.messages)) + body.maxOutputTokens + Math.max(256, Math.ceil(contextWindow * .02))).toBeLessThan(contextWindow)
+    }
+    counts.push(paid.length); jobs.dispose()
+  }
+  expect(counts[0]).toBeGreaterThan(counts[1]); expect(counts[1]).toBe(1)
+})
 
 function durableStore() {
   const files = new Map<string, string>()
@@ -214,8 +244,8 @@ describe('OCR continuous translation', () => {
     const { host, prefs } = fixture()
     prefs.set('extensions.jadenseInZotero.translationCapacity', JSON.stringify({ contextWindow: 32000, maxOutputTokens: 4096, future: true }))
     const value = translationCapacity(host)
-    expect(value).not.toHaveProperty('maxOutputTokens')
-    expect(value.sourceTokens).toBe(Math.floor((32000 - 1024) / 4))
+    expect(value.maxOutputTokens).toBeGreaterThan(4096)
+    expect(value.sourceTokens * 3 + 512).toBeLessThanOrEqual(value.maxOutputTokens)
     expect(value.sourceTokens * 4 + 1024).toBeLessThanOrEqual(32000)
     expect(formulasPreserved('⟦F1⟧ then ⟦F2⟧', '⟦F2⟧ then ⟦F1⟧')).toBe(false)
   })

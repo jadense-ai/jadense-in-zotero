@@ -14,6 +14,7 @@ export async function verifyMachineTranslation({ Zotero, reader, manager, waitFo
   const native = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'native preferences')
   const nativeRoot = native.document.getElementById('jadense-in-zotero-preferences-pane')
   await waitFor(() => nativeRoot.querySelector('[data-translation-setting="kind"] .jdx-select-trigger'), 'native translation setting')
+  native.document.getElementById('jadense-in-zotero-settings-tab-features').click()
   const choose = (root, name, index) => {
     const select = root.querySelector(`[data-translation-setting="${name}"]`)
     select.querySelector('.jdx-select-trigger').click()

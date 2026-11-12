@@ -2420,7 +2420,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     const preferenceSections = Array.from(preferencesWindow.document.querySelectorAll("[data-settings-section]"))
     await waitFor(() => preferencesWindow.getComputedStyle(preferenceSections[0]).display === "grid", "native Preferences stylesheet")
     assert(preferenceSections.length === 5
-      && preferenceSections[1].getBoundingClientRect().top > preferenceSections[0].getBoundingClientRect().bottom,
+      && preferenceSections.filter(section => !section.hidden).length === 1
+      && preferencesWindow.document.querySelectorAll('.jdx-pref-tabs [role="tab"]').length === 5,
     "Native Preferences lost feature, connection, or BYOK sections")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-byok-endpoint").textContent.endsWith("/chat/completions"),
       "Native Preferences did not share the saved BYOK endpoint")
@@ -2428,7 +2429,8 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
       && preferencesWindow.document.querySelector(".jdx-pref-checkbox span").textContent.trim(),
     "Native Preferences did not preserve hidden edit state or option copy")
     await screenshot("native-preferences-jadense", preferencesWindow)
-    preferenceSections[3].scrollIntoView({ block: "start" })
+    preferencesWindow.document.getElementById('jadense-in-zotero-settings-tab-byok').click()
+    preferenceSections[4].scrollIntoView({ block: "start" })
     await Zotero.Promise.delay(150)
     await screenshot("native-preferences-byok", preferencesWindow)
     const savedByokBeforeTest = Zotero.Prefs.get("extensions.jadenseInZotero.byokConfig")

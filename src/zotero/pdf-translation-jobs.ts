@@ -29,7 +29,7 @@ function recordSummary(stage: string, translation: Record<string, number>) {
 /** PDF 与简阅分别保存使用预算；旧任务读取已冻结预算，新任务不使用服务级 1600 目标。 */
 export function pdfTranslationBudget(host: ZoteroLike) {
   const { contextWindow, sourceTokens, maxOutputTokens } = readingTranslationBudget(host, 'pdf')
-  return { contextWindow, sourceTokens, batchTokens: sourceTokens, ...(maxOutputTokens ? { maxOutputTokens } : {}), policy: 'context-v1' as const }
+  return { contextWindow, sourceTokens, batchTokens: sourceTokens, ...(maxOutputTokens ? { maxOutputTokens } : {}), policy: 'context-v2' as const }
 }
 
 export type PDFTranslationTask = {
@@ -48,7 +48,7 @@ export type PDFTranslationTask = {
   completion?: 'complete' | 'partial' | 'cancelled'
   mode?: PDFTranslationMode; strategy?: string; coverage?: PDFCoverage; artifact?: PDFArtifact
   createdAt?: string; service?: string; completed?: number; total?: number; legacy?: boolean; summary?: Record<string, unknown>
-  budget?: { batchTokens: number; contextWindow: number; maxOutputTokens?: number; sourceTokens: number; policy?: 'context-v1' }
+  budget?: { batchTokens: number; contextWindow: number; maxOutputTokens?: number; sourceTokens: number; policy?: 'context-v1' | 'context-v2' }
   retrying?: Record<string, PDFRetryState>
   unconfirmed?: boolean
   failureCounts?: Record<string, number>; diagnosticId?: string
@@ -504,7 +504,7 @@ export class PDFTranslationJobs {
                 if (stopDispatch) throw Object.assign(new Error('Translation dispatch stopped'), { code: 'DISPATCH_STOPPED' })
                 const client = model.route === 'byok' ? new ReliableByokChatClient({ config: model.config!, fetchImpl }) : new ReliableTemporaryChatClient({ baseUrl: config.connection.baseUrl, token: config.connection.token, selection: model.selection.selection, fetchImpl })
                 const allow = allowUnconfirmedRetry && !authorized.has(messageID); authorized.add(messageID)
-                return client.send({ durableExecution: true, allowUnconfirmedRetry: allow, onProgress, clientFeature: 'translation', clientOperation: 'full_translation', clientRequestId: crypto.randomUUID(), conversationId: `pdf-${task.id}`, taskId: `pdf-${task.id}`, operationId: String(message.id),
+                return client.send({ ...(budget.policy === 'context-v2' ? { maxOutputTokens: budget.maxOutputTokens } : {}), durableExecution: true, allowUnconfirmedRetry: allow, onProgress, clientFeature: 'translation', clientOperation: 'full_translation', clientRequestId: crypto.randomUUID(), conversationId: `pdf-${task.id}`, taskId: `pdf-${task.id}`, operationId: String(message.id),
                   previousOperationId: typeof message.previousOperationId === 'string' ? message.previousOperationId : undefined,
                   messages: [{ id: crypto.randomUUID(), role: 'user', text: String(prompt) }], signal, requireComplete: true, reuseCompletedOperation: true })
               })

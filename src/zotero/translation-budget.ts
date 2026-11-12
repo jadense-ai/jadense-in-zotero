@@ -1,7 +1,7 @@
-/** 两种阅读翻译的使用预算；平台目录只提供可选上限，BYOK 输入不与模型容量比较。 */
-import { featureModelState } from './ai-settings'
+/** 两种阅读翻译的独立手动上限；缺省自动使用同一模型能力与输出预留。 */
 import type { ZoteroLike } from './runtime'
-import { featureModelMetadata, refreshModelCatalog } from './model-catalog'
+import { refreshModelCatalog } from './model-catalog'
+import { translationModelBudget } from './model-budget'
 
 export const DEFAULT_READING_CONTEXT = 131072
 export const READING_BUDGET_PREF = 'extensions.jadenseInZotero.readingTranslationBudgets'
@@ -17,20 +17,15 @@ export async function refreshTranslationLimits(host: ZoteroLike) {
 export function readingTranslationBudget(host: ZoteroLike, mode: ReadingBudgetMode) {
   let values: Record<string, unknown> = {}
   try { values = JSON.parse(String(host.Prefs?.get(READING_BUDGET_PREF, true) ?? '{}')) ?? {} } catch { /* 可选偏好降级。 */ }
-  const requested = positive(values[mode]) ? Math.floor(values[mode]) : DEFAULT_READING_CONTEXT
-  const model = featureModelState(host, 'fullTranslation'), option = featureModelMetadata(host, 'fullTranslation')
-  const maximum = positive(option?.contextWindow) ? Math.floor(option.contextWindow) : undefined
-  const contextWindow = maximum ? Math.min(requested, maximum) : requested
-  const maxOutputTokens = model.route === 'byok' ? model.config?.maxOutputTokens : option?.maxOutputTokens
-  const sourceTokens = Math.max(32, Math.floor(Math.min((contextWindow - 1024) / 4, positive(maxOutputTokens) ? (maxOutputTokens - 512) / 3 : Infinity)))
-  return { requested, contextWindow, maximum, maxOutputTokens, sourceTokens, route: model.route }
+  return translationModelBudget(host, positive(values[mode]) ? values[mode] : undefined)
 }
 
 /** 只写当前模式，未知扩展偏好保留；输入格式不合法时局部恢复默认。 */
-export function saveReadingTranslationBudget(host: ZoteroLike, mode: ReadingBudgetMode, value: number) {
+export function saveReadingTranslationBudget(host: ZoteroLike, mode: ReadingBudgetMode, value?: number) {
   let values: Record<string, unknown> = {}
   try { const saved = JSON.parse(String(host.Prefs?.get(READING_BUDGET_PREF, true) ?? '{}')); if (saved && typeof saved === 'object' && !Array.isArray(saved)) values = saved } catch { /* 可选偏好降级。 */ }
   const maximum = readingTranslationBudget(host, mode).maximum
-  values[mode] = Math.min(positive(value) ? Math.floor(value) : DEFAULT_READING_CONTEXT, maximum ?? Infinity)
+  if (positive(value)) values[mode] = Math.min(Math.floor(value), maximum ?? Infinity)
+  else delete values[mode]
   host.Prefs?.set?.(READING_BUDGET_PREF, JSON.stringify(values), true)
 }

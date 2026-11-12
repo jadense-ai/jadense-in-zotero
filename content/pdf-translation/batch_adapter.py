@@ -473,7 +473,7 @@ def capacity_limit(rows, measure, budget, language, legacy=False):
     source = sum(measure(row['text']) for row in rows)
     output = source * 3 + 512 + measure(json.dumps([{'id': row['id'], 'output': ''} for row in rows]))
     if source > budget['batchTokens']: return 'source'
-    if (legacy or budget.get('policy') == 'context-v1') and 'maxOutputTokens' in budget and output > budget['maxOutputTokens']: return 'output'
+    if (legacy or budget.get('policy') in ('context-v1', 'context-v2')) and 'maxOutputTokens' in budget and output > budget['maxOutputTokens']: return 'output'
     if measure(prompt(rows, language, cross_layout=not budget.get('machine', False))) + output > budget['contextWindow']: return 'context'
     return None
 
@@ -671,7 +671,7 @@ def install_adapter(high_level, config, emit):
                 # 固定每轮分组及游标；中断恢复必须使用原输入和身份，不能因缓存变化改写待恢复请求。
                 size = 1 if attempt == 2 else max(1, (len(missing) + 1) // 2) if attempt and state.get('shrink') else len(missing)
                 if 'groups' not in state:
-                    if getattr(self, 'budget', {}).get('policy') == 'context-v1':
+                    if getattr(self, 'budget', {}).get('policy') in ('context-v1', 'context-v2'):
                         # 新预算按缺失正文的实际容量组批，末轮也不退化成每段一个请求。
                         repair_budget = {**self.budget, 'batchTokens': max(32, self.budget['batchTokens'] // (2 ** attempt))}
                         state['groups'] = [[row['id'] for row in group] for group in batches(missing, self.base.calc_token_count, repair_budget, self.language)]

@@ -4,6 +4,7 @@ import { placeByokModelEditor, readByokModelEditorMode, setByokModelEditorMode }
 import { wireFeatureSettings } from './feature-settings'
 import { diagnostics } from "./diagnostics"
 import { wireOCRSettings } from './ocr-settings'
+import { wirePreferencesNavigation } from './settings-navigation'
 /** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import {
@@ -341,6 +342,7 @@ async function refreshFolders(elements: PreferenceElements, strings: Preferences
   setStatus(elements.folderStatus, strings.folderLoading)
   renderConnectionStatus(elements, strings, "checking")
   const result = await refreshFavoriteFoldersCache(Zotero)
+  if (preferencesDisposed) return
   applyRefreshResult(elements, strings, result)
 }
 
@@ -409,6 +411,7 @@ let featureCatalogGeneration = 0
 let featureCatalogUpdatedAt = 0
 let featureCatalogIdentity = ""
 let featureCatalogLoadingIdentity = ""
+let preferencesDisposed = false
 
 function renderFeatureModels(elements: PreferenceElements) {
   const autoFollow = readAutoFollowChatModel(Zotero)
@@ -442,17 +445,17 @@ async function refreshFeatureModelCatalog(elements: PreferenceElements) {
   try {
     const ownerWindow = Zotero.getMainWindow?.()
     const catalog = await new JadenseApiClient({ ...connection, fetchImpl: ownerWindow?.fetch.bind(ownerWindow) }).getChatModels(controller.signal)
-    if (generation !== featureCatalogGeneration) return
+    if (preferencesDisposed || generation !== featureCatalogGeneration) return
     featureModelCatalog = catalog
     rememberModelCatalog(Zotero, catalog)
     featureCatalogUpdatedAt = Date.now()
     setStatus(elements.featureModelStatus, strings.featureModelReady)
   } catch {
-    if (generation !== featureCatalogGeneration) return
+    if (preferencesDisposed || generation !== featureCatalogGeneration) return
     setStatus(elements.featureModelStatus, strings.featureModelUnavailable)
   } finally {
     clearTimeout(timeout)
-    if (generation === featureCatalogGeneration) { featureCatalogLoadingIdentity = ""; renderFeatureModels(elements) }
+    if (!preferencesDisposed && generation === featureCatalogGeneration) { featureCatalogLoadingIdentity = ""; renderFeatureModels(elements) }
   }
 }
 
@@ -559,45 +562,78 @@ async function testByokDraft(elements: PreferenceElements, strings: PreferencesS
 
 export function initJadensePreferencesPage() {
   const root = document.getElementById("jadense-in-zotero-preferences-pane")
-  if (!root || root.getAttribute("data-jadense-initialized") === "true") return
-  root.setAttribute("data-jadense-initialized", "true")
+  if (!root || root.hasAttribute("data-jadense-initialized")) return
+  root.setAttribute("data-jadense-initialized", "initializing")
+  preferencesDisposed = false
+  const stops: Array<() => void> = []
+  const cleanup = () => {
+    if (preferencesDisposed) return
+    preferencesDisposed = true
+    featureCatalogGeneration++
+    root.removeEventListener('unload', cleanup)
+    root.ownerDocument.defaultView?.removeEventListener('unload', cleanup)
+    document.removeEventListener('load', initializeInsertedPane, true)
+    document.removeEventListener('showing', initializeInsertedPane, true)
+    for (const stop of stops.reverse()) {
+      try { stop() } catch { /* 单个可选控件清理失败不留下其他跨窗监听。 */ }
+    }
+  }
+  // Zotero 在根节点 unload 后立即销毁 pane 沙箱；窗口 unload 和节点观察均已太迟。
+  root.addEventListener('unload', cleanup, { once: true })
+  root.ownerDocument.defaultView?.addEventListener('unload', cleanup, { once: true })
+  try {
+    mountJadensePreferencesPage(root, stop => stops.push(stop))
+    root.setAttribute('data-jadense-initialized', 'true')
+  } catch (error) {
+    cleanup()
+    root.removeAttribute('data-jadense-initialized')
+    diagnostics()?.record('preferences', 'initialization_error', error)
+    const status = createHtmlElement('p')
+    status.className = 'jdx-pref-status'; status.setAttribute('role', 'status'); status.dataset.kind = 'error'
+    status.textContent = uiText('设置未能完整载入，请关闭此窗口后重新打开。', 'Settings could not finish loading. Close this window and open it again.')
+    root.prepend(status)
+  }
+}
+
+/** 按创建顺序登记控件清理，初始化中途失败也不会遗留已注册的监听。 */
+function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) => void) {
   initializeUiLocale(Zotero)
   diagnostics(Zotero)
   root.setAttribute("lang", getUiLocale())
   const strings = selectPreferencesStrings(getUiLocale())
   applyStrings(root, strings)
   if (!getUiLocale().toLowerCase().startsWith("zh")) for (const node of Array.from(root.querySelectorAll<HTMLElement>("[data-ui-en]"))) node.textContent = node.dataset.uiEn || node.textContent
+  const navigation = wirePreferencesNavigation(root)
+  own(navigation.destroy)
   const language = createJdxSelect(element("jadense-in-zotero-display-language"), { ariaLabel: strings.displayLanguageLabel })
+  own(() => language.destroy())
   const languageOptions = [{ value: "system", label: strings.followZotero }, { value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }]
   const stopLanguage = observeDisplayLanguage(Zotero, value => language.setOptions(languageOptions, value))
+  own(stopLanguage)
   const theme = createJdxSelect(element("jadense-in-zotero-theme"), { ariaLabel: strings.themeLabel })
+  own(() => theme.destroy())
   const themeOptions = [{ value: "system", label: strings.followZotero }, { value: "light", label: strings.lightTheme }, { value: "dark", label: strings.darkTheme }]
   const generalStatus = element("jadense-in-zotero-general-status")
   const stopOCR = wireOCRSettings(Zotero, root.querySelector<HTMLElement>('[data-settings-section="ocr"]'))
+  own(stopOCR)
   const featuresRoot = root.querySelector<HTMLElement>('[data-settings-section="features"]')!
   const ocrRoot = root.querySelector<HTMLElement>('[data-settings-section="ocr"]')!
-  const stopFeatures = wireFeatureSettings(Zotero, featuresRoot, ocrRoot, ocr => { (ocr ? ocrRoot : featuresRoot).scrollIntoView({ block: 'start' }) })
+  const stopFeatures = wireFeatureSettings(Zotero, featuresRoot, ocrRoot, ocr => {
+    navigation.select(ocr ? 'ocr' : 'features')
+    root.scrollIntoView({ block: 'start' })
+  })
+  own(stopFeatures)
   const stopReading = wireReadingPreferences(Zotero, root.querySelector<HTMLElement>('[data-settings-section="general"]')!)
+  own(stopReading)
   const stopTheme = observeTheme(Zotero, root, () => theme.setOptions(themeOptions, readTheme(Zotero)))
+  own(stopTheme)
   // Zotero 卸载 pane 时也会移除根节点，不让跨窗口主题 observer 引用旧 UI。
-  let stopModels = () => {}
   let removalObserver: MutationObserver | null = null
-  const cleanup = () => {
-    stopTheme()
-    stopReading()
-    stopOCR()
-    stopFeatures()
-    stopModels()
-    language.destroy(); theme.destroy()
-    stopLanguage()
-    removalObserver?.disconnect()
-    root.ownerDocument.defaultView?.removeEventListener("unload", cleanup)
-  }
   try {
-    removalObserver = new MutationObserver(() => { if (!root.isConnected) cleanup() })
+    removalObserver = new MutationObserver(() => { if (!root.isConnected) root.dispatchEvent(new Event('unload')) })
     removalObserver.observe(root.ownerDocument, { childList: true, subtree: true })
+    own(() => removalObserver?.disconnect())
   } catch { /* 旧宿主缺少节点观察能力时仍可使用设置，窗口卸载负责清理。 */ }
-  root.ownerDocument.defaultView?.addEventListener("unload", cleanup, { once: true })
   language.onChange(value => {
     const saved = saveDisplayLanguage(Zotero, value)
     if (!saved) language.setOptions(languageOptions, readDisplayLanguage(Zotero))
@@ -610,6 +646,11 @@ export function initJadensePreferencesPage() {
   })
 
   const elements = readElements()
+  own(() => {
+    Object.values(elements.featureModels).forEach(select => select.destroy())
+    elements.folderSelect.destroy(); elements.byokProtocol.destroy()
+    elements.byokThinkingLevels.destroy()
+  })
   for (const select of Object.values(elements.featureModels)) {
     bindModelSelectToast(select)
     select.onOpen(() => {
@@ -621,7 +662,7 @@ export function initJadensePreferencesPage() {
   for (const key of [AI_MODEL_SETTINGS_PREF_KEY, ...Object.values(FEATURE_MODEL_PREF_KEYS), AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, 'extensions.jadenseInZotero.byokConfig']) {
     try { const id = Zotero.Prefs?.registerObserver?.(key, () => renderFeatureModels(elements), key === AI_MODEL_SETTINGS_PREF_KEY); if (id !== undefined) modelObservers.push(id) } catch { /* 可选跨窗显示。 */ }
   }
-  stopModels = () => { modelObservers.forEach(id => Zotero.Prefs?.unregisterObserver?.(id)); Object.values(elements.featureModels).forEach(select => select.destroy()) }
+  own(() => modelObservers.forEach(id => Zotero.Prefs?.unregisterObserver?.(id)))
   renderHelpSteps(elements, strings)
   renderTokenDisplay(elements, strings)
   void refreshFeatureModelCatalog(elements)
@@ -804,13 +845,14 @@ export function initJadensePreferencesPage() {
   })
 }
 
-if (typeof document !== "undefined") {
+function initializeInsertedPane(event?: Event) {
   // Zotero PreferencePanes 先执行脚本、再插入 XHTML fragment；监听根节点的 load/showing，
   // 不能依赖偏好窗口自身早已结束的 DOMContentLoaded。
-  const initializeInsertedPane = (event?: Event) => {
-    if (event && (event.target as Element | null)?.id !== "jadense-in-zotero-preferences-pane") return
-    initJadensePreferencesPage()
-  }
+  if (event && (event.target as Element | null)?.id !== "jadense-in-zotero-preferences-pane") return
+  initJadensePreferencesPage()
+}
+
+if (typeof document !== "undefined") {
   if (document.getElementById("jadense-in-zotero-preferences-pane")) initializeInsertedPane()
   document.addEventListener("load", initializeInsertedPane, true)
   document.addEventListener("showing", initializeInsertedPane, true)

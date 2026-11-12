@@ -5,6 +5,7 @@ import { uiText } from '../ui-preferences'
 export type ByokThinkingEditor = {
   setValues(value?: readonly string[]): void
   getValues(): string[] | undefined
+  destroy(): void
 }
 
 const XHTML = 'http://www.w3.org/1999/xhtml'
@@ -100,6 +101,8 @@ export function createByokThinkingEditor(host: HTMLElement): ByokThinkingEditor 
     popup.hidden = false
     trigger.setAttribute('aria-expanded', 'true')
     search.focus()
+    // 英文及大字号会增加弹层高度；让宿主滚动完整弹层，而非仅露出搜索框。
+    popup.scrollIntoView?.({ block: 'nearest' })
   })
   host.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || popup.hidden) return
@@ -143,5 +146,6 @@ export function createByokThinkingEditor(host: HTMLElement): ByokThinkingEditor 
       render()
     },
     getValues: () => customized && selected.size ? orderedValues() : undefined,
+    destroy() { close(); doc.removeEventListener('pointerdown', outside); host.replaceChildren() },
   }
 }
