@@ -61,12 +61,13 @@ export class AnalysisRuntime {
   private timers = new Map<string, ReturnType<typeof setTimeout>>()
   private cancellations = new Map<string, Promise<void>>()
   private disposed = false
+  private restarting = new Set<number>()
   private store: Pick<AnalysisTaskStore, 'list' | 'save'>
   readonly ready: Promise<void>
   constructor(private host: ZoteroLike, private run = runIndependentPaperAnalysis, private options: RuntimeOptions = {}) {
     this.store = options.store ?? new AnalysisTaskStore()
     this.ready = this.store.list().then(rows => {
-      for (const task of rows) { this.tasks.set(task.id, task); if (task.record) this.retained.set(task.record.id, task.record); if (!this.runs.has(task.itemID)) this.show(task) }
+      for (const task of rows) { this.tasks.set(task.id, task); if (task.record) this.retained.set(task.record.id, task.record); if (task.status !== 'abandoned' && !this.runs.has(task.itemID)) this.show(task) }
       this.emit()
     })
     let selection = ''
@@ -81,7 +82,7 @@ export class AnalysisRuntime {
             selection = current
           }
           for (const itemID of this.controllers.keys()) this.stop(itemID, 'configuration')
-          for (const task of this.tasks.values()) if (task.status !== 'complete' && task.pauseReason !== 'user') {
+          for (const task of this.tasks.values()) if (task.status !== 'complete' && task.status !== 'abandoned' && task.pauseReason !== 'user') {
             task.status = 'waiting'; this.schedule(task)
           }
         }, key === AI_MODEL_SETTINGS_PREF_KEY)
@@ -97,7 +98,7 @@ export class AnalysisRuntime {
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn) } }
   private emit() { for (const fn of this.listeners) { try { fn() } catch { /* 展示失败不影响执行。 */ } } }
   private taskFor(itemID: number) {
-    return [...this.tasks.values()].filter(task => task.itemID === itemID && task.status !== 'complete').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    return [...this.tasks.values()].filter(task => task.itemID === itemID && task.status !== 'complete' && task.status !== 'abandoned').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
   }
   private show(task: AnalysisTask) {
     const view: AnalysisRunView = { source: task.record?.source ?? (task.snapshot ? { ...task.snapshot, authors: task.snapshot.metadata.authors } : { itemID: task.itemID, libraryID: -1, itemKey: '', title: 'PDF', authors: [] }),
@@ -134,9 +135,31 @@ export class AnalysisRuntime {
     const view = this.get(itemID)
     if (view) { view.message = uiText('已暂停，保留已收到的内容。', 'Paused; received content is retained.'); view.resumable = true; this.emit() }
   }
-  /** 继续同一未完成任务；已完成任务才创建新的模型操作。 */
+  /** 用户明确重新解析：旧检查点留作历史，持久放弃后才允许新的收费身份。运行中须先停止。 */
+  async restart(itemID: number) {
+    if (this.disposed || this.controllers.has(itemID) || this.restarting.has(itemID)) return
+    this.restarting.add(itemID)
+    try {
+      await this.ready
+      if (this.disposed || this.controllers.has(itemID)) return
+      // 兼容曾保存过多个未完成检查点的附件，不能让旧任务重新成为恢复目标。
+      for (const task of this.tasks.values()) if (task.itemID === itemID && task.status !== 'complete' && task.status !== 'abandoned') {
+        clearTimeout(this.timers.get(task.id)); this.timers.delete(task.id)
+        const status = task.status
+        task.status = 'abandoned'
+        if (!(await this.save(task))) {
+          task.status = status
+          const view = this.get(itemID)
+          if (view) { view.error = true; view.retrying = false; view.message = new AnalysisStorageError().message; this.emit() }
+          return
+        }
+      }
+    } finally { this.restarting.delete(itemID) }
+    await this.start(itemID)
+  }
+  /** 继续同一未完成任务；已完成或显式放弃旧任务后才创建新的模型操作。 */
   async start(itemID: number, automatic = false) {
-    if (this.disposed || this.controllers.has(itemID)) return
+    if (this.disposed || this.controllers.has(itemID) || this.restarting.has(itemID)) return
     const controller = new AbortController()
     this.controllers.set(itemID, controller)
     const operation = (async () => {
@@ -160,13 +183,13 @@ export class AnalysisRuntime {
     try { await operation } finally { if (this.active.get(itemID) === operation) this.active.delete(itemID) }
   }
   private schedule(task: AnalysisTask, immediate = false) {
-    if (this.disposed || task.pauseReason === 'user' || this.timers.has(task.id)) return
+    if (this.disposed || task.status === 'abandoned' || task.pauseReason === 'user' || this.timers.has(task.id)) return
     const backoff = immediate ? 0 : this.options.retryDelay ?? Math.min(300_000, 5000 * 2 ** Math.min(task.retries ?? 0, 6)) + Math.floor(Math.random() * 1000)
     const delay = Math.max(backoff, (task.retryAt ?? 0) - Date.now())
     task.retryAt = Date.now() + delay
     this.timers.set(task.id, setTimeout(() => {
       this.timers.delete(task.id)
-      if (!this.disposed && task.pauseReason !== 'user') void this.start(task.itemID, true)
+      if (!this.disposed && task.status !== 'abandoned' && task.pauseReason !== 'user') void this.start(task.itemID, true)
     }, delay))
     // 退避期限也属于检查点；重启后不能把持续故障重新变成无间隔请求。
     void this.save(task)

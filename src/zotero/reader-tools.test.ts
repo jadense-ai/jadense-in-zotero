@@ -1,4 +1,4 @@
-import { stopAnalysisRuntime } from './analysis-runtime'
+import { analysisRuntime, stopAnalysisRuntime } from './analysis-runtime'
 import { openChatSidebar } from './reader-sidebar'
 import { readOCRSelection, OCR_SELECTION_PREF } from './local-ocr'
 import { wireJadenseMode } from './jadense-mode-ui'
@@ -1106,6 +1106,12 @@ describe("native reader toolbars", () => {
     const buttons = actionButtons(toolbar)
     expect(buttons.map((button) => button.attributes.get("aria-label"))).toEqual(["发起新对话，向 AI 提问（当前文献）", "解析文献", "引用选文"])
     expect(buttons.map((button) => button.children[1].textContent)).toEqual(["提问", "解析", "引用"])
+    const runtime = analysisRuntime(fixture.zotero as never)
+    const getRun = vi.spyOn(runtime, 'get').mockReturnValue({ source: { itemID: 11, libraryID: 1, itemKey: 'PDF11', title: 'Paper', authors: [] }, message: 'Paused', busy: false, resumable: true, createdAt: new Date().toISOString() })
+    runtime.stop(11)
+    expect(buttons[1].attributes.get('aria-label')).toBe('继续解析')
+    expect(buttons[1].children[1].textContent).toBe('继续解析')
+    getRun.mockRestore()
     expect(descendants(toolbar).some(node => node.attributes.has("data-jadense-article-languages"))).toBe(false)
     expect(buttons[0].title).toBe("Jadense · 发起新对话，向 AI 提问（当前文献）")
     buttons[0].handlers.get("click")!()

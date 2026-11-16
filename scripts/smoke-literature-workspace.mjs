@@ -113,6 +113,9 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
       main.resizeTo(900, 700); Zotero.Prefs.set('extensions.jadenseInZotero.fontScale', '150', true)
       await Zotero.Promise.delay(300)
       assert(resumeButton.getBoundingClientRect().width > 0 && resumeButton.getBoundingClientRect().right <= main.innerWidth + 2, 'Resume action overflows narrow native window')
+      const restartPaused = [...doc.querySelectorAll('.jdx-detail-run button')].find(button => !button.hidden && /^(重新解析|Reanalyze)$/u.test(button.textContent.trim()))
+      const restartBounds = restartPaused.getBoundingClientRect(), bannerBounds = restartPaused.closest('.jdx-detail-run').getBoundingClientRect()
+      assert(restartBounds.height > 0 && restartBounds.bottom <= bannerBounds.bottom && restartBounds.right <= main.innerWidth + 2, 'Reanalyze action is clipped in narrow native window')
       await screenshot('analysis-runtime-paused-narrow-150-dark', main)
       Zotero.Prefs.set('extensions.jadenseInZotero.theme', 'light', true)
       await Zotero.Promise.delay(200)
@@ -147,6 +150,33 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
       assert(reader._iframeWindow.getComputedStyle(brand.querySelector('svg')).animationName === 'none', 'Retry wait logo still spinning')
       await screenshot('analysis-runtime-retry', main)
       finishRetry(); await waitFor(() => brand.dataset.runtime === 'error', 'retry exhausted')
+      const abandoned = [...runtime.tasks.values()].find(task => task.itemID === reader.itemID && task.status === 'needs_action')
+      const reanalyze = await waitFor(() => [...doc.querySelectorAll('.jdx-detail-run button')].find(button => !button.hidden && /^(重新解析|Reanalyze)$/u.test(button.textContent.trim())), 'explicit reanalysis action')
+      assert(readerDoc.querySelector('[data-jadense-action="analyze"]').getAttribute('aria-label') === '继续解析', 'Unfinished toolbar action is not labelled Continue analysis')
+      const originalConfirm = main.confirm
+      let restarted, finishReanalysis
+      try {
+        main.confirm = () => false
+        reanalyze.click(); await Zotero.Promise.delay(100)
+        assert(abandoned.status === 'needs_action', 'Cancelling reanalysis abandoned the old task')
+        main.confirm = () => true
+        runtime.run = async input => {
+          restarted = input.task
+          assert(abandoned.status === 'abandoned', 'Reanalysis did not abandon the old task')
+          assert(input.task.id !== abandoned.id && input.task.requestID !== abandoned.requestID, 'Reanalysis reused the old request identity')
+          assert((await runtime.store.list()).find(task => task.id === abandoned.id)?.status === 'abandoned', 'Abandonment was not persisted')
+          await new Promise(resolve => { finishReanalysis = resolve })
+          return completedAnalysis(input)
+        }
+        reanalyze.click()
+        await waitFor(() => finishReanalysis, 'new analysis dispatch')
+        assert(reanalyze.hidden, 'Running task still offers reanalysis')
+        await screenshot('analysis-runtime-reanalyzing', main)
+        finishReanalysis()
+        await waitFor(() => restarted.status === 'complete', 'reanalysis completion')
+        assertCoverageSuccess(brand, 'explicit reanalysis')
+        report.checks.push('analysis-reanalyze-confirmation', 'analysis-reanalyze-fresh-identity', 'analysis-reanalyze-durable-abandonment', 'analysis-toolbar-continue-label')
+      } finally { main.confirm = originalConfirm }
       Zotero.Prefs.set(pref, saved)
       report.checks.push('analysis-pending-retains-results', 'analysis-user-pause-persisted', 'analysis-same-task-resume', 'analysis-resume-keyboard-focus', 'analysis-pause-narrow-150-light-dark', 'analysis-failure', 'analysis-error-outline-no-spin', 'analysis-retry-status')
     }
