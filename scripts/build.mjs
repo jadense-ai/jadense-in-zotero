@@ -47,7 +47,7 @@ await mkdir(releasePaths.versionDir, { recursive: true })
 for (const directory of ["content", "locale", "_locales", "icons"]) {
   await cp(path.join(projectRoot, directory), path.join(buildDir, directory), { recursive: true,
     filter: source => (!source.startsWith(path.join(projectRoot, 'content', 'ocr') + path.sep) || ['pyproject.toml', 'uv.lock', 'server.py', 'install.ps1', 'install.sh', 'bundles.json', 'install-bundle.ps1'].includes(path.basename(source)))
-      && (!source.startsWith(path.join(projectRoot, 'content', 'pdf-translation') + path.sep) || ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-network.ps1', 'bundles.json', 'viewer.html', 'viewer.mjs', 'LICENSE'].includes(path.basename(source))) })
+      && (!source.startsWith(path.join(projectRoot, 'content', 'pdf-translation') + path.sep) || ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-network.ps1', 'install-environment.ps1', 'install-stage.ps1', 'native-probe.py', 'bundles.json', 'viewer.html', 'viewer.mjs', 'LICENSE'].includes(path.basename(source))) })
 }
 if (features.includes('literature-tracking')) {
   await cp(path.join(projectRoot, 'private/literature-tracking/icons'), path.join(buildDir, 'content/source-icons'), { recursive: true })

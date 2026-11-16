@@ -33,16 +33,16 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
   nav.append(action(doc, uiText('简阅模式', 'Reading mode'), () => { if (source) void openSavedSimpleReading(host, source).catch(error => { metadata.textContent = String(error) }) }))
   const tabsHost = element(doc, 'div', 'jdx-tabs'), panels = element(doc, 'div', 'jdx-literature-panels')
   tabsHost.setAttribute('role', 'tablist'); tabsHost.setAttribute('aria-label', uiText('文献成果', 'Paper results'))
-  const labels = { ...resultLabels(), simple: uiText('简阅译文', 'Reading translations'), files: uiText('对照翻译', 'Bilingual PDF'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = ['source', 'files', 'simple', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
+  const labels = { ...resultLabels(), simple: uiText('简阅译文', 'Reading translations'), files: uiText('对照翻译', 'Bilingual PDF'), summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References'), history: uiText('历史', 'History') }, modes: LiteratureTab[] = [ 'files', 'simple', 'translation', 'selection', 'summary', 'notes', 'references', 'history']
   const tabs = modes.map(mode => { const button = action(doc, labels[mode], () => {}); button.setAttribute('role', 'tab'); button.id = `jdx-literature-tab-${mode}`; button.setAttribute('aria-controls', `jdx-literature-panel-${mode}`); tabsHost.append(button); return button })
   const hero = element(doc, 'header', 'jdx-literature-hero'); hero.append(title, metadata)
   detail.append(nav, hero, tabsHost, panels)
   const mounted = new Map<string, { root: HTMLElement; view?: ReturnType<typeof mountDocumentResults>; files?: ReturnType<typeof mountPDFTranslationFiles>; simple?: ReturnType<typeof mountSimpleReadingHistory>; scroll: number }>()
   const runs = new Map<string, AnalysisRunView>(), opened = new Map<string, PaperAnalysisSource>()
-  let papers: LiteraturePaper[] = [], current: LiteraturePaper | undefined, source: PaperAnalysisSource | undefined, active: LiteratureTab = 'source', selectedKey = '', savedScroll = 0, disposed = false, sequence = 0
+  let papers: LiteraturePaper[] = [], current: LiteraturePaper | undefined, source: PaperAnalysisSource | undefined, active: LiteratureTab = 'summary', selectedKey = '', savedScroll = 0, disposed = false, sequence = 0
   const recordIDs = new Map<string, string>(), buttons = new Map<string, HTMLButtonElement>()
   const listRows = new Map<string, { root: HTMLElement; state: HTMLElement; date: HTMLElement; meta: HTMLElement }>()
-  const empty = element(doc, 'p', 'jdx-result-empty', uiText('暂无文献成果。提取、翻译或解析文献后，结果将汇集于此。', 'No results yet. Extract, translate or analyze a paper to begin.'))
+  const empty = element(doc, 'p', 'jdx-result-empty', uiText('暂无文献成果。翻译或解析文献后，结果将汇集于此。', 'No results yet. Translate or analyze a paper to begin.'))
   list.append(empty)
   function clearViews() { for (const entry of mounted.values()) { entry.view?.remove(); entry.files?.remove(); entry.simple?.remove() }; mounted.clear(); panels.replaceChildren() }
   function show(requested: DocumentResultMode | LiteratureTab, recordID?: string) {
@@ -67,7 +67,7 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
     for (const [name, panel] of mounted) panel.root.hidden = name !== key
     let panel = mounted.get(key)
     if (!panel) {
-      const container = element(doc, 'section', 'jdx-literature-panel'); container.setAttribute('role', 'tabpanel'); container.id = `jdx-literature-panel-${mode}-${++sequence}`; container.setAttribute('aria-labelledby', `jdx-literature-tab-${mode}`)
+      const container = element(doc, 'section', 'jdx-literature-panel'); container.setAttribute('role', 'tabpanel'); container.id = `jdx-literature-panel-${mode}-${++sequence}`; container.setAttribute('aria-label', labels[mode])
       panels.append(container); panel = { root: container, scroll: 0 }; mounted.set(key, panel)
       if (mode === 'files') panel.files = mountPDFTranslationFiles(container, host, source, recordIDs.get(key))
       else if (mode === 'simple') panel.simple = mountSimpleReadingHistory(container, host, source)
@@ -76,7 +76,7 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
         const run = runs.get(paperKey(source)); if (run) panel.view.setRun(run)
       }
     }
-    tabs[modes.indexOf(mode)].setAttribute('aria-controls', panel.root.id)
+    tabs[modes.indexOf(mode)]?.setAttribute('aria-controls', panel.root.id)
     if (mode === 'history') renderHistory(panel.root)
     section.scrollTop = panel.scroll
   }
@@ -144,8 +144,8 @@ export function mountLiteratureWorkspace(root: HTMLElement, host: ZoteroLike, op
     current = papers.find(paper => recordID && paper.results.some(result => result.id === recordID)) || papers.find(paper => paper.attachments.some(item => sameAttachment(item, next)))!
     selectedKey = current.key; source = next; list.hidden = true; toolbar.hidden = true; detail.hidden = false; section.dataset.detail = 'true'
     clearViews(); updateDetail()
-    const mode = requested || current.results[0]?.mode || 'source'
-    show(mode, recordID || (!requested ? current.results[0]?.id : undefined))
+    const mode = requested || current.results.find(result => result.mode !== 'source')?.mode || 'history'
+    show(mode, recordID || (!requested ? current.results.find(result => result.mode === mode)?.id : undefined))
   }
   function back() {
     const previous = selectedKey; selectedKey = ''; detail.hidden = true; list.hidden = false; toolbar.hidden = false; delete section.dataset.detail

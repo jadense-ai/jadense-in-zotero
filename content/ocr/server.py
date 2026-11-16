@@ -10,8 +10,10 @@ import os
 import re
 import math
 from pathlib import Path
+import platform
 import secrets
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -92,6 +94,21 @@ MODELSCOPE_REVISIONS = {
 }
 
 
+class MissingModelError(FileNotFoundError):
+    """只有模型下载边界可以确认离线权重不可用。"""
+
+
+def conversion_failure(error):
+    cause = error
+    seen = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        if isinstance(cause, MissingModelError):
+            return {"error": str(error), "category": "MODEL_MISSING"}
+        cause = cause.__cause__ or cause.__context__
+    return {"error": str(error), "category": "RECOGNITION_FAILED"}
+
+
 def download_model(repo_id, local_dir=None, force=False, progress=False, revision=None):
     """Docling 下载边界：优先复用旧 HF/魔搭缓存，仅缺失时访问所选源。"""
     from huggingface_hub import snapshot_download
@@ -99,10 +116,12 @@ def download_model(repo_id, local_dir=None, force=False, progress=False, revisio
     name = repo_id.removeprefix("docling-project/")
     expected_revision = "v2.3.0" if name == "docling-models" else "main"
     files = MODELSCOPE_FILES.get(name) if repo_id == "docling-project/" + name and (revision or "main") == expected_revision else None
+    damaged = []
     if not force and local_dir is None:
         try:
             cached = Path(snapshot_download(repo_id, revision=revision, local_files_only=True))
-            if files is None or all((cached / filename).is_file() for filename in files):
+            damaged = [filename for filename, digest in (files or {}).items() if not valid_model_file(cached / filename, digest)]
+            if not damaged:
                 return cached
         except LocalEntryNotFoundError:
             pass
@@ -110,11 +129,26 @@ def download_model(repo_id, local_dir=None, force=False, progress=False, revisio
     if directory and not force and all(valid_model_file(directory / filename, digest) for filename, digest in files.items()):
         return directory
     if os.environ.get("JADENSE_OCR_MODEL_SOURCE") != "modelscope" or files is None or local_dir is not None:
-        return Path(snapshot_download(repo_id, revision=revision, local_dir=local_dir, force_download=force,
-                                      local_files_only=os.environ.get("HF_HUB_OFFLINE") == "1",
-                                      **({"tqdm_class": download_progress_class()} if os.environ.get("JADENSE_OCR_SETUP_PROGRESS") == "1" else {})))
+        offline = os.environ.get("HF_HUB_OFFLINE") == "1"
+        if offline and damaged:
+            raise MissingModelError(f"OCR model checksum mismatch: {repo_id}")
+        try:
+            if damaged:
+                from huggingface_hub import hf_hub_download
+                for filename in damaged:
+                    hf_hub_download(repo_id, filename, revision=revision, force_download=True)
+            snapshot = Path(snapshot_download(repo_id, revision=revision, local_dir=local_dir, force_download=force,
+                                local_files_only=offline,
+                                **({"tqdm_class": download_progress_class()} if os.environ.get("JADENSE_OCR_SETUP_PROGRESS") == "1" else {})))
+        except LocalEntryNotFoundError as error:
+            if offline:
+                raise MissingModelError(f"OCR model is not cached: {repo_id}") from error
+            raise
+        if files and not all(valid_model_file(snapshot / filename, digest) for filename, digest in files.items()):
+            raise MissingModelError(f"OCR model checksum mismatch: {repo_id}")
+        return snapshot
     if os.environ.get("HF_HUB_OFFLINE") == "1":
-        raise FileNotFoundError(f"OCR model is not cached: {repo_id}")
+        raise MissingModelError(f"OCR model is not cached: {repo_id}")
     for filename, digest in files.items():
         target = directory / filename
         if not force and valid_model_file(target, digest):
@@ -160,7 +194,7 @@ def configure_model_downloads():
     if os.environ.get("HF_HUB_OFFLINE") == "1":
         from rapidocr.utils.download_file import DownloadFile
         def offline_download(*_args, **_kwargs):
-            raise FileNotFoundError("RapidOCR model is not cached; prepare OCR models in settings")
+            raise MissingModelError("RapidOCR model is not cached; prepare OCR models in settings")
         # RapidOCR 不遵循 HF_HUB_OFFLINE；仍允许已缓存且摘要正确的权重。
         DownloadFile._make_http_request = offline_download
 
@@ -256,7 +290,7 @@ def convert(path, result_path, progress_path):
         temp.write_text(json.dumps({"version": VERSION, "pages": pages}, ensure_ascii=False), encoding="utf8")
         temp.replace(result_path)
     except Exception as error:
-        Path(progress_path).write_text(json.dumps({"error": str(error)}), encoding="utf8")
+        Path(progress_path).write_text(json.dumps(conversion_failure(error)), encoding="utf8")
         raise
 
 
@@ -266,8 +300,10 @@ def model_files(root, selection=False):
     roots = {"hub": Path(root) / "models"}
     spec = importlib.util.find_spec("rapidocr")
     if spec and spec.origin: roots["rapidocr"] = Path(spec.origin).parent / "models"
-    # refs 决定实际加载的快照：比较内容而非易被重写的时间戳，仍检测目标变化。
-    return {prefix + "/" + str(p.relative_to(directory)): [p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest() if "refs" in p.relative_to(directory).parts else p.stat().st_mtime_ns]
+    def signature(path):
+        with path.open("rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
+    return {prefix + "/" + str(p.relative_to(directory)): signature(p)
             for prefix, directory in roots.items() for p in directory.rglob("*")
             if selection or not any(part in {"models--docling-project--CodeFormulaV2", "CodeFormulaV2"} for part in p.parts)
             if p.is_file() and not any(part in {".locks", ".cache", ".no_exist"} for part in p.relative_to(directory).parts)
@@ -275,9 +311,24 @@ def model_files(root, selection=False):
 
 
 
-def model_check(root, prepare=False, selection=False, allow_download=True):
-    """设置页显式下载并离线识别合成 PDF；普通准入只检查版本及已验证文件。"""
+def runtime_versions():
+    """凭据绑定本机、解释器、原生库和系统 DLL；不保存机器名。"""
     from importlib.metadata import version
+    versions = {name: version(name) for name in ("docling", "rapidocr", "onnxruntime", "torch")}
+    versions.update(python=sys.version, interpreter=hashlib.sha256(os.fsencode(os.path.realpath(sys.executable))).hexdigest(), machine=platform.machine(), os=platform.version(),
+                    host=hashlib.sha256(platform.node().encode()).hexdigest())
+    if os.name == "nt":
+        system = Path(os.environ["SystemRoot"]) / "System32"
+        for name in ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
+            try:
+                versions[name] = hashlib.sha256((system / name).read_bytes()).hexdigest()
+            except OSError:
+                versions[name] = None
+    return versions
+
+
+def model_check(root, prepare=False, selection=False, allow_download=True, force=False):
+    """设置页显式下载并离线识别合成 PDF；普通准入只检查版本及已验证文件。"""
     deadline = time.monotonic() + float(os.environ.get("JADENSE_OCR_SETUP_TIMEOUT", "1740"))
     def run_sample(command, **options):
         # subprocess.run 超时会终止并回收识别子进程，避免孤儿进程继续写凭据。
@@ -286,20 +337,22 @@ def model_check(root, prepare=False, selection=False, allow_download=True):
     root = Path(root)
     os.environ["HF_HOME"] = str(root / "models")
     marker = root / ("selection-models-ready.json" if selection else "models-ready.json")
-    versions = {name: version(name) for name in ("docling", "rapidocr", "onnxruntime")}
+    versions = runtime_versions()
     # 先复用有效凭据，下载元数据不属于识别模型；兼容旧凭据中过宽的文件列表。
     try:
+        if force: raise ValueError("Explicit verification")
         saved = json.loads(marker.read_text(encoding="utf8"))
         files = model_files(root, selection)
         recorded = {name: value for name, value in saved["files"].items()
                     if not any(part in {".locks", ".cache", ".no_exist"} for part in Path(name).parts)}
-        ready = saved.get("revision") == EXTRACTION_REVISION and saved.get("versions") == versions and bool(recorded) and all(files.get(name) == value for name, value in recorded.items())
+        ready = saved.get("revision") == EXTRACTION_REVISION and saved.get("versions") == versions and bool(recorded) and files == recorded
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         ready = False
     if ready or not prepare:
         print(json.dumps({"modelsReady": ready}), flush=True)
         return ready
     if prepare:
+        marker.unlink(missing_ok=True)
         from PIL import Image, ImageDraw, ImageFont
         image = Image.new("RGB", (1200, 1600), "white")
         draw = ImageDraw.Draw(image)
@@ -322,9 +375,16 @@ def model_check(root, prepare=False, selection=False, allow_download=True):
             options = {"stdin": subprocess.DEVNULL, "creationflags": subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0}
             # 旧版没有 models-ready.json；先离线验证旧缓存，不因升级强制联网或重下。
             setup_progress("offline")
-            offline = run_sample(command, env=environment, **options)
+            progress.unlink(missing_ok=True)
+            offline_command = command if selection else [*command[:2], "--service-sample", *command[3:]]
+            offline = run_sample(offline_command, env=environment, **options)
             if offline.returncode != 0:
-                if not allow_download:
+                try:
+                    failure = json.loads(progress.read_text(encoding="utf8"))
+                except (OSError, ValueError):
+                    failure = {}
+                if not allow_download or failure.get("category") != "MODEL_MISSING":
+                    print(json.dumps({"stage": "offline", "error": failure.get("error", "Recognition process failed"), "category": failure.get("category", "RECOGNITION_FAILED"), "exit": offline.returncode}), flush=True)
                     print(json.dumps({"modelsReady": False}), flush=True)
                     return False
                 online = {**environment, "HF_HUB_OFFLINE": "0"}
@@ -334,24 +394,22 @@ def model_check(root, prepare=False, selection=False, allow_download=True):
                 result.unlink(missing_ok=True)
                 if selection: regions.write_text(json.dumps([{"pageIndex": 0, "rects": [[0, 0, 600, 800]]}]), encoding="utf8")
                 setup_progress("verify")
-                run_sample(command, env=environment, check=True, **options)
+                run_sample(offline_command, env=environment, check=True, **options)
             data = json.loads(result.read_text(encoding="utf8"))
             text = data.get("text", "") if selection else " ".join(b.get("text", "") for p in data["pages"] for b in p["blocks"])
             if "readiness" not in text.lower():
                 raise RuntimeError("OCR readiness sample was not recognized")
+            files = model_files(root, selection)
+            if not files:
+                raise RuntimeError("OCR model inventory is empty")
             temporary = marker.with_suffix(".tmp")
-            temporary.write_text(json.dumps({"revision": EXTRACTION_REVISION, "versions": versions, "files": model_files(root, selection)}), encoding="utf8")
+            temporary.write_text(json.dumps({"revision": EXTRACTION_REVISION, "versions": versions, "files": files}), encoding="utf8")
             temporary.replace(marker)
         finally:
             for path in (source, result, progress, regions): path.unlink(missing_ok=True)
-    try:
-        saved = json.loads(marker.read_text(encoding="utf8"))
-        files = model_files(root, selection)
-        ready = saved.get("revision") == EXTRACTION_REVISION and saved.get("versions") == versions and bool(saved.get("files")) and all(files.get(name) == value for name, value in saved["files"].items())
-    except (OSError, ValueError, TypeError):
-        ready = False
-    print(json.dumps({"modelsReady": ready}), flush=True)
-    return ready
+    print(json.dumps({"modelsReady": True}), flush=True)
+    return True
+
 
 
 def selection_regions(value):
@@ -434,7 +492,7 @@ def convert_selection(path, result_path, progress_path, regions_path):
         temp.write_text(json.dumps({"text": "\n\n".join(parts)}, ensure_ascii=False), encoding="utf8")
         temp.replace(result_path)
     except Exception as error:
-        Path(progress_path).write_text(json.dumps({"error": str(error)}), encoding="utf8")
+        Path(progress_path).write_text(json.dumps(conversion_failure(error)), encoding="utf8")
         raise
     finally:
         image_path.unlink(missing_ok=True)
@@ -516,6 +574,16 @@ def serve(root, token):
         def do_GET(self):
             if not self.authorized(): return
             if self.path == "/health": return self.reply(200, {"version": VERSION})
+            if self.path == "/capabilities":
+                models = Path(os.environ["HF_HOME"]).parent
+                def last_verified(name):
+                    try:
+                        data = json.loads((models / name).read_text(encoding="utf8"))
+                        return data.get("revision") == EXTRACTION_REVISION and bool(data.get("versions", {}).get("torch")) and bool(data.get("files"))
+                    except (OSError, ValueError, AttributeError):
+                        return False
+                return self.reply(200, {"version": VERSION, "fullDocumentPreviouslyVerified": last_verified("models-ready.json"),
+                                        "selectionPreviouslyVerified": last_verified("selection-models-ready.json")})
             job = state.jobs.get(self.path.removeprefix("/jobs/"))
             if not job: return self.reply(404, {})
             if job.get("cancelled"): return self.reply(200, {"state": "cancelled"})
@@ -526,7 +594,7 @@ def serve(root, token):
             except (FileNotFoundError, json.JSONDecodeError): progress = {}
             if "error" in progress or job["process"].poll() is not None:
                 Path(job["source"]).unlink(missing_ok=True)
-                return self.reply(200, {"state": "error", "error": progress.get("error", "OCR process stopped")})
+                return self.reply(200, {"state": "error", "error": progress.get("error", "OCR process stopped"), "category": progress.get("category")})
             self.reply(200, {"state": "running", **progress})
 
         def do_DELETE(self):
@@ -546,9 +614,59 @@ def serve(root, token):
     server.serve_forever()
 
 
+def service_sample(path, result_path, progress_path):
+    """用独立空缓存和合成 PDF 验证鉴权、回环端口与真实识别子进程。"""
+    import http.client
+    token = secrets.token_urlsafe(32)
+    with tempfile.TemporaryDirectory(dir=Path(path).parent, prefix="verify-") as directory:
+        service = subprocess.Popen([sys.executable, "-s", "-u", str(Path(__file__).resolve())],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        try:
+            service.stdin.write(json.dumps({"root": directory, "modelRoot": str(Path(path).parent), "token": token}).encode() + b"\n")
+            service.stdin.flush()
+            hello = json.loads(service.stdout.readline())
+            def drain_logs():
+                for line in service.stdout:
+                    sys.stderr.buffer.write(line)
+            threading.Thread(target=drain_logs, daemon=True).start()
+            def request(method, route, data=None):
+                conn = http.client.HTTPConnection("127.0.0.1", int(hello["port"]), timeout=20)
+                try:
+                    conn.request(method, route, data, {"Authorization": "Bearer " + token, "X-Jadense-OCR-Model-Source": os.environ.get("JADENSE_OCR_MODEL_SOURCE", "default")})
+                    response = conn.getresponse()
+                    if response.status != 200:
+                        raise RuntimeError(f"OCR service handshake/request failed: HTTP {response.status}")
+                    return json.loads(response.read())
+                finally:
+                    conn.close()
+            if request("GET", "/health").get("version") != VERSION:
+                raise RuntimeError("OCR service protocol mismatch")
+            job = request("POST", "/jobs", Path(path).read_bytes())
+            deadline = time.monotonic() + float(os.environ.get("JADENSE_OCR_SETUP_TIMEOUT", "240"))
+            while time.monotonic() < deadline:
+                status = request("GET", "/jobs/" + job["id"])
+                if status["state"] == "complete":
+                    Path(result_path).write_text(json.dumps(status["result"]), encoding="utf8")
+                    return
+                if status["state"] == "error":
+                    Path(progress_path).write_text(json.dumps(status), encoding="utf8")
+                    raise RuntimeError(status["error"])
+                time.sleep(0.25)
+            raise TimeoutError("OCR service sample timed out")
+        finally:
+            service.stdin.close()
+            try:
+                service.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                service.kill()
+                service.wait()
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in {"--prepare-models", "--check-models", "--prepare-selection-models", "--verify-models"}:
-        if not model_check(sys.argv[2], sys.argv[1] != "--check-models", sys.argv[1] == "--prepare-selection-models", sys.argv[1] != "--verify-models"): sys.exit(2)
+    if len(sys.argv) > 1 and sys.argv[1] in {"--prepare-models", "--check-models", "--prepare-selection-models", "--verify-models", "--recover-models"}:
+        if not model_check(sys.argv[2], sys.argv[1] != "--check-models", sys.argv[1] == "--prepare-selection-models", sys.argv[1] not in {"--verify-models", "--recover-models"}, force=sys.argv[1] == "--verify-models"): sys.exit(2)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--service-sample":
+        service_sample(*sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == "--selection":
         convert_selection(*sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == "--convert":

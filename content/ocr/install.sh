@@ -58,5 +58,5 @@ rm -f "$runtime/ready-2.126.0-3.9.2"
 printf 'JADENSE_OCR_PROGRESS {"stage":"dependencies"}\n'
 run_child "$uv_path" sync --project "$runtime" --python 3.12 --frozen
 printf 'JADENSE_OCR_PROGRESS {"stage":"imports"}\n'
-run_child "$runtime/.venv/bin/python" -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
+run_child "$runtime/.venv/bin/python" -I -B "$runtime/native-probe.py" ocr
 printf 'ready\n' > "$runtime/ready-2.126.0-3.9.2"

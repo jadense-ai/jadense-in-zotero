@@ -1,4 +1,5 @@
 """构建独立 OCR Python 与模型包；仅收集全新构建目录，不读取用户 profile。"""
+from engine_bundle_inventory import build_requirements, msvc_version
 import argparse
 import hashlib
 import json
@@ -15,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', required=True)
     parser.add_argument('--model-source', choices=['default', 'modelscope', 'hf-mirror'], default='modelscope')
+    parser.add_argument('--msvc-min-version', type=msvc_version, help='Only set for a Windows build with a separately validated minimum')
     args = parser.parse_args()
     if platform.system() != 'Windows' or platform.machine().lower() not in ('amd64', 'x86_64'):
         raise SystemExit('This build currently targets Windows x64.')
@@ -56,7 +58,7 @@ def main():
                 bundle.write(file, file.relative_to(payload).as_posix())
     with archive.open('rb') as stream:
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-    entry = {**metadata, 'published': False, 'file': archive.name, 'size': archive.stat().st_size, 'sha256': digest, 'urls': []}
+    entry = {**metadata, 'requirements': build_requirements(archive, payload / 'python/python.exe', ('torch', 'onnxruntime', 'rapidocr', 'docling'), args.msvc_min_version), 'published': False, 'file': archive.name, 'size': archive.stat().st_size, 'sha256': digest, 'urls': []}
     (output / 'ocr-windows-x64.json').write_text(json.dumps(entry, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'build': str(build), 'artifact': str(archive), **entry}), flush=True)
 

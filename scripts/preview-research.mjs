@@ -258,7 +258,7 @@ function installPreviewHost() {
       getEnvironment: () => ({}),
       call: async options => {
         const checking = options.arguments.includes('-CheckOnly') || options.arguments.includes('--check')
-        const models = options.arguments.some(value => ['--verify-models', '--prepare-models'].includes(value))
+        const models = options.arguments.some(value => ['--verify-models', '--recover-models', '--prepare-models'].includes(value))
         const missing = ocrFixture === 'missing' && !installed
         if (ocrFixture === 'download' && options.arguments.includes('--prepare-models')) {
           const events = [
@@ -287,7 +287,7 @@ function installPreviewHost() {
   }
   window.fetch = async (input, options = {}) => {
     if (ocrFixture && String(input).endsWith('/bundles.json')) return Response.json({})
-    if (ocrFixture && String(input).endsWith('/install-network.ps1')) return new Response('Synthetic installer network helper')
+    if (ocrFixture && ['/install-network.ps1', '/install-environment.ps1', '/install-stage.ps1', '/native-probe.py'].some(name => String(input).endsWith(name))) return new Response('Synthetic installer network helper')
     if (ocrFixture && String(input).startsWith('chrome://jadense-in-zotero/content/ocr/')) return new Response('Synthetic bundled OCR resource')
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href)
     if (url.origin !== location.origin) throw new Error("浏览器验收 fixture 禁止外网请求")

@@ -24,6 +24,7 @@ const isWindows = (host: ZoteroLike) => (host.getMainWindow?.()?.navigator.platf
 /** 安装失败按阶段给出恢复入口；仅使用固定类别，不回显下载地址或代理凭据。 */
 function installationFailure(stage: string, category = '') {
   const stages: Record<string, string> = {
+    msvc: uiText('准备 Microsoft C++ 运行库', 'Preparing the Microsoft C++ runtime'),
     uv: uiText('下载安装工具 uv', 'Downloading the uv installer'),
     download: uiText('下载完整 PDF 引擎包', 'Downloading the complete PDF engine'),
     dependencies: uiText('安装 Python 和引擎依赖', 'Installing Python and engine dependencies'),
@@ -33,7 +34,14 @@ function installationFailure(stage: string, category = '') {
     check: uiText('检测模型、字体和 PDF 渲染', 'Checking models, fonts and PDF rendering'),
     environment: uiText('检查安装环境', 'Checking the installation environment'),
   }
+  if (category.startsWith('NATIVE_')) return uiText('PDF 原生依赖检测失败，请检查 install.log 中的模块和 DLL 路径。', 'PDF native dependency check failed. Check the module and DLL paths in install.log.') + ' ' + category
   const causes: Record<string, string> = {
+    MSVC_MISSING: uiText('请将微软官方对应架构的 vc_redist 安装程序放在离线 ZIP 旁，再次导入。', 'Place the matching Microsoft vc_redist installer beside the ZIP and import again.'),
+    MSVC_TOO_OLD: uiText('请更新 Microsoft C++ 运行库后重试。', 'Update the Microsoft C++ runtime and retry.'),
+    ADMIN_CANCELLED: uiText('已取消 Windows 授权。可再次准备，或请管理员安装运行库。', 'Windows authorization was cancelled. Retry or ask your administrator to install the runtime.'),
+    RESTART_REQUIRED: uiText('Windows 要求重启，请重启后继续。', 'Restart Windows and resume setup.'),
+    MSVC_INSTALL_FAILED: uiText('Microsoft C++ 运行库安装未完成，请检查安装日志或联系管理员。', 'Microsoft C++ runtime setup failed. Inspect the installer log or contact your administrator.'),
+    MSVC_SIGNATURE_INVALID: uiText('运行库签名或产品不匹配，请从微软重新获取。', 'Runtime signature or product mismatch. Obtain the installer from Microsoft.'),
     proxy: uiText('请检查安装器代理地址、HTTP 端口及代理认证。', 'Check the installer proxy address, HTTP port and authentication.'),
     tls: uiText('安全连接或证书校验失败，请检查系统时间及单位证书配置。', 'The secure connection or certificate check failed. Check system time and managed certificates.'),
     dns: uiText('无法解析下载站地址，请检查网络和 DNS。', 'The download host could not be resolved. Check the network and DNS.'),
@@ -129,10 +137,17 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
         checkCancelled(signal)
         lastProgress = Date.now()
         if (!initial && message.type === 'install-error') {
+          installationLog = (installationLog + '\n' + JSON.stringify(message)).slice(-4000)
           installationStage = String(message.stage ?? installationStage); installationCategory = String(message.category ?? '')
           continue
         }
         if (!initial && message.type === 'progress' && message.stage !== 'retry') installationStage = String(message.stage ?? installationStage)
+        if (!initial && message.type === 'error') {
+          // 安装器尚须回滚 runtime；消费其输出直到退出，不能在 worker 首错时终止 PowerShell。
+          installationLog = (installationLog + '\n' + String(message.message ?? '')).slice(-4000)
+          installationStage = 'check'
+          continue
+        }
         if (message.type === 'error') throw Object.assign(new Error(message.category === 'incomplete' ? uiText(`翻译已暂停：补译后仍有 ${Number(message.missing) || 1} 个文段未完成，已保留成功译文。`, `Translation paused: ${Number(message.missing) || 1} passages remain incomplete after repair. Successful translations were retained.`) : String(message.message ?? 'PDF translation failed')), { code: typeof message.code === 'string' ? message.code : message.category === 'incomplete' ? 'OUTPUT_FAILED' : 'PDF_ENGINE_FAILED' })
         if (message.type === 'complete') complete = true
         if (message.type !== 'translate') { await onMessage(message); continue }
@@ -154,7 +169,7 @@ async function processRun(host: ZoteroLike, command: string, args: string[], sig
     await limited(drain, 30_000, uiText('PDF 引擎日志管道未结束，请重试。', 'PDF engine output pipe did not close. Retry.'))
     checkCancelled(signal)
     if (timedOut) throw Object.assign(new Error(finishSignal?.aborted ? uiText('保存已完成译文超时，已保留最近成果和译文缓存。', 'Saving translations timed out. The latest PDF and cached translations were retained.') : uiText('PDF 翻译阶段超时，稍后自动恢复。', 'PDF translation stage timed out; recovery will resume automatically.')), { code: 'PDF_ENGINE_FAILED' })
-    if (result.exitCode !== 0 || (initial && !complete)) throw Object.assign(new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎中断，稍后自动复用检查点继续。', 'PDF engine interrupted; saved checkpoints will resume automatically.')), { code: initial ? 'PDF_ENGINE_FAILED' : 'PDF_INSTALL_FAILED' })
+    if (result.exitCode !== 0 || (initial && !complete)) throw Object.assign(new Error(!initial ? installationFailure(installationStage, installationCategory) : uiText('PDF 引擎中断，稍后自动复用检查点继续。', 'PDF engine interrupted; saved checkpoints will resume automatically.')), { code: initial ? 'PDF_ENGINE_FAILED' : 'PDF_INSTALL_FAILED', category: installationCategory })
   } catch (error) { kill(); throw error } finally {
     clearInterval(timer); signal.removeEventListener('abort', kill)
     if (finishTimer) clearTimeout(finishTimer)
@@ -172,7 +187,7 @@ async function deployPDFResources(host: ZoteroLike, signal: AbortSignal, root = 
   const window = host.getMainWindow?.()
   if (!window) throw new Error('Zotero window unavailable')
   const network = window.fetch.bind(window)
-  for (const name of ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-network.ps1', 'bundles.json']) {
+  for (const name of ['pyproject.toml', 'uv.lock', 'worker.py', 'batch_adapter.py', 'progressive_pipeline.py', 'install.ps1', 'install.sh', 'install-bundle.ps1', 'install-environment.ps1', 'install-stage.ps1', 'native-probe.py', 'install-network.ps1', 'bundles.json']) {
     checkCancelled(signal)
     const response = await network(`chrome://jadense-in-zotero/content/pdf-translation/${name}`, { signal })
     if (!response.ok) throw new Error(`Cannot load PDF engine resource: ${name}`)
@@ -202,22 +217,46 @@ export async function checkPDFEngine(host: ZoteroLike, signal: AbortSignal, prog
 export async function preparePDFEngine(host: ZoteroLike, signal: AbortSignal, progress: PDFEngineProgress, repair = false, archive?: string, root = pdfRuntimeRoot(host)) {
   const { IOUtils: io, PathUtils: paths } = pdfPlatform()
   await deployPDFResources(host, signal, root)
+  let checkFailure: unknown
   if (!repair && !archive) {
-    try { await checkPDFEngine(host, signal, progress, root); return } catch { checkCancelled(signal) }
+    try { await checkPDFEngine(host, signal, progress, root); return } catch (error) { checkCancelled(signal); checkFailure = error }
   }
-  for (const marker of [PDF_ENGINE, PDF_ADAPTER]) await io.remove(paths.join(root, marker), { ignoreAbsent: true })
   progress('dependencies')
   const { Subprocess } = pdfPlatform().ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs')
   const env = Subprocess.getEnvironment()
   const catalog = JSON.parse(await io.readUTF8(paths.join(root, 'bundles.json'))) as Record<string, { published?: boolean } | undefined>
-  const target = (env.PROCESSOR_ARCHITEW6432 ?? env.PROCESSOR_ARCHITECTURE ?? '').toUpperCase() === 'ARM64' ? 'windows-arm64' : 'windows-x64'
+  const arch = (env.PROCESSOR_ARCHITEW6432 ?? env.PROCESSOR_ARCHITECTURE ?? '').toUpperCase()
+  const target = arch === 'ARM64' ? 'windows-arm64' : arch === 'AMD64' ? 'windows-x64' : ''
+  if (!archive && !repair && isWindows(host) && (await io.exists(paths.join(root, 'runtime', 'python', 'python.exe')) || await io.exists(paths.join(root, '.venv', 'Scripts', 'python.exe')))) {
+    let repaired = false, missingPackage = false
+    try {
+      await processRun(host, paths.join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, 'install.ps1'), '-RuntimeDirectory', root, '-NativeOnly'],
+        signal, async message => {
+          if (message.type === 'runtime-install') repaired = true
+          progress(String(message.stage ?? 'imports'), message)
+        }, undefined, undefined, undefined, root)
+    } catch (error) {
+      if ((error as { category?: string }).category !== 'NATIVE_PACKAGE_MISSING') throw error
+      missingPackage = true
+    }
+    if (repaired) {
+      try { await checkPDFEngine(host, signal, progress, root); return } catch (error) { checkCancelled(signal); checkFailure = error }
+    }
+    if (!missingPackage && checkFailure && !['PDF_ASSETS_MISSING', 'PDF_ENGINE_VERSION_MISMATCH'].includes(String((checkFailure as { code?: string }).code))) throw checkFailure
+  }
   // 本地包可先验收离线导入；公开附件验证前不将普通用户导向不存在的下载地址。
   const bundled = isWindows(host) && Boolean(catalog[target]) && (Boolean(archive) || catalog[target]?.published === true)
   if (archive && !bundled) throw new Error(uiText('此平台尚无已验证离线包，请按安装指南手动安装后检测。', 'No verified offline package for this platform. Follow the manual installation guide and check the engine.'))
   await processRun(host, isWindows(host) ? paths.join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : '/bin/sh',
     isWindows(host) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', paths.join(root, bundled ? 'install-bundle.ps1' : 'install.ps1'), root, ...(archive ? [archive] : [])] : [paths.join(root, 'install.sh'), root], signal, async message => progress(String(message.stage ?? 'dependencies'), message), undefined, undefined, undefined, root)
-  progress(bundled ? 'check' : 'assets')
-  await runPDFWorker(host, { operation: bundled ? 'check' : 'prepare' }, signal, async message => progress(String(message.stage ?? 'assets'), message), undefined, root)
+  if (bundled) {
+    // 安装器已在最终路径完成同一 worker 实测；不要再次加载模型。根目录标记只用于发现已安装环境。
+    for (const marker of [PDF_ENGINE, PDF_ADAPTER]) await io.writeUTF8(paths.join(root, marker), 'ready')
+    return
+  }
+  progress('assets')
+  await runPDFWorker(host, { operation: 'prepare' }, signal, async message => progress(String(message.stage ?? 'assets'), message), undefined, root)
 }
 
 export async function runPDFWorker(host: ZoteroLike, config: Record<string, unknown>, signal: AbortSignal, onMessage: (message: Record<string, unknown>) => Promise<unknown>, finishSignal?: AbortSignal, root = pdfRuntimeRoot(host)) {

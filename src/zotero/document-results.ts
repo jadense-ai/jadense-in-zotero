@@ -1,8 +1,6 @@
-import { checkOCREngine } from './cloud-ocr'
-import { documentOCREnabled } from './document-extraction'
 import { analysisRuntime } from './analysis-runtime'
 import { lifecycleTrace } from './lifecycle-diagnostics'
-import { renderDocumentIssueActions, openDocumentSettings } from './document-notices'
+import { renderDocumentIssueActions } from './document-notices'
 /** 当前附件的只读成果界面：Reader 与文献详情共用，任务仅由明确按钮启动。 */
 import { updateChatMarkdown } from '@/chat/markdown'
 import { readTranslationHistory, TRANSLATION_HISTORY_PREF_KEY } from '@/chat/translation-history'
@@ -47,18 +45,12 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', resultLabels()[mode]); root.dataset.resultMode = mode
   const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true
   toolbar.append(versionHost); root.append(toolbar, message, issueActions, body)
-  if (mode === 'source') {
-    const tip = notice(doc)
-    tip.append(doc.createTextNode(uiText('默认使用文字层提取，也可在右侧选择使用已配置的 OCR。', 'Use the text layer by default, or select configured OCR on the right.')),
-      action(doc, uiText('前往 OCR 配置', 'Open OCR configuration'), () => { openDocumentSettings(host, 'ocr') }))
-    root.insertBefore(tip, body)
-  }
+  if (mode === 'source') message.textContent = uiText('全文提取已停用，已有 Markdown 仍可查看和复制。', 'Document extraction has been retired. Saved Markdown remains available to read and copy.')
   if (options.onWorkbench) { const open = action(doc, uiText('在工作台查看', 'Open in workbench'), () => options.onWorkbench?.(mode, selected)); actionIcon(open, 'workbench'); open.classList.add('jdx-result-workbench'); toolbar.append(open) }
   const cleanups: Array<() => void> = []
-  let selected = options.recordID, disposed = false, refreshing = false, dirty = false, signature = '', stopContent = () => {}, active: AbortController | undefined
+  let selected = options.recordID, disposed = false, refreshing = false, dirty = false, signature = '', stopContent = () => {}
   let analysis: ReturnType<typeof mountAnalysisWorkspace> | undefined
   let analysisRun: AnalysisRunView | undefined
-  let useOCR = false
   const rows = () => jobs.list(mode === 'source' ? 'extraction' : 'translation').filter(task => sameAttachment(task.source, source))
   let feedbackToast: ToastHandle | undefined
   // 普通操作反馈自动消失；风险与进行中提示保留在任务区域。
@@ -86,41 +78,11 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     body.replaceChildren(empty)
   }
   body.append(emptyResult(doc, uiText('正在读取成果…', 'Loading results…'), ''))
-  const startExtraction = async (fresh: boolean) => {
-    if (active) return
-    active = new AbortController(); extract.disabled = true; cancel.hidden = false; feedbackToast?.close(); message.dataset.kind = 'running'
-    try {
-      const task = await jobs.start('extraction', source.itemID, fresh, { signal: active.signal, useOCR, onProgress: text => { if (!disposed) message.textContent = text } })
-      selected = task.id; signature = ''; await refresh(); if (task.status === 'complete') feedback(uiText('原文提取完成', 'Source extracted'))
-    } catch (error) { report(error) }
-    finally { active = undefined; if (!disposed) { extract.disabled = false; cancel.hidden = true } }
-  }
-  const extract = action(doc, uiText('提取原文', 'Extract source'), () => { void startExtraction(Boolean(rows().length)) })
-  const cancel = action(doc, uiText('停止提取', 'Stop extraction'), () => { active?.abort(); const running = rows().find(task => task.status === 'running'); if (running) jobs.pause(running.id) }); cancel.hidden = true
-  extract.classList.add('jdx-result-extract')
   if (mode === 'source') {
-    toolbar.append(cancel, action(doc, uiText('复制 Markdown', 'Copy Markdown'), () => {
+    toolbar.append(action(doc, uiText('复制 Markdown', 'Copy Markdown'), () => {
       if (selected) void jobs.store.extraction(selected).then(value => copyTextToClipboard(host, value?.markdown || '')).then(ok => { feedback(ok ? uiText('已复制', 'Copied') : uiText('复制失败', 'Copy failed'), ok ? 'success' : 'error') }).catch(report)
     }))
-    extract.classList.add('jdx-button-primary')
-    const ocrHost = element(doc, 'div', 'jdx-result-language')
-    const ocr = createJdxSelect(ocrHost, { compact: true, portal: true, ariaLabel: uiText('提取方式', 'Extraction method'), popupWidth: 220 })
-    const capsule = element(doc, 'div', 'jdx-translation-capsule')
-    capsule.setAttribute('role', 'group'); capsule.setAttribute('aria-label', uiText('提取原文', 'Extract source'))
-    capsule.append(ocrHost, extract); toolbar.append(capsule)
-    const setOCRAvailable = (ready: boolean) => {
-      if (!ready) useOCR = false
-      ocr.setOptions([
-        { value: 'text', label: uiText('不使用 OCR', 'Without OCR') },
-        { value: 'ocr', label: uiText('使用 OCR', 'Use OCR'), disabled: !ready, description: ready ? undefined : uiText('OCR 未配置，请先在设置中启用', 'OCR is not configured. Enable it in settings first.') },
-      ], useOCR ? 'ocr' : 'text')
-    }
-    setOCRAvailable(false)
-    void checkOCREngine(host).then(() => { if (!disposed) { useOCR = documentOCREnabled(host); setOCRAvailable(true) } }).catch(() => {})
-    ocr.onChange(value => { useOCR = value === 'ocr' })
-    cleanups.push(() => ocr.destroy())
   }
-  actionIcon(cancel, 'stop')
   const copy = Array.from(toolbar.children).find(child => child.textContent === uiText('复制 Markdown', 'Copy Markdown')) as HTMLButtonElement | undefined
   if (mode === 'source' && copy) actionIcon(copy, 'copy')
   const analysisOptions: AnalysisOptions = options.analysis ?? {
@@ -146,9 +108,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       const nextSignature = mode === 'selection' ? JSON.stringify(records) : `${mode}:${selected || ''}:${mode === 'source' ? task?.status : ''}`
       if (mode === 'source') {
         const running = rows().find(row => row.status === 'running')
-        extract.textContent = rows().length ? uiText('重新提取', 'Extract again') : uiText('提取原文', 'Extract source')
-        extract.disabled = Boolean(active || running); cancel.hidden = !active && !running
-        message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task?.warnings.length ? task.warnings.join('\n') : task && task.status !== 'complete' ? resultStatus(task.status) : '')
+        message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task?.warnings.length ? task.warnings.join('\n') : task && task.status !== 'complete' ? resultStatus(task.status) : uiText('全文提取已停用，已有 Markdown 仍可查看和复制。', 'Document extraction has been retired. Saved Markdown remains available to read and copy.'))
         message.dataset.kind = task?.error ? 'error' : running ? 'running' : task?.status || 'neutral'
       }
       if (mode === 'source') renderDocumentIssueActions(issueActions, host, task?.issue)
@@ -161,7 +121,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
         if (disposed) return
         body.replaceChildren()
         const text = element(doc, 'div', 'jdx-markdown jdx-reading-block')
-        updateChatMarkdown(text, value?.markdown || uiText('先提取原文。完成后可阅读图文 Markdown。', 'Extract the source to read its Markdown.'), assets)
+        updateChatMarkdown(text, value?.markdown || uiText('暂无已保存的原文 Markdown。', 'No saved source Markdown.'), assets)
         if (value) body.append(text)
         else body.append(emptyResult(doc, uiText('先准备原文', 'Prepare the source'), text.textContent || ''))
         if (value?.assets.some(asset => !assets[`jdx-asset:${asset}`])) message.textContent = uiText('部分图片不可用，正文仍可阅读和翻译。', 'Some images are unavailable. Text remains readable and translatable.')

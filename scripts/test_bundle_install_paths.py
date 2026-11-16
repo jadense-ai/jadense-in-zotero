@@ -1,4 +1,5 @@
 """用深层普通用户 profile 复现两种离线安装器的 Windows 长路径解压边界。"""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,15 +20,14 @@ class BundleInstallPathTest(unittest.TestCase):
         powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
         with tempfile.TemporaryDirectory(prefix='jadense-bundle-path-') as temporary:
             base = Path(temporary)
-            for kind, stage in [('ocr', 'offline'), ('pdf-translation', 'check')]:
+            for kind in ('ocr', 'pdf-translation'):
                 suffix = Path('普通用户 profile') / kind
                 padding = 'p' * max(1, 94 - len(str(base)) - len(str(suffix)) - 2)
                 root = base / padding / suffix
                 root.mkdir(parents=True)
                 source = SOURCE / kind
-                for name in ('install-bundle.ps1', 'install-network.ps1'):
-                    shutil.copy2((SOURCE / 'pdf-translation' if name == 'install-network.ps1' else source) / name, root / name)
-                (root / 'bundles.json').write_text(json.dumps({'windows-x64': {'file': 'another.zip', 'sha256': '0' * 64}}), encoding='utf-8')
+                for name in ('install-bundle.ps1', 'install-network.ps1', 'install-environment.ps1', 'install-stage.ps1'):
+                    shutil.copy2((SOURCE / 'pdf-translation' if name != 'install-bundle.ps1' else source) / name, root / name)
                 runtime = root / 'runtime'
                 runtime.mkdir()
                 (runtime / 'previous.txt').write_text('keep', encoding='utf-8')
@@ -37,12 +37,15 @@ class BundleInstallPathTest(unittest.TestCase):
                 archive = base / (kind + '.zip')
                 with zipfile.ZipFile(archive, 'w') as bundle:
                     bundle.writestr(member, b'fixture')
+                    bundle.writestr('bundle.json', json.dumps({'platform': 'wrong', 'engine': 'fixture', 'version': '1'}))
+                (root / 'bundles.json').write_text(json.dumps({'windows-x64': {'engine': 'fixture', 'version': '1', 'size': archive.stat().st_size, 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}}))
                 command = [str(powershell), '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'install-bundle.ps1')]
                 command += ['-RuntimeDirectory', str(root), '-ArchivePath', str(archive)] if kind == 'ocr' else [str(root), str(archive)]
                 result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
                 output = result.stdout + result.stderr
                 self.assertNotEqual(result.returncode, 0, output)
-                self.assertIn('"stage":"' + stage + '"', output)
+                self.assertIn('Engine identity mismatch', output)
+                self.assertTrue((root / 's-cache' / member).is_file())
                 self.assertNotIn('Could not find a part of the path', output)
                 self.assertEqual((runtime / 'previous.txt').read_text(encoding='utf-8'), 'keep')
 

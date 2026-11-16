@@ -10,6 +10,88 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   await waitFor(() => doc.querySelector('[data-translation-scope="document"] .jdx-select-trigger'), 'independent translation controls')
   if (doc.querySelector('#jadense-quick-start-dialog')?.open) doc.getElementById('jadense-quick-start-close').click()
   const root = doc.getElementById('jadense-settings-panel-features')
+  if (config.settingsSimplificationOnly) {
+    doc.getElementById('jadense-settings-tab-features').click()
+    await Promise.resolve(Zotero.Utilities.Internal.openPreferences('jadense-in-zotero-preferences'))
+    const preferences = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'native preferences')
+    preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
+    const native = preferences.document.querySelector('[data-settings-section="features"]')
+    await waitFor(() => native.querySelector('[data-settings-target="analysis"]'), 'native feature navigation')
+    for (const panel of [root, native]) {
+      assert(!panel.querySelector('[data-settings-task="figure"], [data-settings-task="document"], [data-ocr-setting="document"]'), 'Retired feature settings remain')
+      assert(!panel.querySelector('[id$="feature-figure-model"]'), 'Independent image model remains')
+      assert(panel.querySelector('[data-chat-document-mode="chat"]'), 'Chat document policy missing')
+      assert(panel.querySelector('[data-ocr-setting="analysis"]'), 'Analysis OCR missing')
+    }
+    const follow = doc.getElementById('jadense-auto-follow-chat-model')
+    follow.click()
+    await waitFor(() => preferences.document.getElementById('jadense-in-zotero-auto-follow-chat-model').checked === follow.checked, 'analysis follow synchronization')
+    assert(native.querySelector('[id$="feature-analysis-model"] .jdx-select-trigger').disabled === follow.checked, 'Analysis model follow state differs')
+    report.checks.push('settings-retired-image-and-extraction-two-hosts', 'settings-analysis-follow-cross-window', 'settings-chat-policy-and-analysis-ocr-preserved')
+    const pause = () => Zotero.Promise.delay(250), language = config.appearanceLanguage === 'en-US' ? 'en' : 'zh'
+    for (const theme of ['light', 'dark']) {
+      set('theme', theme)
+      for (const scale of ['100', '150']) {
+        set('fontScale', scale)
+        for (const [name, win, panel] of [['manager', manager, root], ['native', preferences, native]]) {
+          win.resizeTo(scale === '150' ? 720 : 1100, 900)
+          panel.querySelector('[data-settings-target="chat"]').click()
+          panel.querySelector('[data-settings-task="chat"]').scrollIntoView({ block: 'start' })
+          await pause()
+          assert(panel.scrollWidth <= panel.clientWidth + 2, name + ' settings overflow')
+          await screenshot(`settings-simplified-${language}-${theme}-${scale}-${name}`, win)
+        }
+      }
+    }
+    assert(!report.screenshotWarnings?.length, 'Settings screenshot capture failed')
+    assert(Zotero.__jadenseDocumentJobs.list().length === 0, 'Opening settings created document tasks')
+    report.checks.push('settings-simplified-two-hosts-light-dark-compact-150')
+    preferences.close(); manager.close(); return
+  }
+  if (config.analysisAnnotationSettingsOnly) {
+    doc.getElementById('jadense-settings-tab-features').click()
+    root.querySelector('[data-settings-target="analysis"]').click()
+    const selector = '[data-analysis-annotation-suggestion]', input = await waitFor(() => root.querySelector(selector), 'analysis annotation suggestion')
+    assert(input.value === '' && !input.max, 'Default annotation selection is not automatic')
+    assert(input.labels.length === 1, 'Annotation input lacks an accessible label')
+    await Promise.resolve(Zotero.Utilities.Internal.openPreferences('jadense-in-zotero-preferences'))
+    const preferences = await waitFor(() => findWindowContaining('jadense-in-zotero-preferences-pane'), 'native preferences')
+    const native = preferences.document.querySelector('[data-settings-section="features"]')
+    preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
+    native.querySelector('[data-settings-target="analysis"]').click()
+    const nativeInput = await waitFor(() => native.querySelector(selector), 'native annotation suggestion')
+    const change = (win, field, value) => { field.value = value; field.dispatchEvent(new win.Event('change', { bubbles: true })) }
+    change(manager, input, '75')
+    await waitFor(() => nativeInput.value === '75', 'Manager to native suggestion sync')
+    change(preferences, nativeInput, '90')
+    await waitFor(() => input.value === '90', 'Native to Manager suggestion sync')
+    assert(get('analysisSuggestedMaxAnnotations') === '90', 'Suggestion was not persisted')
+    change(preferences, nativeInput, '')
+    await waitFor(() => input.value === '', 'Restore automatic suggestion')
+    change(manager, input, '-1')
+    assert(input.value === '' && get('analysisSuggestedMaxAnnotations') === '', 'Invalid suggestion did not fall back to automatic')
+    report.checks.push('analysis-annotation-auto-default', 'analysis-annotation-accessible-label', 'analysis-annotation-two-host-save-sync-clear', 'analysis-annotation-invalid-fallback')
+    const english = config.appearanceLanguage === 'en-US', pause = () => Zotero.Promise.delay(250)
+    for (const theme of ['light', 'dark']) {
+      set('theme', theme); await pause()
+      for (const [name, win, panel, field] of [['manager', manager, root, input], ['native', preferences, native, nativeInput]]) {
+        win.resizeTo(1100, 900); field.scrollIntoView({ block: 'center' }); await pause()
+        assert(panel.scrollWidth <= panel.clientWidth + 2, name + ' annotation setting overflows')
+        await screenshot(`analysis-annotations-${english ? 'en' : 'zh'}-${theme}-${name}`, win)
+      }
+    }
+    set('theme', 'light'); set('fontScale', '150'); await pause()
+    for (const [name, win, panel, field] of [['manager', manager, root, input], ['native', preferences, native, nativeInput]]) {
+      win.resizeTo(720, 900); field.focus(); field.scrollIntoView({ block: 'center' }); await pause()
+      assert(panel.scrollWidth <= panel.clientWidth + 2, name + ' annotation setting overflows at 150%')
+      const bounds = field.getBoundingClientRect()
+      assert(bounds.width > 40 && bounds.right <= win.innerWidth, name + ' annotation field is clipped')
+      await screenshot(`analysis-annotations-${english ? 'en' : 'zh'}-compact-150-${name}`, win)
+    }
+    report.checks.push('analysis-annotation-light-dark-two-host-layout', 'analysis-annotation-compact-150-keyboard-focus')
+    assert(!report.screenshotWarnings?.length, 'Annotation settings screenshots failed')
+    preferences.close(); manager.close(); return
+  }
   const assertVerticalFields = scope => {
     for (const row of scope.querySelectorAll('.jdx-feature-model-row, .jdx-cloud-ocr-field, .jdx-pref-token-row')) {
       if (!row.checkVisibility() || !row.getBoundingClientRect().width) continue
@@ -82,8 +164,8 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   const lastNav = root.querySelector('[data-settings-target="organization"]')
   lastNav.focus(); lastNav.dispatchEvent(new manager.KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
   assert(doc.activeElement.dataset.settingsTarget === 'chat', 'Directory Home navigation failed')
-  openGroup(root, 'figure')
-  assert(root.querySelector('[data-settings-task="figure"]').getBoundingClientRect().height < 220, 'Single-field image settings inflated')
+  openGroup(root, 'analysis')
+  assert(!root.querySelector('[data-settings-task="figure"]'), 'Independent image settings remain')
   assert(root.querySelector('[data-settings-task="selection"]').getBoundingClientRect().height === 0, 'Hidden feature occupies space')
   openGroup(root, 'organization')
   const draftKey = root.querySelector('[data-classification-settings-host] input[type="password"]'), previousDraft = draftKey.value
@@ -91,12 +173,12 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   openGroup(root, 'chat'); openGroup(root, 'organization')
   assert(draftKey.value === 'synthetic-unsaved-settings-draft', 'Directory switch lost unsaved draft')
   draftKey.value = previousDraft
-  openGroup(root, 'figure'); root.querySelector('[data-settings-task="figure"] .jdx-settings-link').click()
+  openGroup(root, 'analysis'); root.querySelector('[data-settings-task="figure"] .jdx-settings-link').click()
   assert(!root.querySelector('[data-settings-task="chat"]').hidden && doc.activeElement.id === 'jadense-auto-follow-chat-model', 'Model follow link failed')
   report.checks.push('settings-directory-keyboard-single-detail-and-draft', 'settings-model-follow-link')
   const groups = [...root.querySelectorAll('[data-settings-task]')].map(node => node.dataset.settingsTask)
-  assert(groups.filter(group => group !== 'literature-radar').join() === 'chat,selection,figure,pdf-translation,document,analysis,organization', 'Task groups are not ordered: ' + groups.join())
-  assert(root.querySelectorAll('[data-ocr-setting="document"]').length === 1 && !doc.querySelector('#jadense-settings-panel-ocr [data-ocr-setting="document"]'), 'Document switch not moved')
+  assert(groups.filter(group => group !== 'literature-radar').join() === 'chat,selection,pdf-translation,analysis,organization', 'Task groups are not ordered: ' + groups.join())
+  assert(!root.querySelector('[data-settings-task="document"]') && !root.querySelector('[data-ocr-setting="document"]'), 'Retired extraction settings remain')
   assert(root.querySelectorAll('[data-ocr-setting="selection"]').length === 1, 'Selection switch duplicated')
   assert(root.querySelector('[data-classification-settings-host] input[type="password"]'), 'Classification settings missing')
   const english = config.appearanceLanguage === 'en-US'
@@ -127,7 +209,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   assert(native.querySelector('[data-settings-task="chat"] [data-chat-document-mode="chat"]') && !native.querySelector('[data-settings-task="figure"] [data-chat-document-mode]'), 'Native long-PDF setting is outside AI Chat')
   await waitFor(() => native.querySelector('[data-classification-settings-host] input'), 'native classification')
   preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
-  assert(native.querySelectorAll('[data-settings-task]').length === 7, 'Native groups differ')
+  assert(native.querySelectorAll('[data-settings-task]').length === 5, 'Native groups differ')
   openGroup(native, 'chat')
   const nativeModel = native.querySelector('#jadense-in-zotero-feature-chat-model')
   const savedNativeModel = get('chatModel')
@@ -177,8 +259,8 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   assert(JSON.parse(get('translationSpeed'))[speedAddress].rpm === 20, 'Speed defaults did not restore')
   report.checks.push('translation-speed-defaults-save-invalid-and-cross-window-sync')
   manager.focus(); await Zotero.Promise.delay(100)
-  const configure = root.querySelector('[data-document-ocr-host] .jdx-ocr-summary button')
-  openGroup(root, 'document'); configure.click()
+  const configure = root.querySelector('[data-analysis-ocr-host] .jdx-ocr-summary button')
+  openGroup(root, 'analysis'); configure.click()
   const ocrRoot = doc.getElementById('jadense-settings-panel-ocr')
   assert(!ocrRoot.hidden && root.hidden, 'OCR link did not switch tab')
   assert(![...ocrRoot.querySelectorAll('button')].some(node => /返回功能配置|Back to feature settings/u.test(node.textContent)), 'Redundant OCR back button remains')
@@ -187,24 +269,15 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   assert(!root.hidden, 'OCR return focus: ' + doc.activeElement?.outerHTML?.slice(0, 250) + ' root hidden=' + root.hidden)
   report.checks.push('settings-ocr-navigation-focus')
   set('ocrEngine', 'custom')
-  const documentOCR = root.querySelector('[data-ocr-setting="document"]')
-  openGroup(root, 'document'); documentOCR.click()
-  await waitFor(() => !documentOCR.disabled && !documentOCR.checked, 'unconfigured cloud OCR remains disabled')
-  assert(!get('markdownOCR'), 'Failed OCR check persisted enabled')
-  assert(root.querySelector('[data-document-ocr-host] [role="status"]').textContent, 'OCR failure missing inline feedback')
   const analysisOCR = root.querySelector('[data-ocr-setting="analysis"]')
   openGroup(root, 'analysis'); analysisOCR.click()
   await waitFor(() => !analysisOCR.disabled && !analysisOCR.checked, 'analysis OCR failure stays local')
   assert(!get('analysisOCR'), 'Failed analysis OCR check persisted enabled')
-  // 模拟旧版已开启：两种用途继承，但任一新设置不得改写另一用途或旧键。
   set('documentOCR', true)
-  await waitFor(() => documentOCR.checked && analysisOCR.checked, 'legacy OCR inherited in both scopes')
-  openGroup(root, 'document'); documentOCR.click()
-  await waitFor(() => !documentOCR.checked && analysisOCR.checked && !native.querySelector('[data-ocr-setting="document"]').checked, 'Markdown disable isolated and synchronized')
-  assert(get('markdownOCR') === false && get('documentOCR') === true, 'Markdown disable overwrote legacy preference')
+  await waitFor(() => analysisOCR.checked, 'legacy OCR inherited by analysis')
   openGroup(native, 'analysis'); native.querySelector('[data-ocr-setting="analysis"]').click()
-  await waitFor(() => !analysisOCR.checked && !documentOCR.checked, 'analysis disable synchronized independently')
-  assert(get('analysisOCR') === false, 'Analysis preference did not save')
+  await waitFor(() => !analysisOCR.checked, 'analysis disable synchronized')
+  assert(get('analysisOCR') === false && get('documentOCR') === true, 'Analysis save overwrote legacy preference')
   assert(!root.querySelector('[data-analysis-ocr-host] [role="status"]').textContent, 'Cross-window save retained a stale OCR error')
   set('documentOCR', false)
   report.checks.push('settings-ocr-scopes-legacy-inheritance-isolation-and-cross-window-sync')
@@ -221,7 +294,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
     speed.open = true; openGroup(root, 'pdf-translation'); speed.scrollIntoView({ block: 'start' }); await pause()
     await screenshot(`translation-speed-${english ? 'en' : 'zh'}-${theme}`, manager)
     speed.open = false
-    for (const name of ['chat', 'selection', 'figure', 'pdf-translation', 'document', 'analysis', 'organization']) {
+    for (const name of ['chat', 'selection', 'pdf-translation', 'analysis', 'organization']) {
       openGroup(root, name); root.querySelector(`[data-settings-task="${name}"]`).scrollIntoView({ block: 'start' });
       if (name === 'chat') for (let node = root.parentElement; node; node = node.parentElement) node.scrollTop = 0
       await pause()
@@ -231,7 +304,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
     openGroup(native, 'selection'); native.querySelector('[data-settings-task="selection"]').scrollIntoView({ block: 'start' }); await pause()
     assertVerticalFields(native)
     await screenshot(`settings-native-${english ? 'en' : 'zh'}-${theme}`, preferences)
-    openGroup(root, 'document'); configure.click(); await pause(); await screenshot(`settings-ocr-${english ? 'en' : 'zh'}-${theme}`, manager); openGroup(dependencies, 'layout'); dependencies.querySelector('[data-external-dependency="layout"]').scrollIntoView({ block: 'start' }); await pause(); await screenshot(`settings-layout-${english ? 'en' : 'zh'}-${theme}`, manager); doc.getElementById('jadense-settings-tab-features').click()
+    openGroup(root, 'analysis'); configure.click(); await pause(); await screenshot(`settings-ocr-${english ? 'en' : 'zh'}-${theme}`, manager); openGroup(dependencies, 'layout'); dependencies.querySelector('[data-external-dependency="layout"]').scrollIntoView({ block: 'start' }); await pause(); await screenshot(`settings-layout-${english ? 'en' : 'zh'}-${theme}`, manager); doc.getElementById('jadense-settings-tab-features').click()
     for (const name of ['shortcuts', 'connection']) {
       doc.getElementById(`jadense-settings-tab-${name}`).click(); await pause()
       assertVerticalFields(doc.getElementById(`jadense-settings-panel-${name}`))
@@ -265,7 +338,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   doc.getElementById('jadense-settings-tab-features').click()
   assert(root.scrollWidth <= root.clientWidth + 2, 'Scaled settings overflow horizontally')
   await screenshot(`settings-${english ? 'en' : 'zh'}-compact-150`, manager)
-  openGroup(native, 'document'); native.querySelector('[data-settings-task="document"]').scrollIntoView({ block: 'start' }); await pause()
+  openGroup(native, 'analysis'); native.querySelector('[data-settings-task="analysis"]').scrollIntoView({ block: 'start' }); await pause()
   await screenshot(`settings-native-${english ? 'en' : 'zh'}-150`, preferences)
   doc.getElementById('jadense-settings-tab-ai').click(); await pause()
   const compactByok = doc.getElementById('jadense-settings-panel-ai')
@@ -282,7 +355,7 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   report.checks.push('settings-compact-no-overflow', 'settings-two-hosts-light-dark', 'settings-font-scale-150', 'settings-keyboard-selector')
   assert(!get('documentOCR') && !get('ocrSelection'), 'Opening settings enabled OCR')
   assert(Zotero.__jadenseDocumentJobs.list().length === 0, 'Settings created document tasks')
-  openGroup(root, 'document'); configure.click()
+  openGroup(root, 'analysis'); configure.click()
   set('ocrEngine', 'glm')
   const key = await waitFor(() => ocrRoot.querySelector('[data-ocr-setting="key"]'), 'cloud key input')
   await waitFor(() => ocrRoot.querySelector('[data-ocr-setting="model"]').value === 'glm-ocr', 'GLM settings loaded')

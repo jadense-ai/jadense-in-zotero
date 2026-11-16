@@ -56,22 +56,28 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
     },
   })
   let disposed = false, controller: AbortController | undefined
+  let restartPending = false
   const progress: PDFEngineProgress = (stage, detail) => {
     if (disposed) return
+    if (stage === 'restart_pending') restartPending = true
     const labels: Record<string, string> = {
       environment: uiText('检查安装环境', 'Checking installation environment'), uv: uiText('下载安装工具 uv', 'Downloading the uv installer'),
-      imports: uiText('加载引擎依赖', 'Loading engine dependencies'),
+      msvc: uiText('需要安装 Microsoft C++ 运行库', 'Microsoft C++ runtime installation required'),
+    msvc_authorization: uiText('请在 Windows 授权窗口确认安装运行库', 'Approve the runtime installation in Windows'),
+    restart_pending: uiText('Windows 要求稍后重启，正在重新检测', 'Windows requests a restart; rechecking the runtime'),
+    imports: uiText('加载引擎依赖', 'Loading engine dependencies'),
       download: uiText('下载完整引擎包', 'Downloading engine package'), retry: uiText('下载中断，正在重试；已下载内容保留', 'Download interrupted; retrying with retained bytes'),
       verify: uiText('校验安装包', 'Verifying package'), extract: uiText('解压引擎', 'Extracting engine'), check: uiText('离线检测模型、字体和 PDF 渲染', 'Checking models, fonts and PDF rendering offline'),
       assets: uiText('准备模型和字体', 'Preparing models and fonts'), installed: uiText('引擎已安装，正在检测', 'Engine installed; checking'),
     }
     const bytes = Number(detail?.bytes), total = Number(detail?.total)
-    const amount = total > 0 ? stage === 'download' ? ` · ${(bytes / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB` : ` · ${Math.round(bytes / total * 100)}%` : ''
+    const amount = total > 0 ? stage === 'download' ? ` · ${(bytes / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB` : ` · ${Math.round(Number(detail?.completed ?? bytes) / total * 100)}%` : ''
     const label = stage === 'retry' && detail?.downloadStage === 'uv' ? uiText('安装工具下载中断，正在重试', 'Installer download interrupted; retrying') : labels[stage]
     status.textContent = (label ?? uiText('安装 Python 和引擎依赖', 'Installing Python and engine dependencies')) + amount + '…'
   }
   const run = async (operation: 'prepare' | 'repair' | 'check' | 'import') => {
     if (controller) return
+    restartPending = false
     controller = new AbortController(); for (const button of [prepare, repair, check, offline]) button.disabled = true; cancel.hidden = false
     status.textContent = uiText('等待准备引擎…', 'Waiting to prepare the engine…')
     try {
@@ -85,7 +91,7 @@ export function wirePDFEngineSettings(host: ZoteroLike, root: HTMLElement | null
       }
       if (operation === 'check') await pdfTranslationJobs(host).checkEngine(controller.signal, progress)
       else await pdfTranslationJobs(host).prepare(controller.signal, progress, operation === 'repair', archive)
-      if (!disposed) { status.textContent = uiText('PDF 翻译引擎已就绪', 'PDF translation engine ready'); offlineHelp.element.hidden = true }
+      if (!disposed) { status.textContent = uiText('PDF 翻译引擎已就绪', 'PDF translation engine ready') + (restartPending ? uiText('。Windows 要求稍后重启。', '. Restart Windows when convenient.') : ''); offlineHelp.element.hidden = true }
     } catch (error) {
       if (!disposed) {
         status.textContent = controller.signal.aborted ? uiText('已取消，已下载内容保留；再次准备可继续。', 'Cancelled; downloaded bytes retained. Prepare again to continue.') : error instanceof Error ? error.message : String(error)

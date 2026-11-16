@@ -47,7 +47,9 @@ describe("preferences pane markup", () => {
   it("presents the automatic-follow toggle with feature models, connection, and BYOK sections", () => {
     expect(xhtml).not.toContain('id="jadense-in-zotero-route-jadense"')
     expect(xhtml).toContain('id="jadense-in-zotero-auto-follow-chat-model"')
-    for (const feature of ["chat", "translation", "analysis", "figure"]) expect(xhtml).toContain(`id="jadense-in-zotero-feature-${feature}-model"`)
+    expect(xhtml).not.toContain('data-settings-task="figure"')
+    expect(xhtml).not.toContain('data-settings-task="document"')
+    for (const feature of ["chat", "translation", "analysis"]) expect(xhtml).toContain(`id="jadense-in-zotero-feature-${feature}-model"`)
     expect(xhtml.indexOf('id="jadense-in-zotero-feature-chat-model"')).toBeLessThan(xhtml.indexOf('id="jadense-in-zotero-auto-follow-chat-model"'))
     expect(xhtml.indexOf('id="jadense-in-zotero-auto-follow-chat-model"')).toBeGreaterThan(xhtml.indexOf('id="jadense-in-zotero-feature-translation-model"'))
     expect(xhtml.match(/data-settings-section=/g)).toHaveLength(5)

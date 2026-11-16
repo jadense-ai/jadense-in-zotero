@@ -5,8 +5,9 @@ import { uiText } from './ui-preferences'
 import { wireSelectionSettings } from './selection-settings'
 import { wireTranslationInterface } from './translation-interface'
 import { wireReferenceAISetting } from './reference-ai-settings'
+import { wireAnalysisSettings } from './analysis-settings'
 import { mountClassificationSettings } from './classification-ui'
-import { DOCUMENT_OCR_PREF, MARKDOWN_OCR_PREF, ANALYSIS_OCR_PREF, documentOCREnabled, analysisOCREnabled } from './document-extraction'
+import { DOCUMENT_OCR_PREF, MARKDOWN_OCR_PREF, ANALYSIS_OCR_PREF, analysisOCREnabled } from './document-extraction'
 import { checkOCREngine } from './cloud-ocr'
 import { CLOUD_OCR_SERVICES, OCR_ENGINE_PREF, ocrEngine } from './cloud-ocr-config'
 import { cachedOCR, OCR_READY_PREF, isLocalOCRPreparing, observeOCRProgress } from './local-ocr'
@@ -29,6 +30,7 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     wireTranslationInterface(host, root.querySelector('[data-translation-scope="selection"]'), 'selection'),
     wireTranslationInterface(host, root.querySelector('[data-translation-scope="document"]'), 'document'),
     wirePDFTranslationSettings(host, root.querySelector('[data-translation-scope="document"]'), () => { show(true); selectSettingsGroup(ocrRoot, 'layout'); ocrRoot.querySelector<HTMLElement>('[data-pdf-engine-settings]')?.scrollIntoView?.({ block: 'start' }); ocrRoot.querySelector<HTMLElement>('[data-pdf-engine-settings] button')?.focus() }),
+    wireAnalysisSettings(host, root.querySelector('[data-feature-group="analysis"]')),
     wireReferenceAISetting(host, root.querySelector('[data-feature-group="analysis"]')),
     mountClassificationSettings(doc, host, root.querySelector<HTMLElement>('[data-classification-settings-host]')),
   ]
@@ -63,12 +65,9 @@ export function wireFeatureSettings(host: ZoteroLike | null, root: HTMLElement, 
     stops.push(() => { if (observer !== undefined) host.Prefs?.unregisterObserver?.(observer); select.destroy(); row.remove() })
   }
   const sections = [
-    { section: root.querySelector<HTMLElement>('[data-document-ocr-host]')!, key: MARKDOWN_OCR_PREF, name: 'document', read: documentOCREnabled,
-      label: uiText('全文 Markdown OCR 增强', 'Enhance full Markdown with OCR'),
-      help: uiText('仅控制新提取的全文 Markdown；对话和文本翻译可复用该原文。关闭时使用 PDF 文字层，开启后 OCR 失败仍回退文字层；扫描页需要 OCR。已有成果不变，不影响文献解析与 PDF 对照翻译。', 'Controls new full Markdown extraction; chat and text translation can reuse it. Uses the PDF text layer when off or when OCR fails; scanned pages need OCR. Saved results, literature analysis and bilingual PDF translation are unaffected.') },
     { section: root.querySelector<HTMLElement>('[data-analysis-ocr-host]')!, key: ANALYSIS_OCR_PREF, name: 'analysis', read: analysisOCREnabled,
       label: uiText('文献解析与参考文献识别 OCR 增强', 'Enhance analysis and reference extraction with OCR'),
-      help: uiText('统一控制文献解析与参考文献提取的原文识别，不影响全文 Markdown。关闭时使用文字层，OCR 失败时回退；定位批注还需要有效页坐标。参考文献核验无需 OCR；下方 AI 开关只控制未识别条目的模型补充识别。', 'Shares one OCR choice for literature analysis and reference extraction, independently of full Markdown. Uses the text layer when off or on OCR failure; annotations also require page coordinates. Reference verification needs no OCR; the AI switch below only controls model assistance for unresolved references.') },
+      help: uiText('统一控制文献解析与参考文献提取的原文识别。关闭时使用文字层，OCR 失败时回退；定位批注还需要有效页坐标。参考文献核验无需 OCR；下方 AI 开关只控制未识别条目的模型补充识别。', 'Shares one OCR choice for literature analysis and reference extraction. Uses the text layer when off or on OCR failure; annotations also require page coordinates. Reference verification needs no OCR; the AI switch below only controls model assistance for unresolved references.') },
   ]
   const syncControls: ((key?: string) => void)[] = []
   let disposed = false

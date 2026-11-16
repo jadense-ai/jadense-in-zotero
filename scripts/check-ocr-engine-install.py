@@ -23,7 +23,8 @@ def main():
     runtime.mkdir(parents=True)
     for name in ('server.py', 'install-bundle.ps1', 'bundles.json'):
         shutil.copy2(source / 'ocr' / name, runtime / name)
-    shutil.copy2(source / 'pdf-translation/install-network.ps1', runtime / 'install-network.ps1')
+    for name in ('install-network.ps1', 'install-environment.ps1', 'install-stage.ps1', 'native-probe.py'):
+        shutil.copy2(source / 'pdf-translation' / name, runtime / name)
     entry = json.loads((runtime / 'bundles.json').read_text())['windows-x64']
     powershell = str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe')
     env = {name: os.environ[name] for name in ('SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_ARCHITEW6432') if name in os.environ}
