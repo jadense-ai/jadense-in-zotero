@@ -106,7 +106,7 @@ export class ChatDocuments {
       const readablePages = pages.filter(page => page.paragraphs.some(row => row.text.trim())).length
       const missing = pages.filter(page => !page.paragraphs.some(row => row.text.trim()) || page.warning).map(page => page.pageLabel)
       const warning = [uiText(`已提取 ${pages.length}/${state.totalPages} 页；${readablePages} 页有可读文字。`, `Extracted ${pages.length}/${state.totalPages} pages; ${readablePages} pages contain readable text.`),
-        missing.length ? uiText(`缺失或需核对的页码：${missing.slice(0, 20).join('、')}${missing.length > 20 ? ` 等 ${missing.length} 页` : ''}。可在全文 Markdown 中手动提取/OCR 后补齐。`, `Missing or uncertain pages: ${missing.slice(0, 20).join(', ')}${missing.length > 20 ? ` (${missing.length} pages total)` : ''}. Use Full Markdown extraction/OCR to fill the gaps.`) : '',
+        missing.length ? uiText(`缺失或需核对的页码：${missing.slice(0, 20).join('、')}${missing.length > 20 ? ` 等 ${missing.length} 页` : ''}。扫描页需要先完成 OCR。`, `Missing or uncertain pages: ${missing.slice(0, 20).join(', ')}${missing.length > 20 ? ` (${missing.length} pages total)` : ''}. Scanned pages need prior OCR.`) : '',
         state.storageWarning ? uiText('正文暂未完整保存到本机，重启后可能需要重新提取。', 'Local storage is incomplete; extraction may be needed after restarting.') : ''].filter(Boolean).join(' ')
       return { state, pages, source: { ...source, text: '', warning, document: { id: state.id, version: 1, totalPages: state.totalPages, readablePages, complete: state.complete } } }
     } finally { this.active.delete(state.id) }

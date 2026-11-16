@@ -2,7 +2,7 @@
 import unittest
 import tempfile
 from pathlib import Path
-from server import model_files, model_check
+from server import model_files, model_check, runtime_versions
 from server import formula_text, normalize_document, model_environment, selection_regions, selection_image
 from unittest.mock import patch
 import os
@@ -49,7 +49,7 @@ class DownloadTests(unittest.TestCase):
     def test_old_hf_cache_works_without_network_after_source_change(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"HF_HOME": directory, "JADENSE_OCR_MODEL_SOURCE": "modelscope"}), patch("huggingface_hub.snapshot_download", return_value=directory) as snapshot, patch("urllib.request.urlopen") as network:
             (Path(directory) / "weight").write_bytes(b"old model")
-            with patch("server.MODELSCOPE_FILES", {"docling-layout-egret-large": {"weight": "unused for HF"}}):
+            with patch("server.MODELSCOPE_FILES", {"docling-layout-egret-large": {"weight": hashlib.sha256(b"old model").hexdigest()}}):
                 self.assertEqual(download_model("docling-project/docling-layout-egret-large"), Path(directory))
             snapshot.assert_called_once_with("docling-project/docling-layout-egret-large", revision=None, local_files_only=True)
             network.assert_not_called()
@@ -103,6 +103,20 @@ class DownloadTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 1)
             self.assertTrue((root / "models-ready.json").exists())
 
+    def test_native_or_unknown_failures_never_retry_online_and_clear_old_receipt(self):
+        with tempfile.TemporaryDirectory() as directory, patch("server.importlib.util.find_spec", return_value=None), patch("importlib.metadata.version", return_value="test"):
+            root = Path(directory)
+            marker = root / "models-ready.json"
+            marker.write_text("{}")
+            def fail(command, **options):
+                self.assertEqual(options["env"]["HF_HUB_OFFLINE"], "1")
+                Path(command[5]).write_text(json.dumps({"error": "WinError 1114", "category": "RECOGNITION_FAILED"}))
+                return SimpleNamespace(returncode=2)
+            with patch("server.subprocess.run", side_effect=fail) as run:
+                self.assertFalse(model_check(root, prepare=True))
+                run.assert_called_once()
+            self.assertFalse(marker.exists())
+
     def test_missing_models_prepare_online_then_verify_offline(self):
         with tempfile.TemporaryDirectory() as directory, patch("importlib.metadata.version", return_value="test"), patch("server.importlib.util.find_spec", return_value=None), patch.dict(os.environ, {"JADENSE_OCR_MODEL_SOURCE": "modelscope"}):
             root = Path(directory)
@@ -112,7 +126,9 @@ class DownloadTests(unittest.TestCase):
             def recognize(command, **options):
                 modes.append(options["env"]["HF_HUB_OFFLINE"])
                 self.assertEqual(options["env"]["JADENSE_OCR_MODEL_SOURCE"], "modelscope")
-                if len(modes) == 1: return SimpleNamespace(returncode=2)
+                if len(modes) == 1:
+                    Path(command[5]).write_text(json.dumps({"category": "MODEL_MISSING"}))
+                    return SimpleNamespace(returncode=2)
                 Path(command[4]).write_text(json.dumps({"pages": [{"blocks": [{"text": "readiness"}]}]}))
                 return SimpleNamespace(returncode=0)
             with patch("server.subprocess.run", side_effect=recognize):
@@ -201,7 +217,8 @@ class ReadinessTests(unittest.TestCase):
             with patch("server.subprocess.run", side_effect=recognize) as run:
                 self.assertTrue(model_check(root, prepare=True, allow_download=False))
                 self.assertTrue(model_check(root, prepare=True, allow_download=False))
-                self.assertEqual(run.call_count, 1)
+                self.assertTrue(model_check(root, prepare=True, allow_download=False, force=True))
+                self.assertEqual(run.call_count, 2)
 
     def test_automatic_recovery_never_downloads_missing_models(self):
         with tempfile.TemporaryDirectory() as directory, patch("importlib.metadata.version", return_value="test"), patch("server.importlib.util.find_spec", return_value=None):
@@ -221,7 +238,7 @@ class ReadinessTests(unittest.TestCase):
             metadata = root / "models" / "hub" / "models--example" / "refs" / "main"
             metadata.parent.mkdir(parents=True)
             metadata.write_text("abc")
-            receipt = {"revision": EXTRACTION_REVISION, "versions": {name: "test" for name in ("docling", "rapidocr", "onnxruntime")}, "files": model_files(root)}
+            receipt = {"revision": EXTRACTION_REVISION, "versions": runtime_versions(), "files": model_files(root)}
             (root / "models-ready.json").write_text(json.dumps(receipt))
             metadata.write_text("abc")
             os.utime(metadata, ns=(1_000_000_000, 1_000_000_000))
@@ -249,10 +266,12 @@ class ReadinessTests(unittest.TestCase):
             (root / "models").mkdir()
             weights = root / "models" / "weights.bin"
             weights.write_bytes(b"test weights")
-            receipt = {"revision": EXTRACTION_REVISION, "versions": {name: "test" for name in ("docling", "rapidocr", "onnxruntime")}, "files": model_files(root)}
+            receipt = {"revision": EXTRACTION_REVISION, "versions": runtime_versions(), "files": model_files(root)}
             (root / "models-ready.json").write_text(json.dumps(receipt))
             self.assertTrue(model_check(root))
-            weights.write_bytes(b"changed weights")
+            stamp = weights.stat().st_mtime_ns
+            weights.write_bytes(b"fake weights")
+            os.utime(weights, ns=(stamp, stamp))
             self.assertFalse(model_check(root))
             weights.unlink()
             self.assertFalse(model_check(root))

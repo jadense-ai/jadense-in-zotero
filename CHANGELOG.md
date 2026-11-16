@@ -1,5 +1,17 @@
 # 更新说明 / Changelog
 
+## 0.6.17 — 2026-11-16
+
+- 长文已逐段解析完毕后，即使最后的汇总失败，也会保留完整分段笔记，并写入能与原文核对的批注。
+- 文献解析不再固定最多 32 条批注。现在可按内容自动选择，也可在设置中填写整篇论文的建议数量。
+- 改进 Windows 上的 OCR 与 PDF 版面引擎准备流程，能更清楚地区分安装包损坏、系统依赖和模型缺失。
+- 停用独立的全文提取入口。旧的 Markdown 仍可阅读、复制；查看历史不会重新启动提取或 OCR。
+
+- When every source batch has finished, a failed final summary no longer prevents delivery of the complete batch notes and annotations verified against the text.
+- Paper analysis no longer caps annotations at 32. Leave the count automatic or suggest a number for the whole paper.
+- Windows OCR and PDF layout setup now distinguishes a damaged archive from missing system dependencies or models.
+- Standalone full-text extraction has been retired. Saved Markdown remains readable and copyable without starting extraction or OCR.
+
 ## 0.6.16 — 2026-11-16
 
 - 新增「重新解析」：卡住或未完成的任务可由用户主动放弃继续，使用当前模型创建全新解析请求。

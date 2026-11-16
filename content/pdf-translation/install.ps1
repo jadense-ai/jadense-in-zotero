@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [switch]$CheckOnly)
+param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [switch]$CheckOnly, [switch]$NativeOnly)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $OutputEncoding = [Console]::OutputEncoding
@@ -33,6 +33,18 @@ if ($CheckOnly) {
     exit 0
 }
 New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
+. (Join-Path $PSScriptRoot 'install-environment.ps1')
+$env:PYTHONHOME = ''; $env:PYTHONPATH = ''; $env:PYTHONNOUSERSITE = '1'
+$nativeArch = Get-EngineArchitecture
+if ($NativeOnly) {
+    $python = Join-Path $runtimePath 'runtime\python\python.exe'
+    if (-not [IO.File]::Exists($python)) { $python = Join-Path $runtimePath '.venv\Scripts\python.exe' }
+    $arch = Get-PythonArchitecture $python
+    $entry = (Get-Content -Raw -LiteralPath (Join-Path $runtimePath 'bundles.json') | ConvertFrom-Json).('windows-' + $arch)
+    Initialize-EngineMSVC 'pdf' $arch $runtimePath $entry.requirements.msvcMinVersion ''
+    Test-EngineNative 'pdf' $python $runtimePath $entry.requirements.msvcMinVersion ''
+    exit 0
+}
 if (-not $uvPath) {
     Initialize-PDFNetwork
     $uvPath = Join-Path $runtimePath 'uv.exe'
@@ -75,7 +87,8 @@ Remove-Item -LiteralPath (Join-Path $runtimePath 'dependencies-0.6.4') -Force -E
 & $uvPath sync --project $runtimePath --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw 'PDF translation dependency installation failed. Retry or follow the manual installation README.' }
 Write-Output 'JADENSE_PDF_PROGRESS {"stage":"imports"}'
-& (Join-Path $runtimePath '.venv\Scripts\python.exe') -c 'import babeldoc; import pymupdf; import onnxruntime'
-if ($LASTEXITCODE -ne 0) { throw 'PDF translation dependency import failed. See install.log for the missing dependency or native library.' }
+$python = Join-Path $runtimePath '.venv\Scripts\python.exe'
+Initialize-EngineMSVC 'pdf' (Get-PythonArchitecture $python) $runtimePath $null ''
+Test-EngineNative 'pdf' $python $runtimePath $null ''
 Set-Content -LiteralPath (Join-Path $runtimePath 'dependencies-0.6.4') -Value 'ready'
 Write-Output 'PDF translation runtime ready'

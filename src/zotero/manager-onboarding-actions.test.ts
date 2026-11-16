@@ -6,7 +6,7 @@ import type { ZoteroLike } from './runtime'
 
 const fakes = vi.hoisted(() => ({ runtime: null as unknown, ocr: vi.fn(), exists: vi.fn(), check: vi.fn() }))
 vi.mock('./chat-runtime', () => ({ chatRuntime: () => fakes.runtime }))
-vi.mock('./local-ocr', () => ({ localOCRReadiness: fakes.ocr }))
+vi.mock('./local-ocr', () => ({ checkLocalOCR: fakes.ocr }))
 vi.mock('./pdf-translation-runtime', () => ({ PDF_ENGINE: 'engine', pdfRuntimeRoot: () => 'runtime', pdfPlatform: () => ({ IOUtils: { exists: fakes.exists }, PathUtils: { join: (...parts: string[]) => parts.join('/') } }) }))
 vi.mock('./pdf-translation-jobs', () => ({ pdfTranslationJobs: () => ({ checkEngine: fakes.check }) }))
 
@@ -24,7 +24,7 @@ function fixture(status: 'complete' | 'failed' | 'streaming' = 'complete', text 
   return { host, runtime, preferences }
 }
 
-beforeEach(() => { vi.clearAllMocks(); fakes.ocr.mockResolvedValue(true); fakes.exists.mockResolvedValue(true); fakes.check.mockResolvedValue(undefined) })
+beforeEach(() => { vi.clearAllMocks(); fakes.ocr.mockResolvedValue({ ready: true, modelsReady: true }); fakes.exists.mockResolvedValue(true); fakes.check.mockResolvedValue(undefined) })
 
 describe('onboarding hello', () => {
   it('creates a separate empty conversation and requires a complete nonempty response', async () => {
@@ -58,7 +58,7 @@ describe('onboarding engine checks', () => {
     expect(fakes.check).toHaveBeenCalledOnce()
   })
   it('does not install or check a missing PDF engine', async () => {
-    fakes.ocr.mockResolvedValue(null); fakes.exists.mockResolvedValue(false)
+    fakes.ocr.mockResolvedValue({ ready: true, modelsReady: false }); fakes.exists.mockResolvedValue(false)
     expect(await checkOnboardingEngines(fixture().host, new AbortController().signal)).toEqual({ ocr: false, pdf: false })
     expect(fakes.check).not.toHaveBeenCalled()
   })

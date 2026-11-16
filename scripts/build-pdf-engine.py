@@ -1,4 +1,5 @@
 """在构建机生成可移植离线引擎；只收集新建环境和校验过的资源，不打包用户 profile。"""
+from engine_bundle_inventory import build_requirements, msvc_version
 import argparse
 import hashlib
 import json
@@ -16,6 +17,7 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--assets', help='Optional previously downloaded assets; worker verifies every asset')
     parser.add_argument('--tag', default='pdf-engine-0.6.4-1')
+    parser.add_argument('--msvc-min-version', type=msvc_version, help='Only set for a Windows build with a separately validated minimum')
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[1] / 'content' / 'pdf-translation'
     output = Path(args.output).resolve()
@@ -64,7 +66,7 @@ def main():
             if file.is_file():
                 bundle.write(file, file.relative_to(payload).as_posix())
     digest = hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest()
-    entry = {**metadata, 'file': filename, 'size': archive.stat().st_size, 'sha256': digest,
+    entry = {**metadata, 'requirements': build_requirements(archive, portable, ('babeldoc', 'onnxruntime', 'pymupdf'), args.msvc_min_version), 'file': filename, 'size': archive.stat().st_size, 'sha256': digest,
              'urls': [f'https://github.com/jadense-ai/jadense-in-zotero/releases/download/{args.tag}/{filename}']}
     (output / f'{target}.json').write_text(json.dumps(entry, indent=2) + '\n', encoding='utf-8')
     (output / f'{filename}.sha256').write_text(f'{digest}  {filename}\n', encoding='utf-8')

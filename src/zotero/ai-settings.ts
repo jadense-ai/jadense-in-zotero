@@ -32,7 +32,7 @@ export type FeatureModelSelection =
 export type PaperAnalysisModelSelection = FeatureModelSelection
 
 export const AI_FEATURES = ["chat", "translation", "fullTranslation", "analysis", "figure"] as const
-export const AI_SETTINGS_FEATURES = ["chat", "translation", "analysis", "figure"] as const
+export const AI_SETTINGS_FEATURES = ["chat", "translation", "analysis"] as const
 export type AiFeature = typeof AI_FEATURES[number]
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   get chat() { return uiText("AI 对话", "AI Chat") },
@@ -324,7 +324,7 @@ function currentModelCatalog(host: ZoteroLike) { const cache = modelCatalogs.get
 export function rememberAiModelCapabilities(host: ZoteroLike, catalog: JadenseChatModelCatalog) { modelCatalogs.set(host, { identity: catalogIdentity(host), catalog }) }
 export function aiModelMigrationFailed(host: ZoteroLike) { return migrationFailures.has(host) }
 export function featureFollowsChat(host: ZoteroLike, feature: AiFeature) {
-  return (feature === 'analysis' || feature === 'figure') && readAutoFollowChatModel(host)
+  return feature === 'figure' || feature === 'analysis' && readAutoFollowChatModel(host)
 }
 
 function legacyAiModelSettings(zotero: ZoteroLike): AiModelSettings {
@@ -424,7 +424,7 @@ export function readFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature
   return readAiModelSettings(zotero).models[slot(feature)]
 }
 
-/** 翻译始终独立；只有解析和图片解读可以跟随对话模型。 */
+/** 图片对话始终使用对话模型；解析可选跟随，翻译始终独立。旧图片槽位仅保留兼容读取。 */
 export function effectiveFeatureModelSelection(zotero: ZoteroLike, feature: AiFeature): FeatureModelSelection {
   return readFeatureModelSelection(zotero, featureFollowsChat(zotero, feature) ? 'chat' : feature)
 }

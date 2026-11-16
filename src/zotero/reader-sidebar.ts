@@ -107,7 +107,7 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   cleanups.push(() => pageSelect.destroy())
   const { source, translation, selection } = resultLabels()
   const labels = { source, translation, selection, summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References') }
-  pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))], 'chat')
+  pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, ...Object.entries(labels).filter(([value]) => value !== 'source').map(([value, label]) => ({ value, label }))], 'chat')
   const sessionHost = element(doc, 'div'), heading = element(doc, 'strong'); center.append(sessionHost, heading)
   const newChat = messageAction(doc, uiText('新建对话', 'New conversation'), 'M12 5v14M5 12h14'); newChat.classList.add('jdx-button')
   const workbench = messageAction(doc, uiText('在工作台查看', 'Open in workbench'), 'M3 4h18v16H3zM9 4v16M3 9h6'); workbench.classList.add('jdx-button'); workbench.hidden = true

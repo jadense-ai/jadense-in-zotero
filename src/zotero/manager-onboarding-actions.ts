@@ -1,7 +1,7 @@
 /** 入门引导的真实操作边界：复用 Chat 与本机引擎服务，只有明确点击才调用。 */
 import { createLocalChatSession, readLocalChatState } from '@/chat/local-chat-store'
 import { chatRuntime } from './chat-runtime'
-import { localOCRReadiness } from './local-ocr'
+import { checkLocalOCR } from './local-ocr'
 import { PDF_ENGINE, pdfPlatform, pdfRuntimeRoot } from './pdf-translation-runtime'
 import { pdfTranslationJobs } from './pdf-translation-jobs'
 import { uiText } from './ui-preferences'
@@ -21,10 +21,10 @@ export async function sendOnboardingHello(host: ZoteroLike, onCreated: () => voi
   return { success: Boolean(success), ...(success ? {} : { error: runtime.status || uiText('尚未收到完整回复，请检查配置后重试。', 'No complete reply was received. Check the configuration and try again.') }) }
 }
 
-/** 只读 OCR 成功凭据，并离线检测已有 PDF 引擎；不存在时返回未就绪，不启动安装。 */
+/** 离线验证本机 OCR 与已有 PDF 引擎；不存在时返回未就绪，不启动安装。 */
 export async function checkOnboardingEngines(host: ZoteroLike, signal: AbortSignal) {
   const values = await Promise.allSettled([
-    localOCRReadiness(host),
+    checkLocalOCR(host, true, signal).then(value => value.ready && value.modelsReady),
     (async () => {
       const { IOUtils, PathUtils } = pdfPlatform()
       if (!await IOUtils.exists(PathUtils.join(pdfRuntimeRoot(host), PDF_ENGINE))) return false

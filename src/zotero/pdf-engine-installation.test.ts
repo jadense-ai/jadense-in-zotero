@@ -5,7 +5,7 @@ import { preparePDFEngine } from './pdf-translation-runtime'
 import type { ZoteroLike } from './runtime'
 
 afterEach(() => vi.unstubAllGlobals())
-async function fixture(arch = 'AMD64', failure?: { stdout: string; stderr?: string }, installed = false) {
+async function fixture(arch = 'AMD64', failure?: { stdout: string; stderr?: string }, installed = false, workerFailure?: string) {
   const files = new Map<string, string>(), calls: { command: string; arguments: string[] }[] = []
   let ready = installed
   const root = '/profile/jadense-pdf-translation'
@@ -18,7 +18,8 @@ async function fixture(arch = 'AMD64', failure?: { stdout: string; stderr?: stri
     call: async (options: { command: string; arguments: string[] }) => {
       calls.push(options)
       const install = options.command.endsWith('powershell.exe'), fail = install && failure
-      const stdout = [fail ? failure.stdout : '{"type":"complete"}\n', '']
+      const workerError = !install && workerFailure ? { type: 'error', code: workerFailure, message: 'fixture check failed' } : null
+      const stdout = [workerError ? JSON.stringify(workerError) + '\n' : fail ? failure.stdout : '{"type":"complete"}\n', '']
       const stderr = [fail ? failure.stderr ?? '' : '', '']
       if (install && !fail) ready = true
       return { stdin: { write: async () => {}, close: async () => {} }, stdout: { readString: async () => stdout.shift() ?? '' }, stderr: { readString: async () => stderr.shift() ?? '' }, wait: async () => ({ exitCode: fail ? 1 : 0 }), kill: vi.fn() }
@@ -31,7 +32,8 @@ it('downloads the published x64 bundle, deploys the network helper with BOM, the
   await preparePDFEngine(f.host, new AbortController().signal, () => {})
   expect(f.calls[0].arguments).toContain(f.root + '/install-bundle.ps1')
   expect(f.files.get(f.root + '/install-network.ps1')).toMatch(/^\uFEFF/u)
-  expect(f.calls[1].command).toBe(f.root + '/runtime/python/python.exe')
+  expect(f.calls).toHaveLength(1)
+  expect(f.files.get(f.root + '/babeldoc-0.6.4-v1')).toBe('ready')
   expect(f.io.remove.mock.calls.flat()).not.toContain(f.root + '/tasks')
 })
 it('reuses a healthy installed engine without starting an installer', async () => {
@@ -61,4 +63,13 @@ it('reports the failed download stage and offline recovery without raw network c
 it('uses the last known stage when an older installer has no structured error', async () => {
   const f = await fixture('ARM64', { stdout: 'JADENSE_PDF_PROGRESS {"stage":"uv"}\n', stderr: 'Invoke-WebRequest : Cannot connect' })
   await expect(preparePDFEngine(f.host, new AbortController().signal, () => {})).rejects.toThrow(/下载安装工具 uv|Downloading the uv installer/u)
+})
+
+it.each([['PDF_ENGINE_FAILED', false], ['PDF_ASSETS_MISSING', true]] as const)('only replaces a failed installed engine for a recoverable cause: %s', async (code, downloads) => {
+  const f = await fixture('AMD64', undefined, true, code)
+  const setup = preparePDFEngine(f.host, new AbortController().signal, () => {})
+  if (downloads) await setup
+  else await expect(setup).rejects.toThrow('fixture check failed')
+  expect(f.calls.some(call => call.arguments.includes('-NativeOnly'))).toBe(true)
+  expect(f.calls.some(call => call.arguments.includes(f.root + '/install-bundle.ps1'))).toBe(downloads)
 })

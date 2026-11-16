@@ -7,6 +7,7 @@
     "file": "jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip",
     "size": 856821566,
     "sha256": "775db6909dece9aef9b1a0a5f17de79638ab50f42efc1da298d2b93e2af66901",
+    "requirements": {"unpackedBytes": 1741014742, "treeSha256": "44d9cdf10ce7f2e3cc2b8bc8fbc4f74ce2f9973d394cec526598a16345ac0627"},
     "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.5/jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip"]
   }
 }

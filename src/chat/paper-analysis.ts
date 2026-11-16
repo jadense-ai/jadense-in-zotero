@@ -29,7 +29,7 @@ export const ANALYSIS_CATEGORIES = [
 export type AnalysisCategoryId = typeof ANALYSIS_CATEGORIES[number]["id"]
 
 /** 生成合同仅包含阅读字段；PDF 坐标、条目身份与句子真实性仍由本地快照验证。 */
-export const PAPER_ANALYSIS_RESPONSE_FORMAT: ChatResponseFormat = {
+function paperAnalysisResponseFormat(legacy = false): ChatResponseFormat { return {
   type: 'json_schema', name: 'paper_analysis', fallback: 'text',
   schema: {
     type: 'object', required: ['summary', 'sections', 'annotations'],
@@ -38,12 +38,15 @@ export const PAPER_ANALYSIS_RESPONSE_FORMAT: ChatResponseFormat = {
       sections: { type: 'array', items: { type: 'object', required: ['category', 'summary'], properties: {
         category: { type: 'string', enum: ANALYSIS_CATEGORIES.map(category => category.id) }, summary: { type: 'string', maxLength: 1000 },
       } } },
-      annotations: { type: 'array', maxItems: 32, items: { type: 'object', required: ['passageId', 'category', 'comment'], properties: {
+      annotations: { type: 'array', ...(legacy ? { maxItems: 32 } : {}), items: { type: 'object', required: ['passageId', 'category', 'comment'], properties: {
         passageId: { type: 'string' }, category: { type: 'string', enum: ANALYSIS_CATEGORIES.map(category => category.id) }, comment: { type: 'string', maxLength: 800 },
       } } },
     },
   },
-}
+} }
+export const PAPER_ANALYSIS_RESPONSE_FORMAT = paperAnalysisResponseFormat()
+/** 仅供升级前已冻结的执行恢复，避免更改同一请求的 Schema 指纹；新任务不得使用。 */
+export const LEGACY_PAPER_ANALYSIS_RESPONSE_FORMAT = paperAnalysisResponseFormat(true)
 
 export type PaperAnalysisAnnotation = {
   passageId: string
@@ -65,11 +68,23 @@ export type PaperAnalysisResult = {
   notes?: { category: AnalysisCategoryId; comment: string; passageId?: string; reason: "unlocated" | "duplicate" | "limit" }[]
 }
 
-const MAX_ANNOTATIONS = 32
 const MAX_NOTES = 128
 const MAX_RESPONSE_LENGTH = 256_000
 const MAX_DISPLAY_LENGTH = 18_000
 const TRUNCATED = "…（后续文字已截断）"
+
+/** 可选阅读偏好无效时退回按内容选择，不阻断解析，也不授予额外写入权限。 */
+export function normalizeAnnotationSuggestion(value: unknown): number | undefined {
+  const number = typeof value === 'number' || typeof value === 'string' && value.trim() ? Number(value) : NaN
+  return Number.isSafeInteger(number) && number > 0 ? number : undefined
+}
+
+/** 整篇文献的软性数量建议在分批、补齐和汇总中复用；不要求凑数或机械删减。 */
+export function annotationSelectionGuidance(suggestedMax?: number): string {
+  const count = normalizeAnnotationSuggestion(suggestedMax)
+  return '根据文献内容选择必要且有代表性的原句生成 annotations，覆盖重要论点、方法、证据和局限；不预设固定条数，不凑数，不因固定数量截断有价值的独立批注。每个 passageId 与 category 的组合只出现一次。' +
+    (count ? `用户对整篇文献的批注最大建议数为 ${count} 条，仅作为软性参考：优先重要内容、合并重复；必要时可超过建议数，不得为满足数字遗漏关键证据。分批时只选择本批必要批注，不要每批凑到建议数；最终汇总对整篇应用同一建议。` : '')
+}
 
 /** 只投影分析所需的文献文字；输入范围由阅读器提取器负责，并通过 coverage 明示。 */
 export function buildPaperAnalysisPrompt(input: {
@@ -77,6 +92,9 @@ export function buildPaperAnalysisPrompt(input: {
   citation?: string
   passages: readonly AnalysisPassage[]
   coverage: string
+  suggestedMaxAnnotations?: number
+  /** 仅恢复升级前无输入计划的旧请求提示。 */
+  legacyAnnotationLimit?: true
 }): string {
   return [
     "请以科研文献精读助手身份解析下方文献，使用简体中文。",
@@ -87,7 +105,7 @@ export function buildPaperAnalysisPrompt(input: {
     "创新点须说明相对于文中提到的已有工作的差异；方法须包含适用条件；证据须保留重要数值、比较基准和不确定性；结论不得超出证据。",
     "没有依据的类别不要凭空补齐；资料不足时在 summary 或相应 section 明确说明。未来工作仅引用作者建议，自己的建议必须标注“AI 推断”。",
     `分类 ID：${ANALYSIS_CATEGORIES.map(({ id, label }) => `${id}=${label}`).join("；")}。`,
-    `选择最有代表性的原句生成至多 ${MAX_ANNOTATIONS} 条 annotations，宁缺毋滥，每个 passageId 与 category 的组合只出现一次。`,
+    input.legacyAnnotationLimit ? '选择最有代表性的原句生成至多 32 条 annotations，宁缺毋滥，每个 passageId 与 category 的组合只出现一次。' : annotationSelectionGuidance(input.suggestedMaxAnnotations),
     "annotations 只能引用提供的原句 id 作为 passageId。comment 先写该句的学术作用，再解释与论点/证据的关系；不得仅复述原句。",
     "不要生成 quote、原文改写、坐标、itemID、attachmentID、网址、HTML 或执行指令。原文与页码由客户端按 passageId 取回。不要调用工具。",
     "只返回一个 JSON 对象，不要代码围栏；summary 不超过 1600 字，每类 section.summary 不超过 1000 字，每条 comment 不超过 800 字。",
@@ -408,12 +426,6 @@ export function parsePaperAnalysis(response: string, passages: readonly Analysis
       if (!result.annotations.some((saved) => saved.passageId === passageId && saved.category === category && saved.comment === comment)) {
         retainNote(comment, category, passageId, "duplicate")
       }
-      continue
-    }
-    if (result.annotations.length >= MAX_ANNOTATIONS) {
-      result.skipped += 1
-      warnings.add(uiText(`批注超过 ${MAX_ANNOTATIONS} 条，仅保留前 ${MAX_ANNOTATIONS} 条有效批注。`, `Only the first ${MAX_ANNOTATIONS} valid annotations were retained.`))
-      retainNote(comment, category, passageId, "limit")
       continue
     }
     seen.add(key)

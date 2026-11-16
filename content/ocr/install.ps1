@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [switch]$CheckOnly)
+﻿param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [switch]$CheckOnly, [switch]$NativeOnly)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $OutputEncoding = [Console]::OutputEncoding
@@ -32,12 +32,26 @@ if ($CheckOnly) {
     exit 0
 }
 New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
+. (Join-Path $PSScriptRoot 'install-network.ps1')
+. (Join-Path $PSScriptRoot 'install-environment.ps1')
+$env:PYTHONHOME = ''; $env:PYTHONPATH = ''; $env:PYTHONNOUSERSITE = '1'
+$nativeArch = Get-EngineArchitecture
+if ($NativeOnly) {
+    $python = Join-Path $runtimePath 'runtime\python\python.exe'
+    if (-not [IO.File]::Exists($python)) { $python = Join-Path $runtimePath '.venv\Scripts\python.exe' }
+    $arch = Get-PythonArchitecture $python
+    $entry = (Get-Content -Raw -LiteralPath (Join-Path $runtimePath 'bundles.json') | ConvertFrom-Json).('windows-' + $arch)
+    Initialize-EngineMSVC 'ocr' $arch $runtimePath $entry.requirements.msvcMinVersion ''
+    Test-EngineNative 'ocr' $python $runtimePath $entry.requirements.msvcMinVersion ''
+    exit 0
+}
 if (-not $uvPath) {
     $uvPath = Join-Path $runtimePath 'uv.exe'
     Write-Output 'Downloading uv...'
     Write-Output 'JADENSE_OCR_PROGRESS {"stage":"uv"}'
     $archive = Join-Path $runtimePath 'uv.zip'
-    $url = 'https://github.com/astral-sh/uv/releases/download/0.9.3/uv-x86_64-pc-windows-msvc.zip'
+    $target = if ($nativeArch -eq 'arm64') { 'aarch64' } else { 'x86_64' }
+    $url = "https://github.com/astral-sh/uv/releases/download/0.9.3/uv-$target-pc-windows-msvc.zip"
     Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing -TimeoutSec 300
     $checksumBody = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing -TimeoutSec 120).Content
     if ($checksumBody -is [byte[]]) { $checksumBody = [Text.Encoding]::UTF8.GetString($checksumBody) }
@@ -69,7 +83,8 @@ Remove-Item -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Force -
 & $uvPath sync --project $runtimePath --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw 'OCR dependency installation failed. Retry or follow the manual installation README.' }
 Write-Output 'JADENSE_OCR_PROGRESS {"stage":"imports"}'
-& (Join-Path $runtimePath '.venv\Scripts\python.exe') -c 'from docling.document_converter import DocumentConverter; from rapidocr import RapidOCR; import onnxruntime'
-if ($LASTEXITCODE -ne 0) { throw 'OCR dependency import failed. See install.log for the missing dependency or native library.' }
+$python = Join-Path $runtimePath '.venv\Scripts\python.exe'
+Initialize-EngineMSVC 'ocr' (Get-PythonArchitecture $python) $runtimePath $null ''
+Test-EngineNative 'ocr' $python $runtimePath $null ''
 Set-Content -LiteralPath (Join-Path $runtimePath 'ready-2.126.0-3.9.2') -Value 'ready'
 Write-Output 'OCR runtime ready'

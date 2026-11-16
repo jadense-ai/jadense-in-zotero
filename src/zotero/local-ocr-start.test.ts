@@ -9,7 +9,7 @@ it('prepares bundled resources without AbortSignal.timeout', async () => {
   const f = coldProfile(); f.finish()
   vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => { throw new TypeError('Unavailable') })
   await installLocalOCR(f.host)
-  expect(f.network).toHaveBeenCalledTimes(8)
+  expect(f.network).toHaveBeenCalledTimes(11)
   vi.restoreAllMocks(); f.jobs.dispose()
 })
 
@@ -137,7 +137,8 @@ it('prepares full-document models independently of optional selection models', a
     wait: async () => ({ exitCode: 0 }),
   }) as never)
   await prepareLocalOCRModels(f.host)
-  expect(f.spawn).toHaveBeenCalledOnce()
+  expect(f.spawn.mock.calls[0][0].arguments).toContain('-NativeOnly')
+  expect(f.spawn).toHaveBeenCalledTimes(2)
   expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['--prepare-models']), environment: expect.objectContaining({ JADENSE_OCR_MODEL_SOURCE: 'modelscope' }) }))
   expect(f.files.get('/profile/jadense-ocr/v1/models-prepare.log')).toContain('"modelsReady":true')
   f.jobs.dispose()
@@ -150,7 +151,7 @@ it('shares automatic status reads and verifies old caches offline', async () => 
   const values = await Promise.all([checkLocalOCR(f.host), checkLocalOCR(f.host)])
   expect(values.every(value => value.modelsReady)).toBe(true)
   expect(f.spawn).toHaveBeenCalledTimes(2)
-  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['--verify-models']), environment: expect.objectContaining({ HF_HUB_OFFLINE: '1' }) }))
+  expect(f.spawn).toHaveBeenCalledWith(expect.objectContaining({ arguments: expect.arrayContaining(['--recover-models']), environment: expect.objectContaining({ HF_HUB_OFFLINE: '1' }) }))
   await checkLocalOCR(f.host)
   await ensureLocalOCR(f.host)
   expect(f.spawn).toHaveBeenCalledTimes(2)
@@ -175,17 +176,19 @@ it('explicit repair synchronizes an old installation instead of trusting its rea
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
-it('reuses historical successful model credentials without spawning Python', async () => {
-  const f = coldProfile()
+it('does not admit recognition from an old receipt alone', async () => {
+  const f = coldProfile(); f.finish()
   f.files.set('/profile/jadense-ocr/v1/models-ready.json', JSON.stringify({ revision: 5, versions: { docling: '2.126.0', rapidocr: '3.9.2' } }))
-  await ensureLocalOCR(f.host)
-  expect(f.spawn).not.toHaveBeenCalled()
+  await expect(ensureLocalOCR(f.host)).rejects.toThrow(/OCR/u)
+  expect(f.spawn).toHaveBeenCalledOnce()
   f.jobs.dispose()
 })
 
 it('invalidates persisted readiness after real OCR failure without trusting the old marker again', async () => {
   const f = coldProfile()
   f.files.set('/profile/jadense-ocr/v1/models-ready.json', JSON.stringify({ revision: 5, versions: { docling: '2.126.0', rapidocr: '3.9.2' } }))
+  f.installer.stdout.readString = vi.fn().mockResolvedValueOnce('ready=true\n').mockResolvedValue(null)
+  f.finish()
   await ensureLocalOCR(f.host)
   const original = f.network.getMockImplementation()!
   f.network.mockImplementation(async (url, init) => url.endsWith('/jobs/ocr-test') ? Response.json({ state: 'error', error: 'Missing model weights' }) : original(url, init))
@@ -216,6 +219,7 @@ it('shares fragmented download progress and bounds a silent model preparation', 
   f.files.set('/profile/jadense-ocr/v1/ready-2.126.0-3.9.2', 'ready')
   const stop = observeOCRProgress(f.host, progress)
   f.spawn.mockResolvedValue({ stdout: { readString: vi.fn().mockResolvedValueOnce('JADENSE_OCR_PRO').mockResolvedValueOnce('GRESS {"stage":"download","unit":"B","completed":512,"total":1024,"speed":256,"extra":true}\n').mockImplementation(() => new Promise(() => {})) }, kill } as never)
+  f.spawn.mockResolvedValueOnce({ stdout: { readString: async () => null }, wait: async () => ({ exitCode: 0 }) } as never)
   const prepared = expect(prepareLocalOCRModels(f.host)).rejects.toThrow(/30 分钟|30 minutes/u)
   await vi.advanceTimersByTimeAsync(1800001)
   await prepared
@@ -310,13 +314,14 @@ function coldProfile() {
   let installation = new Promise<{ exitCode: number }>(resolve => { finish = resolve })
   const installer = { stdout: { readString: async () => null }, wait: () => installation }
   const server = { stdin: { write: vi.fn(), close: vi.fn() }, stdout: { readString: vi.fn().mockResolvedValueOnce('{"port":12345}\n').mockResolvedValue(null) }, wait: () => new Promise(() => {}), kill: vi.fn() }
-  const spawn = vi.fn(async (options: { command: string; arguments: string[] }) => options.arguments.includes('--verify-models') ? { stdout: { readString: vi.fn().mockResolvedValueOnce('{"modelsReady":true}').mockResolvedValue(null) }, wait: async () => ({ exitCode: 0 }) } : options.command.endsWith('python.exe') ? server : installer)
+  const spawn = vi.fn(async (options: { command: string; arguments: string[] }) => options.arguments.some(arg => ['--recover-models', '--verify-models'].includes(arg)) ? { stdout: { readString: vi.fn().mockResolvedValueOnce('{"modelsReady":true}').mockResolvedValue(null) }, wait: async () => ({ exitCode: 0 }) } : options.command.endsWith('python.exe') ? server : installer)
   vi.stubGlobal('PathUtils', { profileDir: '/profile', join: (...parts: string[]) => parts.join('/'), normalize: (path: string) => path, parent: (path: string) => path.slice(0, path.lastIndexOf('/')) })
   const remove = vi.fn(async (path: string) => { for (const key of files.keys()) if (key === path || key.startsWith(path + '/')) files.delete(key) })
   vi.stubGlobal('IOUtils', { remove, makeDirectory: async () => {}, exists: async (path: string) => files.has(path), writeUTF8: async (path: string, text: string) => { files.set(path, text) }, readUTF8: async (path: string) => files.get(path), getChildren: async () => [], read: async () => new Uint8Array([1]) })
-  vi.stubGlobal('ChromeUtils', { importESModule: () => ({ Subprocess: { getEnvironment: () => ({}), call: spawn } }) })
+  vi.stubGlobal('ChromeUtils', { importESModule: () => ({ Subprocess: { getEnvironment: () => ({ PROCESSOR_ARCHITECTURE: 'AMD64' }), call: spawn } }) })
   const network = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/bundles.json')) return Response.json({})
+    if (url.endsWith('/health')) return Response.json({ version: 1 })
     if (url.startsWith('chrome://')) return new Response('synthetic bundled resource')
     if (init?.method === 'POST') return Response.json({ id: 'ocr-test' })
     return Response.json({ state: 'complete', result: { pages: [{ pageIndex: 0, blocks: [{ text: 'Hello.', locations: [{ pageIndex: 0, rects: [[0, 0, 10, 10]] }] }] }] } })
@@ -435,13 +440,13 @@ it.each([false, true])('requires verified models in addition to dependencies (mo
   const f = coldProfile()
   f.installer.stdout.readString = vi.fn().mockResolvedValueOnce('ready=true\n').mockResolvedValue(null)
   const original = f.spawn.getMockImplementation()!
-  f.spawn.mockImplementation(async options => options.arguments.includes('--verify-models') ? {
+  f.spawn.mockImplementation(async options => options.arguments.some(arg => ['--recover-models', '--verify-models'].includes(arg)) ? {
     stdout: { readString: vi.fn().mockResolvedValueOnce(JSON.stringify({ modelsReady: ready })).mockResolvedValue(null) },
     wait: async () => ({ exitCode: ready ? 0 : 2 }),
   } as never : original(options))
   f.finish()
   if (ready) await expect(ensureLocalOCR(f.host)).resolves.toBeUndefined()
-  else await expect(ensureLocalOCR(f.host)).rejects.toThrow(/OCR/u)
+  else await expect(ensureLocalOCR(f.host)).rejects.toThrow(/models-prepare\.log/u)
   expect(f.translate).not.toHaveBeenCalled()
   f.jobs.dispose()
 })

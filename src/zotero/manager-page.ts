@@ -1365,8 +1365,8 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
     : !readConnection(zotero).token ? uiText("连接攻玉后可加载内置模型；BYOK 模型可独立使用。", "Connect Jadense to load built-in models. BYOK models work independently.")
-      : autoFollow ? uiText("文献解析和图片解读跟随对话模型；翻译模型独立保存。", "Analysis and image interpretation follow Chat. Translation is configured independently.")
-      : uiText("选择后自动保存，各功能可独立配置。", "Choices save automatically and features can be configured independently."))
+      : autoFollow ? uiText("文献解析跟随对话模型；图片解读始终使用对话模型，翻译模型独立保存。", "Analysis follows Chat. Images always use Chat; translation is configured independently.")
+      : uiText("选择后自动保存；图片解读始终使用对话模型。", "Choices save automatically. Images always use the Chat model."))
 }
 
 function renderByokConfig(elements: ManagerElements, zotero: ZoteroLike) {
@@ -2646,8 +2646,8 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     renderJadenseChatModel(elements, zotero)
     renderChat(elements, zotero)
     setStatus(elements.featureModelStatus, elements.autoFollowChatModel.checked
-      ? uiText("已开启自动跟随当前对话模型。", "Automatic Chat model following is enabled.")
-      : uiText("已关闭自动跟随，可逐项配置功能模型。", "Automatic following is disabled; feature models can be configured independently."), "success")
+      ? uiText("文献解析已跟随当前对话模型。", "Analysis now follows the Chat model.")
+      : uiText("已关闭解析跟随，可独立配置解析模型。", "Analysis following is disabled; choose an independent analysis model."), "success")
   })
   elements.analysisStop.addEventListener("click", () => {
     stopPaperAnalysis(zotero)

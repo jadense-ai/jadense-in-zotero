@@ -60,5 +60,5 @@ rm -f "$runtime/dependencies-0.6.4"
 printf 'JADENSE_PDF_PROGRESS {"stage":"dependencies"}\n'
 run_child "$uv_path" sync --project "$runtime" --python 3.12 --frozen
 printf 'JADENSE_PDF_PROGRESS {"stage":"imports"}\n'
-run_child "$runtime/.venv/bin/python" -c 'import babeldoc; import pymupdf; import onnxruntime'
+run_child "$runtime/.venv/bin/python" -I -B "$runtime/native-probe.py" pdf
 printf 'ready\n' > "$runtime/dependencies-0.6.4"

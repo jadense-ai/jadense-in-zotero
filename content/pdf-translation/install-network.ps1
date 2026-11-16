@@ -67,7 +67,7 @@ function Get-PDFDownloadFailure($Failure) {
 }
 
 # uv 引导文件较小，失败重下；完整引擎包仍由 install-bundle.ps1 按 Range 续传。
-function Save-PDFBootstrapDownload([string]$Url, [string]$Path) {
+function Save-PDFBootstrapDownload([string]$Url, [string]$Path, [string]$Stage = 'uv') {
     $category = 'network'
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
@@ -78,10 +78,10 @@ function Save-PDFBootstrapDownload([string]$Url, [string]$Path) {
         } catch {
             $category = Get-PDFDownloadFailure $_
             if ($category -in @('proxy', 'tls', 'http', 'permission', 'disk') -or $attempt -eq 3) { break }
-            Write-Output (ConvertTo-Json -Compress @{ type='progress'; stage='retry'; downloadStage='uv'; attempt=$attempt; category=$category })
+            Write-Output (ConvertTo-Json -Compress @{ type='progress'; stage='retry'; downloadStage=$Stage; attempt=$attempt; category=$category })
             Start-Sleep -Seconds $attempt
         }
     }
-    Write-PDFInstallError $category 'uv'
-    throw 'PDF bootstrap download failed. Check network/proxy settings or import the offline engine package.'
+    Write-PDFInstallError $category $Stage
+    throw "Download failed ($Stage). Check network/proxy settings or use the official offline installer."
 }

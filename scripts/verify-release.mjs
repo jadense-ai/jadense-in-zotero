@@ -73,6 +73,9 @@ const bundledFiles = Object.values(zip.files)
   .sort((a, b) => a.localeCompare(b))
 
 check(bundledFiles.includes("manifest.json"), "XPI is missing root manifest.json.")
+for (const name of ['install-environment.ps1', 'install-stage.ps1', 'native-probe.py']) {
+  check(bundledFiles.includes('content/pdf-translation/' + name), 'XPI is missing engine setup resource: ' + name)
+}
 check(bundledFiles.includes("bootstrap.js"), "XPI is missing root bootstrap.js.")
 check(bundledFiles.includes("content/preferences.xhtml"), "XPI is missing Preferences pane XHTML.")
 check(bundledFiles.includes("content/preferences.css"), "XPI is missing Preferences pane CSS.")

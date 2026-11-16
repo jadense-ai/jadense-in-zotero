@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.17 长文批注与引擎安装](#update-0617)
 - [0.6.16 重新解析](#update-0616)
 - [0.6.15 模型容量与设置体验](#update-0615)
 - [0.6.14 证据溯源与互动入门](#update-0614)
@@ -10,6 +11,23 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0617"></a>
+## 0.6.17 长文批注与引擎安装 / Annotations and engine setup
+
+### 操作与配置
+
+在 Zotero 插件设置或工作台的「文献解析」设置中填写批注建议数；留空时按内容选择。该数值只影响新任务，不是硬性上限。Windows 用户可在引擎设置中检测或准备环境，两份引擎仍分别导入。
+
+### 升级与兼容
+
+覆盖安装新版 XPI 即可；无需因本次更新重新下载已安装的引擎。原文尚未读完、用户主动停止或原文定位失败时，不会当作已完成写入。旧版本没有保存的批注无法补回。完整离线套装适用于 Windows x64。
+
+### 验证与下载
+
+开发阶段的汇总恢复与批注设置专项分别通过 208 项和 181 项测试（覆盖有重叠）；Windows x64 上验证了 OCR、PDF 版面推理及隔离 Zotero 设置页。未实测真实付费模型、ARM64 或干净系统中的 UAC 流程。
+
+[下载 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.17/jadense-in-zotero-v0.6.17.xpi) · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.17/jadense-in-zotero-v0.6.17-windows-x64-offline.zip)。校验值见同版 DISTRIBUTION-SHA256SUMS。
 
 <a id="update-0616"></a>
 ## 0.6.16 重新解析 / Reanalyze

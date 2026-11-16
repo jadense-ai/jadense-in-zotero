@@ -126,7 +126,7 @@ describe("feature model configuration modes", () => {
     expect(selections.analysis).toEqual({ route: "byok", modelId: "two-model" })
   })
 
-  it.each(AI_FEATURES)("keeps %s independent across save, reload, editor selection, and unrelated model deletion", feature => {
+  it.each(AI_FEATURES.filter(feature => feature !== "figure"))("keeps %s independent across save, reload, editor selection, and unrelated model deletion", feature => {
     const { zotero, values } = fixture()
     const before = initializeFeatureModelSelections(zotero)
     saveFeatureModelSelection(zotero, feature, { route: "byok", modelId: "two-model" })
@@ -152,16 +152,18 @@ describe("feature model configuration modes", () => {
     expect(featureModelState(zotero, "chat")).toMatchObject({ ready: true, config: { model: "one-api-model" } })
   })
 
-  it("uses the image model for an image conversation and switches back for a text conversation", () => {
+  it("always uses Chat for image conversations despite a legacy independent image model", () => {
     const { zotero } = fixture()
+    saveAutoFollowChatModel(zotero, false)
+    saveFeatureModelSelection(zotero, "chat", { route: "byok", modelId: "one-model" })
     saveFeatureModelSelection(zotero, "figure", { route: "byok", modelId: "two-model" })
     createReaderFigureChatSession(zotero.Prefs!, {
       kind: "interpretFigure", conversationTarget: "new", itemID: 42, pageIndex: 0,
       image: { dataUrl: "data:image/png;base64,c3ludGhldGlj", mimeType: "image/png" },
     }, "Synthetic paper")
-    expect(activeAiState(zotero)).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+    expect(activeAiState(zotero)).toMatchObject({ route: "byok", config: { model: "one-api-model" } })
     saveFeatureModelSelection(zotero, "chat", { route: "jadense", selection: { kind: "model", modelId: "text-model" } })
-    expect(activeAiState(zotero)).toMatchObject({ route: "byok", config: { model: "two-api-model" } })
+    expect(activeAiState(zotero)).toMatchObject({ route: "jadense", selection: { selection: { modelId: "text-model" } } })
     createLocalChatSession(zotero.Prefs!)
     expect(activeAiState(zotero)).toMatchObject({ route: "jadense", selection: { selection: { modelId: "text-model" } } })
   })

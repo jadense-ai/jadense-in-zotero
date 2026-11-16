@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   ANALYSIS_CATEGORIES,
+  PAPER_ANALYSIS_RESPONSE_FORMAT,
   buildPaperAnalysisPrompt,
   buildTranslationPrompt,
   normalizeSelectionTranslation,
@@ -246,7 +247,7 @@ describe("paper analysis wrapper", () => {
     },
   )
 
-  it("bounds model content and annotation count with visible notices", () => {
+  it("bounds model text but retains every valid annotation beyond 32 without count warnings", () => {
     const manyPassages = Array.from({ length: 40 }, (_, index) => ({
       id: `p-${index}`, text: "原文".repeat(500), pageIndex: index,
     }))
@@ -254,14 +255,14 @@ describe("paper analysis wrapper", () => {
       summary: "概述".repeat(2000),
       annotations: manyPassages.map(({ id }) => ({ passageId: id, category: "claim", comment: `${id} ${"解释".repeat(1000)}` })),
     }), manyPassages)
-    expect(result.annotations).toHaveLength(32)
-    expect(result.skipped).toBe(8)
+    expect(result.annotations).toHaveLength(40)
+    expect(result.skipped).toBe(0)
     expect(result.annotations[0].comment).toContain("已截断")
     const formatted = formatPaperAnalysis(result)
     expect(formatted.length).toBeLessThanOrEqual(18_000)
     expect(formatted).toContain("展示内容过长")
-    expect(formatted).toContain("仅保留前 32 条")
-    expect(result.notes).toHaveLength(8)
+    expect(formatted).not.toContain("仅保留前 32 条")
+    expect(result.notes).toBeUndefined()
     const archiveText = formatPaperAnalysis(result, 96_000)
     expect(archiveText).toContain("p-39 解释")
     expect(archiveText.length).toBeLessThanOrEqual(96_000)
@@ -271,6 +272,21 @@ describe("paper analysis wrapper", () => {
     expect(oversized.annotations).toEqual([])
     expect(formatPaperAnalysis(oversized).length).toBeLessThanOrEqual(18_000)
     expect(formatPaperAnalysis(oversized)).toContain("返回内容过长")
+  })
+
+  it('treats the requested count as guidance and retains more than the previous note allowance', () => {
+    const source = Array.from({ length: 180 }, (_, index) => ({ id: `source-${index}`, text: `Evidence ${index}`, pageIndex: index }))
+    const prompt = buildPaperAnalysisPrompt({ title: 'Paper', passages: source, coverage: 'complete', suggestedMaxAnnotations: 12 })
+    expect(prompt).toContain('最大建议数为 12 条')
+    expect(prompt).toContain('必要时可超过建议数')
+    expect(prompt).not.toContain('至多 32')
+    const properties = PAPER_ANALYSIS_RESPONSE_FORMAT.schema.properties as Record<string, Record<string, unknown>>
+    expect(properties.annotations.maxItems).toBeUndefined()
+    const result = parsePaperAnalysis(JSON.stringify({ summary: 'Summary', extra: 'ignored additive field', annotations: source.map(row => ({ passageId: row.id, category: 'evidence', comment: 'Independent useful evidence', extra: true })) }), source)
+    expect(result.annotations).toHaveLength(180)
+    expect(result.skipped).toBe(0)
+    expect(result.warnings).toEqual([])
+    expect(result.notes).toBeUndefined()
   })
 })
 

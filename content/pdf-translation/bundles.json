@@ -7,6 +7,7 @@
     "file": "jadense-pdf-engine-0.6.4-1-windows-x64.zip",
     "size": 454424663,
     "sha256": "579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd",
+    "requirements": {"unpackedBytes": 985752154, "treeSha256": "aad84c8f98315ffae5ef0134556c8f8b99482494d7b544d67546ab86e8d8cba8"},
     "urls": ["https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.5/jadense-pdf-engine-0.6.4-1-windows-x64.zip"]
   }
 }

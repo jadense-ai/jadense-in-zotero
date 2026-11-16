@@ -23,9 +23,9 @@ const pdf: PdfAnalysisSnapshot = { itemID: 42, libraryID: 1, itemKey: 'PDF42', t
 const complete = JSON.stringify({ summary: 'Retained synthetic summary', sections: [{ category: 'claim', summary: 'Retained claim' }], annotations: [{ passageId: 'p0', category: 'claim', comment: 'Retained note' }] })
 const written = (): SavedAnalysisAnnotations => ({ created: 1, skipped: 0, failed: 0, unprocessed: 0, warnings: [] })
 
-it('does not advance an incomplete batch or reset the repair limit for valid JSON without a summary', async () => {
+it('does not advance an empty batch or reset the repair limit when no readable content was returned', async () => {
   const f = fixture(), svc = services(), task = newAnalysisTask(42), store = f.store()
-  svc.send.mockResolvedValue('{"summary":"","sections":[{"category":"claim","summary":"Retained claim"}],"annotations":[]}')
+  svc.send.mockResolvedValue('{"summary":"","sections":[],"annotations":[]}')
   const run = () => runIndependentPaperAnalysis({ zotero: f.host, itemID: 42, signal: new AbortController().signal, fetchImpl: vi.fn(), task, checkpoint: value => store.save(value), services: svc })
   expect((await run()).continuation).toBe('waiting')
   expect((await run()).continuation).toBe('waiting')
@@ -51,6 +51,26 @@ function services() {
   return { readPdf: vi.fn(async () => structuredClone(pdf)), validateSource: vi.fn(async () => ({}) as never), send: vi.fn<(input: TemporaryChatSendInput) => Promise<string>>(async () => complete),
     saveAnnotations: vi.fn(async () => written()) }
 }
+
+it('projects locally completed summary recovery as success in the runtime, including after restart', async () => {
+  const f = fixture(), svc = services(), task = newAnalysisTask(42), store = f.store()
+  const batch = (index: number) => JSON.stringify({ summary: `Finding ${index}`, sections: [{ category: 'evidence', summary: `Evidence ${index}` }], annotations: [{ passageId: `p${index}`, category: 'evidence', comment: `Note ${index}` }] })
+  Object.assign(task, { account: 'synthetic-owner', configuration: 'synthetic-model', route: 'jadense', status: 'needs_action', generation: 'terminal', snapshot: pdf, response: batch(0),
+    inputPlan: { version: 1, inputTokens: 64, outputTokens: 2048, prompts: ['a', 'b'], results: [batch(0), batch(1)], level: 0, incomplete: true } })
+  await store.save(task)
+  const runner: typeof runIndependentPaperAnalysis = input => runIndependentPaperAnalysis({ ...input, services: svc })
+  const runtime = new AnalysisRuntime(f.host, runner, { store, context: f.context })
+  await runtime.start(42)
+  expect(runtime.get(42)).toMatchObject({ busy: false, error: false, resumable: false, retrying: false })
+  expect(runtime.records()[0].notes).toContain('Finding 1')
+  expect(runtime.records()[0].warnings).toEqual([])
+  expect(svc.send).not.toHaveBeenCalled()
+  await runtime.dispose()
+  const restored = new AnalysisRuntime(f.host, runner, { store: f.store(), context: f.context })
+  await restored.ready
+  expect(restored.get(42)).toMatchObject({ busy: false, error: false, resumable: false })
+  await restored.dispose()
+})
 
 it('resumes only annotation work after failure, including a new runtime using the same disk', async () => {
   const f = fixture(), svc = services()
@@ -240,18 +260,17 @@ it.each([
   expect(svc.saveAnnotations).not.toHaveBeenCalled()
 })
 
-it('repairs a missing summary and does not authorize native writes from malformed repair output', async () => {
+it('fills a missing display summary from the existing section without another model request', async () => {
   const f = fixture(), svc = services(), task = newAnalysisTask(42), store = f.store()
   svc.send.mockResolvedValueOnce(JSON.stringify({ sections: [{ category: 'claim', summary: 'Retained claim' }], annotations: [] }))
     .mockResolvedValueOnce('Synthetic malformed repair')
     .mockResolvedValueOnce('{"summary":"Recovered missing summary","sections":[],"annotations":[]}')
   const run = () => runIndependentPaperAnalysis({ zotero: f.host, itemID: 42, signal: new AbortController().signal, fetchImpl: vi.fn(), task, checkpoint: value => store.save(value), services: svc })
-  expect((await run()).continuation).toBe('waiting')
-  expect((await run()).continuation).toBe('waiting')
   const final = await run()
   expect(final.continuation).toBeUndefined()
-  expect(final.record.summary).toBe('Recovered missing summary')
+  expect(final.record.summary).toBe('Retained claim')
   expect(final.record.notes).toContain('Retained claim')
+  expect(svc.send).toHaveBeenCalledOnce()
   expect(svc.saveAnnotations).not.toHaveBeenCalled()
 })
 

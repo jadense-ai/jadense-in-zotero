@@ -6,6 +6,10 @@ import { textTokenCost } from './model-budget'
 import { responseFormatInstructions } from '@/chat/response-format'
 import type { PdfAnalysisSnapshot } from './reader-tools'
 import type { ZoteroLike } from './runtime'
+import { ANALYSIS_ANNOTATION_SUGGESTION_PREF } from './analysis-settings'
+import { LEGACY_PAPER_ANALYSIS_RESPONSE_FORMAT } from '@/chat/paper-analysis'
+import { planAnalysisInput } from './analysis-input'
+import { RequestExecutionError } from '@/chat/request-feedback'
 
 function fixture(context: number) {
   const selection = { route: 'byok', modelId: 'm' }
@@ -41,6 +45,7 @@ describe('model-aware independent analysis', () => {
   })
   it('resumes after a local checkpoint failure without regenerating completed input batches', async () => {
     const { host, snapshot } = fixture(8192), task = newAnalysisTask(42), prompts: string[] = []
+    host.Prefs!.set(ANALYSIS_ANNOTATION_SUGGESTION_PREF, '5', true)
     const readPdf = vi.fn(async () => snapshot)
     const send = vi.fn(async input => { prompts.push(input.messages[0].text); return '{"summary":"Evidence retained","sections":[],"annotations":[]}' })
     let rejectCheckpoint = true
@@ -48,10 +53,126 @@ describe('model-aware independent analysis', () => {
       checkpoint: async () => !(rejectCheckpoint && task.inputPlan?.results.length === 1 && task.generation === 'new'),
       services: { readPdf, send, validateSource: async () => {} } }
     await expect(runIndependentPaperAnalysis(options)).rejects.toMatchObject({ code: 'ANALYSIS_STORAGE' })
+    task.inputPlan = JSON.parse(JSON.stringify(task.inputPlan))
+    host.Prefs!.set(ANALYSIS_ANNOTATION_SUGGESTION_PREF, '80', true)
     rejectCheckpoint = false
     await runIndependentPaperAnalysis(options)
     expect(prompts.filter(value => value === prompts[0])).toHaveLength(1)
     expect(readPdf).toHaveBeenCalledOnce()
     expect(task.generation).toBe('complete')
+    expect(task.inputPlan?.suggestedMaxAnnotations).toBe(5)
+    expect(prompts.every(prompt => prompt.includes('最大建议数为 5 条') && !prompt.includes('最大建议数为 80 条'))).toBe(true)
+  })
+
+  it('keeps over 32 distinct annotations through real batch planning, aggregation and delivery without fault status', async () => {
+    const { host, snapshot } = fixture(8192), task = newAnalysisTask(42)
+    host.Prefs!.set(ANALYSIS_ANNOTATION_SUGGESTION_PREF, '12', true)
+    let combined = false
+    const send = vi.fn(async input => {
+      const prompt = input.messages[0].text as string
+      expect(prompt).not.toContain('at most 32')
+      expect(prompt).not.toContain('至多 32')
+      expect(prompt).toContain('最大建议数为 12 条')
+      const material = JSON.parse(prompt.slice(prompt.lastIndexOf('\n') + 1))
+      const annotations = Array.isArray(material)
+        ? (combined = true, [])
+        : material.passages.map((row: { id: string }) => ({ passageId: row.id, category: 'evidence', comment: `Evidence for ${row.id}` }))
+      return JSON.stringify({ summary: 'All independent evidence', sections: [], annotations })
+    })
+    const saveAnnotations = vi.fn(async (_host, _snapshot, annotations) => ({ created: annotations.length, skipped: 0, failed: 0, unprocessed: 0, warnings: [] }))
+    const result = await runIndependentPaperAnalysis({ zotero: host, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, task, checkpoint: async () => true,
+      services: { readPdf: async () => snapshot, send, saveAnnotations, validateSource: async () => {} } })
+    expect(combined).toBe(true)
+    expect(result.record.warnings).toEqual([])
+    expect(saveAnnotations.mock.calls[0][2]).toHaveLength(192)
+    expect(result.annotations.created).toBe(192)
+    expect(result.continuation).toBeUndefined()
+    expect(task.generation).toBe('complete')
+    expect(task.stage).toBe('complete')
+  })
+
+  it('locally recovers an interrupted summary and delivers all completed source notes and annotations', async () => {
+    const { host, snapshot } = fixture(8192), task = newAnalysisTask(42)
+    const send = vi.fn(async input => {
+      const prompt = input.messages[0].text as string, material = JSON.parse(prompt.slice(prompt.lastIndexOf('\n') + 1))
+      if (Array.isArray(material)) throw new RequestExecutionError('Synthetic summary interrupted', 'partial', '{"summary":"Partial combined summary","annotations":[]}')
+      return JSON.stringify({ summary: 'Batch evidence', annotations: material.passages.map((row: { id: string }) => ({ passageId: row.id, category: 'evidence', comment: `Unique evidence ${row.id}` })) })
+    })
+    const saveAnnotations = vi.fn(async (_host, _snapshot, annotations) => ({ created: annotations.length, skipped: 0, failed: 0, unprocessed: 0, warnings: [] }))
+    const result = await runIndependentPaperAnalysis({ zotero: host, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, task, checkpoint: async () => true,
+      services: { readPdf: async () => snapshot, send, saveAnnotations, validateSource: async () => {} } })
+    expect(saveAnnotations).toHaveBeenCalledOnce()
+    expect(result.record.notes).toContain('关键句与批注（192 条）')
+    expect(task.inputPlan?.annotationCandidates).toHaveLength(192)
+    expect(task.inputPlan?.annotationCandidates?.at(-1)?.comment).toBe('Unique evidence p191-s0')
+    expect(result.record.warnings).toEqual([])
+    expect(result.continuation).toBeUndefined()
+    expect(result.annotations.created).toBe(192)
+    expect(task.generation).toBe('complete')
+    expect(task.inputPlan?.summaryExecution?.state).toBe('partial')
+  })
+
+  it('preserves an already dispatched legacy batch prompt and response schema on resume', async () => {
+    const { host, snapshot } = fixture(1048576), task = newAnalysisTask(42)
+    task.snapshot = snapshot; task.generation = 'pending'
+    task.inputPlan = { ...planAnalysisInput(snapshot, 1000000, 1000), version: 1, prompts: ['Frozen legacy prompt'] }
+    // 使用攻玉路径观察实际传给请求层的 schema；所有网络仍是合成服务。
+    host.Prefs!.set('extensions.jadenseInZotero.aiModelSettings', JSON.stringify({ version: 1, followChatModel: false, models: { analysis: { route: 'jadense', selection: { kind: 'default' } } } }), true)
+    host.Prefs!.set('extensions.jadenseInZotero.token', 'synthetic-token', true)
+    const send = vi.fn(async input => {
+      expect(input.messages[0].text).toBe('Frozen legacy prompt')
+      expect(input.responseFormat).toEqual(LEGACY_PAPER_ANALYSIS_RESPONSE_FORMAT)
+      return '{"summary":"Legacy result","annotations":[]}'
+    })
+    await runIndependentPaperAnalysis({ zotero: host, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, task,
+      services: { send, validateSource: async () => {} } })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('continues an old non-converging aggregate with all saved batch annotations and a fresh summary identity', async () => {
+    const { host, snapshot } = fixture(8192), task = newAnalysisTask(42), oldRequestID = task.requestID
+    const batch = (start: number, end: number) => JSON.stringify({ summary: `Saved batch ${start}`, sections: [], annotations: snapshot.passages.slice(start, end).map(row => ({ passageId: row.id, category: 'evidence', comment: 'Important independent evidence '.repeat(10) })) })
+    task.snapshot = snapshot; task.generation = 'terminal'; task.resumeRequested = true
+    task.inputPlan = { version: 1, inputTokens: 5000, outputTokens: 2000, prompts: ['Old batch 1', 'Old batch 2'], results: [batch(0, 96), batch(96, 192)], level: 0, incomplete: true }
+    task.response = batch(0, 32)
+    const send = vi.fn(async input => {
+      expect(input.clientRequestId).not.toBe(oldRequestID)
+      expect(input.previousRequestId).toBe(oldRequestID)
+      expect(input.messages[0].text).toContain('Saved batch 96')
+      expect(input.messages[0].text).not.toContain('Important independent evidence')
+      return '{"summary":"Recovered combined analysis","sections":[],"annotations":[]}'
+    })
+    const saveAnnotations = vi.fn(async (_host, _snapshot, annotations) => ({ created: annotations.length, skipped: 0, failed: 0, unprocessed: 0, warnings: [] }))
+    const result = await runIndependentPaperAnalysis({ zotero: host, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, task, checkpoint: async () => true,
+      services: { readPdf: vi.fn(() => { throw new Error('Do not reread the PDF') }), send, saveAnnotations, validateSource: async () => {} } })
+    expect(send).toHaveBeenCalledOnce()
+    expect(result.annotations.created).toBe(192)
+    expect(result.record.warnings).toEqual([])
+    expect(result.continuation).toBeUndefined()
+    expect(task.stage).toBe('complete')
+  })
+
+  it('restores separately retained annotations from a serialized checkpoint without regenerating source batches', async () => {
+    const { host, snapshot } = fixture(8192), task = newAnalysisTask(42)
+    let failCheckpoint = true, summaryRequests = 0, sourceRequests = 0
+    const send = vi.fn(async input => {
+      const prompt = input.messages[0].text as string, material = JSON.parse(prompt.slice(prompt.lastIndexOf('\n') + 1))
+      if (Array.isArray(material)) { summaryRequests++; return '{"summary":"All evidence","annotations":[]}' }
+      sourceRequests++
+      return JSON.stringify({ summary: 'Batch evidence', annotations: material.passages.map((row: { id: string }) => ({ passageId: row.id, category: 'evidence', comment: 'Evidence' })) })
+    })
+    const saveAnnotations = vi.fn(async (_host, _snapshot, annotations) => ({ created: annotations.length, skipped: 0, failed: 0, unprocessed: 0, warnings: [] }))
+    const options = { zotero: host, itemID: 42, fetchImpl: vi.fn(), signal: new AbortController().signal, task,
+      checkpoint: async () => !(failCheckpoint && task.inputPlan?.level === 1),
+      services: { readPdf: async () => snapshot, send, saveAnnotations, validateSource: async () => {} } }
+    await expect(runIndependentPaperAnalysis(options)).rejects.toMatchObject({ code: 'ANALYSIS_STORAGE' })
+    expect(summaryRequests).toBe(0)
+    const batches = sourceRequests
+    task.inputPlan = JSON.parse(JSON.stringify(task.inputPlan)); failCheckpoint = false
+    const result = await runIndependentPaperAnalysis(options)
+    expect(sourceRequests).toBe(batches)
+    expect(summaryRequests).toBe(1)
+    expect(result.annotations.created).toBe(192)
+    expect(result.continuation).toBeUndefined()
   })
 })

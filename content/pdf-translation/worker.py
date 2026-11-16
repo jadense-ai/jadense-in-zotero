@@ -273,6 +273,14 @@ async def run_in_workspace(config, staged):
     emit(type="complete", pages=artifact['pages'], skipped=skipped, artifact=artifact, coverage=coverage)
 
 
+class EngineAssetsMissing(RuntimeError):
+    code = 'PDF_ASSETS_MISSING'
+
+
+class EngineVersionMismatch(RuntimeError):
+    code = 'PDF_ENGINE_VERSION_MISMATCH'
+
+
 def check_engine():
     """纯离线检查锁定版本、资产哈希、本机模型和 PDF 字体渲染，不发翻译请求。"""
     import importlib.metadata
@@ -280,12 +288,12 @@ def check_engine():
     import babeldoc.const as const
     from babeldoc.assets.assets import generate_all_assets_file_list, verify_file
     if importlib.metadata.version('babeldoc') != '0.6.4':
-        raise RuntimeError('Expected BabelDOC 0.6.4; reinstall the matching engine package.')
+        raise EngineVersionMismatch('Expected BabelDOC 0.6.4; reinstall the matching engine package.')
     emit(type='progress', stage='check', message='Verifying model and font files')
     for directory, files in generate_all_assets_file_list().items():
         for entry in files:
             if not verify_file(const.CACHE_FOLDER / directory / entry['name'], entry['sha3_256']):
-                raise RuntimeError(f"Missing or damaged asset: {directory}/{entry['name']}. Import the offline package or repair the engine.")
+                raise EngineAssetsMissing(f"Missing or damaged asset: {directory}/{entry['name']}. Import the offline package or repair the engine.")
     # 即使上游未来改为隐式下载，检测操作也不得联网。
     import httpx
     import requests
@@ -293,12 +301,17 @@ def check_engine():
             patch.object(httpx.Client, 'send', side_effect=RuntimeError('Engine check is offline')), \
             patch.object(requests.Session, 'send', side_effect=RuntimeError('Engine check is offline')):
         from babeldoc.docvision.doclayout import DocLayoutModel
-        DocLayoutModel.load_available()
+        model = DocLayoutModel.load_available()
+        import numpy as np
         import pymupdf
         document = pymupdf.open()
         page = document.new_page()
         page.insert_text((36, 36), 'Jadense engine check')
-        if not page.get_pixmap().samples or 'Jadense' not in page.get_text():
+        pixels = page.get_pixmap(colorspace=pymupdf.csRGB, alpha=False)
+        image = np.frombuffer(pixels.samples, dtype=np.uint8).reshape(pixels.height, pixels.width, 3)
+        if len(model.predict(image)) != 1:
+            raise RuntimeError('PDF layout inference did not return a page')
+        if not pixels.samples or 'Jadense' not in page.get_text():
             raise RuntimeError('PDF rendering check failed')
         document.close()
     emit(type='progress', stage='check', message='Offline model and PDF rendering checks passed')
