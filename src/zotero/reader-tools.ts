@@ -1530,6 +1530,17 @@ export function registerReaderTools(
         button.title = `Jadense · ${action.label}`
         button.setAttribute("aria-label", action.label)
         button.setAttribute("data-jadense-action", action.kind)
+        if (action.kind === 'analyze') {
+          const runtime = analysisRuntime(zotero as unknown as ZoteroLike)
+          const updateLabel = () => {
+            const continuing = Boolean(runtime.get(event.reader.itemID)?.resumable)
+            const text = continuing ? uiText('继续解析', 'Continue analysis') : action.label
+            label.textContent = continuing ? text : type === 'renderToolbar' ? action.short : text
+            button.title = `Jadense · ${text}`; button.setAttribute('aria-label', text)
+          }
+          const previous = analysisCleanups.get(group), unsubscribe = runtime.subscribe(updateLabel)
+          analysisCleanups.set(group, () => { previous?.(); unsubscribe() }); updateLabel()
+        }
         button.addEventListener("mousedown", (mouseEvent) => mouseEvent.preventDefault())
         button.addEventListener("click", () => {
           if (!active) return

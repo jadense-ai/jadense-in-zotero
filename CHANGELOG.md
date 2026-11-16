@@ -1,5 +1,14 @@
 # 更新说明 / Changelog
 
+## 0.6.16 — 2026-11-16
+
+- 新增「重新解析」：卡住或未完成的任务可由用户主动放弃继续，使用当前模型创建全新解析请求。
+- 将恢复未完成任务的入口统一为「继续解析」，与重新生成明确区分；旧任务放弃后不会在重启或配置变化时自动恢复。
+- 保留已有解析笔记与批注，重新解析前提示可能再次消耗积分，并改善窄侧栏、大字号和浅深色下的操作布局。
+- Add Reanalyze: explicitly leave a stuck or unfinished task and start a fresh analysis request with the current model.
+- Label unfinished-task recovery as Continue analysis. Abandoned tasks no longer resume after restart or configuration changes.
+- Retain saved notes and annotations, explain possible new charges before reanalysis, and improve action layout in narrow sidebars, enlarged text and light/dark themes.
+
 ## 0.6.15 — 2026-11-12
 
 - 对话、文献解析与翻译按所选模型的上下文容量和输出预算安排输入；解析按容量分批处理可读全文，并保存分批进度。

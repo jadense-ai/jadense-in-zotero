@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.16 重新解析](#update-0616)
 - [0.6.15 模型容量与设置体验](#update-0615)
 - [0.6.14 证据溯源与互动入门](#update-0614)
 - [0.6.13 任务继续、解析状态与阅读字号](#update-0613)
@@ -9,6 +10,28 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0616"></a>
+## 0.6.16 重新解析 / Reanalyze
+
+### 操作与配置
+
+在文献解析详情中，点击「继续解析」复用原任务进度；点击「重新解析」并确认后创建新任务。正在运行的任务需先停止。阅读器原「解析」按钮在存在未完成任务时显示「继续解析」。
+
+Reanalyze is available in analysis details after stopping active work. Continue analysis keeps the original task and progress; Reanalyze creates new task and request identities after confirmation.
+
+### 升级与兼容
+
+直接安装新版 XPI，保留账号、模型设置、引擎、已有笔记与批注。重新解析使用当前模型重新读取文献，不复用旧任务的请求身份；旧请求在服务端的执行和计费状态不会因此重置，也不承诺退还原请求积分。可能产生新模型费用。本次无需新增服务端部署或引擎安装。
+
+Install the new XPI over the existing version. Settings, engines, saved notes and annotations remain available. Reanalysis may incur new charges and does not reset the old request's server execution or billing state. No new server deployment or engine installation is required for this change.
+
+### 验证与下载
+
+复用开发阶段验证：116 项相关测试、TypeScript、定向 ESLint，以及 Windows / Zotero 原生隔离 profile 中的新任务身份、确认取消、继续原任务、冷启动恢复、浅深色窄栏与 150% 字号检查。中英文按钮与确认交互有 DOM 回归覆盖；其他系统、Zotero 8/9 和真实付费模型未实测。发行阶段仅核对正式包身份与传输结果，不重复功能测试。
+
+GitHub 提供 XPI、Windows x64 完整离线 ZIP、两份独立引擎及摘要。官网及自动更新、百度与夸克镜像使用同一正式 XPI；各渠道完成状态以发布回执为准。源码公开范围不含私有前沿追踪模块，官方完整发行包含该功能。
+
 
 <a id="update-0615"></a>
 ## 0.6.15 模型容量与设置体验 / Model capacity and settings

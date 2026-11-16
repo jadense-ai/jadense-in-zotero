@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest'
 import { AnalysisRuntime } from './analysis-runtime'
 import { collectSourceForItem } from './research-context'
 import type { runIndependentPaperAnalysis } from './paper-analysis-runner'
-import type { AnalysisTask } from './analysis-task-store'
+import { AnalysisTaskStore, newAnalysisTask, type AnalysisTask } from './analysis-task-store'
 function options() {
   const tasks = new Map<string, AnalysisTask>()
   return { store: { list: async () => [...tasks.values()], save: async (task: AnalysisTask) => { tasks.set(task.id, structuredClone(task)); return true } },
@@ -21,6 +21,89 @@ it('starts analysis without a feature warning', async () => {
   expect(confirm).not.toHaveBeenCalled()
   expect(run).toHaveBeenCalledOnce()
   runtime.dispose()
+})
+
+it('continues an uncertain request with its identity, but explicitly reanalyzes with a new persisted task', async () => {
+  const persistent = options(), old = newAnalysisTask(42)
+  Object.assign(old, { status: 'needs_action', generation: 'pending', operationID: old.id,
+    issue: { code: 'TEMPORARY_EXECUTION_UNCERTAIN', status: 409 }, record: result(42).record })
+  await persistent.store.save(old)
+  const run = vi.fn<typeof runIndependentPaperAnalysis>(async input => {
+    if (input.task!.id === old.id) throw Object.assign(new Error('Unknown execution'), { code: 'TEMPORARY_EXECUTION_UNCERTAIN', status: 409 })
+    expect((await persistent.store.list()).find(task => task.id === old.id)?.status).toBe('abandoned')
+    return { ...result(42), record: { ...result(42).record, id: 'new-result' } }
+  })
+  const runtime = new AnalysisRuntime({ Prefs: { get: () => true } }, run, persistent)
+  await runtime.start(42)
+  expect(run.mock.calls[0][0].task?.requestID).toBe(old.requestID)
+  await Promise.all([runtime.restart(42), runtime.restart(42)])
+  expect(run).toHaveBeenCalledTimes(2)
+  const next = run.mock.calls[1][0].task!
+  expect(next.id).not.toBe(old.id)
+  expect(next.requestID).not.toBe(old.requestID)
+  expect(next.operationID).not.toBe(old.id)
+  expect(runtime.records().map(record => record.id)).toEqual(expect.arrayContaining(['r42', 'new-result']))
+  await runtime.dispose()
+  const coldRun = vi.fn<typeof runIndependentPaperAnalysis>()
+  const cold = new AnalysisRuntime({ Prefs: { get: () => true } }, coldRun, persistent)
+  await cold.restore()
+  expect(cold.get(42)?.resumable).toBe(false)
+  expect(coldRun).not.toHaveBeenCalled()
+  await cold.dispose()
+})
+
+it('does not dispatch a replacement if abandoning the old task cannot be persisted', async () => {
+  const old = newAnalysisTask(42), run = vi.fn<typeof runIndependentPaperAnalysis>()
+  old.status = 'needs_action'
+  const runtime = new AnalysisRuntime({}, run, { ...options(), store: { list: async () => [old], save: async () => false } })
+  await runtime.restart(42)
+  expect(run).not.toHaveBeenCalled()
+  expect(old.status).toBe('needs_action')
+  expect(runtime.get(42)).toMatchObject({ error: true, retrying: false })
+  await runtime.dispose()
+})
+
+it('clears the old retry timer when reanalyzing a waiting task', async () => {
+  vi.useFakeTimers()
+  const persistent = options()
+  const run = vi.fn<typeof runIndependentPaperAnalysis>().mockRejectedValueOnce({ name: 'TypeError' })
+    .mockImplementation(async input => result(input.itemID))
+  const runtime = new AnalysisRuntime({}, run, { ...persistent, retryDelay: 60_000 })
+  try {
+    await runtime.start(42)
+    const old = (await persistent.store.list())[0]
+    expect(old.status).toBe('waiting')
+    await runtime.restart(42)
+    await vi.advanceTimersByTimeAsync(60_001)
+    expect(run).toHaveBeenCalledTimes(2)
+    expect((await persistent.store.list()).find(task => task.id === old.id)?.status).toBe('abandoned')
+  } finally { await runtime.dispose(); vi.useRealTimers() }
+})
+
+it('requires a running task to be stopped before creating a replacement', async () => {
+  let finish!: () => void
+  const run = vi.fn<typeof runIndependentPaperAnalysis>(async input => {
+    await new Promise<void>(resolve => { finish = resolve })
+    return result(input.itemID)
+  })
+  const runtime = new AnalysisRuntime({}, run, options())
+  const active = runtime.start(42)
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  await runtime.restart(42)
+  expect(run).toHaveBeenCalledOnce()
+  finish(); await active; await runtime.dispose()
+})
+
+it('keeps abandoned checkpoints abandoned across disk reload even without a complete response', async () => {
+  const files = new Map<string, string>()
+  const io = { makeDirectory: async () => {}, writeUTF8: async (path: string, text: string) => { files.set(path, text) },
+    readUTF8: async (path: string) => files.get(path)!, getChildren: async () => [...files.keys()] }
+  const paths = { profileDir: 'fixture', join: (...parts: string[]) => parts.join('/'), filename: (path: string) => path.split('/').at(-1)! }
+  const task = newAnalysisTask(42)
+  Object.assign(task, { status: 'abandoned', generation: 'complete', futureMetadata: { ignored: true } })
+  await new AnalysisTaskStore(io, paths).save(task)
+  const [restored] = await new AnalysisTaskStore(io, paths).list()
+  expect(restored).toMatchObject({ id: task.id, status: 'abandoned', requestID: task.requestID })
 })
 it('deduplicates one PDF, isolates another, and retains results despite optional failures', async () => {
   let finish!: () => void
