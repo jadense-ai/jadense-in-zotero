@@ -10,7 +10,7 @@ import type { AnalysisInputPlan } from './analysis-input'
 
 export type AnalysisTask = {
   version: 1; id: string; itemID: number; createdAt: string
-  status: 'queued' | 'running' | 'waiting' | 'paused' | 'needs_action' | 'complete'
+  status: 'queued' | 'running' | 'waiting' | 'paused' | 'needs_action' | 'complete' | 'abandoned'
   stage: 'preparing' | 'generating' | 'annotations' | 'complete'
   account?: string; configuration?: string; route?: 'jadense' | 'byok'
   requestID: string; previousRequestID?: string; generation: 'new' | 'pending' | 'complete' | 'terminal'
@@ -74,10 +74,10 @@ export class AnalysisTaskStore {
           if (task.version !== 1 || task.id !== id || !Number.isSafeInteger(task.itemID) || task.itemID < 1 || !validID(task.requestID)
             || !['new', 'pending', 'complete', 'terminal'].includes(task.generation)
             || !['preparing', 'generating', 'annotations', 'complete'].includes(task.stage)) continue
-          if (!['queued', 'running', 'waiting', 'paused', 'needs_action', 'complete'].includes(task.status)) task.status = 'needs_action'
+          if (!['queued', 'running', 'waiting', 'paused', 'needs_action', 'complete', 'abandoned'].includes(task.status)) task.status = 'needs_action'
           if (typeof task.createdAt !== 'string') task.createdAt = new Date(0).toISOString()
           if (!task.annotations || typeof task.annotations !== 'object' || Array.isArray(task.annotations)) task.annotations = {}
-          if (task.generation === 'complete' && typeof task.response !== 'string') task.status = 'needs_action'
+          if (task.status !== 'abandoned' && task.generation === 'complete' && typeof task.response !== 'string') task.status = 'needs_action'
           tasks.set(id, task)
         } catch { /* 一个损坏文件不阻断其他任务。 */ }
       }

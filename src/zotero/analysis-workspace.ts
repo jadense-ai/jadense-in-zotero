@@ -44,7 +44,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
   const runs = new Map<string, AnalysisRunView>(), papers = new Map<string, AnalysisPaper>()
   const openedSources = new Map<string, PaperAnalysisSource>()
   const rows = new Map<string, { root: HTMLElement; title: HTMLButtonElement; meta: HTMLElement; preview: HTMLElement; state: HTMLElement; date: HTMLElement }>()
-  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; statusTitle: HTMLElement; statusDescription: HTMLElement; actions: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; summary: HTMLElement; notes: HTMLElement; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
+  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; statusTitle: HTMLElement; statusDescription: HTMLElement; actions: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; restart: HTMLButtonElement; summary: HTMLElement; notes: HTMLElement; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
   const details = new Map<string, Detail>()
   let selected: string | undefined, savedScroll = 0, disposed = false, detailSequence = 0
   const labels: Record<AnalysisDetailTab, string> = { summary: uiText("解析总结", "Summary"), notes: uiText("解析笔记", "Analysis notes"), references: uiText("参考文献", "References") }
@@ -96,9 +96,19 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     actionIcon(backButton, "back"); actionIcon(nav.lastElementChild as HTMLButtonElement, "open"); actionIcon(stop, "stop")
     const resume = action(doc, uiText('继续解析', 'Continue analysis'), () => { void analysisRuntime(host).start(papers.get(key)!.source.itemID) })
     actionIcon(resume, 'play'); resume.classList.add('jdx-button-primary')
+    const restart = action(doc, uiText('重新解析', 'Reanalyze'), () => {
+      const runtime = analysisRuntime(host), source = papers.get(key)!.source
+      if (runtime.get(source.itemID)?.busy) return
+      const confirmed = doc.defaultView?.confirm(uiText(
+        '重新解析将放弃继续旧任务，使用当前模型重新生成，可能再次消耗积分。已有解析笔记和批注会保留；原请求的执行与计费状态不会因此重置。是否重新解析？',
+        'Reanalyze with the current model instead of continuing the old task? This may incur new charges. Saved notes and annotations are retained; the original request’s execution and billing status are unchanged.',
+      ))
+      if (confirmed) { reference.pause(); void runtime.restart(source.itemID) }
+    })
+    actionIcon(restart, 'refresh')
     const actions = element(doc, 'div', 'jdx-analysis-run-actions')
     actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', uiText('解析操作', 'Analysis actions'))
-    actions.append(resume, stop); run.append(status, actions)
+    actions.append(resume, restart, stop); run.append(status, actions)
     const warning = notice(doc), tablist = element(doc, "div", "jdx-tabs jdx-detail-tabs")
     warning.classList.add('jdx-analysis-warning')
     tablist.setAttribute("role", "tablist"); tablist.setAttribute("aria-label", uiText("解析结果", "Analysis results"))
@@ -110,7 +120,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     if (options.embedded) { nav.hidden = true; hero.hidden = true }
     if (options.hideTabs) { tablist.hidden = true; panels.forEach(panel => { panel.removeAttribute("role"); panel.removeAttribute("aria-labelledby") }) }
     const reference = mountReferenceDetails(panels[2], host, paper.source, task => { options.onReferenceTask(paper.source, task); refresh() })
-    const detail: Detail = { root: container, title, meta, date, warning, status, statusTitle, statusDescription, actions, stop, resume, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
+    const detail: Detail = { root: container, title, meta, date, warning, status, statusTitle, statusDescription, actions, stop, resume, restart, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
     const cleanup = bindTabs(tabs, i => selectTab(detail, tabNames[i]))
     detail.cleanup = () => { cleanup(); reference.remove() }
     details.set(key, detail); root.append(container); container.hidden = true; selectTab(detail, "summary", false)
@@ -131,8 +141,10 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.status.parentElement!.dataset.kind = detail.status.dataset.kind
     detail.stop.hidden = !working
     detail.resume.hidden = !run?.resumable || run.busy || Boolean(run.retrying)
-    detail.actions.hidden = detail.stop.hidden && detail.resume.hidden
-    detail.status.parentElement!.hidden = !showStatus
+    detail.restart.hidden = Boolean(run?.busy) || (!run && !record)
+    detail.actions.hidden = detail.stop.hidden && detail.resume.hidden && detail.restart.hidden
+    detail.status.hidden = !showStatus
+    detail.status.parentElement!.hidden = !showStatus && detail.actions.hidden
     detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...analysisWarningsForDisplay(record)].filter(text => text && text !== detail.statusDescription.textContent).join("\n")
     detail.warning.dataset.kind = record && options.unsaved(record.id) ? "error" : "neutral"
     const signature = JSON.stringify([record || null, Boolean(run?.busy), Boolean(run?.error)])
