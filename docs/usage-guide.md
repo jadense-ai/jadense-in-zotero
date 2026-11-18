@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.18 免密钥机器翻译](#update-0618)
 - [0.6.17 长文批注与引擎安装](#update-0617)
 - [0.6.16 重新解析](#update-0616)
 - [0.6.15 模型容量与设置体验](#update-0615)
@@ -11,6 +12,23 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0618"></a>
+## 0.6.18 免密钥机器翻译 / Keyless machine translation
+
+### 操作与配置
+
+在 Zotero 的「功能配置」中打开「选文翻译」或「对照翻译」，选择「机器翻译」和所需服务。选用在线服务会把待翻译文本发送给该服务。LibreTranslate 需要先在 `127.0.0.1:5000` 启动免密钥实例并安装对应语言模型。服务可用性取决于网络和服务端限制。
+
+### 升级与兼容
+
+覆盖安装新版 XPI 即可。既有 Bing、Google 设置和已保存的译文继续可用。完整离线套装适用于 Windows x64，其中的 PDF 与 OCR 引擎沿用上一版。
+
+### 验证与下载
+
+正式完整版 XPI 已通过制品校验。各新增翻译服务的线上联通性未在本次发布中复测。
+
+[下载 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.18/jadense-in-zotero-v0.6.18.xpi) · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.18/jadense-in-zotero-v0.6.18-windows-x64-offline.zip)。校验值见同版 DISTRIBUTION-SHA256SUMS。
 
 <a id="update-0617"></a>
 ## 0.6.17 长文批注与引擎安装 / Annotations and engine setup

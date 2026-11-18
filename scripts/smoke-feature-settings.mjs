@@ -17,6 +17,25 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
     preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
     const native = preferences.document.querySelector('[data-settings-section="features"]')
     await waitFor(() => native.querySelector('[data-settings-target="analysis"]'), 'native feature navigation')
+    // 两个真实设置宿主各选一种服务，验证菜单、跨窗口同步及两个用途互不覆盖。
+    for (const [panel, peer, group, scope, label, id] of [
+      [root, native, 'pdf-translation', 'document', 'Microsoft Edge', 'edge'],
+      [native, root, 'selection', 'selection', 'MyMemory', 'mymemory'],
+    ]) {
+      panel.querySelector(`[data-settings-target="${group}"]`).click()
+      const area = panel.querySelector(`[data-translation-scope="${scope}"]`)
+      const kind = area.querySelector('[data-translation-setting="kind"]')
+      kind.querySelector('.jdx-select-trigger').click()
+      kind.querySelectorAll('[role="option"]')[1].click()
+      const service = area.querySelector('[data-translation-setting="service"]')
+      service.querySelector('.jdx-select-trigger').click()
+      const options = [...service.querySelectorAll('[role="option"]')]
+      for (const name of ['Google GTX', 'MyMemory', 'Microsoft Edge', 'LibreTranslate']) assert(options.some(row => row.textContent.includes(name)), 'Missing ' + name)
+      options.find(row => row.textContent === label).click()
+      await waitFor(() => peer.querySelector(`[data-translation-scope="${scope}"] [data-translation-setting="service"] .jdx-select-value`).textContent === label, 'free service synchronization: ' + id)
+    }
+    assert(JSON.parse(get('fullTranslationInterface')).service === 'edge' && JSON.parse(get('selectionTranslationInterface')).service === 'mymemory', 'Translation scopes overwrite each other')
+    report.checks.push('keyless-translation-services-two-hosts-and-scopes')
     for (const panel of [root, native]) {
       assert(!panel.querySelector('[data-settings-task="figure"], [data-settings-task="document"], [data-ocr-setting="document"]'), 'Retired feature settings remain')
       assert(!panel.querySelector('[id$="feature-figure-model"]'), 'Independent image model remains')

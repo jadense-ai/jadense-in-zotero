@@ -1,5 +1,5 @@
 /** 传统翻译配置独立于 AI 模型；选文和全文分别保存，旧 profile 偏好作为兼容来源。 */
-import type { TranslationService } from '@/chat/machine-translation'
+import { isMachineService, machineServices, type TranslationService } from '@/chat/machine-services'
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { createJdxSelect } from './custom-select'
@@ -17,7 +17,7 @@ export function readTranslationInterface(host: ZoteroLike, scope?: TranslationSc
   try {
     const raw = (scope ? host.Prefs?.get(TRANSLATION_INTERFACE_PREFS[scope], true) : undefined) ?? host.Prefs?.get(TRANSLATION_INTERFACE_PREF, true)
     const row = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return { kind: row?.kind === 'machine' ? 'machine' : 'ai', service: row?.service === 'google' ? 'google' : 'bing' }
+    return { kind: row?.kind === 'machine' ? 'machine' : 'ai', service: isMachineService(row?.service) ? row.service : 'bing' }
   } catch { return { kind: 'ai', service: 'bing' } }
 }
 
@@ -48,7 +48,6 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
   }
   const kind = makeField(uiText('翻译方式', 'Translation method'), 'kind')
   const service = makeField(uiText('翻译服务', 'Translation service'), 'service')
-  service.help.textContent = uiText('原文将直接发送至所选翻译服务，无需攻玉令牌或 API Key；可用性受网络与服务限流影响。', 'Source text is sent directly to the selected service. No Jadense token or API key is required; availability depends on network access and service rate limits.')
   const status = element('p'); status.setAttribute('role', 'status'); container.append(status)
   const capacity = element('details'), capacityTitle = element('summary')
   capacityTitle.textContent = uiText('翻译上下文预算', 'Translation context budgets'); capacity.append(capacityTitle)
@@ -72,9 +71,14 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
   const sync = () => {
     const value = readTranslationInterface(host, scope)
     kind.select.setOptions([{ value: 'ai', label: uiText('AI 生成', 'AI generation') }, { value: 'machine', label: uiText('翻译接口', 'Translation service') }], value.kind)
-    service.select.setOptions([{ value: 'bing', label: 'Bing' }, { value: 'google', label: 'Google' }], value.service)
+    service.select.setOptions(Object.entries(machineServices).map(([id, { name }]) => ({ value: id, label: id === 'libretranslate' ? uiText('LibreTranslate（本机）', 'LibreTranslate (local)') : name })), value.service)
+    service.help.textContent = value.service === 'libretranslate'
+      ? uiText('需先在本机 127.0.0.1:5000 启动免密钥 LibreTranslate 并安装所需语言。原文仅发送到本机。', 'Start a keyless LibreTranslate instance at 127.0.0.1:5000 with the required languages installed. Source text stays on this computer.')
+      : value.service === 'mymemory'
+      ? uiText('原文发送至 MyMemory。匿名免费额度有限，更适合选文或短文。', 'Source text is sent to MyMemory. Its free anonymous quota is best suited to selections and short texts.')
+      : uiText('原文直接发送至所选免费服务，无需 API Key；网络或服务限流可能影响可用性。', 'Source text goes directly to the selected free service. No API key is needed; availability depends on network access and rate limits.')
     service.row.hidden = value.kind !== 'machine'
-    modelRow.textContent = value.kind === 'machine' ? `${uiText('当前服务', 'Current service')}：${value.service}` : `${uiText('当前翻译模型', 'Current translation model')}：${featureModelDescription(host, 'translation')}。${uiText('在常规设置中修改。', 'Change it in General settings.')}`
+    modelRow.textContent = value.kind === 'machine' ? `${uiText('当前服务', 'Current service')}：${machineServices[value.service].name}` : `${uiText('当前翻译模型', 'Current translation model')}：${featureModelDescription(host, 'translation')}。${uiText('在常规设置中修改。', 'Change it in General settings.')}`
     capacity.hidden = scope !== 'document' || value.kind === 'machine'
     let limits: Record<string, unknown> = {}
     try { limits = JSON.parse(String(host.Prefs?.get(TRANSLATION_CAPACITY_PREF, true) ?? '{}')) ?? {} } catch { /* optional */ }
@@ -82,16 +86,16 @@ export function wireTranslationInterface(host: ZoteroLike | null, root: HTMLElem
       const value = Number(limits[field.dataset.capacity!])
       field.value = Number.isFinite(value) && value > 0 ? String(value) : ''; field.placeholder = uiText('自动跟随模型 · ', 'Automatic · ') + translationCapacity(host).contextWindow.toLocaleString()
     }
-    kind.help.textContent = value.kind === 'machine'
-      ? uiText('仅返回译文，不进行额外的术语解析、歧义理清或公式恢复。适用于选文和全文翻译。', 'Returns translation only, without extra terminology analysis, ambiguity clarification or formula recovery. Applies to selected text and full documents.')
-      : uiText('沿用当前 AI 翻译能力，可结合上下文处理术语、歧义与公式。', 'Uses the existing AI translation capabilities, including contextual handling of terminology, ambiguity and formulas.')
+    kind.help.textContent = scope === 'document'
+      ? uiText('对照翻译、简阅和 Markdown 全文翻译共用此设置。选择「翻译接口」可使用免费服务。', 'Bilingual PDF, reading mode and full Markdown translation share this setting. Choose Translation service to use a free service.')
+      : uiText('选中文本时使用。选择「翻译接口」可免费获取译文；AI 生成还可结合上下文处理术语与歧义。', 'Applies to selected text. Choose Translation service for free translation, or AI generation for contextual help with terms and ambiguity.')
   }
   const save = (value: TranslationInterface) => {
     status.textContent = saveTranslationInterface(host, value, scope) ? '' : uiText('设置保存失败，请重试。', 'Could not save settings. Please try again.')
     sync()
   }
   kind.select.onChange(value => save({ ...readTranslationInterface(host, scope), kind: value === 'machine' ? 'machine' : 'ai' }))
-  service.select.onChange(value => save({ ...readTranslationInterface(host, scope), service: value === 'google' ? 'google' : 'bing' }))
+  service.select.onChange(value => save({ ...readTranslationInterface(host, scope), service: isMachineService(value) ? value : 'bing' }))
   sync()
   const stopModels = observeAiModelSettings(host, sync)
   let observer: unknown

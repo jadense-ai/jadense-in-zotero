@@ -4,18 +4,21 @@ import type { TranslationLanguages } from './translation-languages'
 import { uiText } from '@/zotero/ui-preferences'
 import { translationScheduler, retryAt, TranslationRateLimitError } from './translation-queue'
 
-export type TranslationService = 'bing' | 'google'
-export const TRANSLATION_LIMITS = { bing: 1000, google: 5000 } as const
+import { machineServices, machineTextCost, type TranslationService } from './machine-services'
+export type { TranslationService } from './machine-services'
+export const TRANSLATION_LIMITS = Object.fromEntries(Object.entries(machineServices).map(([id, service]) => [id, service.limit])) as Record<TranslationService, number>
 const entities = new MarkdownIt().utils
 
 /** 优先在句界和空白处切分；按 UTF-16 长度保守限额，保证 Unicode 与源文均不丢失。 */
-export function splitMachineTranslationText(text: string, limit: number): string[] {
+export function splitMachineTranslationText(text: string, limit: number, cost = (value: string) => value.length): string[] {
   const chars = [...text], parts: string[] = []
   let start = 0
   while (start < chars.length) {
     let end = start, size = 0, boundary = start
-    while (end < chars.length && size + chars[end].length <= limit) {
-      size += chars[end].length; end++
+    while (end < chars.length) {
+      const width = cost(chars[end])
+      if (size + width > limit) break
+      size += width; end++
       if (/[\s。！？.!?]/u.test(chars[end - 1])) boundary = end
     }
     const stop = end === chars.length ? end : boundary > start ? boundary : end
@@ -39,18 +42,21 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 function language(code: string, service: TranslationService) {
-  if (service === 'google') return code
-  return ({ auto: 'auto-detect', 'zh-CN': 'zh-Hans', 'zh-TW': 'zh-Hant' } as Record<string, string>)[code] ?? code
+  if (service === 'bing' || service === 'edge')
+    return ({ auto: 'auto-detect', 'zh-CN': 'zh-Hans', 'zh-TW': 'zh-Hant' } as Record<string, string>)[code] ?? code
+  if (service === 'libretranslate') return ({ 'zh-CN': 'zh', 'zh-TW': 'zt', no: 'nb' } as Record<string, string>)[code] ?? code
+  return service === 'mymemory' && code === 'auto' ? 'autodetect' : code
 }
 
 /** 只解析响应拥有的译文字段，附加字段忽略；HTML 永不插入插件 DOM。 */
 async function translateChunk(service: TranslationService, text: string, languages: TranslationLanguages, fetchImpl: typeof fetch, signal: AbortSignal) {
+  const { name, origin } = machineServices[service]
   const request = async (url: string, init?: RequestInit) => {
     check(signal)
     const response = await fetchImpl(url, { ...init, credentials: 'omit', signal })
     check(signal)
     if (response.status === 429) throw new TranslationRateLimitError(retryAt(response.headers.get('Retry-After')))
-    if (!response.ok) throw new Error(uiText(`${service === 'bing' ? 'Bing' : 'Google'} 翻译请求失败（HTTP ${response.status}），请稍后重试。`, `${service === 'bing' ? 'Bing' : 'Google'} translation failed (HTTP ${response.status}). Please try again later.`))
+    if (!response.ok) throw new Error(uiText(`${name} 翻译请求失败（HTTP ${response.status}），请稍后重试。`, `${name} translation failed (HTTP ${response.status}). Please try again later.`))
     return response
   }
   const source = language(languages.sourceLanguage, service), target = language(languages.targetLanguage, service)
@@ -60,6 +66,30 @@ async function translateChunk(service: TranslationService, text: string, languag
     const html = await (await request(`https://translate.google.com/m?${query}`)).text()
     const value = /class=["'](?:t0|result-container)["'][^>]*>([\s\S]*?)<\/div>/u.exec(html)?.[1]
     result = value?.replace(/<[^>]*>/gu, '').replace(/&(?:#x[\da-f]+|#\d+|[a-z][\da-z]+);/giu, entity => entities.unescapeAll(entity))
+  } else if (service === 'google-gtx') {
+    const query = new URLSearchParams({ client: 'gtx', dt: 't', sl: source, tl: target, q: text })
+    const sentences = (await (await request(`${origin}/translate_a/single?${query}`)).json())?.[0]
+    if (Array.isArray(sentences) && sentences.every(row => Array.isArray(row) && typeof row[0] === 'string'))
+      result = sentences.map(row => row[0]).join('')
+  } else if (service === 'edge') {
+    const query = new URLSearchParams({ to: target, isEnterpriseClient: 'false' })
+    if (languages.sourceLanguage !== 'auto') query.set('from', source)
+    const reply = await (await request(`${origin}/translate/translatetext?${query}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([text]),
+    })).json()
+    result = reply?.[0]?.translations?.[0]?.text
+  } else if (service === 'mymemory') {
+    const query = new URLSearchParams({ q: text, langpair: `${source}|${target}` })
+    const reply = await (await request(`${origin}/get?${query}`)).json()
+    if (reply?.quotaFinished === true || Number(reply?.responseStatus) === 429)
+      throw new Error(uiText('MyMemory 免费额度已用完，请稍后重试或在设置中更换服务。', 'MyMemory quota exhausted. Try later or choose another translation service.'))
+    if (Number(reply?.responseStatus) === 200) result = reply?.responseData?.translatedText
+  } else if (service === 'libretranslate') {
+    // 本机模式不跟随重定向，以免第三方意外收到文献正文。
+    const reply = await (await request(`${origin}/translate`, { method: 'POST', redirect: 'error',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: text, source, target, format: 'text' }),
+    })).json()
+    result = reply?.translatedText
   } else {
     const html = await (await request('https://www.bing.com/translator')).text()
     const ig = /["']IG["']\s*:\s*["']([^"']+)/iu.exec(html)?.[1]
@@ -83,7 +113,7 @@ export async function translateMachineText(input: TranslationLanguages & {
 }): Promise<string> {
   const host = input.host, taskID = crypto.randomUUID()
   let result = ''
-  for (const text of splitMachineTranslationText(input.text, TRANSLATION_LIMITS[input.service])) {
+  for (const text of splitMachineTranslationText(input.text, machineServices[input.service].limit, value => machineTextCost(input.service, value))) {
     check(input.signal)
     const operation = Promise.resolve().then(async () => {
       check(input.signal)

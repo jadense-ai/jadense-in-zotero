@@ -7,6 +7,54 @@ const google = (text = '译文') => new Response(`<div class="result-container">
 const bing = '<script>var x={"ig":"test-ig"};var params_AbusePreventionHelper = [123,"test-session",3600];</script><div data-iid="translator.1"></div>'
 
 describe('traditional translation adapters', () => {
+  it.each([
+    ['edge', 'https://edge.microsoft.com/translate/translatetext', [{ translations: [{ text: '甲乙' }], ignored: 1 }]],
+    ['google-gtx', 'https://translate.googleapis.com/translate_a/single', [[['甲', 'A'], ['乙', 'B']], null, 'en']],
+    ['libretranslate', 'http://127.0.0.1:5000/translate', { translatedText: '甲乙', extra: true }],
+  ] as const)('routes %s directly and preserves auto detection and traditional Chinese', async (service, endpoint, reply) => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => Response.json(reply))
+    const result = await translateMachineText({ host: {}, service, text: 'A B', sourceLanguage: 'auto', targetLanguage: 'zh-TW', fetchImpl })
+    expect(result).toBe('甲乙')
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    const [address, init] = fetchImpl.mock.calls[0], url = new URL(String(address))
+    expect(url.origin + url.pathname).toBe(endpoint)
+    expect(init?.credentials).toBe('omit')
+    if (service === 'edge') {
+      expect(Object.fromEntries(url.searchParams)).toEqual({ to: 'zh-Hant', isEnterpriseClient: 'false' })
+      expect(JSON.parse(String(init?.body))).toEqual(['A B'])
+    } else if (service === 'google-gtx') {
+      expect(Object.fromEntries(url.searchParams)).toEqual({ client: 'gtx', dt: 't', sl: 'auto', tl: 'zh-TW', q: 'A B' })
+    } else {
+      expect(init?.redirect).toBe('error')
+      expect(JSON.parse(String(init?.body))).toEqual({ q: 'A B', source: 'auto', target: 'zt', format: 'text' })
+    }
+  })
+
+  it('sends MyMemory at most 500 UTF-8 bytes per lookup and preserves the entire selection', async () => {
+    const requests: string[] = [], text = ('中文 😀. ').repeat(75)
+    const host = { Prefs: { get: () => '{"https://api.mymemory.translated.net":{"rpm":60000}}' } }
+    const fetchImpl = vi.fn(async (address: RequestInfo | URL) => {
+      const url = new URL(String(address)), q = url.searchParams.get('q')!
+      expect(url.origin + url.pathname).toBe('https://api.mymemory.translated.net/get')
+      expect(url.searchParams.get('langpair')).toBe('autodetect|en')
+      requests.push(q)
+      return Response.json({ responseStatus: '200', responseData: { translatedText: q.trim() } })
+    })
+    expect(await translateMachineText({ host, service: 'mymemory', text, sourceLanguage: 'auto', targetLanguage: 'en', fetchImpl })).toBe(text)
+    expect(requests.length).toBeGreaterThan(1)
+    expect(requests.join('')).toBe(text)
+    expect(requests.every(q => new TextEncoder().encode(q).length <= 500)).toBe(true)
+  })
+
+  it.each([
+    ['mymemory', { responseStatus: 429, quotaFinished: true, responseData: { translatedText: 'quota warning' } }],
+    ['mymemory', { responseStatus: 403, responseData: { translatedText: 'invalid language' } }],
+    ['google-gtx', [[['first sentence'], [null, 'second missing']]]],
+  ] as const)('does not store service errors or partial %s replies as translations', async (service, reply) => {
+    const fetchImpl = vi.fn(async () => Response.json(reply)), onText = vi.fn()
+    await expect(translateMachineText({ host: {}, service, text: 'test', ...languages, fetchImpl, onText })).rejects.toThrow()
+    expect(fetchImpl).toHaveBeenCalledOnce(); expect(onText).not.toHaveBeenCalled()
+  })
   it('maps Bing languages and reads only the translation field without credentials', async () => {
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => init?.method === 'POST'
       ? new Response(JSON.stringify([{ translations: [{ text: '繁體譯文', extra: true }], extra: 1 }])) : new Response(bing))

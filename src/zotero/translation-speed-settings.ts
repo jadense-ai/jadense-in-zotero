@@ -3,6 +3,7 @@ import { DEFAULT_TRANSLATION_SPEED, saveTranslationSpeed, translationScheduler, 
 import { featureModelState } from './ai-settings'
 import { readConnection, type ZoteroLike } from './runtime'
 import { readTranslationInterface } from './translation-interface'
+import { isMachineAddress } from '@/chat/machine-services'
 import { uiText } from './ui-preferences'
 
 export function translationSpeedText(value: TranslationSnapshot) {
@@ -28,7 +29,7 @@ export function wireTranslationSpeedSettings(host: ZoteroLike, root: HTMLElement
         const row = make('div'), description = make('div'), controls = make('div'), title = make('h3'), note = make('p'), status = make('p')
         row.className = 'jdx-feature-model-row'; row.dataset.speedAddress = address; controls.className = 'jdx-settings-controls'; title.textContent = address
         note.className = 'jdx-manager-settings-note jdx-pref-card-note'; note.textContent = uiText('全部翻译共享。RPM 包含检查与恢复。速度立即用于未发送请求；批次按各阅读模式的上下文预算生成。', 'Shared by all translation tools. RPM includes checks and recovery. Limits apply to unsent requests; batches use each reading mode’s context budget.')
-        const machine = address === translationServiceKey('google') || address === translationServiceKey('bing')
+        const machine = isMachineAddress(address)
         if (machine) note.textContent = uiText('全部翻译入口共享请求额度。网页翻译保持串行，RPM 包含页面读取。', 'All translation tools share this limit. Web translation remains serial; RPM includes page requests.')
         const fields = [['concurrency', uiText('并发数（1–8）', 'Concurrency (1–8)')], ['rpm', uiText('HTTP 请求/分钟', 'HTTP requests/minute')]] as const
         const inputs = fields.map(([field, label]) => {

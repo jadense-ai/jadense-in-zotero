@@ -56,6 +56,21 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
+it('dispatches PDF worker text to the saved free service without an AI account', async () => {
+  service = 'mymemory'
+  const finish = vi.mocked(runPDFWorker).getMockImplementation()!
+  vi.mocked(runPDFWorker).mockImplementationOnce(async (...args) => {
+    expect(args[1].machine).toBe(true)
+    const reply = await args[3]({ type: 'translate', id: 'paragraph', text: 'Source sentence.' })
+    expect(reply).toMatchObject({ text: 'translated' })
+    await finish(...args)
+  })
+  const jobs = new PDFTranslationJobs(host), task = await jobs.start(1)
+  await vi.waitFor(() => expect(task.status, task.error).toBe('complete'))
+  expect(translateMachineText).toHaveBeenCalledWith(expect.objectContaining({ service: 'mymemory', text: 'Source sentence.' }))
+  expect(resolveTemporaryAccount).not.toHaveBeenCalled()
+})
+
 it.each([401, 403])('automatically resumes credential-blocked HTTP %i only after a verified same-account token change', async status => {
   kind = 'ai'
   vi.mocked(resolveTemporaryAccount)
