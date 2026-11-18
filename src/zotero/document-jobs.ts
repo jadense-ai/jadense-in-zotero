@@ -23,6 +23,7 @@ import { literatureIdentity } from "./document-identity"
 import { buildTranslationReadingIndex, translationReadingRows } from "./translation-reading"
 import { readTranslationInterface, TRANSLATION_INTERFACE_PREF, TRANSLATION_INTERFACE_PREFS } from './translation-interface'
 import { translateMachineText, TRANSLATION_LIMITS } from '@/chat/machine-translation'
+import { machineServices, machineTextCost } from '@/chat/machine-services'
 import { translationScheduler, stopTranslationScheduler } from '@/chat/translation-queue'
 import { stopLocalOCR } from './local-ocr'
 import { extractionOCREnabled, readDocument } from './document-extraction'
@@ -220,7 +221,7 @@ export class DocumentJobs {
           const config = readTranslationInterface(this.host, 'document'), capacity = translationCapacity(this.host)
           if (config.kind === 'ai') { await refreshModelCatalog(this.host, 'translation', this.fetchImpl); checkCancelled(controller.signal); task.translationBudget = translationCapacity(this.host) }
           const effectiveCapacity = task.translationBudget ?? capacity
-          const pages = chunkTranslationDocument({ source: task.source, pages: document.pages, markdown: document.markdown }, config.kind === 'machine' ? TRANSLATION_LIMITS[config.service] : effectiveCapacity.sourceTokens, config.kind === 'machine' ? text => text.length : tokenCost)
+          const pages = chunkTranslationDocument({ source: task.source, pages: document.pages, markdown: document.markdown }, config.kind === 'machine' ? TRANSLATION_LIMITS[config.service] : effectiveCapacity.sourceTokens, config.kind === 'machine' ? text => machineTextCost(config.service, text) : tokenCost)
           task.total = pages.reduce((sum, page) => sum + page.pieces.length, 0)
           for (const page of pages) task.storageWarning = !(await this.store.savePage(task.id, page)) || task.storageWarning
           this.readingCache.set(task.id, pages)
@@ -355,7 +356,7 @@ export class DocumentJobs {
       for (const piece of pending) {
         checkCurrent()
         await this.validateSource(task)
-        const label = translationInterface.service === 'bing' ? 'Bing' : 'Google'
+        const label = machineServices[translationInterface.service].name
         if (!task.models.includes(label)) task.models.push(label)
         const text = await translateMachineText({ host: this.host, service: translationInterface.service, text: piece.text, ...task.languages!, fetchImpl: this.fetchImpl, signal })
         checkCurrent()
@@ -453,7 +454,7 @@ export class DocumentJobs {
       for (const paragraph of [...page.paragraphs]) {
         const piece = page.pieces.find(piece => piece.paragraphID === paragraph.id)
         if (!piece || page.translations[piece.id] || pending.has(piece.id)) continue
-        const slices = capacitySlices(piece.text, limit, config.kind === 'machine' ? text => text.length : tokenCost)
+        const slices = capacitySlices(piece.text, limit, config.kind === 'machine' ? text => machineTextCost(config.service, text) : tokenCost)
         if (slices.length < 2) continue
         const replacements = slices.map((slice, index) => ({ ...paragraph, id: `${paragraph.id}s${index}`, text: slice.text,
           sourceRange: { start: (paragraph.sourceRange?.start ?? 0) + slice.start, end: (paragraph.sourceRange?.start ?? 0) + slice.end } }))
@@ -479,7 +480,7 @@ export class DocumentJobs {
       let result: string
       if (!hasTranslatableText(piece.text)) result = piece.text
       else if (config.kind === 'machine') {
-        const label = config.service === 'bing' ? 'Bing' : 'Google'
+        const label = machineServices[config.service].name
         if (!task.models.includes(label)) task.models.push(label)
         result = ''
         // 图片/公式在本地拼回，机器翻译接口不接触资源引用。

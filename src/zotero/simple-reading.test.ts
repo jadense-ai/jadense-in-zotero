@@ -288,6 +288,18 @@ describe('atomic jobs, partial output and explicit execution', () => {
     const task = await jobs.start(identity, languages, [block], transport(async (_task, request) => Object.fromEntries(request.blocks.map(row => [row.id, row.text]))), () => new Set())
     await done(jobs, task.id); expect(task.outputs['0']).toBe(block.text); expect(task.status).toBe('complete')
   })
+  it('translates and saves reading blocks using only the selected local document service', async () => {
+    const network = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe('http://127.0.0.1:5000/translate')
+      return Response.json({ translatedText: JSON.parse(String(init?.body)).q.replace('First', '第一段').replace('Second', '第二段') })
+    })
+    const host = { Prefs: { get: (key: string) => key.endsWith('fullTranslationInterface') ? '{"kind":"machine","service":"libretranslate"}' : undefined }, getMainWindow: () => ({ fetch: network }) } as unknown as ZoteroLike
+    const jobs = new SimpleReadingJobs(storage().store)
+    const task = await jobs.start(identity, languages, [{ id: '0', text: 'First' }, { id: '1', text: 'Second' }], await readingTransport(host), () => new Set())
+    await done(jobs, task.id)
+    expect(task.outputs).toEqual({ '0': '第一段', '1': '第二段' })
+    expect(network).toHaveBeenCalledOnce()
+  })
   it('shares real transport scheduling and service cooldown with another translation caller', async () => {
     const values = new Map<string, unknown>([['extensions.jadenseInZotero.fullTranslationInterface', JSON.stringify({ kind: 'machine', service: 'google' })]])
     const starts: number[] = [], network = vi.fn(async () => { starts.push(Date.now()); return starts.length === 1 ? new Response('', { status: 429, headers: { 'Retry-After': '1' } }) : new Response(JSON.stringify([[['译文']]])) })

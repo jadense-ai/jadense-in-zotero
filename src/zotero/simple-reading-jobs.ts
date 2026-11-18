@@ -5,6 +5,7 @@ import { requestHash } from '@/chat/temporary-request-store'
 import { ReliableByokChatClient } from '@/chat/reliable-byok-chat'
 import { ReliableTemporaryChatClient } from '@/chat/reliable-temporary-chat'
 import { translateMachineText, TRANSLATION_LIMITS } from '@/chat/machine-translation'
+import { machineTextCost } from '@/chat/machine-services'
 import { READING_AI_TOTAL_TIMEOUT_MS, translationScheduler, translationServiceKey, translationSpeed } from '@/chat/translation-queue'
 import { readConnection, type ZoteroLike } from './runtime'
 import { featureModelState } from './ai-settings'
@@ -30,7 +31,7 @@ export async function readingTransport(host: ZoteroLike): Promise<ReadingTranspo
   const machine = translation.kind === 'machine'
   // PDF 逐页排版的 batchTokens 不是 SDT 的容量约束；整篇按模型输入/输出预算组批。
   const limit = machine ? TRANSLATION_LIMITS[translation.service] - 100 : budget.sourceTokens
-  return { configuration, limit, outputTokens: budget.maxOutputTokens, concurrency: machine ? 1 : translationSpeed(host, service).concurrency, machine, cost: machine ? text => text.length : tokenCost,
+  return { configuration, limit, outputTokens: budget.maxOutputTokens, concurrency: machine ? 1 : translationSpeed(host, service).concurrency, machine, cost: machine ? text => machineTextCost(translation.service, text) : tokenCost,
     async send(task, request, signal, onProgress, allowUnconfirmedRetry) {
       checkCancelled(signal)
       const win = host.getMainWindow?.(), network = (win?.fetch?.bind(win) ?? globalThis.fetch) as typeof fetch

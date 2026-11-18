@@ -1,5 +1,15 @@
 # 更新说明 / Changelog
 
+## 0.6.18 — 2026-11-18
+
+- 免密钥机器翻译新增 Microsoft Edge、Google GTX、MyMemory 和本机 LibreTranslate，保留 Bing 与 Google。
+- 选文翻译和对照翻译可分别选服务。简阅与 Markdown 全文翻译沿用对照翻译的设置。
+- 长文本会按所选服务的长度限制切分，保留段落顺序和已有翻译进度。
+
+- Keyless machine translation now supports Microsoft Edge, Google GTX, MyMemory, and local LibreTranslate alongside Bing and Google.
+- Choose separate services for selection and parallel translation. Simple Reading and full-text Markdown translation use the parallel translation setting.
+- Long text is split to fit each service's limits while preserving paragraph order and existing translation progress.
+
 ## 0.6.17 — 2026-11-16
 
 - 长文已逐段解析完毕后，即使最后的汇总失败，也会保留完整分段笔记，并写入能与原文核对的批注。

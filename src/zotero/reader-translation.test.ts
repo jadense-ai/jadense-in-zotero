@@ -43,12 +43,12 @@ function readerSourceItems(): NonNullable<ZoteroLike["Items"]> {
 describe("reader translation runtime", () => {
   it('dispatches the selection service even when full translation uses AI', async () => {
     const zotero = zoteroWithPreferences(new Map(), readerSourceItems())
-    saveTranslationInterface(zotero, { kind: 'machine', service: 'google' }, 'selection')
+    saveTranslationInterface(zotero, { kind: 'machine', service: 'edge' }, 'selection')
     saveTranslationInterface(zotero, { kind: 'ai', service: 'bing' }, 'document')
-    const fetchImpl = vi.fn(async (_url: string | URL | Request) => new Response('<div class="result-container">独立选文译文</div>'))
+    const fetchImpl = vi.fn(async (_url: string | URL | Request) => Response.json([{ translations: [{ text: '独立选文译文' }] }]))
     const result = await translateReaderSelection({ zotero, fetchImpl, action: { kind: 'translate', itemID: 17, text: 'Separate selection.' } })
     expect(result.result.text).toBe('独立选文译文')
-    expect(String(fetchImpl.mock.calls[0][0])).toContain('google')
+    expect(new URL(String(fetchImpl.mock.calls[0][0])).hostname).toBe('edge.microsoft.com')
   })
 
   it('uses traditional translation without AI configuration and saves the usual history', async () => {

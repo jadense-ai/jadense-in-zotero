@@ -1,6 +1,7 @@
 /** 翻译服务共享串行节奏；只排队，不自动重试已派发的请求。 */
 import { markDiagnosticAbort } from '@/zotero/diagnostics'
 import { uiText } from '@/zotero/ui-preferences'
+import { isMachineAddress, isMachineService, machineServices } from './machine-services'
 type QueueHost = { __jadenseTranslationServices?: Map<string, { tail: Promise<unknown>; next: number }> }
 export class TranslationRateLimitError extends Error {
   constructor(readonly retryAt: number) { super(`翻译服务限流 / Translation rate limited. ${new Date(retryAt).toLocaleTimeString()} 后可继续 / Resume after this time.`) }
@@ -33,8 +34,7 @@ export type TranslationSpeed = typeof DEFAULT_TRANSLATION_SPEED
 type SpeedHost = object & { Prefs?: { get(key: string, global?: boolean): unknown; set?(key: string, value: unknown, global?: boolean): void }; __jadenseTranslationScheduler?: TranslationScheduler }
 
 export function translationServiceKey(address: string) {
-  if (address === 'google') return 'https://translate.google.com'
-  if (address === 'bing') return 'https://www.bing.com'
+  if (isMachineService(address)) return machineServices[address].origin
   try {
     const url = new URL(address)
     return url.origin + url.pathname.replace(/\/(?:chat\/completions|responses|messages|api\/chat(?:\/temporary)?)\/?$/u, '').replace(/\/+$/u, '')
@@ -75,7 +75,7 @@ export class TranslationScheduler {
     const key = translationServiceKey(address)
     let state = this.services.get(key)
     if (!state) { state = { address: key, active: 0, inFlight: 0, queue: [], http: [], lastTask: '', lastHttpTask: '', starts: [], lastStart: -Infinity, cooldown: 0, limitedAt: null, successes: 0, machine, httpTotal: 0, submissions: 0, rateLimits: 0, waitMs: 0, modelMs: 0 }; this.services.set(key, state) }
-    state.machine ||= machine || key === translationServiceKey('google') || key === translationServiceKey('bing')
+    state.machine ||= machine || isMachineAddress(key)
     return state
   }
   private limits(state: ServiceState) {

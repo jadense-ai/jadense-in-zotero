@@ -1,4 +1,5 @@
 import { readTranslationInterface, TRANSLATION_INTERFACE_PREFS } from './translation-interface'
+import { machineServices } from '@/chat/machine-services'
 /** Manager、原生偏好与 Reader 共用的上下文预算编辑；配置不触发翻译。 */
 import type { ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
@@ -23,8 +24,8 @@ export function wireReadingBudgetSettings(host: ZoteroLike, root: HTMLElement, m
   const sync = () => {
     const service = readTranslationInterface(host, 'document')
     summaryLabel.textContent = service.kind === 'machine' ? uiText('当前服务', 'Current service') : uiText('翻译模型', 'Translation model')
-    summaryValue.textContent = service.kind === 'machine' ? service.service : featureModelDescription(host, 'translation')
-    summaryHint.textContent = service.kind === 'machine' ? '' : uiText('在常规设置中修改', 'Change in General settings')
+    summaryValue.textContent = service.kind === 'machine' ? machineServices[service.service].name : featureModelDescription(host, 'translation')
+    summaryHint.textContent = uiText('免费接口：设置 → 功能配置 → 对照翻译', 'Free services: Settings → Features → Bilingual PDF translation')
     for (const [mode, { input, help }] of inputs) {
       input.disabled = service.kind === 'machine'
       const budget = readingTranslationBudget(host, mode)
@@ -36,7 +37,7 @@ export function wireReadingBudgetSettings(host: ZoteroLike, root: HTMLElement, m
     }
   }
   let disposed = false
-  const refresh = () => { sync(); void refreshTranslationLimits(host).then(() => { if (!disposed) sync() }) }
+  const refresh = () => { sync(); if (readTranslationInterface(host, 'document').kind === 'ai') void refreshTranslationLimits(host).then(() => { if (!disposed) sync() }) }
   const stopModels = observeAiModelSettings(host, refresh)
   refresh(); container.addEventListener('focusin', refresh)
   let serviceObserver: unknown

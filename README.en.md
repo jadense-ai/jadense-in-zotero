@@ -20,11 +20,11 @@ Jadense in Zotero is a source-available AI reading assistant from [Jadense (攻�
 
 **Free for personal non-commercial use · Commercial use prohibited · Bring your own API key (BYOK) · Jadense account optional**
 
-**[Download v0.6.17 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.17/jadense-in-zotero-v0.6.17.xpi)** · [Complete Windows x64 offline ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.17/jadense-in-zotero-v0.6.17-windows-x64-offline.zip) · [Requirements and installation methods](#requirements) · [Quick start](#quick-start) · [Explore Jadense](#continue-research)
+**[Download v0.6.18 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.18/jadense-in-zotero-v0.6.18.xpi)** · [Complete Windows x64 offline ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.18/jadense-in-zotero-v0.6.18-windows-x64-offline.zip) · [Requirements and installation methods](#requirements) · [Quick start](#quick-start) · [Explore Jadense](#continue-research)
 
 The client is source-available under the [non-commercial license](LICENSE). Model usage is billed according to your chosen provider or your Jadense account's subscription and points rules.
 
-**v0.6.17:** Keep completed paper notes when the final summary fails, suggest annotation counts, and diagnose Windows engine setup. [Upgrade details](docs/usage-guide.md#update-0617)
+**v0.6.18:** Choose from six keyless machine translation services, with separate settings for selections and longer reading workflows. [Upgrade details](docs/usage-guide.md#update-0618)
 
 **What does Jadense mode do?** Enable it from the workspace top bar to use your Jadense account for Jev classification without a separate TypeSafe key, choose Jadense OCR when local OCR is unavailable, and search across 13 sources in Frontier Radar. It is off by default and requires a connected account with the relevant permissions; model calls may use points. Standard features remain available with your own keys while the mode is off. [Setup steps](docs/usage-guide.md#jadense-mode)
 
@@ -33,16 +33,16 @@ The offline suite includes the new [PDF installation guide](<docs/jadense-in-zot
 <!-- release-summary:start -->
 ## Recent releases
 
+- [v0.6.18](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.18) — Choose from six keyless machine translation services, with separate settings for selections and longer reading workflows.
 - [v0.6.17](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.17) — Keep completed paper notes when the final summary fails, suggest annotation counts, and diagnose Windows engine setup.
 - [v0.6.16](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.16) — Reanalyze stuck tasks with a fresh request and distinguish Continue analysis.
 - [v0.6.15](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15) — Plan input around model capacity, retain complete long text locally, fix native settings and unify the logo.
 - [v0.6.14](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14) — Add opt-in evidence tracing with passage previews and PDF navigation, an on-demand source list, resumable onboarding and shared offline-engine help.
-- [v0.6.13](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13) — Resume analysis and bilingual PDF tasks, clarify analysis states, add separate text size and PDF zoom, and clarify actions for blocked PDF tasks.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->
 
-See the [v0.6.17 release notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.17) for development verification and compatibility. Official assets use a production/full package; the complete offline suite targets Windows x64.
+See the [v0.6.18 release notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.18) for development verification and compatibility. Official assets use a production/full package; the complete offline suite targets Windows x64.
 
 <a id="api-recommendation"></a>
 
