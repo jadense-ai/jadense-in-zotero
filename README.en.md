@@ -38,7 +38,6 @@ The offline suite includes the new [PDF installation guide](<docs/jadense-in-zot
 - [v0.6.16](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.16) — Reanalyze stuck tasks with a fresh request and distinguish Continue analysis.
 - [v0.6.15](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15) — Plan input around model capacity, retain complete long text locally, fix native settings and unify the logo.
 - [v0.6.14](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14) — Add opt-in evidence tracing with passage previews and PDF navigation, an on-demand source list, resumable onboarding and shared offline-engine help.
-- [v0.6.13](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13) — Resume analysis and bilingual PDF tasks, clarify analysis states, add separate text size and PDF zoom, and clarify actions for blocked PDF tasks.
 
 [Full version history](CHANGELOG.md)
 <!-- release-summary:end -->

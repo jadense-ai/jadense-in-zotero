@@ -39,7 +39,6 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 - [v0.6.16](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.16) — 主动重新解析卡住任务，明确区分继续解析，保留已有成果。
 - [v0.6.15](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15) — 按模型容量规划输入，完整保留本地长正文，修复原生设置并统一 Logo。
 - [v0.6.14](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.14) — 新增可选证据溯源、原文预览与 PDF 定位，来源列表按需展开，提供可继续的入门教学和统一离线安装帮助。
-- [v0.6.13](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13) — 解析与对照翻译保留进度并支持继续，区分解析状态，新增独立字号与译文缩放，明确 PDF 失效任务操作。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
