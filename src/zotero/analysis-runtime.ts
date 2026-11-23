@@ -13,6 +13,7 @@ import { readConnection, type ZoteroLike } from './runtime'
 import { uiText } from './ui-preferences'
 import { markDiagnosticAbort } from './diagnostics'
 import { analysisStage } from './analysis-stage'
+import { readAnalysisReferencesEnabled } from './analysis-settings'
 import { FEATURE_MODEL_PREF_KEYS, AUTO_FOLLOW_CHAT_MODEL_PREF_KEY, AI_MODEL_SETTINGS_PREF_KEY } from './ai-settings'
 
 type Context = { account: string; configuration: string; route: 'jadense' | 'byok' }
@@ -219,18 +220,20 @@ export class AnalysisRuntime {
         signal.throwIfAborted()
         if (source?.kind === 'file') view.source = { ...source, title: source.parentItem?.title || source.title, authors: [] }
       }
-      // 参考文献初始化也属于可选任务边界，不能阻断核心总结。
-      try {
-        const jobs = documentJobs(this.host)
-        view.references = { running: true, message: uiText('正在读取参考文献…', 'Reading references…') }
-        void jobs.start('references', task.itemID, false, { signal }).then(reference => {
-          task.referenceTaskID = reference.id; view.referenceTaskID = reference.id
-          if (task.record) { task.record.referenceTaskID = reference.id; try { if (this.host.Prefs) appendPaperAnalysisRecord(this.host.Prefs, task.record) } catch { /* 可选关联。 */ } }
-          void this.save(task)
-          if (signal.aborted) jobs.pause(reference.id)
-        }).catch(() => { view.references = { running: false, error: uiText('参考文献暂不可用，解析继续。', 'References unavailable; analysis continues.') } })
-          .finally(() => { if (view.references) view.references.running = false; this.emit() })
-      } catch { view.references = { running: false, error: uiText('参考文献暂不可用，解析继续。', 'References unavailable; analysis continues.') } }
+      if (readAnalysisReferencesEnabled(this.host)) {
+        // 参考文献初始化失败也只影响引用页，核心总结继续。
+        try {
+          const jobs = documentJobs(this.host)
+          view.references = { running: true, message: uiText('正在读取参考文献…', 'Reading references…') }
+          void jobs.start('references', task.itemID, false, { signal }).then(reference => {
+            task.referenceTaskID = reference.id; view.referenceTaskID = reference.id
+            if (task.record) { task.record.referenceTaskID = reference.id; try { if (this.host.Prefs) appendPaperAnalysisRecord(this.host.Prefs, task.record) } catch { /* 可选关联。 */ } }
+            void this.save(task)
+            if (signal.aborted) jobs.pause(reference.id)
+          }).catch(() => { view.references = { running: false, error: uiText('参考文献暂不可用，解析继续。', 'References unavailable; analysis continues.') } })
+            .finally(() => { if (view.references) view.references.running = false; this.emit() })
+        } catch { view.references = { running: false, error: uiText('参考文献暂不可用，解析继续。', 'References unavailable; analysis continues.') } }
+      }
       const result = await this.run({ zotero: this.host, itemID: task.itemID, signal, fetchImpl: this.network(), task, checkpoint: value => this.save(value),
         referenceTaskID: task.referenceTaskID,
         onProgress: message => { if (!signal.aborted) { view.message = message; this.emit() } },

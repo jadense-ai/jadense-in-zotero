@@ -84,7 +84,7 @@ export function wireOCRSettings(host: ZoteroLike | null, root: HTMLElement | nul
   confirmation.append(removalTitle, scope, modelOption, modelHelp, confirmActions); removal.append(confirmation); details.append(removal)
   const cloudRoot = make('div')
   details.append(source)
-  body.append(title, note, storageRoot, cloudRoot, overview, tip, details); layout.before(body)
+  body.append(title, note, cloudRoot, overview, storageRoot, tip, details); layout.before(body)
   let disposed = false, busy = false, retryRead = false
   let migrationReady: OCREnvironment | undefined
   const stopStorage = wireEngineStorageSettings(host, storageRoot, 'ocr', {

@@ -20,6 +20,25 @@ vi.mock('./pdf-translation-jobs', () => ({ pdfTranslationJobs: () => ({ storageB
 
 afterEach(() => { vi.unstubAllGlobals(); state.change.mockReset(); state.root = '/profile/jadense-pdf-translation'; document.body.replaceChildren() })
 
+it('shows the current OCR location before opening the move form and keeps destination edits local', () => {
+  vi.stubGlobal('PathUtils', { profileDir: '/profile' })
+  const root = document.createElement('section')
+  const host = { Prefs: { get: () => undefined } } as unknown as ZoteroLike
+  const dispose = wireEngineStorageSettings(host, root, 'ocr', {})
+  const editor = root.querySelector('details')!
+  const status = root.querySelector('[role="status"]')!
+  expect(editor.open).toBe(false)
+  expect(editor.previousElementSibling?.textContent).toContain(state.root)
+  expect(editor.querySelector('input')).toBeTruthy()
+  expect(editor.contains(status)).toBe(false)
+  editor.open = true
+  const input = editor.querySelector('input')!
+  input.value = '/new'; input.dispatchEvent(new Event('input'))
+  expect(editor.textContent).toContain('/new')
+  expect(state.change).not.toHaveBeenCalled()
+  dispose()
+})
+
 it('keeps typed, browsed and default paths as drafts until Save', async () => {
   vi.stubGlobal('PathUtils', { profileDir: '/profile' })
   vi.stubGlobal('ChromeUtils', { importESModule: () => ({ FilePicker: class {

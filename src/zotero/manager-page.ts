@@ -68,6 +68,7 @@ import {
   saveCollectionUploadIncludePdfDefault,
   saveConnection,
   saveDefaultFolderId,
+  SYNC_PANEL_PREF_KEYS,
   type FavoriteFolderOption,
   type ZoteroLike,
 } from "./runtime"
@@ -101,7 +102,7 @@ import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureM
 import { rememberModelCatalog } from "./model-catalog"
 export { buildJadenseChatModelSelectOptions, jadenseChatModelSelectionIssue } from "./ai-model-select"
 import { formatJadenseSyncResult } from "./sync-result"
-import { summarizeZoteroSelection } from "./sync-panel"
+import { readUploadSelection, summarizeZoteroSelection } from "./sync-panel"
 import type { ManagerContext, ManagerSection } from "./manager-window"
 import {} from "./document-ui"
 import { mountLiteratureWorkspace } from "./literature-workspace"
@@ -138,6 +139,7 @@ export type ManagerPageState = {
 type ManagerWindowArguments = {
   zotero?: ZoteroLike
   section?: ManagerSection
+  focusChatModel?: boolean
   actions?: ReaderAction[]
 }
 
@@ -158,6 +160,8 @@ type ManagerElements = {
   itemSummary: HTMLElement
   uploadIssues: HTMLUListElement
   uploadStatus: HTMLElement
+  uploadScope: HTMLElement
+  folderStatus: HTMLElement
   settingsStatus: HTMLElement
   chatStatus: HTMLElement
   deleteDialog: HTMLElement
@@ -253,6 +257,11 @@ type ManagerElements = {
   accountProfileStatus: HTMLElement
   accountStatus: HTMLElement
   accountRefresh: HTMLButtonElement
+  profileRetry: HTMLButtonElement
+  pointsRetry: HTMLButtonElement
+  accountEmpty: HTMLElement
+  accountDetails: HTMLElement
+  accountConnect: HTMLButtonElement
   openJadense: HTMLButtonElement
   openCheckIn: HTMLButtonElement
   openBilling: HTMLButtonElement
@@ -278,6 +287,7 @@ type ManagerElements = {
   byokModelNew: HTMLButtonElement
   byokModelDelete: HTMLButtonElement
   byokStatus: HTMLElement
+  byokProviderStatus: HTMLElement
   byokClear: HTMLButtonElement
   byokTest: HTMLButtonElement
   byokSave: HTMLButtonElement
@@ -295,6 +305,8 @@ const IDS = {
   itemSummary: "jadense-manager-item-summary",
   uploadIssues: "jadense-manager-migration-issues",
   uploadStatus: "jadense-manager-migration-status",
+  uploadScope: "jadense-manager-upload-scope",
+  folderStatus: "jadense-manager-destination-feedback",
   settingsStatus: "jadense-manager-settings-status",
   chatStatus: "jadense-chat-status",
   deleteDialog: "jadense-delete-conversation-dialog",
@@ -389,6 +401,11 @@ const IDS = {
   accountProfileStatus: "jadense-manager-account-profile-status",
   accountStatus: "jadense-manager-account-status",
   accountRefresh: "jadense-manager-account-refresh",
+  profileRetry: "jadense-manager-account-profile-retry",
+  pointsRetry: "jadense-manager-account-points-retry",
+  accountEmpty: "jadense-manager-account-empty",
+  accountDetails: "jadense-manager-account-details",
+  accountConnect: "jadense-manager-account-connect",
   openJadense: "jadense-manager-open-jadense",
   openCheckIn: "jadense-manager-open-check-in",
   openBilling: "jadense-manager-open-billing",
@@ -414,6 +431,7 @@ const IDS = {
   byokModelNew: "jadense-manager-byok-model-new",
   byokModelDelete: "jadense-manager-byok-model-delete",
   byokStatus: "jadense-manager-byok-status",
+  byokProviderStatus: "jadense-manager-byok-provider-status",
   byokClear: "jadense-manager-byok-clear",
   byokTest: "jadense-manager-byok-test",
   byokSave: "jadense-manager-byok-save",
@@ -432,6 +450,8 @@ let accountRefreshGeneration = 0
 let invalidConnectionToken: string | null = null
 let invalidConnectionRevision = 0
 let accountRefreshBusy = false
+let uploadBusy = false
+let displayedUploadSelection: ReturnType<typeof readUploadSelection> = { items: [], collections: [] }
 const accountRequestControllers = new Set<AbortController>()
 export const JADENSE_ACCOUNT_REQUEST_TIMEOUT_MS = 15_000
 let chatModelCatalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }
@@ -545,6 +565,8 @@ export function accountRefreshIsDisabled(refreshBusy: boolean) {
 
 function syncAccountRefreshDisabled(elements: ManagerElements) {
   elements.accountRefresh.disabled = accountRefreshIsDisabled(accountRefreshBusy)
+  elements.profileRetry.disabled = accountRefreshBusy
+  elements.pointsRetry.disabled = accountRefreshBusy
 }
 
 function managerArguments() {
@@ -557,7 +579,7 @@ function resolveZoteroFromWindow() {
 }
 
 function sectionFromValue(value: unknown): ManagerSection {
-  if (value === "settings" || value === "settings-ocr" || value === "settings-connection" || value === "settings-features" || value === "migrate" || value === "translations" || value === "analysis" || value === "guide") return value
+  if (value === "settings" || value === "settings-ocr" || value === "settings-connection" || value === "settings-features" || value === "migrate" || value === "migrate-sync" || value === "translations" || value === "analysis" || value === "guide") return value
   return "chat"
 }
 
@@ -583,6 +605,8 @@ function readElements(): ManagerElements {
     itemSummary: element(IDS.itemSummary),
     uploadIssues: element(IDS.uploadIssues),
     uploadStatus: element(IDS.uploadStatus),
+    uploadScope: element(IDS.uploadScope),
+    folderStatus: element(IDS.folderStatus),
     settingsStatus: element(IDS.settingsStatus),
     chatStatus: element(IDS.chatStatus),
     deleteDialog: element(IDS.deleteDialog),
@@ -678,6 +702,11 @@ function readElements(): ManagerElements {
     accountProfileStatus: element(IDS.accountProfileStatus),
     accountStatus: element(IDS.accountStatus),
     accountRefresh: element(IDS.accountRefresh),
+    profileRetry: element(IDS.profileRetry),
+    pointsRetry: element(IDS.pointsRetry),
+    accountEmpty: element(IDS.accountEmpty),
+    accountDetails: element(IDS.accountDetails),
+    accountConnect: element(IDS.accountConnect),
     openJadense: element(IDS.openJadense),
     openCheckIn: element(IDS.openCheckIn),
     openBilling: element(IDS.openBilling),
@@ -703,6 +732,7 @@ function readElements(): ManagerElements {
     byokModelNew: element(IDS.byokModelNew),
     byokModelDelete: element(IDS.byokModelDelete),
     byokStatus: element(IDS.byokStatus),
+    byokProviderStatus: element(IDS.byokProviderStatus),
     byokClear: element(IDS.byokClear),
     byokTest: element(IDS.byokTest),
     byokSave: element(IDS.byokSave),
@@ -967,10 +997,10 @@ export function activeAiState(zotero: ZoteroLike, invalidToken = invalidConnecti
   return featureModelState(zotero, activeChatFeature(zotero), invalidToken)
 }
 
-export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConnectionToken): ManagerPageState {
+export function buildManagerState(zotero: ZoteroLike, invalidToken = invalidConnectionToken, selected = readUploadSelection(zotero)): ManagerPageState {
   const connection = readConnection(zotero)
   const ai = activeAiState(zotero, invalidToken)
-  const selection = summarizeZoteroSelection(zotero)
+  const selection = summarizeZoteroSelection(zotero, selected)
   const invalid = Boolean(connection.token && invalidToken === connection.token)
   const connected = Boolean(connection.token) && !invalid
   const hasDefaultFolder = Boolean(connection.defaultFolderId)
@@ -1011,7 +1041,7 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection | s
   const isChat = section === "chat"
   const isTranslations = false
   const isAnalysis = section === "analysis"
-  const isUpload = section === "migrate"
+  const isUpload = section === "migrate" || section === "migrate-sync"
   const isSettings = section === "settings" || section === "settings-ocr" || section === "settings-connection" || section === "settings-features"
   const zotero = resolveZoteroFromWindow()
   renderNewChatNavigation(elements.navChat, isChat, zotero?.Prefs ? currentChatSessionID(zotero) : null)
@@ -1029,6 +1059,7 @@ function setActiveSection(elements: ManagerElements, section: ManagerSection | s
   elements.translationsSection.hidden = !isTranslations
   elements.analysisSection.hidden = !isAnalysis
   elements.uploadSection.hidden = !isUpload
+  if (section === "migrate-sync") setConnectionTab(elements, "sync", true)
   elements.guideSection.hidden = section !== "guide"
   elements.settingsSection.hidden = !isSettings
   const diagnosticSection = document.getElementById('jadense-manager-section-diagnostics')
@@ -1092,7 +1123,10 @@ function wireConnectionTabs(elements: ManagerElements, zotero: ZoteroLike | null
     setConnectionTab(elements, "account")
     if (zotero) void refreshJadenseAccount(elements, zotero)
   })
-  elements.connectionTabSync.addEventListener("click", () => setConnectionTab(elements, "sync"))
+  elements.connectionTabSync.addEventListener("click", () => {
+    setConnectionTab(elements, "sync")
+    if (zotero) refreshUploadSelection(elements, zotero)
+  })
   elements.connectionTabs.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
     const current = CONNECTION_TABS.findIndex((name) => connectionTabParts(elements, name)[0] === document.activeElement)
@@ -1100,7 +1134,9 @@ function wireConnectionTabs(elements: ManagerElements, zotero: ZoteroLike | null
     const next = event.key === "Home" ? 0 : event.key === "End" ? CONNECTION_TABS.length - 1
       : (current + (event.key === "ArrowRight" ? 1 : -1) + CONNECTION_TABS.length) % CONNECTION_TABS.length
     event.preventDefault()
-    setConnectionTab(elements, CONNECTION_TABS[next]!, true)
+    const nextTab = connectionTabParts(elements, CONNECTION_TABS[next]!)[0]
+    nextTab.focus()
+    nextTab.click()
   })
 }
 
@@ -1140,6 +1176,9 @@ function wireSettingsTabs(elements: ManagerElements, zotero: ZoteroLike | null, 
       save.disabled = !zotero?.Prefs?.set || draft === readReaderShortcut(zotero, action)
     }
     render()
+    for (const control of [input, save, reset, disable]) {
+      control.addEventListener("focus", () => input.parentElement?.append(elements.shortcutStatus))
+    }
     input.addEventListener("focus", () => setStatus(elements.shortcutStatus, uiText("请按下新的快捷键；Esc 取消录制，Tab 切换控件。", "Press a new shortcut. Esc cancels recording; Tab moves to the next control.")))
     input.addEventListener("keydown", (event) => {
       if (event.key === "Tab") return
@@ -1272,6 +1311,7 @@ function renderFolderOptions(target: JdxSelect, folders: FavoriteFolderOption[],
   target.setOptions([
     { value: "", label: folders.length > 0 ? uiText("选择攻玉收藏夹", "Choose a Jadense folder") : uiText("尚未加载攻玉收藏夹", "Jadense folders not loaded") },
     ...folders.map((folder) => ({ value: folder.id, label: favoriteFolderOptionLabel(folder) })),
+    ...(selectedId && !folders.some(folder => folder.id === selectedId) ? [{ value: selectedId, label: uiText(`已保存的收藏夹（${selectedId}）`, `Saved folder (${selectedId})`) }] : []),
   ], selectedId)
 }
 
@@ -1365,8 +1405,7 @@ function renderJadenseChatModel(elements: ManagerElements, zotero: ZoteroLike) {
     ? uiText("正在加载攻玉模型；已保存的 BYOK 模型仍可选择。", "Loading Jadense models. Saved BYOK models remain available.")
     : chatModelCatalogStatus === "error" ? uiText(`${chatModelCatalogError} 可继续使用当前选择或 BYOK 模型。`, `${chatModelCatalogError} You can continue with your current selection or a BYOK model.`)
     : !readConnection(zotero).token ? uiText("连接攻玉后可加载内置模型；BYOK 模型可独立使用。", "Connect Jadense to load built-in models. BYOK models work independently.")
-      : autoFollow ? uiText("文献解析跟随对话模型；图片解读始终使用对话模型，翻译模型独立保存。", "Analysis follows Chat. Images always use Chat; translation is configured independently.")
-      : uiText("选择后自动保存；图片解读始终使用对话模型。", "Choices save automatically. Images always use the Chat model."))
+      : uiText("模型选择自动保存。", "Model selections save automatically."))
 }
 
 function renderByokConfig(elements: ManagerElements, zotero: ZoteroLike) {
@@ -1466,24 +1505,50 @@ async function testByokDraft(elements: ManagerElements, zotero: ZoteroLike) {
   }
 }
 
+/** 当前可见的范围及上传点击共用选择快照，刷新选区无需重新渲染模型或表单。 */
+export function refreshUploadSelection(elements: Pick<ManagerElements, "collectionSummary" | "itemSummary" | "uploadIssues" | "uploadScope" | "previewCollection" | "exportItems" | "exportCollection">, zotero: ZoteroLike) {
+  displayedUploadSelection = readUploadSelection(zotero)
+  const state = buildManagerState(zotero, invalidConnectionToken, displayedUploadSelection)
+  elements.collectionSummary.textContent = state.collectionLabel
+  elements.itemSummary.textContent = state.itemLabel
+  elements.uploadIssues.replaceChildren(...state.uploadIssues.map((issue) => {
+    const item = elements.uploadIssues.ownerDocument.createElement("li")
+    item.textContent = issue
+    return item
+  }))
+  const count = state.selectedItemCount
+  const folder = readFavoriteFoldersCache(zotero)?.folders.find(entry => entry.id === state.defaultFolderId)
+  const destination = folder?.name || state.defaultFolderId || uiText("尚未选择目标收藏夹", "Choose a destination folder")
+  const content = state.includePdfDefault ? uiText("含可读取的 PDF", "With readable PDFs") : uiText("仅题录", "Metadata only")
+  const target = state.defaultFolderId ? uiText(`上传至「${destination}」`, `Destination: ${destination}`) : destination
+  const scope = (source: string) => `${source} · ${target} · ${content}`
+  elements.exportItems.title = scope(state.itemLabel)
+  elements.exportCollection.title = scope(state.collectionLabel)
+  const source = count ? state.itemLabel : state.hasSelectedCollection ? state.collectionLabel : uiText("尚未选择来源", "No source selected")
+  elements.uploadScope.textContent = scope(source)
+  elements.exportItems.textContent = count ? uiText(`上传已选 ${count} 项`, `Upload ${count} selected ${count === 1 ? "item" : "items"}`) : uiText("上传选中条目", "Upload selected items")
+  const collection = summarizeZoteroSelection(zotero, displayedUploadSelection).collectionName
+  elements.exportCollection.textContent = displayedUploadSelection.collections.length > 1
+    ? uiText(`上传全部 ${displayedUploadSelection.collections.length} 个收藏夹`, `Upload all ${displayedUploadSelection.collections.length} collections`)
+    : collection ? uiText(`上传整个收藏夹（${collection}）`, `Upload entire collection (${collection})`) : uiText("上传整个收藏夹", "Upload entire collection")
+  elements.exportItems.classList.toggle("jdx-manager-primary", state.canExportItems)
+  elements.exportCollection.classList.toggle("jdx-manager-primary", !count && state.canExportCollection)
+  elements.previewCollection.disabled = uploadBusy || !state.canPreviewCollection
+  elements.exportItems.disabled = uploadBusy || !state.canExportItems
+  elements.exportCollection.disabled = uploadBusy || !state.canExportCollection
+  return state
+}
+
 function refreshManagerState(elements: ManagerElements, zotero: ZoteroLike) {
-  const state = buildManagerState(zotero)
+  const state = refreshUploadSelection(elements, zotero)
   const cached = readFavoriteFoldersCache(zotero)
   if (!state.connected) {
     const token = readConnection(zotero).token
     if (token && invalidConnectionToken === token) markConnectionInvalid(elements.connectionStatus)
     else renderManagerConnectionStatus(elements.connectionStatus, "idle")
   }
-  elements.collectionSummary.textContent = state.collectionLabel
-  elements.itemSummary.textContent = state.itemLabel
-  elements.uploadIssues.replaceChildren(...state.uploadIssues.map((issue) => {
-    const item = document.createElement("li")
-    item.textContent = issue
-    return item
-  }))
-  elements.previewCollection.disabled = !state.canPreviewCollection
-  elements.exportItems.disabled = !state.canExportItems
-  elements.exportCollection.disabled = !state.canExportCollection
+  elements.accountEmpty.hidden = Boolean(readConnection(zotero).token)
+  elements.accountDetails.hidden = !elements.accountEmpty.hidden
   renderTokenMask(elements, zotero)
   elements.includePdf.checked = state.includePdfDefault
   // 缓存先行:工作台打开即有列表可看,后台刷新(loadFolders)会再走一遍这里。
@@ -1796,7 +1861,7 @@ function renderSources(elements: ManagerElements, zotero: ZoteroLike, sources: C
     row.dataset.sourceKind = source.kind
     const number = create("span", "jdx-chat-source-number")
     number.textContent = String(index + 1)
-    number.title = uiText(`回答中的 [来源 ${index + 1}]`, `[Source ${index + 1}] in the answer`)
+    number.title = uiText(`关联来源 ${index + 1}`, `Linked source ${index + 1}`)
     const label = create("button", "jdx-chat-source-title") as HTMLButtonElement
     label.type = "button"
     const kind = source.kind === "item" ? uiText("引用信息", "Citation") : source.kind === "quote" ? uiText("引用选文", "Quoted passage")
@@ -2223,7 +2288,8 @@ function syncFolderSelection(elements: ManagerElements, zotero: ZoteroLike, fold
   // 选中即保存;setValue 不触发 onChange,渲染路径不会递归写入。
   if (folderId) {
     saveDefaultFolderId(zotero, folderId)
-    setStatus(elements.uploadStatus, uiText("已保存目标攻玉收藏夹。", "Jadense destination folder saved."), "success")
+    refreshUploadSelection(elements, zotero)
+    setStatus(elements.folderStatus, uiText("已保存目标攻玉收藏夹。", "Jadense destination folder saved."), "success")
   }
 }
 
@@ -2331,7 +2397,11 @@ async function saveTokenFromEdit(elements: ManagerElements, zotero: ZoteroLike) 
     setStatus(elements.settingsStatus, uiText("令牌已保存,正在验证连接…", "Token saved. Verifying the connection…"), "success")
     // 两组请求互不阻塞：收藏夹验证失败时仍可查看账号，账号失败也不影响上传配置。
     await Promise.all([
-      loadFolders(elements, zotero),
+      loadFolders(elements, zotero).then(result => {
+        if (result && readConnection(zotero).token === token) {
+          setStatus(elements.settingsStatus, result.ok ? uiText("令牌已保存，连接验证成功。", "Token saved and connection verified.") : elements.folderStatus.textContent || uiText("令牌已保存，连接验证失败。", "Token saved. Connection verification failed."), result.ok ? "success" : "error")
+        }
+      }),
       refreshJadenseAccount(elements, zotero),
       refreshJadenseChatModelCatalog(elements, zotero, tokenChanged),
     ])
@@ -2346,8 +2416,7 @@ async function loadFolders(elements: ManagerElements, zotero: ZoteroLike) {
   const connection = readConnection(zotero)
   elements.uploadLoadFolders.disabled = true
   renderManagerConnectionStatus(elements.connectionStatus, connection.token ? "checking" : "idle")
-  setStatus(elements.settingsStatus, uiText("正在加载攻玉收藏夹…", "Loading Jadense folders…"))
-  setStatus(elements.uploadStatus, uiText("正在加载攻玉收藏夹…", "Loading Jadense folders…"))
+  setStatus(elements.folderStatus, uiText("正在加载攻玉收藏夹…", "Loading Jadense folders…"))
   const result = await refreshFavoriteFoldersCache(zotero, managerFetch())
   elements.uploadLoadFolders.disabled = false
   const current = readConnection(zotero)
@@ -2362,8 +2431,8 @@ async function loadFolders(elements: ManagerElements, zotero: ZoteroLike) {
     : result.reason === "no-token"
       ? uiText("请先在「设置 → 连接攻玉」中粘贴攻玉令牌。", "Paste a Jadense token in Settings → Connect Jadense first.")
       : result.message
-  setStatus(elements.settingsStatus, message, result.ok ? "success" : "error")
-  setStatus(elements.uploadStatus, message, result.ok ? "success" : "error")
+  setStatus(elements.folderStatus, message, result.ok ? "success" : "error")
+  return result
 }
 
 function formatPoints(value: number) {
@@ -2442,10 +2511,10 @@ function sameConnection(zotero: ZoteroLike, snapshot: { baseUrl: string; token: 
   return current.baseUrl === snapshot.baseUrl && current.token === snapshot.token
 }
 
-async function refreshJadenseAccount(
+export async function refreshJadenseAccount(
   elements: ManagerElements,
   zotero: ZoteroLike,
-  successMessage = uiText("账号与积分已刷新。", "Account and points refreshed."),
+  area: "all" | "profile" | "points" = "all",
 ) {
   const snapshot = readConnection(zotero)
   const generation = ++accountRefreshGeneration
@@ -2460,24 +2529,27 @@ async function refreshJadenseAccount(
     clearAccountPoints(elements)
     accountRefreshBusy = false
     syncAccountRefreshDisabled(elements)
-    setStatus(elements.accountProfileStatus, uiText("在「设置 → 连接攻玉」中保存攻玉令牌后，即可查看账号资料。", "Save a Jadense token in Settings → Connect Jadense to view account details."))
-    setStatus(elements.accountStatus, uiText("在「设置 → 连接攻玉」中保存攻玉令牌后，即可查看积分与签到状态；请前往攻玉网页签到。", "Save a Jadense token in Settings → Connect Jadense to view points and check-in status. Check in on the Jadense website."))
+    setStatus(elements.accountProfileStatus, "")
+    setStatus(elements.accountStatus, "")
+    elements.profileRetry.hidden = true
+    elements.pointsRetry.hidden = true
     return
   }
 
-  setStatus(elements.accountProfileStatus, uiText("正在刷新账号资料…", "Refreshing account details…"))
-  setStatus(elements.accountStatus, uiText("正在刷新积分与签到状态…", "Refreshing points and check-in status…"))
+  if (area !== "points") setStatus(elements.accountProfileStatus, uiText("正在刷新账号资料…", "Refreshing account details…"))
+  if (area !== "profile") setStatus(elements.accountStatus, uiText("正在刷新积分与签到状态…", "Refreshing points and check-in status…"))
   const client = new JadenseApiClient({ baseUrl: snapshot.baseUrl, token: snapshot.token, fetchImpl: managerFetch() })
   const invalidAtStart = invalidConnectionToken === snapshot.token
   const invalidRevisionAtStart = invalidConnectionRevision
   let invalidToken = false
   let authenticatedResponse = false
   const isCurrent = () => generation === accountRefreshGeneration && sameConnection(zotero, snapshot)
-  const profileRequest = runJadenseAccountRequest((signal) => client.getCurrentProfile(signal)).then((profile) => {
+  const profileRequest = area === "points" ? undefined : runJadenseAccountRequest((signal) => client.getCurrentProfile(signal)).then((profile) => {
     if (!isCurrent()) return
     authenticatedResponse = true
     renderAccountProfile(elements, profile)
-    setStatus(elements.accountProfileStatus, uiText("账号资料已刷新。", "Account details refreshed."), "success")
+    elements.profileRetry.hidden = true
+    setStatus(elements.accountProfileStatus, area === "profile" ? uiText("账号资料已刷新。", "Account details refreshed.") : "", "success")
   }, (error: unknown) => {
     if (!isCurrent()) return
     const kind = classifyJadenseAccountError(error)
@@ -2490,12 +2562,14 @@ async function refreshJadenseAccount(
       accountErrorMessage(error, "profile"),
       hadProfileSnapshot ? uiText("当前显示上次成功快照。", "Showing the last successful snapshot.") : "",
     ].filter(Boolean).join(" "), "error")
+    elements.profileRetry.hidden = false
   })
-  const pointsRequest = runJadenseAccountRequest((signal) => client.getPointsStatus(signal)).then((status) => {
+  const pointsRequest = area === "profile" ? undefined : runJadenseAccountRequest((signal) => client.getPointsStatus(signal)).then((status) => {
     if (!isCurrent()) return
     authenticatedResponse = true
     renderAccountPoints(elements, status)
-    setStatus(elements.accountStatus, successMessage, "success")
+    elements.pointsRetry.hidden = true
+    setStatus(elements.accountStatus, area === "points" ? uiText("积分与签到已刷新。", "Points and check-in refreshed.") : "", "success")
   }, (error: unknown) => {
     if (!isCurrent()) return
     const kind = classifyJadenseAccountError(error)
@@ -2508,9 +2582,13 @@ async function refreshJadenseAccount(
       pointsRefreshErrorMessage(error),
       hadPointsSnapshot ? uiText("当前显示上次成功快照。", "Showing the last successful snapshot.") : "",
     ].filter(Boolean).join(" "), "error")
+    elements.pointsRetry.hidden = false
   })
   await Promise.all([profileRequest, pointsRequest])
   if (!isCurrent()) return
+  if (area === "all" && elements.accountProfileStatus.dataset.kind === "success" && elements.accountStatus.dataset.kind === "success") {
+    setStatus(elements.accountProfileStatus, uiText("账号与积分已刷新。", "Account and points refreshed."), "success")
+  }
   if (invalidToken) {
     invalidConnectionToken = snapshot.token
     markConnectionInvalid(elements.connectionStatus)
@@ -2532,22 +2610,20 @@ export function jadenseAppUrl(baseUrl: string, path: "/" | "/app/check-in" | "/a
   return new URL(path, `${baseUrl.replace(/\/+$/g, "")}/`).href
 }
 
-function persistUploadOptions(elements: ManagerElements, zotero: ZoteroLike) {
-  const current = readConnection(zotero)
-  const folderId = elements.folderSelect.getValue() || current.defaultFolderId
-  if (folderId) saveDefaultFolderId(zotero, folderId)
-  saveCollectionUploadIncludePdfDefault(zotero, elements.includePdf.checked)
-}
-
-async function runUploadCommand(elements: ManagerElements, zotero: ZoteroLike, operation: () => Promise<unknown>) {
+async function runUploadCommand(elements: ManagerElements, zotero: ZoteroLike, button: HTMLButtonElement, operation: (selected: ReturnType<typeof readUploadSelection>, includePdf: boolean) => Promise<{ failedCount?: number; pdfFailedCount?: number }>) {
+  if (uploadBusy) return
+  uploadBusy = true
+  const selection = displayedUploadSelection
+  const includePdf = elements.includePdf.checked
+  const scope = button.title
   const token = readConnection(zotero).token
-  setStatus(elements.uploadStatus, uiText("正在上传到攻玉…", "Uploading to Jadense…"))
+  setStatus(elements.uploadStatus, uiText(`正在上传…\n${scope}`, `Uploading…\n${scope}`))
   elements.exportItems.disabled = true
   elements.exportCollection.disabled = true
   try {
-    persistUploadOptions(elements, zotero)
-    const result = await operation()
-    setStatus(elements.uploadStatus, formatJadenseSyncResult(result), "success")
+    const result = await operation(selection, includePdf)
+    const failed = Boolean(result.failedCount || result.pdfFailedCount)
+    setStatus(elements.uploadStatus, `${scope}\n${formatJadenseSyncResult(result)}`, failed ? "error" : "success")
   } catch (error) {
     if (classifyJadenseAccountError(error) === "invalid-token") recordInvalidConnection(elements, zotero, token)
     const message = error instanceof JadenseApiError && error.status === 401
@@ -2557,22 +2633,58 @@ async function runUploadCommand(elements: ManagerElements, zotero: ZoteroLike, o
         : error instanceof Error ? error.message : uiText("上传失败，请重试。", "Upload failed. Please try again.")
     setStatus(elements.uploadStatus, message, "error")
   } finally {
+    uploadBusy = false
     refreshManagerState(elements, zotero)
   }
 }
 
 function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
+  const manager = elements.shell.ownerDocument.defaultView!
+  const libraryWindows = zotero.getMainWindows?.() ?? [zotero.getMainWindow?.()].filter((win): win is Window & typeof globalThis => Boolean(win))
+  let pendingSelection: number | undefined
+  const updateSelection = () => {
+    if (elements.connectionPanelSync.closest<HTMLElement>(".jdx-manager-section")?.hidden || elements.connectionPanelSync.hidden) return
+    refreshUploadSelection(elements, zotero)
+  }
+  const queueSelection = () => {
+    if (pendingSelection !== undefined || elements.connectionPanelSync.hidden) return
+    pendingSelection = manager.setTimeout(() => { pendingSelection = undefined; updateSelection() }, 0)
+  }
+  // Zotero 的文库树可通过鼠标、键盘及程序选择；回到工作台时再同步一次当前主窗口。
+  const selectionEvents = ["select", "mouseup", "keyup"]
+  for (const win of libraryWindows) for (const name of selectionEvents) win.addEventListener(name, queueSelection, true)
+  manager.addEventListener("focus", updateSelection)
+  const observerIds: unknown[] = []
+  if (zotero.Prefs?.registerObserver && zotero.Prefs.unregisterObserver) {
+    for (const key of SYNC_PANEL_PREF_KEYS) {
+      try { observerIds.push(zotero.Prefs.registerObserver(key, () => refreshManagerState(elements, zotero))) } catch { /* 回到窗口时仍会刷新选区。 */ }
+    }
+  }
+  manager.addEventListener("unload", () => {
+    for (const win of libraryWindows) for (const name of selectionEvents) win.removeEventListener(name, queueSelection, true)
+    manager.removeEventListener("focus", updateSelection)
+    for (const id of observerIds) zotero.Prefs?.unregisterObserver?.(id)
+    manager.clearTimeout(pendingSelection)
+    displayedUploadSelection = { items: [], collections: [] }
+  }, { once: true })
+  elements.accountConnect.addEventListener("click", () => {
+    elements.navSettings.click()
+    elements.settingsTabConnection.click()
+    enterTokenEdit(elements)
+    elements.tokenInput.focus()
+  })
   // Markdown 链接交给系统浏览器，不能把特权 Manager 导航到模型提供的网页。
   const linkHost = zotero as ZoteroLike & { launchURL?: (url: string) => void }
   const openAccountPath = (path: "/" | "/app/check-in" | "/app?settings=billing" | "/app?settings=integrations") => {
+    const status = path === "/app?settings=integrations" ? elements.settingsStatus : path === "/app/check-in" ? elements.accountStatus : elements.accountProfileStatus
     if (typeof linkHost.launchURL !== "function") {
-      setStatus(elements.accountStatus, uiText("当前 Zotero 无法打开浏览器链接。", "This Zotero environment cannot open browser links."), "error")
+      setStatus(status, uiText("当前 Zotero 无法打开浏览器链接。", "This Zotero environment cannot open browser links."), "error")
       return
     }
     try {
       linkHost.launchURL(jadenseAppUrl(readConnection(zotero).baseUrl, path))
     } catch {
-      setStatus(elements.accountStatus, uiText("暂时无法打开攻玉，请稍后重试。", "Cannot open Jadense right now. Please try again later."), "error")
+      setStatus(status, uiText("暂时无法打开攻玉，请稍后重试。", "Cannot open Jadense right now. Please try again later."), "error")
     }
   }
   const openMarkdownLink = (event: MouseEvent) => {
@@ -2612,6 +2724,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.navUpload.addEventListener("click", () => {
     setActiveSection(elements, "migrate")
+    refreshUploadSelection(elements, zotero)
     void refreshJadenseAccount(elements, zotero)
   })
   elements.navSettings.addEventListener("click", () => setActiveSection(elements, "settings"))
@@ -2623,10 +2736,12 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
       saveFeatureModelSelection(zotero, feature, featureModelSelectionFromKey(value), chatModelCatalog)
       refreshManagerState(elements, zotero)
       renderChat(elements, zotero)
-      setStatus(elements.featureModelStatus, uiText(`${AI_FEATURE_LABELS[feature]}模型已保存。`, `${AI_FEATURE_LABELS[feature]} model saved.`), "success")
+      const status = document.getElementById(`${elements.featureModelSelects[feature].element.id}-status`) ?? elements.featureModelStatus
+      if (status.dataset.kind !== "error") setStatus(status, uiText("模型已自动保存。", "Model saved automatically."), "success")
     } catch (error) {
       renderJadenseChatModel(elements, zotero)
-      setStatus(elements.featureModelStatus, error instanceof Error ? error.message : uiText("模型选择保存失败。", "Unable to save the model choice."), "error")
+      const status = document.getElementById(`${elements.featureModelSelects[feature].element.id}-status`) ?? elements.featureModelStatus
+      setStatus(status, error instanceof Error ? error.message : uiText("模型选择保存失败。", "Unable to save the model choice."), "error")
     }
   }
   for (const feature of AI_FEATURES) elements.featureModelSelects[feature].onChange(value => selectFeatureModel(feature, value))
@@ -2740,12 +2855,19 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.folderSelect.onChange((value) => syncFolderSelection(elements, zotero, value))
   elements.includePdf.addEventListener("change", () => {
     saveCollectionUploadIncludePdfDefault(zotero, elements.includePdf.checked)
-    setStatus(elements.uploadStatus, uiText("PDF 上传选项已保存。", "PDF upload preference saved."), "success")
+    refreshUploadSelection(elements, zotero)
+    setStatus(elements.folderStatus, uiText("PDF 上传选项已保存。", "PDF upload preference saved."), "success")
   })
   elements.chatModelSelect.onChange(value => selectFeatureModel(featureFollowsChat(zotero, activeChatFeature(zotero)) ? "chat" : activeChatFeature(zotero), value))
+  const providerChanged = () => setStatus(elements.byokProviderStatus, uiText("尚未保存。点击「保存提供商」应用修改。", "Unsaved. Choose Save provider to apply your edits."))
+  for (const field of [elements.byokProviderName, elements.byokBaseUrl, elements.byokKeyInput]) field.addEventListener("input", providerChanged)
+  elements.byokModelEditor.addEventListener("input", () => {
+    setStatus(elements.byokStatus, uiText("尚未保存。点击「保存模型」应用修改。", "Unsaved. Choose Save model to apply your edits."))
+  })
   elements.byokProtocol.onChange((value) => {
     if (!BYOK_PROTOCOL_OPTIONS.some((option) => option.value === value)) return
     updateByokEndpoint(elements)
+    providerChanged()
   })
   elements.byokBaseUrl.addEventListener("input", () => updateByokEndpoint(elements))
   elements.byokKeyToggle.addEventListener("click", () => {
@@ -2759,6 +2881,8 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     const target = (event.target as Element).closest<HTMLButtonElement>("[data-provider-id]")
     if (!target) return
     setByokModelEditorMode(elements.byokModelEditor, null)
+    setStatus(elements.byokProviderStatus, "")
+    setStatus(elements.byokStatus, "")
     selectByokProvider(zotero, target.dataset.providerId ?? "")
     renderByokConfig(elements, zotero)
     refreshManagerState(elements, zotero)
@@ -2768,6 +2892,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     const target = (event.target as Element).closest<HTMLButtonElement>("button[data-model-id]")
     if (!target) return
     const modelId = target.dataset.modelId ?? ""
+    setStatus(elements.byokStatus, "")
     const current = readByokModelEditorMode(elements.byokModelEditor)
     setByokModelEditorMode(elements.byokModelEditor, current?.kind === "edit" && current.modelId === modelId ? null : { kind: "edit", modelId })
     selectByokModel(zotero, modelId)
@@ -2785,7 +2910,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
       apiKey: "",
     })
     renderByokConfig(elements, zotero)
-    setStatus(elements.byokStatus, uiText("已添加提供商；请填写并保存连接信息。", "Provider added. Enter and save its connection details."), "success")
+    setStatus(elements.byokProviderStatus, uiText("已添加提供商；请填写并保存连接信息。", "Provider added. Enter and save its connection details."), "success")
   })
   elements.byokProviderDelete.addEventListener("click", () => {
     markDiagnosticAbort(activeChatAbort?.signal, "settings:byokProviderDelete"); activeChatAbort?.abort()
@@ -2796,7 +2921,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     renderByokConfig(elements, zotero)
     refreshManagerState(elements, zotero)
     renderChat(elements, zotero)
-    setStatus(elements.byokStatus, uiText("提供商及其模型已删除。", "Provider and its models deleted."), "success")
+    setStatus(elements.byokProviderStatus, uiText("提供商及其模型已删除。", "Provider and its models deleted."), "success")
   })
   elements.byokProviderSave.addEventListener("click", () => {
     try {
@@ -2806,9 +2931,9 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
       renderByokConfig(elements, zotero)
       refreshManagerState(elements, zotero)
       renderChat(elements, zotero)
-      setStatus(elements.byokStatus, uiText("提供商已保存；保存操作未联网。", "Provider saved locally without a network request."), "success")
+      setStatus(elements.byokProviderStatus, uiText("提供商已保存；保存操作未联网。", "Provider saved locally without a network request."), "success")
     } catch (error) {
-      setStatus(elements.byokStatus, error instanceof Error ? error.message : uiText("无法保存提供商。", "Unable to save the provider."), "error")
+      setStatus(elements.byokProviderStatus, error instanceof Error ? error.message : uiText("无法保存提供商。", "Unable to save the provider."), "error")
     }
   })
   elements.byokModelNew.addEventListener("click", () => {
@@ -2858,7 +2983,8 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     setStatus(elements.byokStatus, uiText("BYOK 配置已清除；各功能的模型选择未改变。", "BYOK settings cleared. Feature model choices are unchanged."), "success")
   })
   elements.tokenEdit.addEventListener("click", () => enterTokenEdit(elements))
-  elements.tokenCancel.addEventListener("click", () => exitTokenEdit(elements))
+  elements.tokenInput.addEventListener("input", () => setStatus(elements.settingsStatus, uiText("尚未保存。保存后将验证连接。", "Unsaved. Saving will verify the connection.")))
+  elements.tokenCancel.addEventListener("click", () => { exitTokenEdit(elements); setStatus(elements.settingsStatus, "") })
   elements.tokenSave.addEventListener("click", () => void saveTokenFromEdit(elements, zotero))
   elements.tokenInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -2866,6 +2992,7 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
       void saveTokenFromEdit(elements, zotero)
     } else if (event.key === "Escape") {
       exitTokenEdit(elements)
+      setStatus(elements.settingsStatus, "")
     }
   })
   elements.tokenCopy.addEventListener("click", () => {
@@ -2877,6 +3004,8 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   })
   elements.uploadLoadFolders.addEventListener("click", () => void loadFolders(elements, zotero))
   elements.accountRefresh.addEventListener("click", () => void refreshJadenseAccount(elements, zotero))
+  elements.profileRetry.addEventListener("click", () => void refreshJadenseAccount(elements, zotero, "profile"))
+  elements.pointsRetry.addEventListener("click", () => void refreshJadenseAccount(elements, zotero, "points"))
   elements.openJadense.addEventListener("click", () => openAccountPath("/"))
   elements.openCheckIn.addEventListener("click", () => openAccountPath("/app/check-in"))
   elements.openBilling.addEventListener("click", () => openAccountPath("/app?settings=billing"))
@@ -2895,8 +3024,8 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
     clearAccountProfile(elements)
     clearAccountPoints(elements)
     syncAccountRefreshDisabled(elements)
-    setStatus(elements.accountProfileStatus, uiText("在「设置 → 连接攻玉」中保存攻玉令牌后，即可查看账号资料。", "Save a Jadense token in Settings → Connect Jadense to view account details."))
-    setStatus(elements.accountStatus, uiText("在「设置 → 连接攻玉」中保存攻玉令牌后，即可查看积分与签到状态；请前往攻玉网页签到。", "Save a Jadense token in Settings → Connect Jadense to view points and check-in status. Check in on the Jadense website."))
+    setStatus(elements.accountProfileStatus, "")
+    setStatus(elements.accountStatus, "")
     setStatus(elements.settingsStatus, uiText("已断开与攻玉的连接；这台电脑上的对话记录仍然保留。", "Disconnected from Jadense. Conversations on this computer are retained."), "success")
   })
   elements.previewCollection.addEventListener("click", () => {
@@ -2912,12 +3041,14 @@ function wireEvents(elements: ManagerElements, zotero: ZoteroLike) {
   elements.exportItems.addEventListener("click", () => void runUploadCommand(
     elements,
     zotero,
-    () => pushSelectedItemsToJadense(zotero, { includePdf: elements.includePdf.checked }),
+    elements.exportItems,
+    (selected, includePdf) => pushSelectedItemsToJadense(zotero, { includePdf, selectedItems: selected.items }),
   ))
   elements.exportCollection.addEventListener("click", () => void runUploadCommand(
     elements,
     zotero,
-    () => pushSelectedCollectionToJadense(zotero, { includePdf: elements.includePdf.checked }),
+    elements.exportCollection,
+    (selected, includePdf) => pushSelectedCollectionToJadense(zotero, { includePdf, selectedCollections: selected.collections }),
   ))
 }
 
@@ -3001,13 +3132,15 @@ export function wireManagerAppearance(
   const stopObservingTheme = observeTheme(zotero, root, updateTheme)
   elements.displayLanguage.onChange((value) => {
     const saved = saveDisplayLanguage(zotero, value)
+    elements.displayLanguage.element.after(elements.generalStatus)
     setStatus(elements.generalStatus, saved
       ? uiText("显示语言已保存，重启 Zotero 后生效。", "Display language saved. Restart Zotero to apply.")
       : uiText("暂时无法保存显示语言。", "Unable to save the display language."), saved ? "success" : "error")
   })
   elements.displayTheme.onChange((value) => {
     const saved = saveTheme(zotero, value)
-    if (!saved) setStatus(elements.generalStatus, uiText("暂时无法保存主题设置。", "Unable to save the theme."), "error")
+    elements.displayTheme.element.after(elements.generalStatus)
+    setStatus(elements.generalStatus, saved ? uiText("主题已立即应用。", "Theme applied.") : uiText("暂时无法保存主题设置。", "Unable to save the theme."), saved ? "success" : "error")
   })
   elements.themeToggle.addEventListener("click", () => {
     const dark = root.dataset.theme !== "dark"
@@ -3180,7 +3313,7 @@ export function initJadenseManagerPage() {
     document.getElementById('jadense-manager-onboarding')?.addEventListener('click', onboarding.restart)
     window.addEventListener('unload', () => { engineCheck.abort(); onboarding.dispose() }, { once: true })
   } catch { /* 可选教学不可阻断普通配置和对话。 */ }
-  const receive = (context: Pick<ManagerContext, "section" | "actions">) => {
+  const receive = (context: Pick<ManagerContext, "section" | "actions" | "focusChatModel">) => {
     const actions = (context.actions ?? []).filter(action => {
       if (action.kind === "analyze") {
         const run = analysisRuntime(zotero).get(action.itemID)
@@ -3223,15 +3356,23 @@ export function initJadenseManagerPage() {
     }
     setActiveSection(elements, context.section)
     if (context.section === "settings-ocr") elements.settingsTabOcr.click()
-    if (context.section === "settings-features") elements.settingsTabFeatures.click()
+    if (context.section === "settings-features") {
+      elements.settingsTabFeatures.click()
+      if (context.focusChatModel) {
+        selectSettingsGroup(elements.settingsPanelFeatures, 'chat')
+        elements.featureModelSelects.chat.element.querySelector<HTMLElement>('.jdx-select-trigger')?.focus()
+      }
+    }
     if (context.section === "settings-connection") elements.settingsTabConnection.click()
+    if (context.section === "migrate-sync") refreshUploadSelection(elements, zotero)
     if (context.section === "migrate") void refreshJadenseAccount(elements, zotero)
     void drainReaderActions(elements, zotero)
   }
   managerWindow().receiveJadenseContext = receive
   const initialActions = managerWindow().JadenseInZotero?.actions ?? managerArguments()?.actions
-  if (initialActions?.length) {
-    receive({ section: initialSection(), actions: initialActions })
+  const focusChatModel = managerWindow().JadenseInZotero?.focusChatModel ?? managerArguments()?.focusChatModel
+  if (initialActions?.length || focusChatModel) {
+    receive({ section: initialSection(), actions: initialActions, focusChatModel })
     // 初始窗口参数只负责交接；入队后移除副本，图片仅由 session → context 内存映射持有。
     const injected = managerWindow().JadenseInZotero
     if (injected) injected.actions = undefined

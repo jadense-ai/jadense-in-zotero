@@ -384,6 +384,8 @@ async function startup(data: BootstrapData = {}) {
   await step('native_panel', () => {
     registeredSyncPanelID = registerSyncPanel(Zotero, pluginContext, {
       openTranslationHistory: () => { openManager('translations') }, openManager: () => { openManager() },
+      openConnection: configureConnection,
+      openUploadDestination: () => { openManager('migrate-sync') },
     })
     if (!registeredSyncPanelID) throw new Error('Native panel unavailable')
   })

@@ -1,5 +1,4 @@
 /* 文献解析的阅读布局：公共控件在 ui.css，所有颜色继承 Manager 主题。 */
-.jdx-analysis-section { --analysis-width:960px; }
 .jdx-analysis-section [hidden] { display:none!important; }
 .jdx-analysis-section>.jdx-manager-section-header { margin-bottom:24px; }
 .jdx-analysis-section>.jdx-tabs { margin-bottom:20px; }
@@ -10,9 +9,7 @@
 .jdx-analysis-history { display:block; }
 .jdx-analysis-section .jdx-analysis-run { display:none; }
 .jdx-analysis-section .jdx-analysis-run:has([data-busy="true"]),.jdx-analysis-section .jdx-analysis-run:has([data-kind="error"]) { display:flex; }
-.jdx-analysis-history-heading { max-width:var(--analysis-width); margin:0 auto; }
 .jdx-analysis-history-heading button { border:0; background:transparent; }
-.jdx-analysis-list { max-width:var(--analysis-width); margin:0 auto; }
 .jdx-analysis-record { display:flex; align-items:center; gap:20px; border:0; border-bottom:1px solid var(--jdx-line); border-radius:0; padding:22px 8px; background:transparent; }
 .jdx-analysis-record:hover { background:var(--jdx-surface-sunken); }
 .jdx-analysis-row-body { flex:1; min-width:0; }
@@ -22,7 +19,7 @@
 .jdx-analysis-meta { margin:6px 0 0; line-height:1.6; font-size:calc(12px * var(--jdx-font-scale,1)); }
 .jdx-analysis-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:9px; color:var(--jdx-muted); line-height:1.7; font-size:calc(12px * var(--jdx-font-scale,1)); }
 .jdx-analysis-preview p { margin:0; }
-.jdx-analysis-detail { width:100%; max-width:var(--analysis-width); margin:0 auto; padding-bottom:28px; }
+.jdx-analysis-detail { width:100%; padding-bottom:28px; }
 .jdx-document-results .jdx-analysis-detail { display:flex; flex-direction:column; min-height:0; height:100%; }
 .jdx-detail-navigation { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
 .jdx-detail-navigation>.jdx-button:first-child { margin-left:-10px; }
@@ -120,8 +117,8 @@
   border:1px solid var(--jdx-line-strong); border-radius:8px;
   background:var(--jdx-surface-sunken);
 }
-.jdx-analysis-workspace .jdx-detail-run[data-kind=running] { border-inline-start:3px solid var(--jdx-green); }
-.jdx-analysis-workspace .jdx-detail-run[data-kind=error] { border-inline-start:3px solid var(--jdx-red); }
+.jdx-analysis-workspace .jdx-detail-run[data-kind=running] { border-color:var(--jdx-green-deep); }
+.jdx-analysis-workspace .jdx-detail-run[data-kind=error] { border-color:var(--jdx-red); }
 .jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-run>.jdx-notice { flex:none; max-height:24vh; overflow:auto; margin:0; padding:0; color:var(--jdx-text); }
 .jdx-analysis-status-title { display:block; margin-bottom:5px; font-size:calc(13px * var(--jdx-font-scale,1)); font-weight:600; line-height:1.5; }
 .jdx-analysis-status-description { display:block; color:var(--jdx-muted); font-size:calc(12px * var(--jdx-font-scale,1)); line-height:1.7; }
@@ -144,7 +141,7 @@
   border:1px solid var(--jdx-line-strong); border-radius:6px;
   background:var(--jdx-surface-sunken); color:var(--jdx-text); line-height:1.75;
 }
-.jdx-analysis-workspace .jdx-analysis-detail>.jdx-analysis-warning[data-kind=error] { border-inline-start:3px solid var(--jdx-red); color:var(--jdx-red); }
+.jdx-analysis-workspace .jdx-analysis-detail>.jdx-analysis-warning[data-kind=error] { border-color:var(--jdx-red); color:var(--jdx-red); }
 
 .jdx-analysis-workspace .jdx-detail-tabs { gap:6px; padding:0 0 10px; margin-bottom:12px; border-bottom:1px solid var(--jdx-line); }
 .jdx-analysis-workspace .jdx-detail-tabs>.jdx-button { border:1px solid var(--jdx-line-strong); border-radius:6px; font-weight:600; color:var(--jdx-text); }
@@ -171,3 +168,39 @@
   .jdx-analysis-workspace .jdx-analysis-detail .jdx-detail-panel .jdx-reading-body { padding:14px; }
   .jdx-analysis-run-actions>.jdx-button { flex-grow:1!important; }
 }
+
+/* 工作台按成果面板的实际宽度排版；PDF 阅读器侧栏单独沿用其阅读列。 */
+.jdx-literature-detail .jdx-analysis-workspace .jdx-analysis-reading-tools,
+.jdx-literature-detail .jdx-analysis-workspace .jdx-detail-panel .jdx-reading-body {
+  box-sizing:border-box; width:100%; min-width:0; max-width:none; margin-inline:0;
+  font-size:calc(14px * var(--jdx-font-scale,1));
+}
+.jdx-literature-detail .jdx-analysis-workspace .jdx-detail-panel .jdx-reading-body {
+  padding:8px 0 24px; border:0; border-radius:0; background:transparent;
+}
+.jdx-analysis-reading-tools {
+  display:flex; flex:none; flex-wrap:wrap; align-items:baseline; gap:4px 16px;
+  padding:0 0 4px; border-bottom:1px solid var(--jdx-line);
+}
+.jdx-analysis-retained {
+  display:flex; flex:1 1 auto; flex-wrap:wrap; align-items:baseline; gap:0 8px;
+  min-width:0; color:var(--jdx-muted); overflow-wrap:anywhere; line-height:1.6;
+  font-size:calc(12px * var(--jdx-font-scale,1));
+}
+.jdx-analysis-workspace .jdx-analysis-reading-tools>.jdx-icon-action {
+  display:inline-flex; align-items:center; flex:0 0 auto; width:auto; height:auto; min-height:28px;
+  margin-inline-start:auto; padding:3px 6px!important; gap:6px;
+  font-size:calc(12px * var(--jdx-font-scale,1))!important; line-height:1.5;
+  color:var(--jdx-muted); background:transparent; border:0;
+}
+.jdx-analysis-reading-tools>.jdx-icon-action::before { width:14px; height:14px; }
+.jdx-analysis-workspace .jdx-analysis-text-action {
+  min-height:26px; padding:2px 1px; border:0; background:transparent;
+  color:var(--jdx-text); font-size:inherit; text-decoration:underline; text-underline-offset:3px;
+}
+.jdx-analysis-workspace .jdx-analysis-text-action:hover,
+.jdx-analysis-workspace .jdx-analysis-reading-tools>.jdx-button:hover { background:var(--jdx-press-bg); }
+.jdx-analysis-detail[data-tab=notes] .jdx-analysis-retained,
+.jdx-analysis-detail[data-tab=references] .jdx-analysis-reading-tools { display:none; }
+.jdx-analysis-detail[data-tab=notes] .jdx-analysis-reading-tools:not(:has(>.jdx-button:not([hidden]))) { display:none; }
+.jdx-analysis-workspace .jdx-note-meta { align-items:baseline; flex-wrap:wrap; gap:4px 12px; }

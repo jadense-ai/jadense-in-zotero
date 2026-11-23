@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.19 证据引用与阅读工作区](#update-0619)
 - [0.6.18 免密钥机器翻译](#update-0618)
 - [0.6.17 长文批注与引擎安装](#update-0617)
 - [0.6.16 重新解析](#update-0616)
@@ -12,6 +13,20 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0619"></a>
+
+## 0.6.19 证据引用与阅读工作区 / Evidence citations and reading tools
+
+1. **核对引用。** 在工作台或阅读器输入区开启「证据溯源」，关联 PDF 后提问。鼠标悬停或用键盘聚焦角标可预览原文。点击角标会跳到对应页，有原文坐标时会高亮。同一篇论文的两处论断可能分别引用不同段落，各有自己的角标。已有回答中，能与本地原文绑定的角标会收起紧挨它的旧页码标签。关闭溯源后，新回答沿用文字引用。
+2. **切换阅读版本。** 在阅读器侧栏打开解析总结、笔记或参考文献，使用版本控件查看同一版的三项成果。打开旧译文可以直接阅读。对话生成期间可以切换会话，再从状态提示返回。再次点击「＋」时，未发送的草稿和附件会保留。
+3. **核对工作台操作。** 在成果笔记旁选择「查看原文」可打开匹配的 PDF 批注。上传前核对当前选中的条目、目标收藏夹和是否包含 PDF。在诊断列表中选中记录，可单独复制其脱敏内容。
+
+In Reader or workbench Chat, enable **Evidence tracing** and ask about a linked PDF. Hover over or focus a citation number to preview its passage. Click it to open the source page and highlight the passage when coordinates are available. Saved replies hide a duplicate page label next to a locally matched citation. In the Reader, choosing an analysis version updates its summary, notes and references together. The workbench lets you open a matching annotation, check an upload’s contents and destination, and copy an individual diagnostic entry.
+
+Windows Zotero 10.0.8 的自动化验证中，焦点转回 PDF 后曾出现等待来源浮层收起超时。如果浮层仍在，可按 Esc 关闭。
+
+覆盖安装新版 XPI 即可。Windows x64 完整离线包附带 PDF 与 OCR 引擎，已有引擎可继续使用。[下载 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.19/jadense-in-zotero-v0.6.19.xpi) · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.19/jadense-in-zotero-v0.6.19-windows-x64-offline.zip) · [发布说明](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.19)
 
 <a id="update-0618"></a>
 ## 0.6.18 免密钥机器翻译 / Keyless machine translation

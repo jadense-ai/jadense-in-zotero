@@ -79,6 +79,15 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
     preferences.document.getElementById('jadense-in-zotero-settings-tab-features').click()
     native.querySelector('[data-settings-target="analysis"]').click()
     const nativeInput = await waitFor(() => native.querySelector(selector), 'native annotation suggestion')
+    const referenceSelector = '[data-analysis-references-enabled]'
+    const managerReferences = await waitFor(() => root.querySelector(referenceSelector), 'Manager reference extraction setting')
+    const nativeReferences = await waitFor(() => native.querySelector(referenceSelector), 'native reference extraction setting')
+    assert(!managerReferences.checked && !nativeReferences.checked, 'Automatic reference extraction should default to off')
+    managerReferences.click()
+    await waitFor(() => nativeReferences.checked && get('analysisReferencesEnabled') === true, 'reference extraction enabled in both hosts')
+    nativeReferences.click()
+    await waitFor(() => !managerReferences.checked && get('analysisReferencesEnabled') === false, 'reference extraction disabled in both hosts')
+    report.checks.push('analysis-reference-extraction-default-off', 'analysis-reference-extraction-two-host-save-sync')
     const change = (win, field, value) => { field.value = value; field.dispatchEvent(new win.Event('change', { bubbles: true })) }
     change(manager, input, '75')
     await waitFor(() => nativeInput.value === '75', 'Manager to native suggestion sync')

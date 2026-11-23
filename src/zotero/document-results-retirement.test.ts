@@ -10,7 +10,7 @@ const fixture = vi.hoisted(() => {
   return { source, task, start: vi.fn(), ocr: vi.fn(), copy: vi.fn(async () => true) }
 })
 vi.mock('./document-jobs', () => ({ documentJobs: () => ({
-  ready: Promise.resolve(), list: () => [fixture.task], get: () => fixture.task, start: fixture.start,
+  ready: Promise.resolve(), list: (kind: string) => kind === 'extraction' ? [fixture.task] : [], get: () => fixture.task, start: fixture.start,
   subscribe: () => () => {}, store: { extraction: async () => ({ markdown: '# 已有全文\n\n历史正文保留。', assets: [] }), assets: async () => ({}) },
 }) }))
 vi.mock('./cloud-ocr', () => ({ checkOCREngine: fixture.ocr }))
@@ -29,5 +29,25 @@ it('reads and copies saved Markdown without extraction controls or OCR checks', 
     await vi.waitFor(() => expect(fixture.copy).toHaveBeenCalledWith({}, '# 已有全文\n\n历史正文保留。'))
     expect(fixture.start).not.toHaveBeenCalled()
     expect(fixture.ocr).not.toHaveBeenCalled()
+  } finally { view.remove(); dom.window.close() }
+})
+
+it('opens the bilingual reader from empty translation history on click and allows a retry', async () => {
+  initializeUiLocale({ locale: 'zh-CN' })
+  const dom = new JSDOM('<!doctype html><main></main>'), root = dom.window.document.querySelector('main')!
+  const open = vi.fn<() => Promise<void>>().mockRejectedValueOnce(new Error('Reader busy')).mockResolvedValue(undefined)
+  const view = mountDocumentResults(root, {}, fixture.source, 'translation', { onOpenBilingual: open })
+  try {
+    await vi.waitFor(() => expect(root.textContent).toContain('暂无历史全文译文'))
+    const button = root.querySelector<HTMLButtonElement>('.jdx-result-empty button')!
+    expect(button.textContent).toBe('打开对照翻译')
+    expect(open).not.toHaveBeenCalled()
+    button.click(); button.click()
+    expect(open).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(root.textContent).toContain('Reader busy'))
+    button.click()
+    await vi.waitFor(() => expect(button.disabled).toBe(false))
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(root.textContent).not.toContain('Reader busy')
   } finally { view.remove(); dom.window.close() }
 })

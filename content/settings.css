@@ -82,6 +82,25 @@
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-detail [role="status"]:empty { display: none; }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-settings-link { border: 0; padding: 0; min-height: 0; background: transparent; color: var(--settings-green); font: inherit; cursor: pointer; }
 /* 原生偏好宽度由宿主决定；统一组件在可用容器内折叠，不靠整窗断点猜测。 */
+/* 设置表单优先完整显示模型名称；对话输入框继续使用紧凑触发器。 */
+#jadense-manager-section-settings .jdx-model-select { width: 100%; max-width: 100%; }
+#jadense-manager-section-settings .jdx-model-select .jdx-select-trigger {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  width: 100%; height: auto; min-height: 34px; padding: 5px 9px;
+}
+#jadense-manager-section-settings .jdx-model-select .jdx-select-leading-icon { grid-column: 1; grid-row: 1; }
+#jadense-manager-section-settings .jdx-model-select .jdx-select-value {
+  grid-column: 2; grid-row: 1; text-align: start; white-space: normal; overflow-wrap: anywhere;
+}
+#jadense-manager-section-settings .jdx-model-select .jdx-model-discount-icon { grid-column: 3; grid-row: 1; }
+#jadense-manager-section-settings .jdx-model-select .jdx-model-effort { grid-column: 4; grid-row: 1; }
+#jadense-manager-section-settings .jdx-model-select .jdx-select-chevron { grid-column: 5; grid-row: 1; }
+#jadense-manager-section-settings [role="status"]:empty { display: none; }
+@container (max-width: 500px) {
+  #jadense-manager-section-settings .jdx-model-select .jdx-select-trigger { column-gap: 6px; row-gap: 3px; }
+  #jadense-manager-section-settings .jdx-model-select .jdx-model-effort { grid-row: 2; grid-column: 2 / 5; justify-self: start; }
+}
+
 @container (max-width: 700px) {
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory { flex-direction: row; flex-wrap: wrap; border-radius: 7px 7px 0 0; }

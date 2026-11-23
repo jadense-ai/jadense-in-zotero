@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PaperAnalysisRecord } from '@/chat/paper-analysis-history'
 import { mountAnalysisWorkspace } from './analysis-workspace'
 import { initializeUiLocale } from './ui-preferences'
+import type { ZoteroLike } from './runtime'
 
 vi.mock('./document-jobs', () => ({ documentJobs: () => ({ list: () => [], get: () => undefined, subscribe: () => () => {}, ready: Promise.resolve() }) }))
 vi.mock('./reference-workspace', () => ({ mountReferenceDetails: () => ({ update: () => {}, suspend: () => {}, pause: () => {}, remove: () => {} }) }))
@@ -22,10 +23,10 @@ afterEach(() => {
 })
 
 /** 用隔离 DOM 挂载真实解析界面，仅替换无关引用任务和运行调度。 */
-function mount(record: PaperAnalysisRecord, unsaved = false) {
-  const dom = new JSDOM('<!doctype html><main></main>'), root = dom.window.document.querySelector('main')!
+function mount(record: PaperAnalysisRecord, unsaved = false, workbench = false, host: ZoteroLike = {}) {
+  const dom = new JSDOM(`<!doctype html><article class="${workbench ? 'jdx-literature-detail' : ''}"><main></main></article>`), root = dom.window.document.querySelector('main')!
   const stop = vi.fn()
-  const workspace = mountAnalysisWorkspace(root, {}, { records: () => [record], unsaved: () => unsaved,
+  const workspace = mountAnalysisWorkspace(root, host, { records: () => [record], unsaved: () => unsaved,
     openSource: async () => true, stop, onReferenceTask: () => {} })
   workspace.open(record.source)
   disposals.push(() => { workspace.remove(); dom.window.close() })
@@ -38,6 +39,56 @@ function record(warnings: string[]): PaperAnalysisRecord {
 }
 
 describe('analysis warning visibility', () => {
+  it('keeps the completed action compact, opens the retained group and keeps storage failures visible', () => {
+    const fixture = record(['有 1 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。', pageFailure])
+    fixture.notes = '文献解析（AI 辅助，请核对原文）\n\n总体概述\n已有研究总结\n\n保留笔记（1 条，未写入 PDF 批注）\n\n【研究问题】原句位置无法确认\n已恢复的笔记'
+    const { root, workspace } = mount(fixture, true, true)
+    const tools = root.querySelector<HTMLElement>('.jdx-analysis-reading-tools')!
+    expect(tools.textContent).toContain('1 条笔记已保留，未写入 PDF 批注')
+    expect(tools.querySelector('.jdx-icon-action')?.textContent).toBe('重新解析')
+    const run = root.querySelector<HTMLElement>('.jdx-detail-run')!
+    expect(run.hidden).toBe(true)
+    expect(root.querySelector('.jdx-analysis-warning')?.textContent).toContain(pageFailure)
+    expect(root.querySelector('.jdx-analysis-warning')?.textContent).toContain('最新结果尚未完整保存')
+    tools.querySelector('button')!.click()
+    expect(root.ownerDocument.activeElement?.getAttribute('data-jdx-retained-notes')).toBe('1')
+    workspace.setRun({ source:fixture.source, busy:false, resumable:true, message:'已暂停', createdAt:fixture.createdAt })
+    expect(run.hidden).toBe(false)
+    expect(run.querySelector('.jdx-icon-action[aria-label="重新解析"]')).toBeTruthy()
+    expect(tools.querySelector('.jdx-icon-action')).toBeNull()
+  })
+
+  it('only links an unambiguous native quote and rechecks the PDF anchor when the reader clicks', async () => {
+    const fixture = record([])
+    fixture.notes = '文献解析（AI 辅助，请核对原文）\n\n【研究问题】第 iv 页\n原句：Unique passage\nAI 批注：已核对\n\n【研究问题】第 7 页\n原句：Unknown passage\nAI 批注：仅有历史页码'
+    const annotation = { key:'NATIVE42', parentItemID:42, annotationText:'Unique passage', annotationPageLabel:'iv', annotationPosition:JSON.stringify({ pageIndex:3, rects:[[1,2,3,4]] }), getTags:() => [{tag:'Jadense AI/question'}] }
+    const annotations = [annotation], navigate = vi.fn()
+    const host = { Items:{ get:() => ({ id:42, libraryID:1, key:'PDF42', isPDFAttachment:() => true, getAnnotations:() => annotations }) }, Reader:{ open:vi.fn(async () => ({ navigate })) } }
+    const { root, workspace } = mount(fixture, false, true, host)
+    workspace.open(fixture.source, 'notes')
+    await vi.waitFor(() => expect(root.querySelectorAll('.jdx-note-meta button')).toHaveLength(1))
+    const link = root.querySelector<HTMLButtonElement>('.jdx-note-meta button')!
+    expect(link.textContent).toBe('查看原文')
+    expect(root.querySelectorAll('.jdx-note-meta')[1].textContent).toContain('第 7 页')
+    link.click()
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith({ position:{ pageIndex:3, rects:[[1,2,3,4]] } }))
+    annotations.push({...annotation, key:'ANOTHER', annotationPosition:JSON.stringify({ pageIndex:3, rects:[[3,4,5,6]] })})
+    link.click()
+    await vi.waitFor(() => expect(link.isConnected).toBe(false))
+    expect(navigate).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the notes body for a legacy notice without claiming all skipped entries were saved', () => {
+    const fixture = record(['4 entries were not used as PDF annotations. Recoverable notes were retained for review.'])
+    fixture.notes = '旧版本留下的原始文字，未记录具体笔记分组。'
+    const { root } = mount(fixture, false, true)
+    expect(root.querySelector('.jdx-analysis-retained')?.textContent).toContain('4 条内容未写入 PDF 批注')
+    expect(root.querySelector('.jdx-analysis-retained')?.textContent).not.toContain('4 条笔记已保留')
+    root.querySelector<HTMLButtonElement>('.jdx-analysis-retained button')!.click()
+    expect(root.ownerDocument.activeElement).toBe(root.querySelector('.jdx-analysis-notes-text'))
+    expect(root.ownerDocument.activeElement?.textContent?.trim()).toBe(fixture.notes)
+  })
+
   it.each(['zh-CN', 'en-US'])('hides both legacy technical templates and marks saved analysis complete in %s', locale => {
     initializeUiLocale({ locale })
     const { root } = mount(record([sampling, samplingEn]))

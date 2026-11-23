@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { prepareDocumentRequest, chatDocumentCapacity } from './chat-document-request'
 import { documentChunks, documentTokenCost } from '@/chat/long-document-context'
-import { localChatMessages } from '@/chat/temporary-chat'
+import { localChatMessages, temporaryChatMessages } from '@/chat/temporary-chat'
 import type { ChatDocument } from './chat-documents'
 import type { ZoteroLike } from './runtime'
 import { saveChatDocumentMode } from './chat-document-policy'
@@ -40,7 +40,26 @@ describe('PDF request preparation', () => {
     expect(request.sources.every(source => !source.text)).toBe(true)
     const traced = await prepareDocumentRequest({ ...input, evidenceEnabled: true })
     expect(traced.evidence?.entries.length).toBeGreaterThan(0)
+    const tracedText = temporaryChatMessages(traced.messages, traced.sources).at(-1)!.parts[0].text!
+    expect(tracedText).toContain('[[evidence:段落id]]')
+    expect(tracedText.match(/来源 JSON：/gu)).toHaveLength(1)
+    expect(tracedText).not.toMatch(/\[来源 (?:1\]|N，第 P 页\])/u)
     expect(documentTokenCost(JSON.stringify(localChatMessages(traced.messages, traced.sources))) + 4096).toBeLessThanOrEqual(chatDocumentCapacity(f.host, 'chat').input)
+  })
+  it.each([false, true])('attributes unindexed metadata by title with a traceable PDF present: %s', async withPdf => {
+    const f = setup()
+    const metadata = { ...f.docs[0].source, kind: 'item' as const, text: 'Abstract only' }
+    const request = await prepareDocumentRequest({ host: f.host, feature: 'chat', evidenceEnabled: true, sources: withPdf ? [metadata, f.docs[0].source] : [metadata],
+      messages: [{ id: 'q', role: 'user', text: '概括摘要' }], imageCount: 0, signal: new AbortController().signal,
+      modelIdentity: 'platform', progress: vi.fn(), update: vi.fn(), generate: vi.fn() })
+    const text = localChatMessages(request.messages, request.sources)[0].content
+    expect(text).toContain('Abstract only')
+    expect(text).toContain('来源标题')
+    expect(text).not.toContain('[来源 ')
+    if (withPdf) {
+      expect(text).toContain('[[evidence:段落id]]')
+      expect(request.evidence?.entries[0].sourceNumber).toBe(2)
+    } else expect(text).not.toContain('[[evidence:')
   })
   it('removes stale material when a PDF changes during intermediate generation', async () => {
     const f = setup()
@@ -48,7 +67,9 @@ describe('PDF request preparation', () => {
     const request = await prepareDocumentRequest({ host: f.host, feature: 'chat', evidenceEnabled: true, sources: [f.docs[0].source], messages: [{ id: 'q', role: 'user', text: '请全面总结第 81 页是什么？' }],
       imageCount: 0, signal: new AbortController().signal, modelIdentity: 'platform', progress: vi.fn(), update: vi.fn(),
       generate: async () => { f.items.get(1)!.attachmentModificationTime = 2; return 'summary' } })
-    expect(request.messages[0].text).toBe('请全面总结第 81 页是什么？')
+    const text = localChatMessages(request.messages, request.sources)[0].content
+    expect(text).toContain('请全面总结第 81 页是什么？')
+    expect(text).not.toMatch(/TAIL-1|全部可读正文：|本轮原文：|\[来源 /u)
     expect(request.reading?.notice).toContain('已变化')
     expect(request.reading?.sources).toEqual([])
     expect(request.evidence?.entries).toEqual([])

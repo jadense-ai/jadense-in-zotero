@@ -23,6 +23,60 @@ function fixture() {
 }
 
 describe('chat evidence UI', () => {
+  it('shows only the locally bound citation for legacy PDF labels during streaming and history replay', async () => {
+    const f = fixture()
+    const entry = f.message.evidence!.entries[0]
+    const evidence = { entries: [
+      { ...entry, id: 's1b7', pageLabel: '1', pageIndex: 0 },
+      { ...entry, id: 's1b48', pageLabel: '3', pageIndex: 2 },
+    ] }
+    const first = '第一处[来源 1，第 1 页][[evidence:s1b7]]。'
+    renderMessage(f.elements, f.host, { ...f.message, text: first, evidence }, f.wrapper)
+    expect(f.wrapper.querySelector('.jdx-chat-message-body')?.textContent?.trim()).toBe('第一处1。')
+
+    const text = first + '第二处[来源 1，第 3 页][[evidence:s1b48]]。重复[来源 1，第 99 页] [[evidence:s1b7]]。'
+    const replay = renderMessage(f.elements, f.host, { ...f.message, status: 'complete', text, evidence })
+    const body = replay.querySelector('.jdx-chat-message-body')!
+    expect(body.textContent?.trim()).toBe('第一处1。第二处2。重复1。')
+    const buttons = Array.from(body.querySelectorAll('button'))
+    expect(buttons.map(button => button.dataset.evidenceId)).toEqual(['s1b7', 's1b48', 's1b7'])
+    expect(buttons[2].getAttribute('aria-label')).toContain('第 1 页')
+    buttons[1].click()
+    await vi.waitFor(() => expect(f.open).toHaveBeenCalledWith(2, { pageIndex: 2 }))
+    f.dom.window.close()
+  })
+
+  it('preserves independent page labels, literal Markdown and unavailable citations', () => {
+    const f = fixture()
+    const label = '[来源 1，第 1 页]', marker = '[[evidence:s1b1]]'
+    const text = [
+      `提及 ${label}。`, `缺少证据 ${label}[[evidence:s9b9]]。`,
+      `\`${label}${marker}\``, `[链接 ${label}${marker}](https://example.org)`,
+      `\\${label}${marker}`,
+    ].join('\n\n')
+    renderMessage(f.elements, f.host, { ...f.message, text }, f.wrapper)
+    const body = f.wrapper.querySelector('.jdx-chat-message-body')!
+    expect(body.textContent).toContain(`提及 ${label}。`)
+    expect(body.textContent).toContain(`缺少证据 ${label}来源不可用。`)
+    expect(body.querySelector('code')?.textContent).toBe(label + marker)
+    expect(body.querySelector('a')?.textContent).toBe('链接 ' + label + marker)
+    expect(body.lastElementChild?.textContent).toBe(label + '1')
+    expect(body.querySelectorAll('[data-evidence-id]')).toHaveLength(1)
+    f.dom.window.close()
+  })
+
+  it('folds common printed page numbers and the bound PDF label while retaining similar prose', () => {
+    const f = fixture()
+    const evidence = { entries: [{ ...f.message.evidence!.entries[0], pageLabel: '附录·甲' }] }
+    const marker = '[[evidence:s1b1]]'
+    const prose = '[来源 1，第一个结论见下页]'
+    const labels = ['xii', 'S3', '十二', '附录·甲']
+    const text = [...labels.map(page => `[来源 1，第 ${page} 页]${marker}`), prose + marker].join('。')
+    renderMessage(f.elements, f.host, { ...f.message, evidence, text }, f.wrapper)
+    expect(f.wrapper.querySelector('.jdx-chat-message-body')?.textContent?.trim()).toBe(`1。1。1。1。${prose}1`)
+    f.dom.window.close()
+  })
+
   it('numbers passages in first-citation order and lists unambiguous titles for PDFs with the same page label', async () => {
     const f = fixture(), title = 'Second paper with a very long title '.repeat(12)
     const second = { ...f.message.evidence!.entries[0], id: 's7b3', sourceNumber: 7, source: { ...f.message.evidence!.entries[0].source, itemID: 3, itemKey: 'PDF3', title } }

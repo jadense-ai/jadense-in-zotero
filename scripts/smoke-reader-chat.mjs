@@ -1,14 +1,21 @@
 /** 隔离 profile 的真实 Reader 对话验收；仅点击发行 UI，合成模型请求不访问真实账号。 */
 export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFor, screenshot, report }) {
   const main = Zotero.getMainWindow(), doc = main.document, runtime = Zotero.__jadenseChatRuntime
-  const state = () => JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.localChatState'))
+  const state = () => JSON.parse(Zotero.Prefs.get('extensions.jadenseInZotero.localChatState') || '{"sessions":[]}')
+  if (!state().sessions.some(s => s.id === state().activeSessionId)) {
+    const managerInput = manager.document.getElementById('jadense-chat-input')
+    managerInput.value = 'SYNTHETIC_SIDEBAR_QUESTION manager history'
+    managerInput.dispatchEvent(new manager.Event('input', { bubbles: true }))
+    manager.document.getElementById('jadense-chat-form').requestSubmit()
+    await waitFor(() => !runtime.busy && state().sessions.some(s => s.id === state().activeSessionId && s.messages.at(-1)?.status === 'complete'), 'saved Manager conversation')
+  }
   const previous = state().activeSessionId
+  const initialCount = state().sessions.length
   reader._iframeWindow.document.querySelector('[data-jadense-action="attach"]').click()
   const root = await waitFor(() => doc.querySelector(`.jdx-reader-workspace[data-reader-item="${reader.itemID}"]`), 'Reader Chat shell')
   const chat = root.querySelector('.jdx-reader-chat')
-  await waitFor(() => chat.dataset.chatSession && state().sessions.find(s => s.id === chat.dataset.chatSession)?.sources.length, 'new sidebar conversation with PDF')
-  const createdID = chat.dataset.chatSession
-  assert(state().activeSessionId === previous, 'Sidebar changed Manager selection')
+  await waitFor(() => chat.dataset.chatSession === '' && doc.activeElement === chat.querySelector('textarea'), 'focused Reader draft')
+  assert(state().sessions.length === initialCount && state().activeSessionId === previous, 'Opening a draft changed saved conversations')
   const pick = async (host, value) => {
     host.querySelector('.jdx-select-trigger').click()
     const owner = host.ownerDocument
@@ -16,22 +23,30 @@ export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFo
     option.click()
   }
   const input = chat.querySelector('textarea'), sessions = root.querySelector('.jdx-reader-header-center .jdx-select')
+  const newChat = root.querySelector('.jdx-reader-header-right button:not([hidden])')
   input.value = 'Sidebar draft'; input.dispatchEvent(new main.Event('input', { bubbles: true }))
+  newChat.click()
+  assert(input.value === 'Sidebar draft' && doc.activeElement === input, 'New discarded the first draft or lost input focus')
   await pick(sessions, state().sessions.find(s => s.id === previous).title)
   assert(chat.dataset.chatSession === previous && state().sessions.find(s => s.id === previous).sources.length === 0, 'Switching associated the PDF')
   assert(chat.querySelector('.jdx-chat-association').textContent.includes('发送时将关联'), 'Missing send-time association notice')
   input.value = 'SYNTHETIC_SIDEBAR_QUESTION'; input.dispatchEvent(new main.Event('input', { bubbles: true }))
   chat.querySelector('form').requestSubmit()
   await waitFor(() => runtime.busy, 'shared Chat started')
-  await pick(sessions, state().sessions.find(s => s.id === createdID).title)
+  newChat.click()
   assert(input.value === 'Sidebar draft', 'Switching lost the first draft')
+  const other = chat.querySelector('.jdx-reader-other-generation'), stop = chat.querySelector('[id$="-chat-stop"]')
+  assert(!other.hidden && other.textContent.includes(state().sessions.find(s => s.id === previous).title) && stop.hidden, 'Draft exposes Stop or hides the generating conversation')
+  other.querySelector('button').click()
+  assert(chat.dataset.chatSession === previous && !stop.hidden, 'Return did not surface Stop in the owning conversation')
+  newChat.click()
   await waitFor(() => !runtime.busy && state().sessions.find(s => s.id === previous)?.messages.some(m => m.role === 'assistant' && m.status === 'complete'), 'original conversation completion')
   assert(state().sessions.find(s => s.id === previous).sources.some(s => s.itemID === reader.itemID), 'Send did not associate current PDF')
-  assert(state().sessions.find(s => s.id === createdID).messages.length === 0, 'Reply followed visible selection')
+  assert(chat.dataset.chatSession === '' && state().sessions.length === initialCount, 'Reply followed the unsent draft')
   await waitFor(() => manager.document.querySelector('.jdx-chat-message[data-role="assistant"]'), 'shared Manager history render')
   const taskCount = Zotero.__jadenseDocumentJobs.list('translation').length
-  await pick(root.querySelector('.jdx-reader-header-left .jdx-select'), '全文翻译')
-  assert(root.dataset.page === 'translation' && !root.querySelector('.jdx-reader-workspace-empty').hidden, 'Translation page missing')
+  await pick(root.querySelector('.jdx-reader-header-left .jdx-select'), '历史全文译文')
+  await waitFor(() => root.dataset.page === 'translation' && root.querySelector('[data-result-mode="translation"] .jdx-result-empty button')?.textContent === '打开对照翻译', 'saved translations with bilingual PDF action')
   assert(Zotero.__jadenseDocumentJobs.list('translation').length === taskCount, 'Page switch started a translation')
   await pick(root.querySelector('.jdx-reader-header-left .jdx-select'), '对话')
   assert(input.value === 'Sidebar draft', 'Page switch lost draft')
@@ -45,7 +60,7 @@ export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFo
     research: { source: { itemID: attachment.id, libraryID: attachment.libraryID, itemKey: attachment.key, title: 'Synthetic PDF' }, pages: [{ pageIndex: 0, pageLabel: '1' }] },
   })
   Zotero.Prefs.set('extensions.jadenseInZotero.localChatState', JSON.stringify(analysisState))
-  await pick(sessions, state().sessions.find(s => s.id === createdID).title)
+  newChat.click()
   await pick(sessions, state().sessions.find(s => s.id === previous).title)
   const analysisPage = await waitFor(() => chat.querySelector('button.jdx-analysis-page'), 'analysis page button')
   const chromeWidth = main.outerWidth - main.innerWidth, chromeHeight = main.outerHeight - main.innerHeight
@@ -75,7 +90,7 @@ export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFo
       assert(main.getComputedStyle(dock).backgroundColor === 'rgba(0, 0, 0, 0)' && main.getComputedStyle(dock).position === 'absolute', 'Composer dock masks the message area')
       const panel = chat.querySelector('.jdx-chat-status-panel'), field = chat.querySelector('.jdx-chat-compose-field')
       assert(panel.getBoundingClientRect().bottom > field.getBoundingClientRect().top && panel.getBoundingClientRect().height <= 36, 'Idle status is not a compact tucked panel')
-      assert(root.querySelectorAll('.jdx-reader-header-right button').length === 1, 'Redundant sidebar collapse control remains')
+      assert(root.querySelectorAll('.jdx-reader-header-right button:not([hidden])').length === 1, 'Redundant sidebar collapse control remains')
       assert(root.scrollWidth <= root.clientWidth + 2, `Sidebar overflow at ${width} x ${height}`)
       const ancestors = []; let ancestor = root
       while (ancestor && ancestors.length < 20) { ancestors.push({ name: ancestor.localName, id: ancestor.id, className: ancestor.className, bounds: ancestor.getBoundingClientRect().toJSON(), minWidth: main.getComputedStyle(ancestor).minWidth, overflow: main.getComputedStyle(ancestor).overflow }); ancestor = ancestor.parentElement }
@@ -92,7 +107,7 @@ export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFo
       ;(report.readerChatLayouts ??= []).push({ theme, requested: [width, height], actual: [bounds.width, bounds.height], parent: [parentBounds.width, expectedBottom - bounds.top] })
       const model = chat.querySelector('.jdx-chat-model-select .jdx-select-trigger')
       assert(model?.querySelector('.jdx-select-leading-icon img'), 'Selected model icon missing')
-      assert(model.querySelector('img').src.endsWith('/deepseek.svg') && model.querySelector('img').naturalWidth > 0, 'Model brand logo failed to load')
+      assert(model.querySelector('img').src.includes('/model-logos/') && model.querySelector('img').naturalWidth > 0, 'Model brand logo failed to load')
       const label = model.querySelector('.jdx-select-value')
       assert((main.getComputedStyle(label).display === 'none') === (chat.clientWidth <= 380), 'Model label did not follow container width')
       const sendBounds = send.getBoundingClientRect()
@@ -132,14 +147,14 @@ export async function verifyReaderChat({ Zotero, reader, manager, assert, waitFo
   const standalone = await Zotero.Reader.open(reader.itemID, undefined, { openInWindow: true, allowDuplicate: true })
   await waitFor(() => standalone._iframeWindow?.document.querySelector('[data-jadense-action="attach"]'), 'standalone Reader tools')
   standalone._iframeWindow.document.querySelector('[data-jadense-action="attach"]').click()
-  const second = await waitFor(() => standalone._window.document.querySelector('.jdx-reader-chat[data-chat-session]:not([data-chat-session=""])'), 'standalone conversation')
-  const secondID = second.dataset.chatSession
-  assert(secondID !== chat.dataset.chatSession, 'Readers shared a view selection')
+  const second = await waitFor(() => standalone._window.document.querySelector('.jdx-reader-chat[data-chat-session=""]'), 'standalone draft')
+  assert(state().sessions.length === initialCount && chat.dataset.chatSession === previous, 'Opening the standalone draft changed saved conversations or another view')
   const secondInput = second.querySelector('textarea')
   secondInput.value = 'SYNTHETIC_SIDEBAR_QUESTION standalone'
   secondInput.dispatchEvent(new standalone._window.Event('input', { bubbles: true }))
   second.querySelector('form').requestSubmit()
-  await waitFor(() => runtime.busy, 'standalone generation')
+  const secondID = await waitFor(() => runtime.busy && second.dataset.chatSession && runtime.activeSessionID === second.dataset.chatSession && second.dataset.chatSession, 'standalone generation')
+  assert(secondID !== previous && state().sessions.length === initialCount + 1, 'First standalone send did not create its own conversation')
   await screenshot('reader-chat-standalone-stream', standalone._window)
   standalone._window.close()
   await waitFor(() => !runtime.busy, 'generation survives Reader close')

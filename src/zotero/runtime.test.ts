@@ -483,6 +483,26 @@ describe("Zotero -> Jadense upload", () => {
     expect(await pushSelectedItemsToJadense(zotero,{includePdf:true})).toMatchObject({pdfUploadedCount:1})
     expect(JSON.parse(fetcher.mock.calls[3][1].body).requestId).not.toBe(JSON.parse(fetcher.mock.calls[0][1].body).requestId)
   })
+  it("uploads only the items or collections shown when the workbench action was invoked", async () => {
+    const { zotero, seedItem, seedCollection, selectedItems, setSelectedCollection } = createFakeZotero()
+    const shown = seedItem({ title: "Shown paper" }), other = seedItem({ title: "Different selection" })
+    const folder = seedCollection("Shown folder"), differentFolder = seedCollection("Different folder")
+    folder.childItems.push(shown); differentFolder.childItems.push(other)
+    selectedItems.push(other); setSelectedCollection(differentFolder)
+    const upload = vi.fn(async () => Response.json({
+      importedCount: 1, skippedCount: 0, failedCount: 0,
+      results: [{ clientItemId: "zotero:1/I1", status: "imported", result: { insertedFolderIds: ["folder-1"] } }],
+    }))
+    vi.stubGlobal("fetch", upload)
+    const items = await pushSelectedItemsToJadense(zotero, { selectedItems: [shown] })
+    const collections = await pushSelectedCollectionToJadense(zotero, { selectedCollections: [folder] })
+    expect(items.items.map(item => item.title)).toEqual(["Shown paper"])
+    expect(collections.items.map(item => item.title)).toEqual(["Shown paper"])
+    expect(collections.collectionName).toBe("Shown folder")
+    await expect(pushSelectedItemsToJadense(zotero, { selectedItems: [] })).rejects.toThrow()
+    expect(upload).toHaveBeenCalledTimes(2)
+  })
+
   it("pushes selected method-style Zotero items and persists v2 push mappings", async () => {
     const { zotero, prefs, selectedItems, seedItem } = createFakeZotero()
     const item = seedItem({

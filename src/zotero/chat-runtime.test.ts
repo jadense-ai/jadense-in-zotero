@@ -36,13 +36,17 @@ describe('shared Reader Chat lifecycle', () => {
     await runtime.send({ sessionID: session.id, itemID: 2, prompt: 'Question about literal syntax [[evidence:s9b9]]' })
     const message = readLocalChatState(runtime.preferences).sessions[0].messages.at(-1)!
     expect(message).toMatchObject({ status: 'complete', evidence: { entries: [{ id: 's1b1', quote: 'Synthetic evidence', source: { itemID: 2, modificationTime: 1 } }] } })
-    expect(String(fetch.mock.calls[0][1]?.body)).toContain('证据溯源已开启')
+    const tracedBody = String(fetch.mock.calls[0][1]?.body)
+    expect(tracedBody).toContain('证据溯源已开启')
+    expect(tracedBody).not.toMatch(/\[来源 (?:1\]|N，第 P 页\])/u)
     host.Prefs!.set(CHAT_EVIDENCE_PREF_KEY, false)
     await runtime.send({ sessionID: session.id, prompt: 'Follow-up' })
     const payload = JSON.parse(String(fetch.mock.calls[1][1]?.body))
     expect(payload.messages.find((row: { role: string }) => row.role === 'assistant').content).toBe('Answer ')
     expect(payload.messages.some((row: { role: string; content: string }) => row.role === 'user' && row.content.includes('[[evidence:s9b9]]'))).toBe(true)
     expect(JSON.stringify(payload)).not.toContain('证据溯源已开启')
+    expect(payload.messages.at(-1).content).toContain('[来源 N，第 P 页]')
+    expect(payload.messages.at(-1).content).toContain('[来源 1]')
     expect(readLocalChatState(runtime.preferences).sessions[0].messages.at(-1)?.evidence).toBeUndefined()
   })
   it('sends extracted file text on upload and follow-up without persisting contents in messages', async () => {

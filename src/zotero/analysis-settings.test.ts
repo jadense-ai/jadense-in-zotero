@@ -1,7 +1,10 @@
-/** 两处配置宿主共享软性建议；偏好故障、非法数字和跨窗口修改不阻断解析。 */
+/** 两处配置宿主共享文献解析偏好；覆盖默认值、保存、跨窗口同步与读写故障。 */
 import { JSDOM } from 'jsdom'
 import { afterEach, expect, it, vi } from 'vitest'
-import { ANALYSIS_ANNOTATION_SUGGESTION_PREF as KEY, readAnalysisAnnotationSuggestion, wireAnalysisSettings } from './analysis-settings'
+import {
+  ANALYSIS_ANNOTATION_SUGGESTION_PREF as KEY, ANALYSIS_REFERENCES_PREF,
+  readAnalysisAnnotationSuggestion, readAnalysisReferencesEnabled, wireAnalysisSettings,
+} from './analysis-settings'
 import { initializeUiLocale } from './ui-preferences'
 
 afterEach(() => initializeUiLocale(null))
@@ -41,14 +44,44 @@ it.each([undefined, null, '', 'bad', -1, 0, 2.5, Infinity, {}, Number.MAX_SAFE_I
   expect(readAnalysisAnnotationSuggestion(host)).toBeUndefined()
 })
 
+it.each(['zh-CN', 'en-US'])('defaults reference extraction to off and persists changes from either host in %s', locale => {
+  initializeUiLocale({ locale })
+  const { host, values, observers } = fixture()
+  const dom = new JSDOM('<div id="manager"></div><div id="native"></div>')
+  const roots = [...dom.window.document.querySelectorAll<HTMLElement>('div')]
+  const stops = roots.map(root => wireAnalysisSettings(host, root))
+  const boxes = roots.map(root => root.querySelector<HTMLInputElement>('[data-analysis-references-enabled]')!)
+  expect(boxes[0].labels?.[0].textContent).toBe(locale === 'zh-CN' ? '解析文献时自动提取参考文献' : 'Automatically extract references during analysis')
+  expect(boxes.every(box => !box.checked)).toBe(true)
+  expect(host.Prefs.set).not.toHaveBeenCalled()
+  boxes[0].click()
+  expect(values.get(ANALYSIS_REFERENCES_PREF)).toBe(true)
+  expect(boxes[1].checked).toBe(true)
+  stops[0]()
+  stops[0] = wireAnalysisSettings(host, roots[0])
+  const reopened = roots[0].querySelector<HTMLInputElement>('input[type=checkbox]')!
+  expect(reopened.checked).toBe(true)
+  boxes[1].click()
+  expect(values.get(ANALYSIS_REFERENCES_PREF)).toBe(false)
+  expect(reopened.checked).toBe(false)
+  stops.forEach(stop => stop())
+  expect(observers.size).toBe(0)
+  dom.window.close()
+})
+
 it('contains unavailable preference reads and failed writes within the setting', () => {
   initializeUiLocale({ locale: 'zh-CN' })
   const { host } = fixture(); host.Prefs.get = () => { throw new Error('Unavailable') }
   expect(readAnalysisAnnotationSuggestion(host)).toBeUndefined()
+  expect(readAnalysisReferencesEnabled(host)).toBe(false)
   const dom = new JSDOM('<div></div>'), root = dom.window.document.querySelector('div')!
   const stop = wireAnalysisSettings(host, root)
   host.Prefs.set.mockImplementation(() => { throw new Error('Unavailable') })
   const input = root.querySelector('input')!; input.value = '70'; input.dispatchEvent(new dom.window.Event('change'))
   expect(root.querySelector('[role=status]')?.textContent).toContain('保存失败')
+  const checkbox = root.querySelector<HTMLInputElement>('input[type=checkbox]')!
+  checkbox.click()
+  expect(checkbox.checked).toBe(false)
+  expect(checkbox.closest('.jdx-feature-model-row')?.querySelector('[role=status]')?.textContent).toContain('保存失败')
   stop(); dom.window.close()
 })

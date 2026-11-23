@@ -1,6 +1,7 @@
 /** 后台运行合同：按附件去重、停止与迟到读取隔离、保留未落盘结果。 */
 import { expect, it, vi } from 'vitest'
 import { AnalysisRuntime } from './analysis-runtime'
+import { ANALYSIS_REFERENCES_PREF } from './analysis-settings'
 import { collectSourceForItem } from './research-context'
 import type { runIndependentPaperAnalysis } from './paper-analysis-runner'
 import { AnalysisTaskStore, newAnalysisTask, type AnalysisTask } from './analysis-task-store'
@@ -10,9 +11,12 @@ function options() {
     context: async () => ({ account: 'synthetic-account', configuration: 'synthetic-model', route: 'jadense' as const }) }
 }
 vi.mock('./research-context', () => ({ collectSourceForItem: vi.fn(async (_host, itemID) => ({ kind: 'file', itemID, libraryID: 1, itemKey: `PDF${itemID}`, title: 'Paper' })) }))
-vi.mock('./document-jobs', () => ({ documentJobs: () => ({ start: async () => { throw new Error('Optional OCR unavailable') }, pause: vi.fn() }) }))
+const { startReferences } = vi.hoisted(() => ({
+  startReferences: vi.fn<() => Promise<{ id: string }>>().mockRejectedValue(new Error('Optional OCR unavailable')),
+}))
+vi.mock('./document-jobs', () => ({ documentJobs: () => ({ start: startReferences, pause: vi.fn() }) }))
 const result = (id: number) => ({ record: { id: `r${id}`, createdAt: new Date().toISOString(), source: { itemID: id, libraryID: 1, itemKey: `PDF${id}`, title: 'Paper', authors: [] }, summary: 'Retained summary', notes: 'Complete notes' }, historySaved: false, coverage: '', annotations: { created: 0, skipped: 0, failed: 0, unprocessed: 0 } })
-it('starts analysis without a feature warning', async () => {
+it('starts analysis without prompting or extracting references by default', async () => {
   const confirm = vi.fn(() => false)
   const host = { Prefs: { get: () => undefined }, getMainWindow: () => ({ confirm, fetch }) } as never
   const run = vi.fn<typeof runIndependentPaperAnalysis>(async input => result(input.itemID))
@@ -20,7 +24,44 @@ it('starts analysis without a feature warning', async () => {
   await runtime.start(1)
   expect(confirm).not.toHaveBeenCalled()
   expect(run).toHaveBeenCalledOnce()
+  expect(startReferences).not.toHaveBeenCalled()
+  expect(runtime.get(1)?.references).toBeUndefined()
   runtime.dispose()
+})
+
+it('uses the current reference extraction preference on each analysis', async () => {
+  let enabled = true
+  const referenceID = crypto.randomUUID()
+  const host = { Prefs: { get: (key: string) => key === ANALYSIS_REFERENCES_PREF ? enabled : undefined } }
+  const run = vi.fn<typeof runIndependentPaperAnalysis>(async input => result(input.itemID))
+  const runtime = new AnalysisRuntime(host, run, options())
+  startReferences.mockClear().mockResolvedValueOnce({ id: referenceID })
+  try {
+    await runtime.start(1)
+    expect(startReferences).toHaveBeenCalledWith('references', 1, false, { signal: expect.any(AbortSignal) })
+    expect(runtime.get(1)?.referenceTaskID).toBe(referenceID)
+    enabled = false
+    await runtime.restart(1)
+    expect(run).toHaveBeenCalledTimes(2)
+    expect(startReferences).toHaveBeenCalledTimes(1)
+    expect(runtime.get(1)?.references).toBeUndefined()
+  } finally { await runtime.dispose() }
+})
+
+it('preserves the reference link when resuming a saved analysis with automatic extraction off', async () => {
+  const persistent = options(), task = newAnalysisTask(42)
+  task.referenceTaskID = crypto.randomUUID()
+  task.status = 'paused'
+  await persistent.store.save(task)
+  const run = vi.fn<typeof runIndependentPaperAnalysis>(async input => result(input.itemID))
+  const runtime = new AnalysisRuntime({}, run, persistent)
+  startReferences.mockClear()
+  try {
+    await runtime.start(42)
+    expect(startReferences).not.toHaveBeenCalled()
+    expect(run.mock.calls[0][0].referenceTaskID).toBe(task.referenceTaskID)
+    expect(runtime.get(42)?.referenceTaskID).toBe(task.referenceTaskID)
+  } finally { await runtime.dispose() }
 })
 
 it('continues an uncertain request with its identity, but explicitly reanalyzes with a new persisted task', async () => {

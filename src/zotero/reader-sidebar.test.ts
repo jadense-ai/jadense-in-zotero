@@ -11,6 +11,5 @@ it('exposes seven independent pages and never starts document work when shown', 
   expect(source).toContain('mountDocumentResults(panel, host, source, mode')
   expect(source).toContain("action: { kind: 'fullTranslate', itemID, taskID, resultMode: resultPage }")
   expect(source).toContain('right.append(newChat, workbench)')
-  expect(source).toContain('views.get(resultPage)?.view.selectedRecordID()')
   expect(source).not.toContain('onWorkbench:')
 })

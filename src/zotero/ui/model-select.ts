@@ -3,7 +3,7 @@ import { createJdxSelect } from './select'
 import { uiText } from '../ui-preferences'
 
 /** Reader 可将弹层挂至宿主文档，避免侧栏裁切；其他入口保持原有生命周期。 */
-export function createModelSelect(host: HTMLElement, input: { ariaLabel: string; portal?: boolean }) {
+export function createModelSelect(host: HTMLElement, input: { ariaLabel: string; portal?: boolean; modelNoticeInPopup?: boolean }) {
   host.classList.add('jdx-model-select')
   return createJdxSelect(host, {
     ...input,

@@ -1,5 +1,6 @@
 /** 工作台的展示偏好行为测试：窗口联动不修改启动语言、内容或 AI 操作。 */
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { JSDOM } from "jsdom"
 import { localizeManagerStaticContent } from "./manager-localization"
 import { buildJadensePointsView, friendlyChatError, observeManagerOperationPreferences, wireManagerAppearance } from "./manager-page"
 import { DISPLAY_LANGUAGE_PREF, getUiLocale, initializeUiLocale, THEME_PREF } from "./ui-preferences"
@@ -37,12 +38,12 @@ function host() {
   }
 }
 
-function select() {
+function select(element: HTMLElement) {
   let value = ""
   let listener = (_value: string) => {}
   let options: JdxSelectOption[] = []
   return {
-    element: {} as HTMLElement,
+    element,
     getValue: () => value,
     setValue: (next: string) => { value = next },
     setOptions: (next: JdxSelectOption[], selected: string) => { options = next; value = selected },
@@ -54,6 +55,7 @@ function select() {
 }
 
 function appearanceWindow() {
+  const doc = new JSDOM("<body><div id='language'></div><div id='theme'></div><p role='status'></p></body>").window.document
   const clicks = new Map<string, () => void>()
   const attributes = new Map<string, string>()
   const root = { dataset: {} as Record<string, string>, style: {}, replaceChildren: vi.fn(), draft: "尚未发送的中文草稿", messages: ["既有回答不翻译"] }
@@ -63,9 +65,9 @@ function appearanceWindow() {
       addEventListener: (name: string, listener: () => void) => { clicks.set(name, listener) },
       setAttribute: (name: string, value: string) => { attributes.set(name, value) },
     } as unknown as HTMLButtonElement,
-    displayLanguage: select(),
-    displayTheme: select(),
-    generalStatus: { textContent: "", dataset: {} } as HTMLElement,
+    displayLanguage: select(doc.getElementById("language")!),
+    displayTheme: select(doc.getElementById("theme")!),
+    generalStatus: doc.querySelector<HTMLElement>("[role=status]")!,
   }
   return { root, elements, clickTheme: () => clicks.get("click")!(), attributes }
 }
@@ -83,6 +85,7 @@ describe("Manager appearance", () => {
     expect(values.get(DISPLAY_LANGUAGE_PREF)).toBe("en-US")
     expect(second.elements.displayLanguage.getValue()).toBe("en-US")
     expect(first.elements.generalStatus.textContent).toContain("重启 Zotero")
+    expect(first.elements.generalStatus.previousElementSibling).toBe(first.elements.displayLanguage.element)
     expect(initializeUiLocale(zotero)).toBe("zh-CN")
     stopSecond()
     const reopened = appearanceWindow()
@@ -104,6 +107,7 @@ describe("Manager appearance", () => {
     const stopSecond = wireManagerAppearance(second.elements, zotero, second.root as unknown as HTMLElement)
     expect(first.root.dataset.theme).toBe("light")
     first.elements.displayTheme.choose("dark")
+    expect(first.elements.generalStatus.previousElementSibling).toBe(first.elements.displayTheme.element)
     expect([first.root.dataset.theme, second.root.dataset.theme]).toEqual(["dark", "dark"])
     expect(second.elements.displayTheme.getValue()).toBe("dark")
     second.clickTheme()

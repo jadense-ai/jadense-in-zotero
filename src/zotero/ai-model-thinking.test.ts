@@ -10,7 +10,7 @@ import { chatDocumentCapacity } from './chat-document-request'
 import { rememberModelCatalog } from './model-catalog'
 import type { ZoteroLike } from './runtime'
 
-function fixture(follow = false) {
+function fixture(follow = false, reader = false) {
   const prefs = new Map<string, unknown>([['extensions.jadenseInZotero.autoFollowChatModel', follow]])
   const host = { Prefs: { get: (key: string) => prefs.get(key), set: (key: string, value: unknown) => prefs.set(key, value) } } as ZoteroLike
   const catalog = parseJadenseChatModelCatalog({ future: true, options: [
@@ -23,7 +23,7 @@ function fixture(follow = false) {
   for (const feature of ['chat', 'translation', 'fullTranslation'] as const) saveFeatureModelSelection(host, feature, { route: 'jadense', selection: { kind: 'model', modelId: 'fast', thinkingEffort: 'auto' } })
   const dom = new JSDOM('<main><div id="models"></div></main>')
   const root = dom.window.document.getElementById('models')!
-  const select = createJdxSelect(root, { compact: true, searchPlaceholder: '搜索模型', showSelectedIcon: true })
+  const select = createJdxSelect(root, { compact: true, searchPlaceholder: '搜索模型', showSelectedIcon: true, portal: reader, modelNoticeInPopup: reader })
   const render = () => {
     const selection = effectiveFeatureModelSelection(host, 'fullTranslation')
     select.setOptions(buildFeatureModelSelectOptions(host, catalog, selection), featureModelSelectionKey(selection))
@@ -35,6 +35,33 @@ function fixture(follow = false) {
 }
 
 describe('model thinking and metadata', () => {
+  it('keeps the contract notice inline in settings and inside the portalled Reader dialog', () => {
+    const settings = fixture(), reader = fixture(false, true)
+    try {
+      expect(settings.root.nextElementSibling?.textContent).toContain('服务端尚未确认支持思考设置')
+      expect(reader.root.nextElementSibling).toBeNull()
+      const trigger = reader.root.querySelector<HTMLButtonElement>('.jdx-select-trigger')!
+      trigger.dispatchEvent(new reader.dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      const doc = reader.dom.window.document, dialog = doc.querySelector<HTMLElement>('.jdx-select-portal [role=dialog]')!
+      const notice = doc.getElementById(dialog.getAttribute('aria-describedby')!)!
+      expect(dialog.contains(notice)).toBe(true)
+      expect(notice.textContent).toContain('服务端尚未确认支持思考设置')
+      expect(doc.activeElement?.className).toBe('jdx-model-heading')
+      configureFeatureModelThinking(reader.select, reader.host, 'fullTranslation', { ...reader.catalog, thinkingContractVersion: 1 })
+      expect(dialog.hasAttribute('aria-describedby')).toBe(false)
+      expect(dialog.contains(notice)).toBe(false)
+      expect(doc.activeElement?.className).toBe('jdx-model-heading')
+
+      saveByokProvider(reader.host, { id: 'p', name: 'P', protocol: 'openai-chat-completions', baseUrl: 'https://provider.test/v1', apiKey: 'synthetic' })
+      saveByokModel(reader.host, { id: 'm', providerId: 'p', name: 'M', model: 'model', thinkingEfforts: ['low'] })
+      saveFeatureModelSelection(reader.host, 'fullTranslation', { route: 'byok', modelId: 'm', thinkingEffort: 'high' })
+      reader.render()
+      expect(doc.getElementById(dialog.getAttribute('aria-describedby')!)?.textContent).toContain('此前选定的思考档位')
+      expect(doc.querySelectorAll('[data-thinking-contract-notice]')).toHaveLength(1)
+      reader.select.close()
+      expect(reader.root.nextElementSibling).toBeNull()
+    } finally { for (const f of [reader, settings]) { f.select.destroy(); f.dom.window.close() } }
+  })
   it('puts Auto first beside models and keeps the Standard selection identity', () => {
     const f = fixture()
     const options = buildFeatureModelSelectOptions(f.host, f.catalog, effectiveFeatureModelSelection(f.host, 'chat'))

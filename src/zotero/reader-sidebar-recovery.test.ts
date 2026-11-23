@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ZoteroLike } from './runtime'
 
-const mocks = vi.hoisted(() => ({ chat: vi.fn(), jobs: vi.fn(), traces: [] as string[] }))
+const mocks = vi.hoisted(() => ({ chat: vi.fn(), jobs: vi.fn(), pageChange: vi.fn<(listener: (page: string) => void) => void>(), bilingual: vi.fn(async () => {}), traces: [] as string[] }))
 vi.mock('./reader-chat', () => ({ mountReaderChat: mocks.chat }))
 vi.mock('./document-jobs', () => ({ documentJobs: mocks.jobs }))
 vi.mock('./document-results', () => ({ resultLabels: () => ({ source: 'Source', translation: 'Translation', selection: 'Selection' }), mountDocumentResults: vi.fn() }))
@@ -10,7 +10,8 @@ vi.mock('./translation-reader', () => ({ installTranslationReadingStyles: vi.fn(
 vi.mock('./research-context', () => ({ collectSourceForItem: async () => null }))
 vi.mock('./manager-window', () => ({ openManagerWindow: vi.fn() }))
 vi.mock('./ui-preferences', () => ({ observeTheme: () => () => {}, uiText: (_cn: string, en: string) => en }))
-vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ setOptions() {}, setValue() {}, close() {}, destroy() {}, onChange() {} }) }))
+vi.mock('./ui/select', () => ({ createJdxSelect: () => ({ setOptions() {}, setValue() {}, close() {}, destroy() {}, onChange: mocks.pageChange }) }))
+vi.mock('./pdf-translation-reader', () => ({ openPDFTranslation: mocks.bilingual }))
 vi.mock('./chat-message-ui', () => ({ messageAction: (doc: Document) => doc.createElement('button') }))
 import { openAnalysisSidebar, openChatSidebar, openTranslationSidebar, removeReaderSidebars, renderNativeReaderSidebar } from './reader-sidebar'
 import { mountDocumentResults } from './document-results'
@@ -267,10 +268,10 @@ it('abandons a pending open when the user switches tabs', async () => {
   expect(mocks.chat).not.toHaveBeenCalled()
 })
 
-it('opens the selected analysis version from the header and hides that action in chat', async () => {
-  const f = fixture(true), selectedRecordID = vi.fn(() => 'latest-analysis')
+it('shares the selected version across analysis pages and passes it to the workbench', async () => {
+  const f = fixture(true), selectedRecordID = vi.fn(() => 'latest-analysis'), setAnalysisTab = vi.fn()
   mocks.jobs.mockReturnValue({ ready: Promise.resolve(), list: () => [{ source: { itemID: 1, title: 'Synthetic PDF' } }] })
-  vi.mocked(mountDocumentResults).mockReturnValueOnce({ refresh: vi.fn(), selectedRecordID, setRun: vi.fn(), remove: vi.fn() })
+  vi.mocked(mountDocumentResults).mockClear().mockReturnValueOnce({ refresh: vi.fn(), selectedRecordID, setAnalysisTab, setRun: vi.fn(), remove: vi.fn() })
   await openAnalysisSidebar(f.host, f.pdf as unknown as Document, 1, f.reader as never)
   const header = f.doc.querySelector('.jdx-reader-header-right')!
   const workbench = header.children[1] as unknown as HTMLButtonElement
@@ -278,10 +279,31 @@ it('opens the selected analysis version from the header and hides that action in
   workbench.onclick?.(new Event('click') as MouseEvent)
   expect(openManagerWindow).toHaveBeenLastCalledWith(expect.objectContaining({ action: { kind: 'fullTranslate', itemID: 1, taskID: 'latest-analysis', resultMode: 'summary' } }))
   selectedRecordID.mockReturnValue('older-analysis')
-  workbench.onclick?.(new Event('click') as MouseEvent)
-  expect(openManagerWindow).toHaveBeenLastCalledWith(expect.objectContaining({ action: expect.objectContaining({ taskID: 'older-analysis' }) }))
+  const navigate = mocks.pageChange.mock.lastCall![0]
+  for (const page of ['notes', 'references', 'summary']) {
+    navigate(page)
+    workbench.onclick?.(new Event('click') as MouseEvent)
+    expect(setAnalysisTab).toHaveBeenLastCalledWith(page)
+    expect(openManagerWindow).toHaveBeenLastCalledWith(expect.objectContaining({ action: { kind: 'fullTranslate', itemID: 1, taskID: 'older-analysis', resultMode: page } }))
+  }
+  await vi.advanceTimersByTimeAsync(0)
+  expect(mountDocumentResults).toHaveBeenCalledTimes(1)
   expect(vi.mocked(mountDocumentResults).mock.calls.at(-1)?.[4]).not.toHaveProperty('onWorkbench')
   await f.open()
   expect(workbench.hidden).toBe(true)
   expect(header.children[0].hidden).toBe(false)
+})
+
+it('opens bilingual translation only on request and in the Reader that owns this PDF', async () => {
+  const f = fixture(true)
+  mocks.jobs.mockReturnValue({ ready: Promise.resolve(), list: () => [{ source: { itemID: 1, title: 'Synthetic PDF' } }] })
+  vi.mocked(mountDocumentResults).mockReturnValueOnce({ refresh: vi.fn(), selectedRecordID: () => undefined, setAnalysisTab: vi.fn(), setRun: vi.fn(), remove: vi.fn() })
+  await openTranslationSidebar(f.host, f.pdf as unknown as Document, 1, () => {}, f.reader as never)
+  const open = vi.mocked(mountDocumentResults).mock.lastCall![4]!.onOpenBilingual!
+  expect(mocks.bilingual).not.toHaveBeenCalled()
+  await open()
+  expect(mocks.bilingual).toHaveBeenCalledWith(f.host, f.reader, 'compare')
+  f.reader.itemID = 2
+  await expect(open()).rejects.toThrow('Reopen this PDF')
+  expect(mocks.bilingual).toHaveBeenCalledTimes(1)
 })
