@@ -31,7 +31,19 @@ export function wireEngineStorageSettings(host: ZoteroLike, parent: HTMLElement,
   const cleanup = make('button', uiText('重试清理旧目录', 'Retry old-folder cleanup')); cleanup.type = 'button'; cleanup.className = 'jdx-button'; cleanup.hidden = true
   actions.append(save, reset, cancel, cleanup)
   const status = make('p'); status.className = 'jdx-manager-inline-status jdx-pref-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true')
-  controls.append(inputRow, current, preview, actions, status); row.append(description, controls); parent.append(row)
+  if (kind === 'ocr') {
+    const editor = make('details'); editor.className = 'jdx-storage-editor'
+    const summary = make('summary', uiText('更改存储位置', 'Change storage location'))
+    const fields = make('div'); fields.className = 'jdx-settings-controls'
+    fields.append(note, inputRow, preview, actions)
+    editor.append(summary, fields)
+    controls.append(current, editor, status)
+    // 未完成迁移的恢复入口在折叠时也可见。
+    controls.append(cleanup)
+  } else {
+    controls.append(inputRow, current, preview, actions, status)
+  }
+  row.append(description, controls); parent.append(row)
   let disposed = false, controller: AbortController | undefined, dirty = false
   const feedback = (message: string, type: 'info' | 'success' | 'error' = 'info') => { if (!disposed) { status.textContent = message; status.dataset.kind = type } }
   const legacyCacheIdle = () => !ocrStorageBusyReason(host) && !pdfTranslationJobs(host).storageBusyReason()

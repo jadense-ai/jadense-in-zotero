@@ -1,5 +1,15 @@
 # 更新说明 / Changelog
 
+## 0.6.19 — 2026-11-24
+
+- 开启证据溯源后，每处可定位的 PDF 引用显示原文角标。鼠标悬停或聚焦角标可预览原文，点击可跳回 PDF。已有回复中紧挨有效角标的旧来源和页码标签也会收起。
+- 阅读器侧栏保留未发送的草稿和附件，可返回正在生成回复的会话。切换解析版本时，总结、笔记和参考文献一起切换。
+- 工作台可从保留笔记跳到匹配的 PDF 批注，上传前可核对所选条目、目标和 PDF 选项，诊断列表支持复制单条脱敏记录。
+
+- Evidence tracing now shows a marker for each cited PDF passage. Hover or focus it to preview the passage, or click to jump to the PDF. Saved replies also hide duplicate source and page labels immediately before a valid marker.
+- The Reader sidebar keeps unsent drafts and attachments and lets you return to a reply in progress. Switching analysis versions updates the summary, notes and references together.
+- In the workbench, open a matching PDF annotation from a saved note, review the items, destination and PDF option before upload, or copy a single redacted diagnostic entry.
+
 ## 0.6.18 — 2026-11-18
 
 - 免密钥机器翻译新增 Microsoft Edge、Google GTX、MyMemory 和本机 LibreTranslate，保留 Bing 与 Google。

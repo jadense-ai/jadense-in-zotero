@@ -34,6 +34,7 @@ export type JdxModelControl = {
   levels: { value: string; label: string }[]
   value: string
   label: string
+  notice?: string
   onCommit?: (value: string) => void
 }
 
@@ -150,6 +151,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   iconPath?: string
   portal?: boolean
   showSelectedIcon?: boolean
+  modelNoticeInPopup?: boolean
 } = {}): JdxSelect {
   const doc = host.ownerDocument
   const hostId = host.id || `jdx-select-${Math.random().toString(36).slice(2)}`
@@ -166,6 +168,7 @@ export function createJdxSelect(host: HTMLElement, input: {
   const disabledListeners = new Set<(option: JdxSelectOption) => void>()
   let anchorTop = 0, anchorLeft = 0
   let modelControl: JdxModelControl | undefined
+  let modelNotice: HTMLParagraphElement | undefined
   let modelView: "model" | "list" = "model"
 
   host.classList.add("jdx-select")
@@ -689,11 +692,31 @@ export function createJdxSelect(host: HTMLElement, input: {
   return {
     element: host,
     close,
-    destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); detail.remove(); portal?.remove() },
+    destroy() { close(); listeners.clear(); openListeners.clear(); disabledListeners.clear(); trigger.remove(); popup.remove(); detail.remove(); modelNotice?.remove(); portal?.remove() },
     getValue: () => state.value,
     setModelControl(control) {
+      // Reader 的模型说明随弹层移动；设置页继续紧邻选择器显示。
+      if (control.notice !== modelControl?.notice) {
+        if (control.notice) {
+          if (!modelNotice) {
+            modelNotice = htmlElement(doc, "p")
+            modelNotice.className = input.modelNoticeInPopup ? "jdx-notice" : "jdx-setting-description"
+            modelNotice.setAttribute("data-thinking-contract-notice", "")
+            modelNotice.id = `${hostId}-thinking-notice`
+            if (input.modelNoticeInPopup) popup.append(modelNotice)
+            else host.after(modelNotice)
+          }
+          modelNotice.textContent = control.notice
+          if (input.modelNoticeInPopup) popup.setAttribute("aria-describedby", modelNotice.id)
+        } else {
+          modelNotice?.remove(); modelNotice = undefined
+          if (input.modelNoticeInPopup) popup.removeAttribute("aria-describedby")
+        }
+        if (state.open) positionPopup()
+      }
       if (modelControl && JSON.stringify([modelControl.selectionKey, modelControl.levels, modelControl.value, modelControl.label, Boolean(modelControl.onCommit)]) === JSON.stringify([control.selectionKey, control.levels, control.value, control.label, Boolean(control.onCommit)])) {
         modelControl.onCommit = control.onCommit
+        modelControl.notice = control.notice
         return
       }
       modelControl = control

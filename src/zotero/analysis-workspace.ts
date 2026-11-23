@@ -11,6 +11,7 @@ import type { ZoteroLike } from "./runtime"
 import { getUiLocale, uiText } from "./ui-preferences"
 import { actionIcon, action, badge, bindTabs, element, notice } from "./ui/controls"
 import { analysisRuntime } from './analysis-runtime'
+import { readAnalysisNoteOrigins } from './analysis-note-origins'
 
 export type AnalysisDetailTab = "summary" | "notes" | "references"
 export type AnalysisRunView = { source: PaperAnalysisSource; message: string; busy: boolean; resumable?: boolean; error?: boolean; retrying?: boolean; references?: ReferencePreparation; referenceTaskID?: string; createdAt: string }
@@ -24,10 +25,17 @@ function noteLabel(text: string) {
 }
 
 let workspaceSequence = 0
+const retainedHeading = /^保留笔记（(\d+) 条，未写入 PDF 批注）$/u
+
+/** 历史只保存文本。仅识别插件生成的完整通知，未知警告继续逐字显示。 */
+function skippedAnnotations(warning: string) {
+  return /^(?:有 (\d+) 条内容未作为 PDF 批注采用；可恢复的笔记已保留供阅读。|(\d+) entries were not used as PDF annotations\. Recoverable notes were retained for review\.)$/u.exec(warning)?.slice(1).find(Boolean)
+}
 
 export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, options: {
   embedded?: boolean
   hideTabs?: boolean
+  onOpenNotes?(): void
   referenceTaskID?: string
   records(): PaperAnalysisRecord[]
   unsaved(id: string): boolean
@@ -37,14 +45,15 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
 }) {
   const workspaceID = ++workspaceSequence
   const doc = root.ownerDocument, jobs = documentJobs(host), section = options.embedded ? root : root.closest<HTMLElement>(".jdx-analysis-section") || root
+  const workbench = Boolean(root.closest('.jdx-literature-detail'))
   root.classList.add('jdx-analysis-workspace')
   const list = element(doc, "div", "jdx-analysis-list"), empty = element(doc, "div", "jdx-result-empty")
-  empty.append(element(doc, "span", "jdx-empty-mark", "≡"), element(doc, "h3", "", uiText("从一篇文献开始", "Start with a paper")), element(doc, "p", "", uiText("在 PDF 阅读器中点击「解析」，总结、笔记与参考文献会汇集在这里。", "Click Analyze in the PDF reader to collect the summary, notes and references here.")))
+  empty.append(element(doc, "span", "jdx-empty-mark", "≡"), element(doc, "h3", "", uiText("从一篇文献开始", "Start with a paper")), element(doc, "p", "", uiText("在 PDF 阅读器中点击「解析」，即可在这里查看总结和解析笔记。", "Click Analyze in the PDF reader to see the summary and analysis notes here.")))
   root.replaceChildren(list, empty)
   const runs = new Map<string, AnalysisRunView>(), papers = new Map<string, AnalysisPaper>()
   const openedSources = new Map<string, PaperAnalysisSource>()
   const rows = new Map<string, { root: HTMLElement; title: HTMLButtonElement; meta: HTMLElement; preview: HTMLElement; state: HTMLElement; date: HTMLElement }>()
-  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; statusTitle: HTMLElement; statusDescription: HTMLElement; actions: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; restart: HTMLButtonElement; summary: HTMLElement; notes: HTMLElement; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
+  type Detail = { root: HTMLElement; title: HTMLElement; meta: HTMLElement; date: HTMLElement; warning: HTMLElement; status: HTMLElement; statusTitle: HTMLElement; statusDescription: HTMLElement; actions: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; restart: HTMLButtonElement; readingTools: HTMLElement; retained: HTMLElement; retainedText: HTMLElement; summary: HTMLElement; notes: HTMLElement; loadOrigins?(): void; tabs: HTMLButtonElement[]; panels: HTMLElement[]; active: AnalysisDetailTab; scrolls: number[]; signature: string; reference: ReturnType<typeof mountReferenceDetails>; cleanup(): void }
   const details = new Map<string, Detail>()
   let selected: string | undefined, savedScroll = 0, disposed = false, detailSequence = 0
   const labels: Record<AnalysisDetailTab, string> = { summary: uiText("解析总结", "Summary"), notes: uiText("解析笔记", "Analysis notes"), references: uiText("参考文献", "References") }
@@ -66,21 +75,54 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
   function selectTab(detail: Detail, tab: AnalysisDetailTab, restore = true) {
     if (restore) detail.scrolls[tabNames.indexOf(detail.active)] = section.scrollTop
     detail.reference.suspend(); detail.active = tab
+    detail.root.dataset.tab = tab
     detail.tabs.forEach((button, index) => { const active = tabNames[index] === tab; button.setAttribute("aria-selected", String(active)); button.tabIndex = active ? 0 : -1; detail.panels[index].hidden = !active })
     section.scrollTop = detail.scrolls[tabNames.indexOf(tab)]
+    if (tab === 'notes') detail.loadOrigins?.()
   }
-  function renderNotes(target: HTMLElement, record?: PaperAnalysisRecord) {
+  function renderNotes(detail: Detail, record?: PaperAnalysisRecord) {
+    const target = detail.notes
     target.replaceChildren()
+    detail.loadOrigins = undefined
     if (!record?.notes) { target.append(element(doc, "p", "jdx-result-empty", uiText("这条记录没有解析笔记。", "This record has no analysis notes."))); return }
+    const anchors: { note: { pageLabel: string; category: string; quote: string }; meta: HTMLElement }[] = []
     for (const block of parseResearchPresentation(record.notes)) {
       if (block.type === "heading") { if (block.level !== 1) target.append(element(doc, "h3", "jdx-note-heading", noteLabel(block.text))); continue }
+      const retained = block.type === 'paragraph' && retainedHeading.exec(block.text)
+      if (retained) {
+        const heading = element(doc, 'h3', 'jdx-note-heading', uiText(block.text, `Retained notes (${retained[1]} not written to PDF)`))
+        heading.dataset.jdxRetainedNotes = retained[1]; heading.tabIndex = -1; target.append(heading); continue
+      }
       if (block.type === "annotation") {
         const note = element(doc, "article", "jdx-note-entry"), meta = element(doc, "div", "jdx-note-meta")
         meta.append(badge(doc, noteLabel(block.category)), element(doc, "span", "", uiText(`第 ${block.pageLabel} 页`, `Page ${block.pageLabel}`)))
+        anchors.push({ note: block, meta })
         const comment = element(doc, "div", "jdx-markdown"); updateChatMarkdown(comment, block.comment)
         note.append(meta, element(doc, "blockquote", "", block.quote), comment); target.append(note)
       } else { const text = element(doc, "div", "jdx-markdown jdx-note-paragraph"); updateChatMarkdown(text, block.text); target.append(text) }
     }
+    if (!workbench || !anchors.length) return
+    detail.loadOrigins = () => {
+      detail.loadOrigins = undefined
+      void readAnalysisNoteOrigins(host, record.source).then(resolve => {
+        for (const { note, meta } of anchors) {
+          const open = resolve(note)
+          if (!open || !target.contains(meta)) continue
+          const link = action(doc, uiText('查看原文', 'View source'), () => {
+            void open().catch(() => false).then(opened => {
+              if (!opened) {
+                const status = notice(doc)
+                status.textContent = uiText('原文位置已不可用，请按页码核对。', 'The source location is unavailable. Check the displayed page.')
+                link.replaceWith(status)
+              }
+            })
+          })
+          link.classList.add('jdx-analysis-text-action')
+          meta.append(link)
+        }
+      }).catch(() => { /* 批注定位是补充信息，缺少权限或宿主能力时保留页码。 */ })
+    }
+    if (detail.active === 'notes') detail.loadOrigins()
   }
   function createDetail(paper: AnalysisPaper): Detail {
     const key = paper.key, prefix = `jdx-analysis-detail-${workspaceID}-${++detailSequence}`
@@ -109,18 +151,30 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     const actions = element(doc, 'div', 'jdx-analysis-run-actions')
     actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', uiText('解析操作', 'Analysis actions'))
     actions.append(resume, restart, stop); run.append(status, actions)
+    const readingTools = element(doc, 'div', 'jdx-analysis-reading-tools')
+    const retained = element(doc, 'div', 'jdx-analysis-retained'), retainedText = element(doc, 'span')
+    retainedText.setAttribute('role', 'status')
+    const openNotes = action(doc, uiText('查看笔记', 'View notes'), () => {
+      if (options.onOpenNotes) { options.onOpenNotes(); return }
+      selectTab(detail, 'notes')
+      const target = detail.notes.querySelector<HTMLElement>('[data-jdx-retained-notes]') ?? detail.notes
+      target.focus(); target.scrollIntoView?.({ block: 'nearest' })
+    })
+    openNotes.classList.add('jdx-analysis-text-action')
+    retained.append(retainedText, openNotes); readingTools.append(retained); readingTools.hidden = true
     const warning = notice(doc), tablist = element(doc, "div", "jdx-tabs jdx-detail-tabs")
     warning.classList.add('jdx-analysis-warning')
     tablist.setAttribute("role", "tablist"); tablist.setAttribute("aria-label", uiText("解析结果", "Analysis results"))
     const panels = tabNames.map(name => { const panel = element(doc, "section", "jdx-detail-panel"); panel.id = `${prefix}-${name}`; panel.setAttribute("role", "tabpanel"); panel.setAttribute("aria-labelledby", `${prefix}-tab-${name}`); return panel })
     const tabs = tabNames.map((name, i) => { const button = action(doc, labels[name], () => {}); button.id = `${prefix}-tab-${name}`; button.setAttribute("role", "tab"); button.setAttribute("aria-controls", panels[i].id); tablist.append(button); return button })
     const summary = element(doc, "div", "jdx-markdown jdx-analysis-summary jdx-reading-body"), notes = element(doc, "div", "jdx-analysis-notes-text jdx-reading-body")
+    notes.tabIndex = -1
     panels[0].append(summary); panels[1].append(notes)
-    container.append(nav, hero, run, warning, feedback, tablist, ...panels)
+    container.append(nav, hero, run, warning, feedback, tablist, readingTools, ...panels)
     if (options.embedded) { nav.hidden = true; hero.hidden = true }
     if (options.hideTabs) { tablist.hidden = true; panels.forEach(panel => { panel.removeAttribute("role"); panel.removeAttribute("aria-labelledby") }) }
     const reference = mountReferenceDetails(panels[2], host, paper.source, task => { options.onReferenceTask(paper.source, task); refresh() })
-    const detail: Detail = { root: container, title, meta, date, warning, status, statusTitle, statusDescription, actions, stop, resume, restart, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
+    const detail: Detail = { root: container, title, meta, date, warning, status, statusTitle, statusDescription, actions, stop, resume, restart, readingTools, retained, retainedText, summary, notes, tabs, panels, active: "summary", scrolls: [0, 0, 0], signature: "", reference, cleanup: () => {} }
     const cleanup = bindTabs(tabs, i => selectTab(detail, tabNames[i]))
     detail.cleanup = () => { cleanup(); reference.remove() }
     details.set(key, detail); root.append(container); container.hidden = true; selectTab(detail, "summary", false)
@@ -142,11 +196,27 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
     detail.stop.hidden = !working
     detail.resume.hidden = !run?.resumable || run.busy || Boolean(run.retrying)
     detail.restart.hidden = Boolean(run?.busy) || (!run && !record)
-    detail.actions.hidden = detail.stop.hidden && detail.resume.hidden && detail.restart.hidden
+    const quietRestart = workbench && !showStatus && !detail.restart.hidden
+    const restartParent = quietRestart ? detail.readingTools : detail.actions
+    if (detail.restart.parentElement !== restartParent) restartParent.insertBefore(detail.restart, quietRestart ? null : detail.stop)
+    detail.actions.hidden = detail.stop.hidden && detail.resume.hidden && (detail.restart.hidden || quietRestart)
     detail.status.hidden = !showStatus
     detail.status.parentElement!.hidden = !showStatus && detail.actions.hidden
-    detail.warning.textContent = [record && options.unsaved(record.id) ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...analysisWarningsForDisplay(record)].filter(text => text && text !== detail.statusDescription.textContent).join("\n")
-    detail.warning.dataset.kind = record && options.unsaved(record.id) ? "error" : "neutral"
+    const warnings = analysisWarningsForDisplay(record).filter(text => text !== detail.statusDescription.textContent)
+    const retainedWarning = workbench && record?.notes?.trim() ? warnings.find(text => skippedAnnotations(text)) : undefined
+    const unsaved = record && options.unsaved(record.id)
+    detail.warning.textContent = [unsaved ? uiText("最新结果尚未完整保存，关闭窗口前请选中需要保留的内容并复制。", "The latest result is not fully saved. Select and copy anything you need before closing.") : "", ...warnings.filter(text => text !== retainedWarning)].filter(Boolean).join("\n")
+    detail.warning.dataset.kind = unsaved ? "error" : "neutral"
+    detail.retained.hidden = !retainedWarning
+    detail.readingTools.hidden = !quietRestart && !retainedWarning
+    if (retainedWarning) {
+      const skipped = skippedAnnotations(retainedWarning)!
+      const saved = /(?:^|\n)保留笔记（(\d+) 条，未写入 PDF 批注）(?:\n|$)/u.exec(record!.notes!)?.[1]
+      const text = saved === skipped
+        ? uiText(`${saved} 条笔记已保留，未写入 PDF 批注`, `${saved} retained in notes, not written to the PDF`)
+        : uiText(`${skipped} 条内容未写入 PDF 批注`, `${skipped} entries not written to the PDF`)
+      if (detail.retainedText.textContent !== text) detail.retainedText.textContent = text
+    }
     const signature = JSON.stringify([record || null, Boolean(run?.busy), Boolean(run?.error)])
     if (signature !== detail.signature) {
       detail.signature = signature
@@ -157,7 +227,7 @@ export function mountAnalysisWorkspace(root: HTMLElement, host: ZoteroLike, opti
       } else if (!record && run?.error) {
         updateChatMarkdown(detail.summary, uiText('本次解析未生成可展示的总结，可从阅读器工具条重试。', 'No summary is available from this run. Retry from the reader toolbar.'))
         detail.notes.replaceChildren()
-      } else renderNotes(detail.notes, record)
+      } else renderNotes(detail, record)
     }
     const reference = options.referenceTaskID ? jobs.get(options.referenceTaskID) : paper.references
     detail.reference.update(reference && paperKey(reference.source) === paperKey(paper.source) ? reference : paper.references, run?.references)

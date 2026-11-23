@@ -90,6 +90,15 @@ describe('long PDF context', () => {
     expect(result.reading.notice).toContain('全部可读正文已分段整理')
     expect(documentTokenCost(result.context)).toBeLessThanOrEqual(f.input.budget)
   })
+  it('uses only indexed passage markers for the answer when tracing a summarized PDF', async () => {
+    const f = fixture(26, 2500)
+    f.generate.mockResolvedValue('Summary of the supplied material.')
+    const result = await buildLongDocumentContext({ ...f.input, mode: 'summarize', evidenceEnabled: true })
+    expect(f.generate).toHaveBeenCalled()
+    expect(result.context).toContain('[[evidence:段落id]]')
+    expect(result.context).not.toContain('[来源 N，第 P 页]')
+    for (const [prompt] of f.generate.mock.calls) expect(prompt).not.toMatch(/\[来源 N，第 P 页\]|\[\[evidence:/u)
+  })
   it('stops serial generation on cancellation and retains completed summaries', async () => {
     const f = fixture(81), controller = new AbortController()
     f.input.mode = 'summarize'

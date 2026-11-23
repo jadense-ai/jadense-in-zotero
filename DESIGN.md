@@ -46,6 +46,8 @@ Reader「在工作台查看」属于导航，放在标题栏右侧，以图标�
 
 文案采用现有中英文机制（Manager 的 `data-ui-en`、原生偏好的 i18n key 或动态 `uiText`）。新增帮助同步两种语言；不翻译模型 ID、密钥、用户输入。英文按钮、150% 字号也必须能换行且可操作。
 
+设置表单优先显示完整模型名，空间不足时将思考档位移到下一行。引擎配置先显示识别引擎、就绪状态与检查或修复动作，存储位置摘要和可展开的迁移表单放在后面。即时保存、重启生效、显式保存的反馈贴近各自控件；BYOK 测试旁保留真实请求和可能产生费用的说明。
+
 #### 状态与交互
 
 - 每个操作只在就近的一个区域显示反馈，复用 `role="status"` 和 `status.css` 的 `data-kind`；空状态不占位，成功、等待和错误不混用颜色。不要让通用设置行样式覆盖状态组件的语义颜色。
@@ -95,11 +97,11 @@ Reader「在工作台查看」属于导航，放在标题栏右侧，以图标�
 - Manager 和原生 Preferences 共用 OCR DOM、状态逻辑和反馈 CSS，分别映射宿主主题 token；支持深浅色、换行、键盘和缩放。共用外观不意味着合并不同功能的状态机、错误范围或权限域。
 - 设计依据：[GOV.UK notification banner](https://design-system.service.gov.uk/components/notification-banner/) 建议将直接相关信息放在任务内容附近并避免重复通知；[W3C status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) 要求状态变化可被辅助技术感知而无需移动焦点；[Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html) 要求颜色之外的可感知线索。此处采用原则，不照搬政务页面的大型横幅。
 
-### Hidden Diagnostics
+### Error Diagnostics
 
-About's installed version supports five clicks within five seconds, including Enter/Space activation. This exposes the Help menu's Error diagnostics item for the current plugin lifetime and immediately opens the page. Ordinary Manager mode has no diagnostic counter or navigation item. Zotero's native Tools plugin menu always offers Export error diagnostics so users can save sanitized local JSON even when Manager cannot open. Exiting hides the Manager item without clearing history; reopening the Manager retains access, while restarting/reloading the plugin hides it.
+Open Error diagnostics from Help. The five-click About version shortcut remains available. Zotero’s Tools menu can export local diagnostics even when Manager cannot open. Return to chat leaves local records available.
 
-The diagnostic page uses the existing section surface and theme. Compact time/feature/category/request-ID filters precede the list, result summary and ordered request timeline; complete sanitized JSON is expandable. Provide Copy record, Export filtered, Export all, Clear records and Exit developer mode. Business refusals and cancellations are separate from errors. State local-only retention and the possible loss of unflushed events after abrupt exit. All operations use local sanitized metadata, never request/response content or credentials.
+Place retention and return navigation in the header, filtered export beside the result count, and Copy record beside the selected record. Keep full export and the separate, explicitly counted Clear all action in local record management. Distinguish an empty store from filters with no matches. Reuse record buttons by ID so refreshing a list preserves keyboard focus. Show the feature and first anomaly before the detailed timeline and expandable sanitized JSON.
 
 Jadense in Zotero is a reading, local Chat, figure-interpretation, literature-analysis, and Jadense-account workbench with one-way upload. Use a white canvas, green-gray side chrome, near-black text, thin borders, restrained green state signals, and compact controls.
 
@@ -180,11 +182,12 @@ The `上手指南` section (`guide`) is bundled with the XPI. Its own sticky, gr
 
 ### Literature Analysis Section
 
-- `解析历史` directly displays the result list without top-level tabs or a configuration panel. Its paper detail offers an attachment selector and `全文 Markdown / 全文翻译 / 选中翻译历史 / 解析结果 / 历史`. Analysis results retain Summary / Notes / References as inner tabs. Keep keyboard tab semantics and scroll state; do not duplicate Zotero tags.
+- `解析历史` opens the literature result list. Distinguish an empty history, a search with no matches, and partial read failures. Keep successfully loaded papers visible during recovery. The attachment detail offers eight directly accessible tabs: 对照翻译, 简阅译文, 全文翻译, 选中翻译历史, 解析总结, 解析笔记, 参考文献, 历史. Group them by task and wrap them to the available content width. Opening a saved simple translation uses its exact version. Older source Markdown opens inside History and returns focus to its version row.
 - Reader `解析` opens the current PDF detail with progress and Stop. Repeated clicks focus the same active task. It never creates, selects or appends to Chat, a Webapp session or a remote file record. The main Stop cancels preparation/generation and pauses the associated reference task; retained text remains readable.
 - History groups by the verified Zotero parent item and library; standalone PDFs stay separate. Every result retains its exact attachment identity. Include extraction-only and selection-only papers. The history tab lists all retained versions across attachments and links to the exact result. Opening a PDF revalidates its saved identity; reading stored results never starts work.
-- Make the paper title the detail's visual center. Summary/notes use a restrained 78ch reading column, fine dividers and compact tools instead of nested cards. Tabs remain reachable while scrolling. Each tab keeps its scroll, reference search/filter and selection. Summary uses safe Markdown; notes use existing category/quote/explanation parsing with readable fallback and copying. Copy includes warnings; model page labels do not become PDF navigation controls. Reference rows separate numbering, original citation, verification status and actions, including edit and delete. Search/status controls sit above the list; selection count, writable destination library/collection and import are grouped below. Unverified rows retain source location, explicit publication search and available source links. DOI or normalized-title matches enable import; author/year differences and AI readiness never gate these actions. No task means no pause/verify; no importable selection means no batch import. Loading, paused, failure, incomplete-save and empty results are explicit, with English/Chinese and 12–24px light/dark layouts.
+- Make the paper title the detail's visual center. In Manager, the paper list, summary, notes and their toolbar follow the available panel width as the sidebar or window resizes. Long text wraps inside the panel with compact side padding. The PDF Reader sidebar keeps its own reading measure. Tabs remain reachable while scrolling. Each tab keeps its scroll, reference search/filter and selection. Summary uses safe Markdown; notes use existing category/quote/explanation parsing with readable fallback and copying. Copy includes warnings; model page labels do not become PDF navigation controls. Reference rows separate numbering, original citation, verification status and actions, including edit and delete. Search/status controls sit above the list; selection count, writable destination library/collection and import are grouped below. Unverified rows retain source location, explicit publication search and available source links. DOI or normalized-title matches enable import; author/year differences and AI readiness never gate these actions. No task means no pause/verify; no importable selection means no batch import. Loading, paused, failure, incomplete-save and empty results are explicit, with English/Chinese and 12–24px light/dark layouts.
 - Back up readable notes before native writes, then update the same history entry with the write outcome. A malformed annotation must not discard other valid notes or successful writes. Local format repair makes no additional AI request. Incomplete/failed/cancelled generation retains already received text with an explicit warning and writes no native annotations; failures before text retain their original error. Do not automatically retry an uncertain native save.
+- On completed results, keep reanalysis in the compact reading toolbar. A retained-note notice opens the notes from that result and focuses the retained note when identifiable. Offer a PDF jump only after matching an unambiguous native annotation on the same attachment. Progress, failure and copy-before-close warnings remain above the reading surface.
 - Recovered formatting and retained partial-generation notices use neutral status styling. Actual history-persistence or native-write failures use error styling; a readable recovery must not look like complete data loss.
 - History stores at most 200 records and 1,000,000 serialized characters, evicting the oldest records; long notes can leave substantially fewer than 200. If persistence or the final write-status update fails, keep at most 10 latest results in the current Manager window with a visible copy-before-close warning. Closing or restarting loses these unsaved results; the UI must not describe them as durably saved.
 - Settings → Feature settings chooses an accessible Jadense route/model or a saved BYOK model for analysis only. Provider/key/model catalog editing remains in Settings → BYOK. Missing feature preferences are snapshotted from legacy settings once before any catalog mutation, preserving the existing analysis selection.
@@ -196,6 +199,8 @@ The visible `攻玉学术` section retains the internal compatibility value `mig
 
 - `用户信息`: the `你的攻玉 / Your Jadense` card shows account display name, subscription, effective points balance and source (`个人积分` or `团队积分`), daily check-in state, current streak, and today's granted points. `前往攻玉`, `打开签到页`, and `订阅与用量` open the corresponding pages in the system browser. Check-in information is read-only; checking in happens on the Jadense website. Primary and fallback balances are transport context and must not be added together.
 - `文献同步`: favorite-folder selector, refresh action, and PDF-upload default; current Zotero collection/item summary; actions for uploading selected items or the selected collection; and a progress/result log with separate metadata/PDF outcomes. Do not duplicate the folder/PDF controls elsewhere in Manager.
+
+Place subscription and check-in links beside their values. An unlinked account has one connection action. Show successful refresh once and report partial failures beside their data. The primary upload action follows the Zotero selection. Selected items take precedence over their collection. Show the item count or collection, destination and PDF option next to the action, and retain that scope with its progress and result.
 
 The Settings `连接攻玉` tab contains the masked Jadense token with Copy/Edit actions, token help, the `生成 / 更新令牌` Webapp action, and Disconnect. The canonical Jadense server URL remains fixed in the UI; existing developer/staging preferences remain readable. Copy stays user-facing: say `这台电脑` rather than `Zotero profile`, never expose OAuth scope names, and point recovery guidance at the concrete tab (token problems to `设置 → 连接攻玉`, points/check-in to `攻玉学术 → 用户信息`).
 
@@ -233,18 +238,18 @@ The panel is intentionally compact. It appears in Zotero's item pane, so it shou
 
 - Use a single-column panel with 12px chrome text and 30px to 32px controls.
 - Keep buttons full-width for easy scanning.
-- The first action should open the Jadense Manager.
-- Show current connection, default folder, selected item count, and current collection status as short status rows.
+- Lead with the selected item count or collection, followed by the destination folder name. Prefer its cached display name when available.
+- When setup is incomplete, show the action that takes the user directly to the connection or destination settings.
 
 ### Actions
 
 The panel can expose:
 
-- Open Jadense Manager.
-- Export selected items.
-- Export current collection when a collection is selected.
+- Upload selected items with the count and PDF inclusion in the button label.
+- Upload the selected collection and its subcollections. Give item upload priority when both actions are available.
+- Open Jadense Manager from the footer.
 
-Panel copy should make it clear that upload lives in the Manager `攻玉学术` section and collection context menu.
+Changing the destination opens the Manager’s literature sync tab. The panel reflects saved folder and PDF preferences when the user returns.
 
 ## Menu And Entry Rules
 
@@ -260,7 +265,7 @@ Panel copy should make it clear that upload lives in the Manager `攻玉学术` 
 - The permanent toolbar has no language selectors, language menu, translation-options menu, or separate References action. Existing per-article language preferences remain readable; sentence language overrides live in the translation panel.
 - The translation panel header exposes `本句源语言 / 本句目标语言` and `重新翻译`, with a short explanation that changes apply only to the current sentence. Changing a selector clears the old result and invalidates old deltas; sending is explicit and retains the panel's original source/page even if PDF selection changes. Disable duplicate sends while generating; allow language changes, retry after errors, and Escape dismissal. New selected text always starts from the article's preferences. Translation history displays the actual source/target language of each completed result.
 - Use Zotero's toolbar and text-selection popup extension slots, with compact labels and accessible button names. Do not restructure Zotero's own controls.
-- Main toolbar offers `提问 / 解析 / 引用 / 全文翻译`; `提问` uses a chat icon and tooltip `发起新对话，向 AI 提问（当前文献）` and opens a new local Chat draft for the active document; the first question creates the session. `解析` opens `解析历史` and starts an independent analysis for that exact attachment without writing Chat. The same entry also extracts references for the same PDF; show them in `解析历史 → 参考文献`, and contain extraction errors there without blocking summary/notes. Selection translation is absent from both the main toolbar and its collapsed menu; its shortcut remains available. Selection popup offers `智能翻译 / 引用选文`; read the current selection when invoked and explain when no text is selected.
+- Main toolbar offers `提问 / 解析 / 引用 / 全文翻译`; `提问` uses a chat icon and tooltip `发起新对话，向 AI 提问（当前文献）` and opens a new local Chat draft for the active document; the first question creates the session. `解析` opens `解析历史` and starts an independent analysis for that exact attachment without writing Chat. Reference extraction during analysis is off by default. Users can enable it in `设置 → 功能配置 → 文献解析` or extract references for a single PDF from `参考文献`. Show saved references and extraction errors on that page. Selection translation is absent from both the main toolbar and its collapsed menu; its shortcut remains available. Selection popup offers `智能翻译 / 引用选文`; read the current selection when invoked and explain when no text is selected.
 - Figure interpretation is a separate canvas-adjacent layer, not another item in either toolbar. On Zotero 10.0.1+ ordinary PDF views, pointer hover over a valid SDT image shows one subtle 2px brand-green outline that cannot intercept mouse input. Click locks it and reveals two vertically grouped buttons: `图片解读（开启新对话）` and `图片解读（追加在当前对话）`. Clamp the group to an 8px viewport inset, allow long labels to wrap in narrow/split views, and explicitly cycle Tab/Shift+Tab between the actions because PDFView owns the native Tab sequence. Do not show them before selection. Escape, blank click, or page change clears them, and zoom, rotation, scrolling, redraw, and split-view changes keep the geometry aligned.
 - Install independent controllers for primary and split PDF views. Selection is available only for the ordinary pointer tool when the user is not dragging; it must not hinder text selection, annotations, or native controls. While either branch is cropping and handing the action to Manager, disable both buttons and show one `处理中…` state on the activated button instead of accepting a duplicate request. Remove all figure nodes and listeners when the view or plugin closes.
 - Attach a caption only when same-page SDT text begins with `Figure`, `Fig.`, `图`, `Scheme`, or `Plate`, excludes `Table`/`表`, aligns or overlaps horizontally, and lies within `max(24pt, 6% page height)`. Merge adjacent caption parts, prefer below-image then nearest geometry/document order, and omit an equal-ranked result. No-caption is a normal actionable state.
@@ -327,20 +332,20 @@ Selected-text translation windows retain a bottom-left `外观` disclosure for s
 - 工作台和原生功能配置均提供「翻译方式：AI 生成 / 翻译接口」。默认 AI 生成，沿用既有模型；翻译接口显示独立 Bing / Google 服务选择，隐藏 AI 翻译模型行，不受自动跟随开关影响。两类配置切换保留已有值，不改变 AI 对话、解析、图片解读。传统模式只输出译文，选文和全文沿用既有阅读与历史界面。
 - 「翻译方式」与「翻译服务」标签旁使用可聚焦说明图标。悬浮/聚焦展示当前类别的能力边界和原文直传所选服务的说明，Escape 关闭提示；说明不常驻占据设置页。提示继承插件浅深主题，窄窗口保留完整标签与可用控件宽度；中英文文案保持相同含义。
 
-- The native Jadense pane and standalone dock share five pages: Chat, Full Markdown, Full translation, Selection translations, Analysis results. The last four bind to the current PDF, while Chat keeps all conversations reachable. Each result offers a workbench deep link. Preserve drafts and reading positions while switching.
+- The native pane and standalone dock share six destinations. Chat keeps local conversations reachable. Saved full translations, selection translation history, summary, analysis notes and references belong to the current attachment. Summary, notes and references share its selected analysis version, including when opened in the workbench.
 - Reader Chat uses the shared composer with plugin-owned textarea colors, placeholder and focus decoration in both themes, overriding native field styling only inside the plugin. Manager and Reader share the same compact inset status panel tucked behind the composer with no vertical gap. Reader adds PDF association to that panel; Manager hides the whole panel when status is empty. The dock and the area around Back to latest are transparent, without a backdrop mask; measured dock height reserves message scroll space and positions the floating latest button. Empty status occupies no height; errors remain readable and may wrap.
 - The shell fills its actual host width and available height. Default width is 480px, the minimum usable target is 320 × 360px, and a smaller host is contained instead of overflowing. Never set a fixed content-height cap based on the previous scroll content. Size tests must resize the host, not constrain the plugin root and leave unused sidebar space.
 - New Reader conversations associate the Reader's PDF. Selecting an existing conversation alone changes no sources. When the PDF is missing from that conversation, the composer states “发送时将关联当前 PDF”; Send (including its keyboard shortcut) confirms association before dispatch. Text extraction warnings remain visible; an invalid attachment cannot be replaced with the globally selected library item.
-- Messages, Markdown/image actions and composer are shared with Manager. Each view keeps its selection and drafts independently; switching pages retains scroll and drafts. The plugin owns the single Chat generation, so hiding or closing a view does not stop it. The Stop tooltip names the generating conversation.
+- Reader 草稿在标题栏显示「新对话」。再次点击「＋」保留问题和附件，并聚焦输入框；已有会话时可以切换历史。其他会话正在生成时，输入区显示其名称与「返回该对话」，停止操作位于所属会话中。输入文字、空态说明和配置提示随插件字号缩放。
 - Translation reuses continuous reading, source positioning, appearance, progress, pause/resume and history. Opening its page restores results without starting work. Custom controls and bounded portal menus inherit plugin colors only; they never recolor Zotero's PDF or chrome.
 
 - 模型触发器复用 webapp/public/model-logos/catalog.json 索引的品牌 Logo，按实际模型 ID 匹配（含 BYOK），智能路由保留模式图标；未知品牌保留后备标识。彩色素材保持原色，单色素材用主题前景色 mask；构建直接打包公共素材。触发器常规宽度显示图标与名称，Reader 对话内容容器不超过 380 px 时仅显示图标（32 px 按钮），完整名称保留在悬停提示和菜单中。侧栏高度按宿主可见区域计算，不能用自身内容高度反向限制；原生 context-pane 的最小宽度须容纳右侧宿主图标栏。
 
 - Reader selection history shows only the current attachment’s exact item/library/key identity; the workbench aggregates all attachment histories under their parent paper. Local source navigation remains separate from Markdown links.
 
-### Two-step source and translation
+### 历史全文译文
 
-Original extraction is a model-independent action. Full translation is available without a pre-existing source: clicking Translate full text silently extracts missing Markdown and continues, or directly reuses an existing source, without a confirmation or page switch. Browsing never starts work; independent extraction completion never dispatches translation. Source and translated versions remain separately selectable. Persist image assets separately and resolve only registered local resources. Missing images display a local notice without hiding readable text. Re-extraction creates a new source version; existing translations retain their original source. Keep narrow sidebars readable with compact selectors and horizontally scrollable, unbroken tab labels.
+侧栏按当前附件列出已保存的全文译文。已有记录沿用各自的原文和本地图片，空态提供「打开对照翻译」，进入当前 PDF 的对照阅读界面。
 
 ### 文献成果组件与运行状态
 
@@ -354,7 +359,7 @@ Original extraction is a model-independent action. Full translation is available
 
 成果阅读页及详情导航的操作按钮统一使用 18px 线性图标、32px 点击区域、原生 title tooltip 与 aria-label，动态暂停/继续、重新提取、导入数量须同步可访问名称。tabs、菜单选项及当前选择值保留文字。全文翻译为胶囊组合控件：左侧目标语言，右侧「全文翻译」文字按钮，内部无间距；窄侧栏允许整个胶囊换行，不能拆开语言和按钮。
 
-所有成果操作栏的图标从左侧起连续排列，不给工作台按钮设置自动起始边距，不将单个复制按钮右对齐。版本选择排在图标之后，翻译胶囊可保留右侧位置。Reader 页面菜单为对话、全文 Markdown、全文翻译、选中翻译历史、解析总结、解析笔记、参考文献；解析页面不再嵌套 tabs，工作台跳转保留当前解析页面。
+所有成果操作栏的图标从左侧起连续排列。Reader 菜单中的三个解析页共享解析版本控件，仅在有多个版本时显示；每页保留标题栏右侧的工作台入口。
 
 ### 功能配置分区
 

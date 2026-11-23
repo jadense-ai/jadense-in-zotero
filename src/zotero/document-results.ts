@@ -12,6 +12,7 @@ import { mountTranslationReader, installTranslationReadingStyles } from './trans
 import { copyTextToClipboard } from './connection-display'
 import { navigateDocument, type DocumentHost } from './pdf-document'
 import { actionIcon, element, action, notice } from './ui/controls'
+import { createChevron } from './ui/chevron'
 import { createJdxSelect } from './ui/select'
 import { show, type ToastHandle, type ToastType } from './ui/toast'
 import { uiText } from './ui-preferences'
@@ -30,7 +31,8 @@ export function sameAttachment(a: { itemID: number; libraryID?: number; itemKey?
 }
 
 export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source: PaperAnalysisSource, mode: DocumentResultMode, options: {
-  recordID?: string; readerDocument?: Document; analysis?: AnalysisOptions; analysisTab?: AnalysisDetailTab; hideAnalysisTabs?: boolean; onTranslate?(id: string): void; onWorkbench?(mode: DocumentResultMode, id?: string): void
+  recordID?: string; readerDocument?: Document; analysis?: AnalysisOptions; analysisTab?: AnalysisDetailTab; hideAnalysisTabs?: boolean; onTranslate?(id: string): void; onWorkbench?(mode: DocumentResultMode, id?: string): void; onOpenBilingual?(): Promise<void>
+  onOpenAnalysisNotes?(id?: string): void
 } = {}) {
   const doc = root.ownerDocument, jobs = documentJobs(host)
   installTranslationReadingStyles(doc)
@@ -40,10 +42,12 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   }
   root.classList.add('jdx-document-results'); root.replaceChildren()
   const toolbar = element(doc, 'div', 'jdx-result-tools'), versionHost = element(doc, 'div', 'jdx-result-version'), message = notice(doc)
+  const savedKind = mode === 'translation' && options.analysis ? element(doc, 'span', 'jdx-result-kind', uiText('历史全文译文', 'Saved full translation')) : undefined
   const versions = createJdxSelect(versionHost, { compact: true, portal: true, ariaLabel: uiText('成果版本', 'Result version'), popupWidth: 300 })
   const body = element(doc, 'div', 'jdx-result-content')
   toolbar.setAttribute('role', 'group'); toolbar.setAttribute('aria-label', resultLabels()[mode]); root.dataset.resultMode = mode
   const issueActions = element(doc, 'div', 'jdx-actions'); issueActions.hidden = true
+  if (savedKind) { savedKind.hidden = true; toolbar.append(savedKind) }
   toolbar.append(versionHost); root.append(toolbar, message, issueActions, body)
   if (mode === 'source') message.textContent = uiText('全文提取已停用，已有 Markdown 仍可查看和复制。', 'Document extraction has been retired. Saved Markdown remains available to read and copy.')
   if (options.onWorkbench) { const open = action(doc, uiText('在工作台查看', 'Open in workbench'), () => options.onWorkbench?.(mode, selected)); actionIcon(open, 'workbench'); open.classList.add('jdx-result-workbench'); toolbar.append(open) }
@@ -51,6 +55,21 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
   let selected = options.recordID, disposed = false, refreshing = false, dirty = false, signature = '', stopContent = () => {}
   let analysis: ReturnType<typeof mountAnalysisWorkspace> | undefined
   let analysisRun: AnalysisRunView | undefined
+  let activeAnalysisTab = options.analysisTab, requestedRecordID = options.recordID, showAnalysisRun = true
+  let attachmentReferences = false
+  let notesFocusPending = false
+  function focusNotesWhenReady() {
+    if (!notesFocusPending || root.closest('[hidden]')) return
+    const target = body.querySelector<HTMLElement>('[data-jdx-retained-notes]') || body.querySelector<HTMLElement>('.jdx-analysis-notes-text')
+    if (!target || target.closest('[hidden]')) return
+    notesFocusPending = false
+    target.focus({ preventScroll: true })
+    target.scrollIntoView?.({ block: 'nearest' })
+  }
+  const updateReferenceNotice = () => {
+    message.textContent = attachmentReferences && activeAnalysisTab === 'references'
+      ? uiText('此版本未保存参考文献关联。下方展示当前 PDF 附件的参考文献记录。', 'This version has no linked bibliography. The references below are saved for this attachment.') : ''
+  }
   const rows = () => jobs.list(mode === 'source' ? 'extraction' : 'translation').filter(task => sameAttachment(task.source, source))
   let feedbackToast: ToastHandle | undefined
   // 普通操作反馈自动消失；风险与进行中提示保留在任务区域。
@@ -97,15 +116,30 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
     try { do {
       dirty = false
       if (mode === 'analysis' && !options.analysis) analysisRun = analysisRuntime(host).get(source.itemID)
+      const selections = mode === 'selection' && host.Prefs
+        ? readTranslationHistory(host.Prefs).records.filter(record => sameAttachment(record.source, source)) : []
       const records = mode === 'analysis' ? analysisOptions.records().filter(record => sameAttachment(record.source, source))
-        : mode === 'selection' ? (host.Prefs ? readTranslationHistory(host.Prefs).records : []).filter(record => sameAttachment(record.source, source)) : rows()
+        : mode === 'selection' ? selections : rows()
       const ordered = [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       if (!selected || !ordered.some(record => record.id === selected)) selected = ordered[0]?.id
+      // 历史解析引用自己的参考文献任务；当前运行的进度只属于当前版本。
+      const analysisRecord = mode === 'analysis' ? ordered.find(record => record.id === selected) : undefined
+      const requestedTask = mode === 'analysis' && requestedRecordID ? jobs.get(requestedRecordID) : undefined
+      const referenceTaskID = requestedTask?.kind === 'references' ? requestedTask.id
+        : analysisRecord && 'referenceTaskID' in analysisRecord ? analysisRecord.referenceTaskID : undefined
+      showAnalysisRun = selected === ordered[0]?.id
+      if (mode === 'analysis') {
+        attachmentReferences = ordered.length > 1 && !referenceTaskID && jobs.list('references').some(task => sameAttachment(task.source, source))
+        updateReferenceNotice()
+      }
       versions.setOptions(ordered.map(record => ({ value: record.id, label: `${new Date(record.createdAt).toLocaleString()}${'languages' in record && record.languages ? ` · ${translationLanguageDisplayLabel(record.languages.targetLanguage)}` : ''}${'status' in record ? ` · ${resultStatus(record.status)}` : ''}` })), selected || '')
       versionHost.hidden = ordered.length < 2 || mode === 'selection'
+      if (savedKind) savedKind.hidden = !selected
       toolbar.hidden = !Array.from(toolbar.children).some(child => !(child as HTMLElement).hidden)
       const task = selected ? jobs.get(selected) : undefined
-      const nextSignature = mode === 'selection' ? JSON.stringify(records) : `${mode}:${selected || ''}:${mode === 'source' ? task?.status : ''}`
+      const nextSignature = mode === 'selection' ? JSON.stringify(records)
+        : mode === 'analysis' ? JSON.stringify([mode, selected, referenceTaskID, showAnalysisRun])
+        : `${mode}:${selected || ''}:${mode === 'source' ? task?.status : ''}`
       if (mode === 'source') {
         const running = rows().find(row => row.status === 'running')
         message.textContent = task?.error || (running ? jobs.translationPhase(running.id) || uiText('正在提取原文…', 'Extracting source…') : task?.warnings.length ? task.warnings.join('\n') : task && task.status !== 'complete' ? resultStatus(task.status) : uiText('全文提取已停用，已有 Markdown 仍可查看和复制。', 'Document extraction has been retired. Saved Markdown remains available to read and copy.'))
@@ -113,7 +147,7 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       }
       if (mode === 'source') renderDocumentIssueActions(issueActions, host, task?.issue)
       if (mode === 'source' && task?.storageWarning) { message.textContent = uiText('成果未完整保存，关闭窗口前请复制。', 'Not fully saved. Copy before closing.'); message.dataset.kind = 'error' }
-      if (nextSignature === signature) { if (analysisRun) analysis?.setRun(analysisRun); analysis?.refresh(); continue }
+      if (nextSignature === signature) { if (analysisRun && showAnalysisRun) analysis?.setRun(analysisRun); analysis?.refresh(); continue }
       signature = nextSignature; stopContent(); stopContent = () => {}; analysis = undefined; body.replaceChildren()
       if (mode === 'source') {
         body.append(emptyResult(doc, uiText('正在读取原文…', 'Loading source…'), ''))
@@ -127,20 +161,45 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
         if (value?.assets.some(asset => !assets[`jdx-asset:${asset}`])) message.textContent = uiText('部分图片不可用，正文仍可阅读和翻译。', 'Some images are unavailable. Text remains readable and translatable.')
       } else if (mode === 'translation') {
         if (selected) stopContent = mountTranslationReader(body, host, selected, { readerDocument: options.readerDocument, onReplace: id => { selected = id; signature = ''; void refresh() } })
-        else body.append(emptyResult(doc, uiText('暂无历史全文译文', 'No legacy full translations'), uiText('全文翻译已停用。请使用 PDF 阅读器工具条中的“对照翻译”。已有记录仍可在此查看。', 'Full translation has been retired. Use Bilingual PDF in the reader toolbar. Existing records remain available here.')))
+        else {
+          const openBilingual = options.onOpenBilingual
+          const empty = emptyResult(doc, uiText('暂无历史全文译文', 'No saved full translations'), openBilingual
+            ? uiText('在对照翻译中并排阅读原文和译文。', 'Read the original and translated PDF side by side.')
+            : uiText('请在 PDF 阅读器工具条中打开「对照翻译」。', 'Open Bilingual PDF from the PDF reader toolbar.'))
+          const openPDF = options.analysis?.openSource
+          if (openBilingual || openPDF) {
+            const label = openBilingual ? uiText('打开对照翻译', 'Open bilingual PDF') : uiText('打开 PDF 阅读器', 'Open PDF reader')
+            const open = action(doc, label, async () => {
+              open.disabled = true; message.textContent = ''
+              try {
+                if (openBilingual) await openBilingual()
+                else if (!await openPDF!(source)) report(uiText('原 PDF 不可用。', 'The original PDF is unavailable.'))
+              } catch (error) { report(error) }
+              finally { if (!disposed) open.disabled = false }
+            })
+            empty.append(open)
+          }
+          body.append(empty)
+        }
       } else if (mode === 'analysis') {
-        const referenceTask = options.recordID ? jobs.get(options.recordID) : undefined
-        analysis = mountAnalysisWorkspace(body, host, { ...analysisOptions, embedded: true, hideTabs: options.hideAnalysisTabs, referenceTaskID: referenceTask?.kind === 'references' ? referenceTask.id : undefined, records: () => analysisOptions.records().filter(record => sameAttachment(record.source, source) && (!selected || record.id === selected)) })
-        analysis.open(source, referenceTask?.kind === 'references' ? 'references' : options.analysisTab)
-        if (analysisRun) analysis.setRun(analysisRun)
+        analysis = mountAnalysisWorkspace(body, host, { ...analysisOptions, embedded: true, hideTabs: options.hideAnalysisTabs, referenceTaskID,
+          onOpenNotes: options.onOpenAnalysisNotes ? () => options.onOpenAnalysisNotes?.(selected) : analysisOptions.onOpenNotes,
+          records: () => analysisOptions.records().filter(record => sameAttachment(record.source, source) && (!selected || record.id === selected)) })
+        analysis.open(source, activeAnalysisTab ?? (requestedTask?.kind === 'references' ? 'references' : undefined))
+        if (analysisRun && showAnalysisRun) analysis.setRun(analysisRun)
+        focusNotesWhenReady()
         stopContent = () => analysis?.remove()
       } else {
-        for (const record of host.Prefs ? readTranslationHistory(host.Prefs).records.filter(record => sameAttachment(record.source, source)) : []) {
+        for (const record of selections) {
           const entry = element(doc, 'article', 'jdx-selection-result')
           const content = element(doc, 'div', 'jdx-selection-content'); content.id = `jdx-selection-${Math.random().toString(36).slice(2)}`; content.hidden = record.id !== options.recordID
           const title = action(doc, '', () => { content.hidden = !content.hidden; title.setAttribute('aria-expanded', String(!content.hidden)) }); title.classList.add('jdx-selection-toggle')
           title.setAttribute('aria-expanded', String(!content.hidden)); title.setAttribute('aria-controls', content.id)
-          title.append(element(doc, 'time', '', new Date(record.createdAt).toLocaleString()), element(doc, 'span', 'jdx-selection-preview', record.source.text.slice(0, 90)))
+          const meta = element(doc, 'span', 'jdx-selection-meta')
+          const page = record.source.pageLabel || (record.source.pageIndex !== undefined ? String(record.source.pageIndex + 1) : '')
+          if (page) meta.append(element(doc, 'span', '', uiText(`第 ${page} 页`, `Page ${page}`)))
+          meta.append(element(doc, 'span', '', translationLanguageDisplayLabel(record.result.targetLanguage)), element(doc, 'time', '', new Date(record.createdAt).toLocaleString()))
+          title.append(element(doc, 'span', 'jdx-selection-preview', record.source.text.slice(0, 90)), meta, createChevron(doc, 'jdx-selection-chevron', 'down', 16))
           const original = element(doc, 'div', 'jdx-markdown'), translated = element(doc, 'div', 'jdx-markdown')
           updateChatMarkdown(original, record.source.text); updateChatMarkdown(translated, record.result.text)
           content.append(element(doc, 'h4', '', uiText('原文', 'Source')), original, element(doc, 'h4', '', record.result.targetLanguage), translated,
@@ -152,14 +211,23 @@ export function mountDocumentResults(root: HTMLElement, host: ZoteroLike, source
       }
     } while (dirty && !disposed) } catch (error) { readFailed(error) } finally { refreshing = false }
   }
-  versions.onChange(value => { selected = value; void refresh() })
+  versions.onChange(value => { selected = value; requestedRecordID = value; void refresh() })
   if (mode === 'analysis') cleanups.push(analysisRuntime(host).subscribe(() => { void refresh() }))
   cleanups.push(jobs.subscribe(() => { void refresh() }))
   for (const key of [TRANSLATION_HISTORY_PREF_KEY, PAPER_ANALYSIS_HISTORY_PREF_KEY]) {
     try { const id = host.Prefs?.registerObserver?.(key, () => { void refresh() }); if (id !== undefined) cleanups.push(() => host.Prefs?.unregisterObserver?.(id)) } catch { /* 切换视图仍会读取。 */ }
   }
   void readResult(jobs.ready).then(refresh).catch(readFailed)
-  return { refresh, selectedRecordID: () => selected, setRun(run: AnalysisRunView) { if (paperKey(run.source) === paperKey(source)) { analysisRun = run; analysis?.setRun(run) } }, remove() { disposed = true; stopContent(); versions.destroy(); cleanups.forEach(stop => stop()) } }
+  return {
+    refresh, selectedRecordID: () => selected,
+    focusNotes() { notesFocusPending = true; focusNotesWhenReady() },
+    setAnalysisTab(tab: AnalysisDetailTab) {
+      if (activeAnalysisTab === tab) return
+      activeAnalysisTab = tab; updateReferenceNotice(); analysis?.open(source, tab)
+    },
+    setRun(run: AnalysisRunView) { if (paperKey(run.source) === paperKey(source)) { analysisRun = run; if (showAnalysisRun) analysis?.setRun(run) } },
+    remove() { disposed = true; stopContent(); versions.destroy(); cleanups.forEach(stop => stop()) },
+  }
 }
 
 /** 空状态沿用文档式层级，不依赖系统表单外观。 */

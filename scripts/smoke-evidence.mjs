@@ -51,6 +51,7 @@ export async function verifyEvidence({ Zotero, reader, manager, assert, waitFor,
   assert(entry && entry.source.itemID === reader.itemID && entry.rects.length, 'Evidence lost native identity or rectangles')
   const button = await waitFor(() => chat.querySelector('[data-evidence-id]'), 'Inline citation')
   assert(button.textContent === '1', 'Inline citation contains page metadata')
+  assert(!button.closest('.jdx-chat-message-body').textContent.includes('999'), 'Reader displayed the model-supplied page beside a bound citation')
   assert(!main.document.querySelector('.jdx-evidence-sources'), 'Source list rendered before opening')
   const initialPanel = openSources(button.closest('.jdx-chat-message'), main), source = initialPanel.querySelector('.jdx-evidence-source')
   assert(source?.textContent.includes(entry.source.title) && source.dataset.evidenceNumber === '1', 'Dedicated source title missing')
@@ -89,7 +90,8 @@ export async function verifyEvidence({ Zotero, reader, manager, assert, waitFor,
   manager.document.querySelector(`[data-session-id="${session.id}"]`).click()
   await waitFor(() => manager.document.querySelector('[data-evidence-id]'), 'Manager citation')
   const previous = manager.document; manager.location.reload()
-  await waitFor(() => manager.document !== previous && manager.document.querySelector('[data-evidence-id]'), 'Citations after reload')
+  const restored = await waitFor(() => manager.document !== previous && manager.document.querySelector('[data-evidence-id]'), 'Citations after reload')
+  assert(!restored.closest('.jdx-chat-message-body').textContent.includes('999'), 'Manager displayed the model-supplied page after reload')
   assert(manager.document.querySelector('[data-chat-evidence-toggle]').getAttribute('aria-pressed') === 'true', 'Reload lost preference')
   await verifyPreviewLifecycle(manager.document.querySelector('[data-evidence-id]'), manager)
   // 为原生阅读器和侧栏同时留出可用宽度；只调整宿主侧栏，不伪造插件内部尺寸。

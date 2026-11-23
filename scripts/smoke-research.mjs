@@ -2,6 +2,7 @@ import { verifyTranslationFiles } from './smoke-translation-files.mjs'
 import { verifyFeatureSettings, verifyFeatureSettingsRestart } from './smoke-feature-settings.mjs'
 import { verifyEngineStorage } from './smoke-engine-storage.mjs'
 import { verifySidebarRecovery } from './smoke-sidebar-recovery.mjs'
+import { verifySidebarUI } from './smoke-sidebar-ui.mjs'
 import { verifyClassification } from './smoke-classification.mjs'
 import { verifyDiagnostics } from './smoke-diagnostics.mjs'
 import { verifyLiteratureWorkspace, verifyAnalysisRestart } from './smoke-literature-workspace.mjs'
@@ -528,10 +529,12 @@ async function startStub(selectionOnly = false, evidenceOnly = false) {
           requests.push({ kind: 'chat-file', temporary: true, evidenceVerified: true })
         } else if (prompt.includes('SYNTHETIC_EVIDENCE_QUESTION')) {
           if (!prompt.includes('证据溯源已开启')) throw new Error('Evidence instructions missing')
+          if (prompt.includes('回答使用 [来源 N，第 P 页]') || prompt.includes('回答请用 [来源 1]')) throw new Error('Evidence request asks for a second citation format')
           const match = /"id":"(s\d+b\d+)"/.exec(prompt)
           if (!match) throw new Error('No evidence passage was sent')
           const second = [...prompt.matchAll(/"id":"(s\d+b\d+)"/g)].find(row => row[1].split('b')[0] !== match[1].split('b')[0])?.[1] ?? match[1]
-          output = `## 主要发现\n\n这项研究通过实验评估了方法的测量表现，并报告了改进效果。[[evidence:${match[1]}]]\n\n**核对原文**\n\n引用直接关联本轮读取的 PDF 文段，可查看研究条件与结论的适用范围。[[evidence:${second}]]\n\n这些结果应结合实验条件理解，不能直接推广到其他情境。[[evidence:${match[1]}]]`
+          // 模拟旧回复将错误页码紧贴真实段落 ID，核对 Reader 定位与重开后的正文。
+          output = `## 主要发现\n\n这项研究通过实验评估了方法的测量表现，并报告了改进效果。[来源 1，第 999 页][[evidence:${match[1]}]]\n\n**核对原文**\n\n引用直接关联本轮读取的 PDF 文段，可查看研究条件与结论的适用范围。[[evidence:${second}]]\n\n这些结果应结合实验条件理解，不能直接推广到其他情境。[[evidence:${match[1]}]]`
           requests.push({ kind: 'evidence', localPassage: match[1] })
         } else if (prompt.includes('SYNTHETIC_SIDEBAR_QUESTION')) {
           output = createMarkdownFixture('assistant', `http://127.0.0.1:${server.address().port}`)
@@ -976,6 +979,10 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
         main.resizeTo(...previousSize)
         await Zotero.Promise.delay(200)
       }
+    }
+    if (config.sidebarUIOnly) {
+      await verifySidebarUI({ Zotero, reader, parent, attachment, assert, waitFor, screenshot, report, stage, findManager, config })
+      report.state = 'passed'; report.stage = 'complete'; await persist(); return
     }
     if (config.sidebarRecoveryOnly) {
       await verifySidebarRecovery({ Zotero, reader, assert, waitFor, screenshot, report, pluginID: config.pluginID, stage, hostCollapseOnly: config.sidebarHostCollapseOnly })
@@ -2341,7 +2348,7 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     byokKey.value = config.token
     manager.document.getElementById("jadense-manager-byok-provider-name").value = "Synthetic Provider"
     manager.document.getElementById("jadense-manager-byok-provider-save").click()
-    await waitFor(() => manager.document.getElementById("jadense-manager-byok-status").dataset.kind === "success", "BYOK provider save")
+    await waitFor(() => manager.document.getElementById("jadense-manager-byok-provider-status").dataset.kind === "success", "BYOK provider save")
     const managerModelEditor = manager.document.getElementById("jadense-manager-byok-model-editor")
     const managerModelList = manager.document.getElementById("jadense-manager-byok-model-select")
     assert(managerModelEditor.hidden && managerModelEditor.nextElementSibling === managerModelList, "BYOK model editor is visible in the normal state")
@@ -3182,6 +3189,7 @@ async function writeCompanion(extensionsDir, config) {
     verifyClassification.toString(),
     verifyDiagnostics.toString(),
     verifyReaderChat.toString(),
+    verifySidebarUI.toString(),
     verifyEvidence.toString(),
     verifyChatFiles.toString(),
     verifyLongPdf.toString(),
@@ -3327,7 +3335,7 @@ async function main() {
       machineOnly: argv.includes('--machine-only'), machineLive: argv.includes('--machine-live'),
       jadenseModeOnly: argv.includes('--jadense-mode-only'),
       translationFilesOnly: argv.includes('--translation-files-only'), pdfTranslationOnly: argv.includes('--pdf-translation-only'), pdfStatusOnly: argv.includes('--pdf-status-only'), pdfAI: argv.includes('--pdf-ai'), pdfPartial: argv.includes('--pdf-partial'), pdfViewerFixture: argValue(argv, '--pdf-viewer-fixture') ? path.resolve(argValue(argv, '--pdf-viewer-fixture')) : undefined, pdfEngineArchive: argValue(argv, '--pdf-engine-archive') ? path.resolve(argValue(argv, '--pdf-engine-archive')) : undefined, pdfEngineSettingsCheck: argv.includes('--pdf-engine-settings-check'), pdfEngineOnly: argv.includes('--pdf-engine-only'), pdfEngineSetupOnly: argv.includes('--pdf-engine-setup-only'),
-      sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'),
+      sidebarRecoveryOnly: argv.includes('--sidebar-recovery-only'), sidebarHostCollapseOnly: argv.includes('--sidebar-host-collapse-only'), sidebarUIOnly: argv.includes('--sidebar-ui-only'),
       classificationOnly: argv.includes('--classification-only'),
       chatFilesOnly: argv.includes('--chat-files-only'), cloudOCROnly: argv.includes('--cloud-ocr-only'), settingsSimplificationOnly: argv.includes('--settings-simplification-only'), featureSettingsOnly: argv.includes('--settings-simplification-only') || argv.includes('--feature-settings-only') || argv.includes('--analysis-annotation-settings-only'), analysisAnnotationSettingsOnly: argv.includes('--analysis-annotation-settings-only'), engineStorageOnly: argv.includes('--engine-storage-only'), engineStorageParent: argValue(argv, '--engine-storage-parent'),
       analysisRuntimeOnly: argv.includes('--analysis-runtime-only'), diagnosticsOnly: argv.includes('--diagnostics-only'), selectionOnly: argv.includes('--selection-only'), modelToastOnly: argv.includes('--model-toast-only'), literatureOnly: argv.includes('--literature-only'), ocrOnly: argv.includes('--ocr-only'), chatSidebarOnly: argv.includes("--chat-sidebar-only"), shellOnly: argv.includes("--shell-only"), titlebarOnly: argv.includes("--titlebar-only"), screenshots: argv.includes("--screenshots"), screenshotDir: smokeRoot, appearanceLanguage, documentsOnly: argv.includes("--documents-only"), analysisOnly: argv.includes("--analysis-only"), sidebarOnly: argv.includes("--sidebar-only"), documentRestart: argv.includes("--document-restart"), glassProbe: argv.includes("--glass-probe"),
@@ -3477,11 +3485,11 @@ async function main() {
       if (stub.requests.some(request => !['model-catalog', 'account-profile', 'points-status'].includes(request.kind))) throw new Error('Sidebar recovery dispatched a business request')
       report.checks.push('no-generation-or-upload-request')
     }
-    if (!companionConfig.featureSettingsOnly && !argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
+    if (!companionConfig.featureSettingsOnly && !argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !companionConfig.sidebarUIOnly && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "upload-metadata").length !== 2
       || stub.requests.filter((request) => request.kind === "upload-pdf").length !== 1)) {
       throw new Error("Expected two metadata uploads and exactly one multipart PDF; missing or disabled PDFs must not dispatch files")
     }
-    if (!companionConfig.featureSettingsOnly && !argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
+    if (!companionConfig.featureSettingsOnly && !argv.includes('--literature-only') && !argv.includes('--engine-storage-only') && !argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !companionConfig.sidebarUIOnly && !appearanceLanguage && !argv.includes("--documents-only") && (stub.requests.filter((request) => request.kind === "analysis-jadense").length !== 3
       || stub.requests.filter((request) => request.kind === "analysis-byok").length !== 1
       || stub.requests.filter((request) => request.kind === "translation").length !== 3
       || stub.requests.filter((request) => request.kind === "markdown").length !== 1
@@ -3498,7 +3506,7 @@ async function main() {
     }
     if (stub.requests.some((request) => request.kind === "points-check-in")) throw new Error("Plugin UI must never dispatch a direct check-in POST")
     report.checks.push("no-plugin-check-in-post")
-    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
+    if (!argv.includes('--simple-reading-only') && !argv.includes('--simple-reading-interruption-only') && !argv.includes('--pdf-translation-only') && !argv.includes('--sidebar-recovery-only') && !argv.includes('--chat-files-only') && !argv.includes('--diagnostics-only') && !argv.includes('--selection-only') && !argv.includes("--shell-only") && !argv.includes("--chat-sidebar-only") && !companionConfig.sidebarUIOnly && !appearanceLanguage && !argv.includes("--documents-only")) report.checks.push("markdown-no-automatic-network-resources")
     await writeFile(reportPath, JSON.stringify(report, null, 2))
     await writeFile(path.join(smokeRoot, "request-summary.json"), JSON.stringify(stub.requests, null, 2))
     passed = true

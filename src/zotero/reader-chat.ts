@@ -16,6 +16,7 @@ import { collectSourceForItem } from './research-context'
 import { effectiveFeatureModelSelection, featureModelSelectionFromKey, featureModelSelectionKey, featureModelState, featureFollowsChat, saveFeatureModelSelection } from './ai-settings'
 import { bindModelSelectToast, buildFeatureModelSelectOptions, configureFeatureModelThinking, jadenseChatModelSelectionIssue, shouldRefreshModelCatalog } from './ai-model-select'
 import { rememberModelCatalog } from './model-catalog'
+import { openManagerWindow } from './manager-window'
 import { readConnection, type ZoteroLike } from './runtime'
 
 /** 每个 Reader 生命周期保留一份会话选择；功能页隐藏不销毁此视图。 */
@@ -36,11 +37,22 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   const send = get<HTMLButtonElement>('send'), stop = get<HTMLButtonElement>('stop'), attach = get<HTMLButtonElement>('attach-image')
   const file = get<HTMLInputElement>('image-input'), preview = get<HTMLElement>('image-preview'), hint = get<HTMLElement>('compose-hint')
   const association = element(doc, 'small', 'jdx-chat-association')
-  dock.querySelector('.jdx-chat-status-panel')!.prepend(association); root.append(messageList, chatLatest, dock)
+  const otherGeneration = element(doc, 'div', 'jdx-reader-other-generation'), owner = element(doc, 'span')
+  owner.setAttribute('role', 'status')
+  const returnChat = element(doc, 'button', 'jdx-reader-return-chat', uiText('返回该对话', 'Go to conversation'))
+  returnChat.type = 'button'; otherGeneration.append(owner, returnChat)
+  const modelIssue = element(doc, 'div', 'jdx-reader-model-issue'), issueText = element(doc, 'span')
+  issueText.id = `${prefix}-model-issue`; issueText.setAttribute('role', 'status')
+  const configure = element(doc, 'button', 'jdx-reader-configure-model')
+  configure.type = 'button'; modelIssue.append(issueText, configure)
+  dock.querySelector('.jdx-chat-status-panel')!.prepend(association, otherGeneration, modelIssue); root.append(messageList, chatLatest, dock)
   const elements = { messageList, chatLatest, chatStatus }
-  const sessions = createJdxSelect(selector, { compact: true, portal: true, ariaLabel: uiText('切换对话', 'Switch conversation'), popupWidth: 280 })
+  const newTitle = uiText('新对话', 'New conversation')
+  const draftTitle = element(doc, 'strong', 'jdx-reader-draft-title', newTitle), history = element(doc, 'div')
+  selector.append(draftTitle, history)
+  const sessions = createJdxSelect(history, { compact: true, portal: true, ariaLabel: uiText('切换对话', 'Switch conversation'), popupWidth: 280 })
   cleanups.push(() => sessions.destroy())
-  const models = createModelSelect(get('model-select'), { portal: true, ariaLabel: uiText('对话模型', 'Chat model') })
+  const models = createModelSelect(get('model-select'), { portal: true, modelNoticeInPopup: true, ariaLabel: uiText('对话模型', 'Chat model') })
   bindModelSelectToast(models)
   models.onOpen(() => { void refreshCatalog() })
   cleanups.push(() => models.destroy())
@@ -50,6 +62,8 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   let catalog: JadenseChatModelCatalog = { options: [], defaultSelection: null }, catalogReady = false
   let sessionOptionsKey = '', modelOptionsKey = '', imageGeneration = 0
   let newSessionGeneration = 0
+  let firstSendPending = false
+  let needsConnection = false
   const saveDraft = () => drafts.set(sessionID, { text: input.value, image, scroll: messageList.scrollTop })
   const error = (value: unknown) => { if (disposed) return; chatStatus.textContent = value instanceof Error ? value.message : String(value); chatStatus.dataset.state = 'error' }
   const renderImage = () => {
@@ -59,18 +73,20 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     if (disposed) return
     root.dataset.chatSession = sessionID
     const state = readLocalChatState(runtime.preferences)
-    if (sessionID && !state.sessions.some(session => session.id === sessionID)) { sessionID = ''; input.value = ''; image = undefined; renderImage(); messageList.replaceChildren() }
+    if (sessionID && !state.sessions.some(session => session.id === sessionID)) { select(''); return }
     const session = state.sessions.find(session => session.id === sessionID)
     const ordered = [...state.sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     const key = JSON.stringify(ordered.map(session => [session.id, session.title]))
     if (key !== sessionOptionsKey) {
-      sessions.setOptions(ordered.map(session => ({ value: session.id, label: session.title })), sessionID); sessionOptionsKey = key
+      history.hidden = ordered.length === 0; draftTitle.hidden = !history.hidden
+      if (history.hidden) sessions.close()
+      sessions.setOptions([{ value: '', label: newTitle }, ...ordered.map(session => ({ value: session.id, label: session.title }))], sessionID); sessionOptionsKey = key
     } else sessions.setValue(sessionID)
     const follow = nearLatest(elements), top = messageList.scrollTop
     if (!session?.messages.length) {
       if (!messageList.querySelector('.jdx-chat-empty')) {
         const empty = element(doc, 'div', 'jdx-chat-empty')
-        empty.append(element(doc, 'h3', '', uiText('与当前文献对话', 'Discuss this paper')), element(doc, 'p', '', uiText('发送问题时关联当前 PDF，也可从顶部切换已有对话。', 'Ask about this PDF, or switch conversations above.')))
+        empty.append(element(doc, 'h3', '', uiText('与当前文献对话', 'Discuss this paper')), element(doc, 'p', '', uiText('发送问题时会关联当前 PDF。', 'Your question will include this PDF.')))
         messageList.replaceChildren(empty)
       }
     } else {
@@ -94,61 +110,96 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     else models.setValue(featureModelSelectionKey(selection))
     configureFeatureModelThinking(models, host, feature, catalog)
     const issue = ai.route === 'jadense' && catalogReady ? jadenseChatModelSelectionIssue(catalog, ai.selection.route === 'jadense' ? ai.selection.selection ?? { kind: 'default' } : { kind: 'default' }) : ''
-    send.disabled = !ai.ready || !!issue || runtime.busy || creating || readingImage || (!input.value.trim() && !image)
-    stop.hidden = !runtime.busy
-    const generating = state.sessions.find(session => session.id === runtime.activeSessionID)?.title ?? ''
-    stop.title = uiText(`停止生成：${generating}`, `Stop generating: ${generating}`); stop.setAttribute('aria-label', stop.title)
+    send.disabled = !ai.ready || !!issue || runtime.busy || creating || (!sessionID && firstSendPending) || readingImage || (!input.value.trim() && !image)
+    const generating = state.sessions.find(session => session.id === runtime.activeSessionID)?.title
+    stop.hidden = !runtime.busy || runtime.activeSessionID !== sessionID
+    stop.title = generating ? uiText(`停止生成：${generating}`, `Stop generating: ${generating}`) : uiText('停止生成', 'Stop generating')
+    stop.setAttribute('aria-label', stop.title)
+    otherGeneration.hidden = !runtime.busy || runtime.activeSessionID === sessionID
+    const ownerText = otherGeneration.hidden ? '' : generating
+      ? uiText(`「${generating}」正在生成回复。`, `“${generating}” is generating a reply.`)
+      : uiText('其他对话正在生成回复。', 'Another conversation is generating a reply.')
+    if (owner.textContent !== ownerText) owner.textContent = ownerText
+    returnChat.hidden = !generating
     attach.disabled = readingImage
-    hint.textContent = !ai.ready ? ai.issue : issue || uiText('Ctrl / ⌘ + Enter 发送 · Enter 换行', 'Ctrl / ⌘ + Enter to send · Enter for a new line')
+    modelIssue.hidden = ai.ready && !issue
+    needsConnection = !ai.ready && ai.route === 'jadense' && Boolean(ai.selection.selection)
+    const reason = modelIssue.hidden ? '' : ai.ready ? issue : needsConnection ? uiText('尚未连接攻玉。', 'Jadense is not connected.')
+      : ai.route === 'byok' ? uiText('当前 BYOK 对话模型不可用。', 'The selected BYOK chat model is unavailable.')
+      : uiText('尚未配置对话模型。', 'Choose a chat model to send a message.')
+    if (issueText.textContent !== reason) issueText.textContent = reason
+    configure.textContent = needsConnection ? uiText('连接攻玉', 'Connect Jadense') : uiText('配置对话模型', 'Configure chat model')
+    hint.hidden = !modelIssue.hidden
+    input.setAttribute('aria-describedby', modelIssue.hidden ? hint.id : issueText.id)
     input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, Math.max(48, Math.min(160, root.clientHeight * .28)))}px`
     updateLatestButton(elements)
+  }
+  const syncStatus = () => {
+    chatStatus.textContent = runtime.activeSessionID === sessionID ? runtime.status : ''
+    chatStatus.dataset.state = runtime.statusKind
   }
   const select = (id: string) => {
     ++newSessionGeneration; creating = false
     saveDraft(); sessionID = id
-    newConversationDraft = false
+    newConversationDraft = id === ''
     const draft = drafts.get(id); input.value = draft?.text ?? ''; image = draft?.image
-    messageList.replaceChildren(); renderImage(); update()
+    messageList.replaceChildren(); syncStatus(); renderImage(); update()
     win.requestAnimationFrame(() => { messageList.scrollTop = draft?.scroll ?? messageList.scrollHeight; updateLatestButton(elements) })
   }
   sessions.onChange(select)
+  returnChat.onclick = () => {
+    const id = runtime.activeSessionID
+    if (runtime.busy && id && readLocalChatState(runtime.preferences).sessions.some(session => session.id === id)) { select(id); input.focus() }
+  }
+  configure.onclick = () => {
+    const opened = openManagerWindow({ zotero: host, win: host.getMainWindow?.() ?? win as Window & typeof globalThis,
+      context: { pluginID: 'jadense-in-zotero@jadense.cn', rootURI: '' }, section: needsConnection ? 'settings-connection' : 'settings-features', focusChatModel: !needsConnection })
+    if (!opened) error(uiText('暂时无法打开设置，请从工作台进入设置。', 'Settings could not open. Open Settings from the workbench.'))
+  }
   models.onChange(value => { const selected = featureModelSelectionFromKey(value); if (selected) saveFeatureModelSelection(host, featureFollowsChat(host, runtime.feature(sessionID)) ? 'chat' : image ? 'chat' : runtime.feature(sessionID), selected, catalog); update() })
   async function newSession(quote?: SelectionQuote) {
+    if (sessionID) select('')
+    newConversationDraft = true
+    input.focus()
+    if (!quote) return
     const generation = ++newSessionGeneration
-    creating = false
-    if (sessionID) saveDraft(); else drafts.delete('')
-    sessionID = ''; newConversationDraft = true; input.value = ''; image = undefined
-    messageList.replaceChildren(); renderImage(); update()
-    if (quote) {
-      creating = true
-      input.value = quote.text.split('\n').map(line => `> ${line}`).join('\n') + '\n\n'
-      update()
-      try {
-        const id = await runtime.create(itemID, quote)
-        if (disposed || generation !== newSessionGeneration) return
-        const text = input.value
-        select(id); input.value = text; saveDraft(); update(); input.focus()
-      } finally { if (!disposed && generation === newSessionGeneration) { creating = false; update() } }
-    }
+    creating = true
+    input.value = quote.text.split('\n').map(line => `> ${line}`).join('\n') + '\n\n' + input.value
+    saveDraft(); update()
+    try {
+      const id = await runtime.create(itemID, quote)
+      if (disposed || generation !== newSessionGeneration) return
+      promoteDraft(id); input.focus()
+    } finally { if (!disposed && generation === newSessionGeneration) { creating = false; update() } }
+  }
+  /** 首次发送取得真实会话后，迁移当前输入和附件，之后新建的草稿从空白开始。 */
+  function promoteDraft(id: string) {
+    sessionID = id; newConversationDraft = false; drafts.delete('')
+    saveDraft(); syncStatus(); update()
   }
   form.addEventListener('submit', async event => {
     event.preventDefault(); if (send.disabled) return
-    const target = sessionID, prompt = input.value, sentImage = image
-    if (!target) {
-      creating = true; update()
+    let capturedID = sessionID
+    const prompt = input.value, sentImage = image
+    if (!capturedID) {
+      firstSendPending = true; update()
       try {
-        const id = await runtime.create(itemID)
+        capturedID = await runtime.create(itemID)
         if (disposed) return
-        select(id); input.value = prompt; image = sentImage; renderImage(); saveDraft()
+        if (!sessionID && !creating) promoteDraft(capturedID)
+        else {
+          const draft = drafts.get('')
+          if (draft?.text === prompt && draft.image === sentImage) drafts.delete('')
+          drafts.set(capturedID, { text: prompt, image: sentImage, scroll: 0 })
+        }
       } catch (value) {
         if (!disposed) error(value)
         return
       } finally {
-        creating = false
+        firstSendPending = false
         if (!disposed) update()
       }
     }
-    const capturedID = target || sessionID
     void runtime.send({ sessionID: capturedID, prompt, image: sentImage, itemID,
       onAccepted() {
         const saved = drafts.get(capturedID)
@@ -178,10 +229,10 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
   input.addEventListener('paste', event => { const value = event.clipboardData?.files?.[0]; if (value) { event.preventDefault(); void attachImage(value) } })
   root.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault() })
   root.addEventListener('drop', event => { const value = event.dataTransfer?.files?.[0]; if (value) { event.preventDefault(); void attachImage(value) } })
-  stop.onclick = () => runtime.stop()
+  stop.onclick = () => { if (runtime.busy && runtime.activeSessionID === sessionID) runtime.stop() }
   chatLatest.onclick = () => { messageList.scrollTop = messageList.scrollHeight; updateLatestButton(elements) }
   messageList.addEventListener('scroll', () => updateLatestButton(elements), { passive: true })
-  const unsubscribe = runtime.subscribe(() => { if (disposed) return; chatStatus.textContent = runtime.activeSessionID === sessionID ? runtime.status : ''; chatStatus.dataset.state = runtime.statusKind; void refreshCatalog(); update() })
+  const unsubscribe = runtime.subscribe(() => { if (disposed) return; syncStatus(); void refreshCatalog(); update() })
   cleanups.push(unsubscribe)
   const onResize = () => { if (!disposed) { update(); fitDock() } }
   win.addEventListener('resize', onResize); cleanups.push(() => win.removeEventListener('resize', onResize))
@@ -200,7 +251,7 @@ export function mountReaderChat(root: HTMLElement, selector: HTMLElement, host: 
     if (disposed) return
     source = value
     const related = readLocalChatState(runtime.preferences).sessions.find(session => session.sources.some(item => item.kind === 'file' && item.libraryID === value?.libraryID && item.itemKey === value?.itemKey))
-    if (related && !newConversationDraft && !sessionID && !input.value) select(related.id)
+    if (related && !newConversationDraft && !sessionID && !input.value && !image && !readingImage) select(related.id)
     update()
   }).catch(error)
   let catalogController = new AbortController(), catalogIdentity = '', catalogUpdatedAt = 0, catalogLoading = false

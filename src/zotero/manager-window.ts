@@ -6,7 +6,7 @@ import type { ReaderAction } from "./reader-tools"
 import { silentlyCheckForUpdates } from './update-notification'
 import { diagnostics } from './diagnostics'
 
-export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "guide" | "settings" | "settings-ocr" | "settings-connection" | "settings-features" | "diagnostics"
+export type ManagerSection = "chat" | "translations" | "analysis" | "migrate" | "migrate-sync" | "guide" | "settings" | "settings-ocr" | "settings-connection" | "settings-features" | "diagnostics"
 
 export const JADENSE_MANAGER_WINDOW_NAME = "jadense-in-zotero-manager"
 export const JADENSE_MANAGER_RESOURCE = "manager.xhtml"
@@ -20,6 +20,7 @@ export type ManagerContext = {
   zotero: ZoteroLike
   section: ManagerSection
   pluginID: string
+  focusChatModel?: boolean
   actions?: ReaderAction[]
 }
 
@@ -99,6 +100,7 @@ export function openManagerWindow(input: {
   win: ZoteroManagerWindow | null
   context: BootstrapPluginContext
   section?: ManagerSection
+  focusChatModel?: boolean
   action?: ReaderAction
 }) {
   const win = input.win
@@ -110,6 +112,7 @@ export function openManagerWindow(input: {
     zotero: input.zotero,
     section,
     pluginID: input.context.pluginID,
+    ...(input.focusChatModel ? { focusChatModel: true } : {}),
     ...(input.action ? { actions: [input.action] } : {}),
   }
 

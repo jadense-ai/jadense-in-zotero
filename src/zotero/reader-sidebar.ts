@@ -14,11 +14,14 @@ import { element } from "./ui/controls"
 import { observeTheme, uiText } from "./ui-preferences"
 import type { ZoteroLike } from "./runtime"
 import { isLiveDocumentReader } from "./pdf-document"
+import { openPDFTranslation } from "./pdf-translation-reader"
 
 const PANE = "jadense-in-zotero-sync-panel"
 const WIDTH = "extensions.jadenseInZotero.readerSidebarWidth"
 export type ReaderSidebarSource = { itemID: number; tabID?: string; _iframe?: HTMLElement; _iframeWindow?: Window; _window?: Window }
 type ResultPage = Exclude<DocumentResultMode, 'analysis'> | AnalysisDetailTab
+const isAnalysisTab = (page: string): page is AnalysisDetailTab => page === 'summary' || page === 'notes' || page === 'references'
+const resultModeFor = (page: ResultPage) => isAnalysisTab(page) ? 'analysis' : page
 type Reader = ReaderSidebarSource
 type Details = HTMLElement & { tabID?: string; pinnedPane?: string; scrollToPane?(id: string, behavior: string): Promise<unknown>; render?(): Promise<unknown> }
 type Surface = { itemID: number; doc: Document; root: HTMLElement; show(start?: boolean, history?: () => void, chat?: boolean, quote?: SelectionQuote, resultPage?: ResultPage): Promise<void>; remove(): void }
@@ -39,7 +42,7 @@ function styles(doc: Document) {
   }
   if (doc.getElementById("jdx-reader-sidebar-css")) return
   const style = element(doc, "style"); style.id = "jdx-reader-sidebar-css"
-  style.textContent = `.jdx-reader-workspace{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:var(--jdx-reader-background);color:var(--jdx-reader-text);font:13px/1.4 system-ui,sans-serif;box-sizing:border-box}.jdx-reader-workspace[hidden]{display:none!important}.jdx-reader-workspace-header{display:flex;align-items:center;gap:8px;flex:none;height:32px;padding:0 12px;font-size:12px}.jdx-reader-workspace-header strong{font-weight:600;flex:1}.jdx-reader-workspace-header button{background:transparent;color:inherit;border:0;cursor:pointer;padding:4px 6px;font:inherit}.jdx-reader-workspace-content{flex:1;min-height:0;overflow:hidden}.jdx-reader-workspace-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:24px;line-height:1.8}.jdx-reader-workspace-empty p{margin:0;color:var(--jdx-reader-muted)}.jdx-reader-workspace-empty button{padding:6px 12px;background:var(--jdx-reader-hover);color:inherit;border:0;border-radius:5px;font:inherit;cursor:pointer}[data-jdx-docked]{display:flex!important;flex-direction:row!important;min-width:0}[data-jdx-docked]>browser{min-width:160px;flex:1;width:0}.jdx-reader-dock{flex:none;width:var(--jdx-dock-width,480px);height:100%;border-inline-start:1px solid var(--jdx-reader-line);position:relative}.jdx-reader-dock-resizer{position:absolute;top:0;bottom:0;left:-3px;width:6px;cursor:ew-resize;z-index:4;touch-action:none}.jdx-reader-dock-resizer:focus-visible{outline:2px solid #16cf8c}`
+  style.textContent = `.jdx-reader-workspace{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:var(--jdx-reader-background);color:var(--jdx-reader-text);box-sizing:border-box}.jdx-reader-workspace[hidden]{display:none!important}.jdx-reader-workspace-header{display:flex;align-items:center;gap:8px;flex:none;height:32px;padding:0 12px;font-size:calc(12px * var(--jdx-font-scale,1))}.jdx-reader-workspace-header strong{font-weight:600;flex:1}.jdx-reader-workspace-header button{background:transparent;color:inherit;border:0;cursor:pointer;padding:4px 6px;font:inherit}.jdx-reader-workspace-content{flex:1;min-height:0;overflow:hidden}.jdx-reader-workspace-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:24px;line-height:1.8}.jdx-reader-workspace-empty p{margin:0;color:var(--jdx-reader-muted)}.jdx-reader-workspace-empty button{padding:6px 12px;background:var(--jdx-reader-hover);color:inherit;border:0;border-radius:5px;font:inherit;cursor:pointer}[data-jdx-docked]{display:flex!important;flex-direction:row!important;min-width:0}[data-jdx-docked]>browser{min-width:160px;flex:1;width:0}.jdx-reader-dock{flex:none;width:var(--jdx-dock-width,480px);height:100%;border-inline-start:1px solid var(--jdx-reader-line);position:relative}.jdx-reader-dock-resizer{position:absolute;top:0;bottom:0;left:-3px;width:6px;cursor:ew-resize;z-index:4;touch-action:none}.jdx-reader-dock-resizer:focus-visible{outline:2px solid var(--jdx-green-deep)}`
   style.textContent += `item-details[data-jdx-reading-active]{min-width:0!important;max-width:100%!important}item-details[data-jdx-reading-active] .zotero-view-item{min-width:0!important;max-width:100%!important;overflow:hidden!important;padding:0!important;--min-scroll-height:0px!important}item-details[data-jdx-reading-active] .zotero-view-item>[data-pane]:not([data-jdx-reading-pane]){display:none!important}[data-jdx-reading-pane]>collapsible-section{padding:0!important}[data-jdx-reading-pane]>collapsible-section>.head{display:none!important}[data-jdx-reading-pane]{margin:0!important;padding:0!important;min-height:0!important}`
   // 多 PDF 切换后，后台 item-details 的最小宽度会撑大宿主 deck 的 auto 轨道。
   // 仅在插件侧栏激活时约束轨道，让内容始终止于右侧原生工具栏之前。
@@ -92,7 +95,7 @@ function dockFrame(root: HTMLElement, target: HTMLElement, host: ZoteroLike) {
 
 /** 挂载壳只恢复已有结果；只有明确启动操作才创建翻译任务。 */
 function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
-  root: HTMLElement; activate(): Promise<void> | void; hide(): void; cleanup(): void; history?(): void; readerDocument?: Document
+  root: HTMLElement; reader: Reader; activate(): Promise<void> | void; hide(): void; cleanup(): void; history?(): void; readerDocument?: Document
 }): Surface {
   const root = options.root
   const cleanups: Array<() => void> = [() => root.remove()]
@@ -105,8 +108,8 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   const pageHost = element(doc, 'div'); left.append(pageHost)
   const pageSelect = createJdxSelect(pageHost, { compact: true, portal: true, popupWidth: 180, ariaLabel: uiText('切换功能', 'Switch page'), iconPath: 'M4 6h16M4 12h16M4 18h16' })
   cleanups.push(() => pageSelect.destroy())
-  const { source, translation, selection } = resultLabels()
-  const labels = { source, translation, selection, summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References') }
+  const { source, selection } = resultLabels()
+  const labels = { source, translation: uiText('历史全文译文', 'Saved full translations'), selection, summary: uiText('解析总结', 'Summary'), notes: uiText('解析笔记', 'Analysis notes'), references: uiText('参考文献', 'References') }
   pageSelect.setOptions([{ value: 'chat', label: uiText('对话', 'Chat') }, ...Object.entries(labels).filter(([value]) => value !== 'source').map(([value, label]) => ({ value, label }))], 'chat')
   const sessionHost = element(doc, 'div'), heading = element(doc, 'strong'); center.append(sessionHost, heading)
   const newChat = messageAction(doc, uiText('新建对话', 'New conversation'), 'M12 5v14M5 12h14'); newChat.classList.add('jdx-button')
@@ -116,7 +119,8 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   pages.append(chat); root.append(header, pages)
   const chatView = mountReaderChat(chat, sessionHost, host, itemID)
   cleanups.push(() => chatView.remove())
-  const views = new Map<ResultPage, { root: HTMLElement; view: ReturnType<typeof mountDocumentResults> }>()
+  // 三个解析页共用版本选择器和同一附件视图，切页时只切换正文。
+  const views = new Map<DocumentResultMode, { root: HTMLElement; view: ReturnType<typeof mountDocumentResults> }>()
   let page = 'chat', removed = false, sequence = 0
   let loading: HTMLElement | undefined
   const setPage = async (next: string, recordID?: string) => {
@@ -127,14 +131,14 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
     root.dataset.page = next; pageSelect.setValue(next); pageSelect.close(); chatView.closeMenus()
     chat.hidden = next !== 'chat'; sessionHost.hidden = chat.hidden; newChat.hidden = chat.hidden; heading.hidden = !chat.hidden
     workbench.hidden = !chat.hidden
-    for (const [mode, view] of views) view.root.hidden = mode !== next
-    if (next === 'chat') { chatView.refresh(); return }
     const resultPage = next as ResultPage
-    const analysisTab = resultPage === 'summary' || resultPage === 'notes' || resultPage === 'references' ? resultPage : undefined
-    const mode: DocumentResultMode = analysisTab ? 'analysis' : resultPage as DocumentResultMode
+    const mode = resultModeFor(resultPage)
+    for (const [key, view] of views) view.root.hidden = key !== mode
+    if (next === 'chat') { chatView.refresh(); return }
+    const analysisTab = isAnalysisTab(resultPage) ? resultPage : undefined
     heading.textContent = labels[resultPage]
-    let existing = views.get(resultPage)
-    if (recordID && existing) { existing.view.remove(); existing.root.remove(); views.delete(resultPage); existing = undefined }
+    let existing = views.get(mode)
+    if (recordID && existing) { existing.view.remove(); existing.root.remove(); views.delete(mode); existing = undefined }
     const placeholder = element(doc, 'section', 'jdx-sidebar-loading jdx-reader-workspace-empty', uiText('正在读取当前 PDF 的成果…', 'Loading results for this PDF…'))
     placeholder.setAttribute('role', 'status'); pages.append(placeholder); loading = placeholder
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -142,7 +146,7 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
     try {
       const loaded = await Promise.race([
         (async () => {
-          if (existing) { await existing.view.refresh(); return null }
+          if (existing) { if (analysisTab) existing.view.setAnalysisTab(analysisTab); await existing.view.refresh(); return null }
           const jobs = documentJobs(host); await jobs.ready
           const current = await collectSourceForItem(host, itemID, { includeText: false }).catch(() => undefined)
           return { jobs, current }
@@ -158,8 +162,12 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
       const panel = element(doc, 'section', 'jdx-reader-workspace-content')
       const view = mountDocumentResults(panel, host, source, mode, { recordID, readerDocument: options.readerDocument, analysisTab, hideAnalysisTabs: true,
         onTranslate: id => { void setPage('translation', id).catch(() => navigate('translation')) },
+        onOpenBilingual: async () => {
+          if (options.reader.itemID !== itemID || !isLiveDocumentReader(options.reader)) throw new Error(uiText('请重新打开此 PDF 后重试。', 'Reopen this PDF and try again.'))
+          await openPDFTranslation(host, options.reader, 'compare')
+        },
       })
-      pages.append(panel); views.set(resultPage, { root: panel, view })
+      pages.append(panel); views.set(mode, { root: panel, view })
     } catch (error) { if (!removed && generation === sequence) {
       const trace = lifecycleTrace(host, 'reader-sidebar', 'results'); trace.fail(error, 'results_mount', 'SIDEBAR_RESULTS_FAILED'); trace.end('error')
       recovery(pages, host, () => navigate(next), trace.id)
@@ -173,7 +181,7 @@ function surface(host: ZoteroLike, doc: Document, itemID: number, options: {
   // 工作台入口属于页面导航，固定在标题栏；按当前页面读取所选成果版本。
   workbench.onclick = () => {
     if (page === 'chat') return
-    const resultPage = page as ResultPage, taskID = views.get(resultPage)?.view.selectedRecordID()
+    const resultPage = page as ResultPage, taskID = views.get(resultModeFor(resultPage))?.view.selectedRecordID()
     openManagerWindow({ zotero: host, win: host.getMainWindow?.() as Parameters<typeof openManagerWindow>[0]['win'],
       context: { pluginID: 'jadense-in-zotero@jadense.cn', rootURI: '' }, section: 'analysis', action: { kind: 'fullTranslate', itemID, taskID, resultMode: resultPage } })
   }
@@ -310,7 +318,7 @@ export function mountNativeReaderSidebar(body: HTMLElement, host: ZoteroLike, on
     else leave()
   }
   let value: Surface
-  try { value = surface(host, doc, reader.itemID, { root, history: onHistory, readerDocument: reader._iframeWindow?.document,
+  try { value = surface(host, doc, reader.itemID, { root, reader, history: onHistory, readerDocument: reader._iframeWindow?.document,
     async activate() {
       wanted = true
       root.hidden = false
@@ -527,7 +535,7 @@ function openReaderSidebar(host: ZoteroLike, readerDoc: Document, itemID: number
       const root = element(owner, 'aside'), dock = dockFrame(root, target, host)
       const remove = () => mounted?.remove()
       try {
-        mounted = surface(host, owner, itemID, { root, history: onHistory, readerDocument: readerDoc,
+        mounted = surface(host, owner, itemID, { root, reader, history: onHistory, readerDocument: readerDoc,
           activate() { check(); root.hidden = false; dock.show() },
           hide() { root.hidden = true; dock.hide() },
           cleanup() { dock.dispose(); readerDoc.defaultView?.removeEventListener('pagehide', remove); docks.delete(readerDoc) },

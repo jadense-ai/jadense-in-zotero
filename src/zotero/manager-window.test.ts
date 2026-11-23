@@ -123,6 +123,17 @@ describe("manager window helpers", () => {
     }, "settings")).toBe("chrome://jadense-in-zotero/content/manager.xhtml?section=settings")
   })
 
+  it("delivers the chat model settings target to both a new and an existing workbench", () => {
+    const opened = { closed: false, focus: vi.fn(), receiveJadenseContext: vi.fn() }
+    const openDialog = vi.fn().mockReturnValue(opened)
+    const input = { zotero: {}, win: { openDialog } as unknown as ZoteroManagerWindow, context: { pluginID: "fixture", rootURI: "" },
+      section: "settings-features" as const, focusChatModel: true }
+    openManagerWindow(input); openManagerWindow(input)
+    const target = expect.objectContaining({ section: "settings-features", focusChatModel: true })
+    expect(openDialog.mock.calls[0][3]).toEqual(target)
+    expect(opened.receiveJadenseContext).toHaveBeenCalledWith(target)
+  })
+
   it("opens installed XPI manager windows through the registered chrome content URL", () => {
     expect(managerWindowUrl({
       pluginID: "plugin@example.com",

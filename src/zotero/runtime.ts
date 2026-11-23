@@ -17,6 +17,7 @@ const PREF_DEFAULT_FOLDER_ID = "extensions.jadenseInZotero.defaultFolderId"
 const PREF_SYNC_MAPPINGS = "extensions.jadenseInZotero.syncMappings"
 const PREF_COLLECTION_UPLOAD_INCLUDE_PDF = "extensions.jadenseInZotero.collectionUploadIncludePdf"
 const PREF_FAVORITE_FOLDERS_CACHE = "extensions.jadenseInZotero.favoriteFoldersCache"
+export const SYNC_PANEL_PREF_KEYS = [PREF_BASE_URL, PREF_TOKEN, PREF_DEFAULT_FOLDER_ID, PREF_COLLECTION_UPLOAD_INCLUDE_PDF, PREF_FAVORITE_FOLDERS_CACHE] as const
 export const AI_INITIAL_MODEL_PREF_KEY = "extensions.jadenseInZotero.aiInitialModel"
 const SYNC_MAPPING_VERSION = 2
 export const DEFAULT_BASE_URL = "https://jadense.cn"
@@ -440,9 +441,7 @@ function collectionRefFromRawCollection(collection: unknown): ZoteroCollectionRe
   return { name, collectionID, key, libraryID }
 }
 
-function selectedEntries(zotero: ZoteroLike): CollectionItemEntry[] {
-  const pane = zotero.getActiveZoteroPane?.()
-  const selected = pane?.getSelectedItems?.() ?? []
+function selectedEntries(selected: unknown[]): CollectionItemEntry[] {
   return selected.flatMap((item) => {
     const snapshot = snapshotItem(item)
     const itemRef = itemRefFromRawItem(item)
@@ -527,12 +526,11 @@ function collectionEntryKey(ref: ZoteroItemRef) {
   return `${String(ref.libraryID ?? ref.libraryKey)}:${ref.itemKey}`
 }
 
-async function collectSelectedCollectionItems(zotero: ZoteroLike): Promise<{
+async function collectSelectedCollectionItems(zotero: ZoteroLike, collections = selectedZoteroCollections(zotero)): Promise<{
   collectionName: string
   entries: CollectionItemEntry[]
   skipped: CollectionSkippedEntry[]
 }> {
-  const collections = selectedZoteroCollections(zotero)
   if (collections.length === 0) throw new Error(uiText("请先在 Zotero 中选中分类再上传。", "Select a Zotero collection before uploading."))
 
   const entriesByKey = new Map<string, CollectionItemEntry>()
@@ -1170,10 +1168,9 @@ export function resolveSelectedFavoriteFolderId(input: {
 }
 
 export function readFavoriteFoldersCache(zotero: ZoteroLike): FavoriteFoldersCache | null {
-  const rawValue = prefString(zotero, PREF_FAVORITE_FOLDERS_CACHE)
-  if (!rawValue) return null
-
   try {
+    const rawValue = prefString(zotero, PREF_FAVORITE_FOLDERS_CACHE)
+    if (!rawValue) return null
     const parsed = JSON.parse(rawValue) as Partial<FavoriteFoldersCache>
     if (!Array.isArray(parsed.folders)) return null
     const folders = parsed.folders.filter((folder): folder is FavoriteFolderOption =>
@@ -1269,13 +1266,13 @@ export function refreshFavoriteFoldersCache(
 
 export async function pushSelectedItemsToJadense(
   zotero: ZoteroLike,
-  options: { includePdf?: boolean; signal?: AbortSignal } = {},
+  options: { includePdf?: boolean; signal?: AbortSignal; selectedItems?: unknown[] } = {},
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
   if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
-  const entries = selectedEntries(zotero)
+  const entries = selectedEntries(options.selectedItems ?? zotero.getActiveZoteroPane?.()?.getSelectedItems?.() ?? [])
   const items = entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
   if (items.length === 0) throw new Error(uiText("未选中可上传的 Zotero 条目。", "No uploadable Zotero items are selected."))
 
@@ -1329,13 +1326,13 @@ export async function previewSelectedCollectionUpload(zotero: ZoteroLike): Promi
 
 export async function pushSelectedCollectionToJadense(
   zotero: ZoteroLike,
-  options: { includePdf?: boolean; signal?: AbortSignal } = {},
+  options: { includePdf?: boolean; signal?: AbortSignal; selectedCollections?: unknown[] } = {},
 ) {
   const client = assertClient(zotero)
   const folderId = prefString(zotero, PREF_DEFAULT_FOLDER_ID)
   if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
-  const collected = await collectSelectedCollectionItems(zotero)
+  const collected = await collectSelectedCollectionItems(zotero, options.selectedCollections)
   const localSkippedItems: ZoteroCollectionUploadItemResult[] = collected.skipped.map((item) => ({
     clientItemId: item.clientItemId ?? `zotero:missing-key/${item.collectionPaths.join("/")}`,
     title: item.title,

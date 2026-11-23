@@ -444,6 +444,7 @@ const assets = new Map([
   ["/pdfjs/pdf.mjs", ["pdfjs/pdf.mjs", "text/javascript; charset=utf-8"]],
   ["/pdfjs/pdf.worker.mjs", ["pdfjs/pdf.worker.mjs", "text/javascript; charset=utf-8"]],
   ["/ui.css", ["ui.css", "text/css; charset=utf-8"]],
+  ["/settings.css", ["settings.css", "text/css; charset=utf-8"]],
   ["/status.css", ["status.css", "text/css; charset=utf-8"]],
   ["/translation-interface.css", ["translation-interface.css", "text/css; charset=utf-8"]],
   ["/analysis.css", ["analysis.css", "text/css; charset=utf-8"]],

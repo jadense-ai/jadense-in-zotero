@@ -59,15 +59,13 @@ export function configureModelThinking(select: JdxSelect, zotero: ZoteroLike, ca
   const levels = (selection.route === "byok" ? byokModel ? byokEfforts : []
     : [...new Set([...efforts.filter(value => value !== 'none'), ...(option?.reasoningConfig?.reasoningRequired === false ? ['none'] : []), ...(efforts.length ? ['auto'] : [])])])
     .map(value => ({ value, label: modelThinkingLabel(value) }))
-  const warning = uiText('服务端尚未确认支持思考设置', 'The server has not confirmed thinking settings support')
-  let notice = select.element.parentElement?.querySelector<HTMLElement>('[data-thinking-contract-notice]')
-  if (!notice) { notice = select.element.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p'); notice.setAttribute('data-thinking-contract-notice', ''); notice.className = 'jdx-setting-description'; select.element.after(notice) }
-  notice.hidden = !staleByokEffort && (selection.route !== 'jadense' || selected?.kind !== 'model' || catalog.thinkingContractVersion === 1)
-  notice.textContent = notice.hidden ? '' : staleByokEffort
-    ? uiText('此前选定的思考档位已不在此模型配置中，本次使用提供商默认；请重新选择。', 'The saved thinking effort is no longer configured for this model. Requests use the provider default until you choose another.') : warning
+  const notice = staleByokEffort
+    ? uiText('此前选定的思考档位已不在此模型配置中，本次使用提供商默认；请重新选择。', 'The saved thinking effort is no longer configured for this model. Requests use the provider default until you choose another.')
+    : selected?.kind === 'model' && catalog.thinkingContractVersion !== 1
+      ? uiText('服务端尚未确认支持思考设置', 'The server has not confirmed thinking settings support') : ''
   const label = selection.route === 'byok' ? value === 'auto' ? uiText('提供商默认', 'Provider default') : modelThinkingLabel(value)
     : selected?.kind === 'route' ? uiText('由实际路由决定', 'Route default') : !efforts.length ? uiText('提供商默认', 'Provider default') : modelThinkingLabel(value)
-  select.setModelControl({ selectionKey: featureModelSelectionKey(selection), levels, value, label,
+  select.setModelControl({ selectionKey: featureModelSelectionKey(selection), levels, value, label, notice,
     ...((selection.route === "byok" && byokModel || selected?.kind === "model" && option && !option.locked) && levels.length ? { onCommit: (thinkingEffort: string) => {
       try {
         // 目录刷新/跨窗换模型之后，旧手势不能覆盖新选择。

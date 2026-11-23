@@ -62,9 +62,16 @@ export async function prepareDocumentRequest(input: {
     source.text = fitted.text
     if (fitted.limited) source.warning = `${source.warning ?? ''} 本轮仅附与问题相关的部分原文，不代表已读全文。`
   }
-  if (!documents.length) return { messages, sources, ...(dropped ? { reading: { notice: uiText('本轮省略较早对话，完整历史仍保留。', 'Earlier turns were omitted from this request; full history is retained.'), sources: [] } } : {}) }
-  const budget = capacity.input - imageBudget - messageCost() - documentTokenCost(buildSourceContext(sources)) - 256
   const question = last.text
+  const request = { messages, sources }
+  if (input.evidenceEnabled) {
+    // 在组装 PDF 原文的同一轮确定引用规则，传输层无需再次包装来源快照。
+    const sourceContext = buildSourceContext(sources, true)
+    if (sourceContext) last.text += `\n\n${sourceContext}`
+    request.sources = []
+  }
+  if (!documents.length) return { ...request, ...(dropped ? { reading: { notice: uiText('本轮省略较早对话，完整历史仍保留。', 'Earlier turns were omitted from this request; full history is retained.'), sources: [] } } : {}) }
+  const budget = capacity.input - imageBudget - messageCost() - documentTokenCost(buildSourceContext(request.sources)) - 256
   const recent = messages.slice(0, -1).slice(-4).map(row => row.text).join('\n').slice(-3000)
   const result = await buildLongDocumentContext({ documents, sourceNumbers: numbers, question, recent, budget,
     evidenceEnabled: input.evidenceEnabled,
@@ -92,5 +99,5 @@ export async function prepareDocumentRequest(input: {
   if (result.context) last.text += `\n\n${result.context}`
   if (dropped) result.reading.notice += ' 本轮省略较早对话，完整历史仍保留。'
   if (sources.some(source => source.contentType === 'application/pdf' && !documents.some(document => document.source.id === source.id))) result.reading.notice += ' 部分 PDF 当前不可读取。'
-  return { messages, sources, reading: result.reading, ...(input.evidenceEnabled ? { evidence: result.evidence ?? { entries: [] } } : {}) }
+  return { ...request, reading: result.reading, ...(input.evidenceEnabled ? { evidence: result.evidence ?? { entries: [] } } : {}) }
 }

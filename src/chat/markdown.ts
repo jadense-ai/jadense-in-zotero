@@ -22,6 +22,22 @@ markdown.inline.ruler.before('link', 'evidence', (state, silent) => {
   state.pos += match[0].length
   return true
 })
+
+// v0.6.18 的回复可能在段落标记前重复写页码。普通 Markdown 链接优先，且只折叠已绑定标记前的标签。
+const legacyPageBeforeEvidence = /^\[来源[ \t]*\d+[ \t]*[，,][ \t]*第([^[\]\r\n]+?)页[ \t]*\][ \t]*(?=\[\[evidence:(s\d+b\d+)\]\])/u
+const printedPageNumber = /^(?:[a-z]?\d+(?:[-–—][a-z]?\d+)?|[ivxlcdm]+|[〇零一二三四五六七八九十百千万]+)$/iu
+markdown.inline.ruler.after('link', 'legacy_evidence_page', (state, silent) => {
+  const evidence = state.env?.chatEvidence as ChatEvidence | undefined
+  if (silent || !evidence || state.linkLevel > 0 || !state.src.startsWith('[来源', state.pos)) return false
+  const label = legacyPageBeforeEvidence.exec(state.src.slice(state.pos, state.posMax))
+  if (!label) return false
+  const page = label[1].trim()
+  const entry = evidence.entries.find(entry => entry.id === label[2])
+  if (!entry || (page !== entry.pageLabel && !printedPageNumber.test(page.normalize('NFKC')))) return false
+  state.pos += label[0].length
+  return true
+})
+
 markdown.renderer.rules.evidence = (tokens, index, _options, env) => {
   const entry = (env?.chatEvidence as ChatEvidence | undefined)?.entries.find(row => row.id === tokens[index].content)
   const escape = markdown.utils.escapeHtml

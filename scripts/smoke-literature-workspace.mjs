@@ -214,38 +214,35 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     const option = await waitFor(() => [...doc.querySelectorAll('[role="option"]')].find(row => row.getBoundingClientRect().height > 0 && row.textContent.includes(label)), `sidebar option ${label}`)
     option.click(); await Zotero.Promise.delay(120)
   }
-  const isEnglish = root.querySelector('.jdx-reader-header-left').textContent.includes('Chat'), labels = isEnglish ? ['Chat', 'Full Markdown', 'Full translation', 'Selection translations', 'Summary', 'Analysis notes', 'References'] : ['对话', '全文 Markdown', '全文翻译', '选中翻译历史', '解析总结', '解析笔记', '参考文献']
+  const isEnglish = root.querySelector('.jdx-reader-header-left button').getAttribute('aria-label').includes('Switch page')
+  const labels = isEnglish
+    ? { chat: 'Chat', translation: 'Saved full translations', selection: 'Selection translations', summary: 'Summary', notes: 'Analysis notes', references: 'References' }
+    : { chat: '对话', translation: '历史全文译文', selection: '选中翻译历史', summary: '解析总结', notes: '解析笔记', references: '参考文献' }
   root.querySelector('.jdx-reader-header-left button').click()
-  assert(labels.every(label => [...doc.querySelectorAll('[role="option"]')].some(row => row.textContent.includes(label))), 'Seven sidebar pages missing')
+  const choices = [...doc.querySelectorAll('.jdx-select-portal [role="option"]')].filter(row => row.getBoundingClientRect().height > 0).map(row => row.textContent.trim())
+  assert(Object.values(labels).every(label => choices.includes(label)), 'Reader sidebar pages missing')
   root.querySelector('.jdx-reader-header-left button').click()
-  await choose(labels[1])
-  await waitFor(() => root.querySelector('.jdx-reader-workspace-content:not([hidden]) .jdx-reading-block')?.textContent.includes('SOURCE_MARKDOWN'), 'rendered source Markdown')
-  await waitFor(() => root.querySelector('.jdx-reader-workspace-content:not([hidden]) img')?.naturalWidth > 0, 'loaded local figure')
-  assert(jobs.list('translation').length === 0, 'Browsing source started translation')
-  const sourceTools = root.querySelector('.jdx-reader-workspace-content:not([hidden]) .jdx-result-tools')
-  assert(sourceTools.querySelector('.jdx-result-workbench').getBoundingClientRect().left - sourceTools.getBoundingClientRect().left <= 14, 'Markdown actions not left aligned')
-  await Zotero.Promise.delay(150)
-  const sourceActionBounds = sourceTools.querySelector('.jdx-result-workbench').getBoundingClientRect(), sourceToolsBounds = sourceTools.getBoundingClientRect()
-  assert(sourceActionBounds.width >= 30 && sourceActionBounds.left >= sourceToolsBounds.left && sourceActionBounds.right <= sourceToolsBounds.right, `Source actions outside toolbar: ${JSON.stringify({ action: sourceActionBounds.toJSON(), tools: sourceToolsBounds.toJSON() })}`)
-  await screenshot('literature-sidebar-source', main)
-  await choose(labels[3])
+  await choose(labels.selection)
   const currentPanel = () => root.querySelector('.jdx-reader-workspace-content:not([hidden])')
   await waitFor(() => currentPanel()?.textContent.includes('CURRENT_PDF_SELECTION'), 'current PDF history')
   assert(!currentPanel().textContent.includes('SIBLING_PDF_ONLY'), 'Sibling history leaked into current PDF')
   const disclosure = currentPanel().querySelector('.jdx-selection-toggle'); assert(disclosure, 'Custom selection disclosure missing'); disclosure.click(); assert(disclosure.getAttribute('aria-expanded') === 'true', 'Selection disclosure did not expand'); await screenshot('literature-sidebar-selection', main)
-  await choose(labels[4]); await waitFor(() => currentPanel()?.textContent.includes('ANALYSIS_RESULT_VISIBLE'), 'sidebar analysis')
-  for (const [index, tab] of [[4, 'summary'], [5, 'notes'], [6, 'references']]) {
-    await choose(labels[index])
+  await choose(labels.summary); await waitFor(() => currentPanel()?.textContent.includes('ANALYSIS_RESULT_VISIBLE'), 'sidebar analysis')
+  const workbenchButton = () => root.querySelector('.jdx-reader-header-right button:not([hidden])')
+  for (const tab of ['summary', 'notes', 'references']) {
+    await choose(labels[tab])
     await waitFor(() => currentPanel()?.querySelector('.jdx-detail-tabs')?.hidden, `flat reader ${tab}`)
-    const panel = currentPanel(), tools = panel.querySelector('.jdx-result-tools'), first = tools.querySelector('.jdx-result-workbench')
-    assert(first.getBoundingClientRect().left - tools.getBoundingClientRect().left <= 14, 'Reader action is not left aligned')
+    const panel = currentPanel(), workbench = workbenchButton()
+    assert(workbench?.getAttribute('aria-label') === (isEnglish ? 'Open in workbench' : '在工作台查看') && workbench.getBoundingClientRect().width > 0, 'Missing workbench navigation in Reader header')
     assert(!panel.querySelector(`.jdx-detail-panel[id$="-${tab}"]`).hidden, `Reader content mismatch: ${tab}`)
   }
-  await choose(labels[4])
+  await choose(labels.summary)
   await screenshot('literature-sidebar-analysis', main)
-  await choose(labels[0]); assert(root.querySelector('.jadense-reader-chat') || !root.querySelector('.jdx-reader-workspace-content').hidden, 'Chat unreachable')
-  await choose(labels[2])
-  assert(currentPanel().textContent.includes(isEnglish ? 'has been retired' : '已停用'), 'Legacy translation retirement notice missing')
+  await choose(labels.chat); assert(!root.querySelector('.jdx-reader-chat').hidden, 'Chat unreachable')
+  await choose(labels.translation)
+  const bilingualAction = isEnglish ? 'Open bilingual PDF' : '打开对照翻译'
+  await waitFor(() => currentPanel()?.querySelector('.jdx-result-empty button')?.textContent === bilingualAction, 'Bilingual PDF action in saved translations')
+  assert(!jobs.list('translation').length, 'Browsing saved translations started translation')
   // 新建入口已停用；直接调用真实任务层，验收旧任务兼容链路和成果界面。
   const translation = await jobs.start('translation', reader.itemID, false, { extractionID })
   await waitFor(() => { if (translation.status === 'error') throw new Error(translation.error); return translation.status === 'complete' }, 'Markdown translation completion')
@@ -273,7 +270,7 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   Object.assign(translation, originalState); jobs.emit(); await Zotero.Promise.delay(120)
   report.checks.push('custom-disclosure-and-menu', 'runtime-running-paused-partial-error-unsaved')
 
-  const workbench = [...currentPanel().querySelectorAll('button')].find(button => /^(在工作台查看|Open in workbench)$/u.test(button.textContent.trim()))
+  const workbench = workbenchButton()
   assert(workbench, 'Workbench deep link unavailable'); workbench.click()
   const manager = await waitFor(() => findManager()?.document.querySelector('.jdx-literature-detail:not([hidden])') && findManager(), 'unified paper detail')
   const md = manager.document
@@ -285,18 +282,44 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   const detail = md.querySelector('.jdx-literature-detail'), section = detail.closest('.jdx-analysis-section')
   const bounds = detail.getBoundingClientRect(), outer = section.getBoundingClientRect()
   assert(bounds.left - outer.left <= 14 && outer.right - bounds.right <= 14, 'Paper detail retains wide gutters')
-  md.getElementById('jdx-literature-tab-source').click()
-  await waitFor(() => md.querySelector('.jdx-literature-panel:not([hidden]) .jdx-reading-block'), 'workbench source')
+  // 用整个成果 section 作为基准；逐层扣掉真实边框、内边距和滚动槽，不能让两个同样限宽的子元素互相作证。
+  const widthEvidence = []
+  report.workbenchContentWidths = widthEvidence
+  function measureContentWidth(element, label) {
+    assert(element?.getBoundingClientRect().height > 0 && section.contains(element), label + ' is not visible')
+    const sectionBounds = section.getBoundingClientRect()
+    let left = sectionBounds.left, right = sectionBounds.right
+    for (let owner = element.parentElement; owner; owner = owner.parentElement) {
+      const css = manager.getComputedStyle(owner)
+      left += owner.clientLeft + parseFloat(css.paddingLeft)
+      right -= owner.offsetWidth - owner.clientWidth - owner.clientLeft + parseFloat(css.paddingRight)
+      if (owner === section) break
+    }
+    const rect = element.getBoundingClientRect()
+    widthEvidence.push({ label, available: Math.round(right - left), actual: Math.round(rect.width),
+      leftGap: Math.round(rect.left - left), rightGap: Math.round(right - rect.right) })
+  }
+  async function wideWorkbench() {
+    manager.resizeTo(1440, 860)
+    await Zotero.Promise.delay(250)
+    if (section.clientWidth < 1040) {
+      const toggle = md.getElementById('jadense-manager-sidebar-toggle')
+      if (toggle.getAttribute('aria-expanded') === 'true') toggle.click()
+    }
+    await waitFor(() => section.clientWidth >= 1040, 'workbench wide enough to detect a 960px list cap')
+  }
+  await wideWorkbench()
+  measureContentWidth(detail.querySelector(':scope > [role=tablist]'), 'result-tabs')
+  md.getElementById('jdx-literature-tab-history').click()
+  const sourceHistory = await waitFor(() => [...md.querySelectorAll('.jdx-literature-panel:not([hidden]) .jdx-literature-event-title')].find(button => button.textContent === (isEnglish ? 'Full Markdown' : '全文 Markdown')), 'saved Markdown in workbench history')
+  sourceHistory.click()
+  await waitFor(() => md.querySelector('.jdx-literature-panel:not([hidden]) .jdx-reading-block')?.textContent.includes('SOURCE_MARKDOWN'), 'saved source Markdown')
+  await waitFor(() => md.querySelector('.jdx-literature-panel:not([hidden]) img')?.naturalWidth > 0, 'saved local figure')
   const sourcePanel = md.querySelector('.jdx-literature-panel:not([hidden])')
   assert(![...sourcePanel.querySelectorAll(':scope > .jdx-notice')].some(node => node.textContent.includes(isEnglish ? 'Complete' : '已完成')), 'Saved completion status persists')
   assert(manager.getComputedStyle(sourcePanel.querySelector('.jdx-result-tools')).backgroundColor === 'rgba(0, 0, 0, 0)', 'Source toolbar has a separate fill')
-  const capsule = sourcePanel.querySelector('.jdx-translation-capsule')
-  assert(capsule && capsule.firstElementChild.classList.contains('jdx-result-language') && capsule.lastElementChild.textContent === (isEnglish ? 'Extract again' : '重新提取'), 'Extraction capsule order')
-  const iconActions = sourcePanel.querySelectorAll('.jdx-result-tools > button')
-  assert(iconActions.length >= 2 && [...iconActions].every(button => button.classList.contains('jdx-icon-action') && button.title && button.getAttribute('aria-label') === button.title), 'Source actions lack icons/tooltips')
-  assert(manager.getComputedStyle(capsule).borderRadius === '999px', 'Translation capsule is not rounded')
-  const languageBounds = capsule.firstElementChild.getBoundingClientRect(), translateBounds = capsule.lastElementChild.getBoundingClientRect()
-  assert(Math.abs(languageBounds.right - translateBounds.left) < 2, 'Translation capsule has a gap')
+  const copy = sourcePanel.querySelector('.jdx-result-tools button[aria-label="复制 Markdown"], .jdx-result-tools button[aria-label="Copy Markdown"]')
+  assert(copy?.classList.contains('jdx-icon-action') && copy.title === copy.getAttribute('aria-label'), 'Missing saved Markdown copy action')
   await screenshot('literature-workbench-source', manager)
   md.getElementById('jdx-literature-tab-selection').click()
   await waitFor(() => md.querySelector('.jdx-literature-panel:not([hidden]) .jdx-result-tools')?.hidden, 'empty toolbar hidden')
@@ -306,6 +329,11 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     const panel = md.querySelector('.jdx-literature-panel:not([hidden])')
     assert(panel.querySelector('.jdx-detail-tabs').hidden, 'Nested analysis tabs remain')
     assert(!panel.querySelector(`.jdx-detail-panel[id$="-${tab}"]`).hidden, `Incorrect analysis content: ${tab}`)
+    if (tab === 'summary' || tab === 'notes') {
+      const analysis = panel.querySelector('.jdx-analysis-detail:not([hidden])')
+      measureContentWidth(analysis.querySelector('.jdx-detail-panel:not([hidden]) .jdx-reading-body'), tab + '-body')
+      measureContentWidth(analysis.querySelector('.jdx-analysis-reading-tools'), tab + '-actions')
+    }
     await screenshot(`literature-workbench-${tab}`, manager)
   }
   report.checks.push('panel-gutters', 'transparent-source-toolbar', 'empty-toolbar-hidden', 'flat-analysis-tabs', 'no-saved-completion-banner')
@@ -356,6 +384,12 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
   }
   const back = [...md.querySelectorAll('.jdx-literature-detail button')].find(button => /← (文献列表|Papers)/u.test(button.textContent)); back.click()
   assert(md.querySelectorAll('#jadense-analysis-history .jdx-analysis-list>.jdx-analysis-record').length === 1, 'Same parent was not grouped into one paper')
+  await wideWorkbench()
+  measureContentWidth(md.querySelector('.jdx-analysis-history-heading'), 'paper-list-heading')
+  measureContentWidth(md.querySelector('#jadense-analysis-history > .jdx-analysis-list'), 'paper-list')
+  const narrow = widthEvidence.filter(sample => sample.available <= 960 || Math.abs(sample.leftGap) > 3 || Math.abs(sample.rightGap) > 3)
+  assert(!narrow.length, 'Workbench content misses its available edges: ' + JSON.stringify(narrow))
+  report.checks.push('full-width-paper-list-and-heading', 'full-width-analysis-body-and-actions')
   await screenshot('literature-paper-list', manager)
   const siblingReader = await Zotero.Reader.open(sibling.id); await siblingReader._initPromise; await siblingReader._internalReader._primaryView.initializedPromise
   const siblingTrigger = await waitFor(() => siblingReader._iframeWindow.document.querySelector('[data-jadense-action="attach"]'), 'sibling Reader toolbar')
@@ -366,22 +400,17 @@ export async function verifyLiteratureWorkspace({ Zotero, reader, jobs, assert, 
     const option = await waitFor(() => [...doc.querySelectorAll('[role="option"]')].find(row => row.getBoundingClientRect().height > 0 && row.textContent.includes(label)), 'sibling option')
     option.click()
   }
-  await switchSibling(labels[3])
+  await switchSibling(labels.selection)
   const siblingPanel = () => siblingRoot.querySelector('.jdx-reader-workspace-content:not([hidden])')
   await waitFor(() => siblingPanel()?.textContent.includes('SIBLING_PDF_ONLY'), 'sibling selection history')
   assert(!siblingPanel().textContent.includes('CURRENT_PDF_SELECTION'), 'Primary PDF leaked after switching PDF')
-  await switchSibling(labels[2])
-  await waitFor(() => siblingPanel()?.textContent.includes(isEnglish ? 'has been retired' : '已停用'), 'legacy translation empty state')
+  await switchSibling(labels.translation)
+  await waitFor(() => siblingPanel()?.querySelector('.jdx-result-empty button')?.textContent === bilingualAction, 'saved translations empty state')
   assert(!siblingPanel().querySelector('.jdx-translation-capsule .jdx-button-primary'), 'Retired translation entry returned')
   assert(!jobs.list('extraction').some(task => task.source.itemID === sibling.id), 'Browsing translation started OCR')
   await screenshot('literature-translation-without-source', main)
   report.checks.push('legacy-translation-retired-entry', 'translation-browse-no-ocr')
-  await switchSibling(labels[1])
-  await waitFor(() => siblingPanel()?.textContent.includes(isEnglish ? 'Extract the source' : '先提取原文'), 'empty source page')
-  assert(!jobs.list('extraction').some(task => task.source.itemID === sibling.id), 'Empty source view started OCR')
-  await screenshot('literature-sibling-empty', main)
-  report.checks.push('switch-pdf-history-isolation', 'empty-source-no-dispatch')
-  report.checks.push('seven-sidebar-pages', 'source-markdown-local-images', 'no-translation-on-browse', 'current-pdf-isolation', 'analysis-sidebar', 'all-chat-reachable', 'legacy-markdown-task-translation', 'fixed-extraction-version', 'workbench-deep-link', 'paper-history-all-attachments', 'parent-paper-grouping', 'compact-light-dark-workbench')
+  report.checks.push('switch-pdf-history-isolation', 'reader-sidebar-pages', 'source-markdown-local-images', 'no-translation-on-browse', 'current-pdf-isolation', 'analysis-sidebar', 'all-chat-reachable', 'legacy-markdown-task-translation', 'fixed-extraction-version', 'workbench-deep-link', 'paper-history-all-attachments', 'parent-paper-grouping', 'compact-light-dark-workbench')
 }
 
 /** 第二个真实 Zotero 进程：不注入 runner/context，验证插件启动自动只补本地批注。 */

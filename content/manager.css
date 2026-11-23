@@ -1,3 +1,31 @@
+/* 工作台错误诊断：筛选、单条详情与整库操作在各自的作用范围内排列。 */
+.jdx-diagnostics [hidden] { display: none !important; }
+.jdx-diagnostics { overflow: auto; min-width: 0; overflow-wrap: anywhere; }
+.jdx-diagnostics :is(h2, h3, h4, p, ol) { margin: 0; }
+.jdx-diagnostic-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.jdx-diagnostic-note { color: var(--jdx-muted); line-height: 1.65; }
+.jdx-diagnostics > .jdx-diagnostic-note { margin: 6px 0 16px; }
+.jdx-diagnostic-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; margin: 18px 0; }
+.jdx-diagnostic-filters label { flex: 1 1 120px; min-width: 0; display: grid; gap: 4px; color: var(--jdx-muted); }
+.jdx-diagnostic-filters label:last-child { flex: 2 1 170px; }
+.jdx-diagnostic-filters :is(input, select) { width: 100%; min-width: 0; min-height: 34px; padding: 5px 8px; border: 1px solid var(--jdx-line-strong); border-radius: 6px; color: var(--jdx-text); background: var(--jdx-surface); }
+.jdx-diagnostic-list { display: grid; max-height: 32vh; overflow-y: auto; margin: 8px 0 18px; }
+.jdx-diagnostic-list button.jdx-button { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; text-align: start; padding: 8px; height: auto; border-radius: 4px; }
+.jdx-diagnostic-list time { color: var(--jdx-muted); font-variant-numeric: tabular-nums; }
+.jdx-diagnostic-list button[aria-pressed=true] { color: var(--jdx-active-text); background: var(--jdx-active-bg); }
+.jdx-diagnostics :focus-visible { outline: 2px solid var(--jdx-green-deep); outline-offset: -2px; }
+.jdx-diagnostic-facts { display: grid; gap: 7px; padding: 14px 0; border-top: 1px solid var(--jdx-line); }
+.jdx-diagnostic-facts ol { padding-inline-start: 24px; }
+.jdx-diagnostic-facts h4 { margin-top: 8px; }
+.jdx-diagnostic-facts summary { cursor: pointer; }
+.jdx-diagnostic-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .94em; }
+.jdx-diagnostic-empty { padding: 18px 0; }
+.jdx-diagnostic-manage { display: grid; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--jdx-line); }
+.jdx-diagnostic-clear { padding-top: 8px; border-top: 1px solid var(--jdx-line); }
+.jdx-diagnostic-feedback:empty { margin: 0; height: 0; }
+.jdx-diagnostic-facts .jdx-diagnostic-feedback:empty { margin-block-end: -7px; }
+.jdx-diagnostic-feedback:not(:empty) { margin-top: 8px; }
+
 :root {
   color-scheme: light;
   --jdx-background: #ffffff;
@@ -61,6 +89,9 @@ body {
 head {
   display: none;
 }
+
+/* Gecko 在计算工作台原生窗口下限时读取根节点；下限需要先于窄窗媒体查询生效。 */
+#jadense-manager-document { min-width: 640px; }
 
 body {
   display: block;
@@ -599,8 +630,30 @@ textarea {
 }
 
 .jdx-manager-account-inline-status {
-  min-height: 20px;
-  margin-top: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+#jadense-manager-section-migrate [hidden],
+#jadense-manager-section-migrate :is(.jdx-manager-inline-status, .jdx-manager-log, .jdx-manager-issues):empty {
+  display: none;
+}
+
+#jadense-connection-panel-account .jdx-manager-actions {
+  margin: 0;
+}
+
+.jdx-manager-upload-scope {
+  color: var(--jdx-text);
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+#jadense-connection-panel-sync .jdx-manager-actions button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .jdx-manager-settings-card {
@@ -1603,7 +1656,7 @@ textarea {
 .jdx-help-dialog h2 { font-size: 18px; }
 .jdx-help-dialog p { line-height: 1.7; }
 .jdx-help-description p:first-child { margin-top: 12px; }
-.jdx-help-star { margin: 14px 0 0; padding: 10px 12px; border-inline-start: 2px solid var(--jdx-green); background: var(--jdx-press-bg); border-radius: 0 6px 6px 0; }
+.jdx-help-star { margin: 14px 0 0; padding: 10px 12px; background: var(--jdx-press-bg); border-radius: 6px; }
 .jdx-help-release-notes[hidden] { display: none; }
 .jdx-help-release-notes { max-height: min(34vh, 240px); overflow: auto; margin: 12px 0; padding: 12px 14px; background: var(--jdx-press-bg); border-radius: 8px; overflow-wrap: anywhere; }
 .jdx-help-release-notes h3 { margin: 0 0 6px; font-size: 14px; }
@@ -1635,7 +1688,7 @@ textarea {
 .jdx-quick-start-options li::before { content: counter(quick-start); position: absolute; left: 14px; top: 12px; display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: var(--jdx-active-text); background: var(--jdx-active-bg); font-weight: 700; }
 .jdx-quick-start-options strong { display: block; margin-bottom: 4px; }
 .jdx-quick-start-options p { margin: 0; color: var(--jdx-muted); line-height: 1.65; }
-.jdx-quick-start-note { padding: 10px 12px; border-inline-start: 2px solid var(--jdx-green); background: var(--jdx-press-bg); border-radius: 0 6px 6px 0; }
+.jdx-quick-start-note { padding: 10px 12px; background: var(--jdx-press-bg); border-radius: 6px; }
 .jdx-chat-source-panel { background: var(--jdx-surface-sunken); }
 
 .jdx-titlebar .jdx-manager-sidebar-toggle { padding: 4px; color: var(--jdx-muted); }

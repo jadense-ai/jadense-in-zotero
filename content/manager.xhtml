@@ -175,14 +175,14 @@
                 <ol>
                   <li data-ui-en="Open the PDF in Zotero. Make sure the attachment is downloaded and its text is readable.">在 Zotero 中打开要解析的 PDF，确认附件已下载且可以读取文字。</li>
                   <li data-ui-en="If you want to change the model, open Settings → Feature settings and choose an available Jadense or saved BYOK model. This does not change the Chat or translation model.">如需更换模型，到「设置 → 功能配置」选择可用的攻玉模型或已保存的 BYOK 模型。这里的选择不会改变对话和翻译模型。</li>
-                  <li data-ui-en="Click Analyze in the PDF reader (inside Reading actions in a narrow window). The workbench shows analysis progress and extracts references for the same PDF. Click Stop to interrupt the analysis.">点击 PDF 阅读器的「解析」（窄窗口先展开「阅读操作」菜单）。工作台显示解析进度，同时提取当前 PDF 的参考文献；需要中断解析时点击「停止」。</li>
+                  <li data-ui-en="Click Analyze in the PDF reader (inside Reading actions in a narrow window). You can follow progress in the reader and click Stop to pause the analysis.">点击 PDF 阅读器的「解析」（窄窗口先展开「阅读操作」菜单）。你可以在阅读器中查看进度，点击「停止」暂停解析。</li>
                   <li data-ui-en="Read the summary first, then return to the PDF annotations and original pages to check important claims against the source.">完成后先看摘要，再回到 PDF 批注和原文页面，核对重要结论是否有依据。</li>
                 </ol>
                 <h4 data-ui-en="Where to find results">在哪里查看结果</h4>
                 <p data-ui-en="Analysis history shows the latest result for each PDF. Click a title to open Summary, Analysis notes, and References. Open PDF is a separate action. Select any part of the summary or notes to copy it into your own notes.">「解析历史」按 PDF 展示每篇文献最近一次的结果。点击标题进入详情，在「解析总结 / 解析笔记 / 参考文献」之间切换；「打开原文」单独用于回到 PDF。需要整理成自己的笔记时，可在正文中选中需要的内容复制。</p>
                 <p data-ui-en="Parts that can be matched to the source may be written as Zotero annotations. You can edit, filter, and export them. If a passage cannot be placed back into the PDF, it stays in Analysis notes. Analysis results and AI Chat are separate.">能够对应到原文位置的内容会写成 Zotero 批注，你可以继续编辑、筛选和导出。暂时无法放回 PDF 的内容，会保留在「解析笔记」中。解析结果和 AI 对话彼此独立。</p>
                 <h4 data-ui-en="Extract references">解析参考文献</h4>
-                <p data-ui-en="When analysis starts, the plugin also reads the paper&#x27;s reference list. If no list is shown, open References and click Extract references. A pause stops both tasks, while content already received is kept.">开始解析时，插件会同时整理论文末尾的参考文献。如果没有看到参考文献结果，可以打开「参考文献」标签，点击「提取参考文献」。暂停会同时暂停两项任务，但已经得到的内容会保留。</p>
+                <p data-ui-en="Automatic extraction is off by default. To extract references for one paper, open References and click Extract references. To do this whenever you analyze a paper, turn on “Automatically extract references during analysis” in Settings → Feature settings → Literature analysis.">自动提取默认关闭。只需提取某篇论文时，可在「参考文献」页点击「提取参考文献」。如需每次解析文献时一起提取，可在「设置 → 功能配置 → 文献解析」中开启「解析文献时自动提取参考文献」。</p>
                 <h4 data-ui-en="What you can do after references are ready">参考文献解析成功后，可以做什么</h4>
                 <ol>
                   <li data-ui-en="Search by title, author, or DOI, and filter the list to find references that are ready, still being checked, or already in your library.">按标题、作者或 DOI 搜索，也可以按状态筛选，快速找到已核验、待核验或已经在文库中的条目。</li>
@@ -329,7 +329,7 @@
           <header class="jdx-manager-section-header">
             <div>
               <h2 data-ui-en="Jadense academic">攻玉学术</h2>
-              <p data-ui-en="View your Jadense account and upload papers to Jadense folders. Check in on the Jadense website. Connection details are stored only on this computer.">查看攻玉账号并把文献上传到攻玉收藏夹。每日签到请前往攻玉网页。连接信息只保存在这台电脑上。</p>
+              <p data-ui-en="Manage your account and upload Zotero papers to a Jadense folder.">查看账号与积分，或将 Zotero 文献上传到攻玉收藏夹。</p>
             </div>
           </header>
 
@@ -339,17 +339,16 @@
           </div>
 
           <section id="jadense-connection-panel-account" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-account" hidden="hidden">
-            <div class="jdx-manager-actions jdx-manager-account-links">
-              <button id="jadense-manager-open-jadense" type="button" class="jdx-manager-primary" data-ui-en="Go to Jadense">前往攻玉</button>
-              <button id="jadense-manager-open-check-in" type="button" data-ui-en="Open check-in page">打开签到页</button>
-              <button id="jadense-manager-open-billing" type="button" data-ui-en="Subscription and usage">订阅与用量</button>
+            <div id="jadense-manager-account-empty" class="jdx-manager-settings-card" hidden="hidden">
+              <h3 data-ui-en="Connect your Jadense account">连接你的攻玉账号</h3>
+              <p data-ui-en="Save a token on this computer to see your subscription, available points, and check-in rewards.">在这台电脑保存令牌后，即可查看订阅方案、可用积分与签到奖励。</p>
+              <div class="jdx-manager-actions"><button id="jadense-manager-account-connect" type="button" class="jdx-manager-primary" data-ui-en="Connect Jadense">连接攻玉</button></div>
             </div>
-            <div class="jdx-manager-connection-grid">
+            <div id="jadense-manager-account-details" class="jdx-manager-connection-grid">
               <section class="jdx-manager-settings-card" data-connection-section="account">
                 <div class="jdx-manager-settings-card-header jdx-manager-account-header">
                   <div>
                     <h3 data-ui-en="Your Jadense">你的攻玉</h3>
-                    <p data-ui-en="View your Jadense account, subscription, and points. Visit the Jadense website for free daily check-in points.">查看攻玉账号、订阅和积分；前往攻玉网页每日签到可免费领取积分。</p>
                   </div>
                   <div class="jdx-manager-actions jdx-manager-account-header-actions">
                     <button id="jadense-manager-account-refresh" type="button" data-ui-en="Refresh">刷新</button>
@@ -360,7 +359,13 @@
                   <div><dt data-ui-en="Subscription">订阅方案</dt><dd id="jadense-manager-account-plan">—</dd></div>
                 </dl>
                 <div id="jadense-manager-account-profile-status" class="jdx-manager-inline-status jdx-manager-account-inline-status" role="status"></div>
+                <div class="jdx-manager-actions">
+                  <button id="jadense-manager-account-profile-retry" type="button" hidden="hidden" data-ui-en="Retry account details">重试账号资料</button>
+                  <button id="jadense-manager-open-jadense" type="button" data-ui-en="Go to Jadense">前往攻玉</button>
+                  <button id="jadense-manager-open-billing" type="button" data-ui-en="Subscription and usage">订阅与用量</button>
+                </div>
 
+                <h3 data-ui-en="Points and check-in">积分与签到</h3>
                 <dl class="jdx-manager-summary jdx-manager-account-summary">
                   <div><dt data-ui-en="Available points">可用积分</dt><dd id="jadense-manager-account-balance">—</dd></div>
                   <div><dt data-ui-en="Points source">积分来源</dt><dd id="jadense-manager-account-source">—</dd></div>
@@ -368,6 +373,10 @@
                   <div><dt data-ui-en="Check-in streak">连续签到</dt><dd id="jadense-manager-account-streak">—</dd></div>
                 </dl>
                 <div id="jadense-manager-account-status" class="jdx-manager-inline-status jdx-manager-account-inline-status" role="status"></div>
+                <div class="jdx-manager-actions">
+                  <button id="jadense-manager-account-points-retry" type="button" hidden="hidden" data-ui-en="Retry points and check-in">重试积分与签到</button>
+                  <button id="jadense-manager-open-check-in" type="button" data-ui-en="Open check-in page">打开签到页</button>
+                </div>
 
               </section>
             </div>
@@ -391,6 +400,7 @@
                   <input id="jadense-manager-include-pdf" type="checkbox" />
                   <span data-ui-en="Include readable PDF full text when uploading papers">上传文献时一并上传可读取的 PDF 全文</span>
                 </label>
+                <div id="jadense-manager-destination-feedback" class="jdx-manager-inline-status" role="status"></div>
               </div>
             </section>
 
@@ -413,10 +423,11 @@
                 </dl>
                 <ul id="jadense-manager-migration-issues" class="jdx-manager-issues"></ul>
               </div>
+              <p id="jadense-manager-upload-scope" class="jdx-manager-upload-scope"></p>
               <div class="jdx-manager-actions">
-                <button id="jadense-manager-preview-collection" type="button" data-ui-en="Preview collection">预览收藏夹内容</button>
                 <button id="jadense-manager-export-items" type="button" data-ui-en="Upload selected items">上传选中条目</button>
-                <button id="jadense-manager-export-collection" type="button" class="jdx-manager-primary" data-ui-en="Upload entire collection">上传整个收藏夹</button>
+                <button id="jadense-manager-export-collection" type="button" data-ui-en="Upload entire collection">上传整个收藏夹</button>
+                <button id="jadense-manager-preview-collection" type="button" data-ui-en="Preview collection">预览收藏夹内容</button>
               </div>
               <pre id="jadense-manager-migration-status" class="jdx-manager-log" role="status"></pre>
             </section>
@@ -539,7 +550,7 @@
                   <div class="jdx-manager-byok-panel-header">
                     <div>
                       <h4 data-ui-en="Provider connection">提供商连接</h4>
-                      <p data-ui-en="Each provider keeps its own endpoint and key">每个提供商独立保存地址和密钥</p>
+                    <p data-ui-en="Save changes to apply this provider’s address and key.">地址和密钥在点击「保存提供商」后生效。</p>
                     </div>
                     <button id="jadense-manager-byok-provider-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
                   </div>
@@ -572,6 +583,8 @@
                   <div class="jdx-manager-actions jdx-manager-actions-end">
                     <button id="jadense-manager-byok-provider-save" type="button" class="jdx-manager-primary" data-ui-en="Save provider">保存提供商</button>
                   </div>
+                  <p class="jdx-manager-settings-note" data-ui-en="Changing the protocol or base URL reuses the saved key. Verify the destination before saving.">更改协议或基础地址会继续使用已保存的密钥，请确认目标可信。</p>
+                  <div id="jadense-manager-byok-provider-status" class="jdx-manager-inline-status" role="status"></div>
                   <div class="jdx-manager-byok-panel" aria-labelledby="jadense-manager-model-heading">
                     <div class="jdx-manager-byok-panel-header">
                       <div>
@@ -604,6 +617,7 @@
                           </label>
                         </div>
                         <div id="jadense-manager-byok-thinking-levels"></div>
+                        <p class="jdx-manager-settings-note" data-ui-en="Testing sends a real request with the unsaved form, up to 3000 tokens, and may incur charges. Choose Save model to apply your edits.">测试会使用未保存表单发起一次最多 3000 个词元的真实请求，可能计费。点击「保存模型」后应用修改。</p>
                         <div class="jdx-manager-actions jdx-manager-actions-end">
                           <button id="jadense-manager-byok-test" type="button" data-ui-en="Test current form">测试当前表单</button>
                           <button id="jadense-manager-byok-save" type="button" class="jdx-manager-primary" data-ui-en="Save model">保存模型</button>
@@ -611,11 +625,10 @@
                       </div>
                     </div>
                     <div id="jadense-manager-byok-model-select" class="jdx-manager-byok-model-list" role="group" aria-label="模型" data-ui-en-aria-label="Models for this provider"></div>
+                    <div id="jadense-manager-byok-status" class="jdx-manager-inline-status" role="status"></div>
                   </div>
                 </div>
               </div>
-              <p class="jdx-manager-settings-note" data-ui-en="Changing a provider&#x27;s protocol or base URL continues to use its saved key. Check that the destination is trusted. Testing sends a real request with the unsaved form, up to 3000 tokens, and may incur charges.">更改当前提供商的协议或基础地址会继续复用它已保存的密钥。请确认目标可信；测试会使用未保存表单发起一次最多 3000 个词元的真实请求，可能计费。</p>
-              <div id="jadense-manager-byok-status" class="jdx-manager-inline-status" role="status"></div>
               <div class="jdx-manager-actions jdx-manager-actions-end">
                 <button id="jadense-manager-byok-clear" type="button" class="jdx-manager-danger" data-ui-en="Clear BYOK">清除 BYOK</button>
               </div>

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { JSDOM } from "jsdom"
 
 import { describe, expect, it, vi } from "vitest"
 
@@ -7,9 +8,9 @@ import { addLocalChatSources, appendLocalChatMessage, createLocalChatSession, re
 import type { PaperAnalysisRecord } from "@/chat/paper-analysis-history"
 import { normalizeChatSources } from "@/chat/research-context"
 import type { TranslationRecord } from "@/chat/translation-history"
-import { JadenseApiError, type JadenseChatModelCatalog } from "@/jadense/api"
+import { JadenseApiClient, JadenseApiError, type JadenseChatModelCatalog } from "@/jadense/api"
 import type { ZoteroLike } from "./runtime"
-import { renderNewChatNavigation, wireGuideNavigation } from "./manager-page"
+import { refreshJadenseAccount, refreshUploadSelection, renderNewChatNavigation, wireGuideNavigation } from "./manager-page"
 
 describe("built-in getting started guide", () => {
   it("switches one chapter at a time with clicks and vertical keyboard navigation without a host", () => {
@@ -557,6 +558,37 @@ describe("manager connection indicator", () => {
     expect(source).not.toContain("accountCheckInBusy")
   })
 
+  it.each(["profile", "points"] as const)("retries only the failed %s projection and keeps its sibling visible", async area => {
+    const doc = new JSDOM().window.document
+    const keys = ["accountName", "accountPlan", "accountBalance", "accountSource", "accountReward", "accountStreak", "accountProfileStatus", "accountStatus", "connectionStatus"]
+    const elements = Object.fromEntries(keys.map(key => [key, doc.createElement("div")])) as Parameters<typeof refreshJadenseAccount>[0]
+    elements.profileRetry = doc.createElement("button")
+    elements.pointsRetry = doc.createElement("button")
+    elements.accountRefresh = doc.createElement("button")
+    const profile = vi.spyOn(JadenseApiClient.prototype, "getCurrentProfile").mockResolvedValue({
+      userId: "p", displayName: "Reader", avatarUrl: null, avatarSrc: null, subscription: { code: "basic", label: "Basic" },
+    })
+    const points = vi.spyOn(JadenseApiClient.prototype, "getPointsStatus").mockResolvedValue({
+      billing: { sourceKind: "personal", balancePoints: 16 }, checkIn: { signedToday: true, currentStreakDays: 1, todayReward: { grantedPoints: 8 } },
+    })
+    const failed = area === "profile" ? profile : points
+    const retry = area === "profile" ? elements.profileRetry : elements.pointsRetry
+    failed.mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("window", { fetch: vi.fn() })
+    try {
+      const zotero = fakeZotero({ token: "test" })
+      await refreshJadenseAccount(elements, zotero)
+      expect(retry.hidden).toBe(false)
+      expect(area === "profile" ? elements.accountBalance.textContent : elements.accountName.textContent).toMatch(/16|Reader/)
+      await refreshJadenseAccount(elements, zotero, area)
+      expect(retry.hidden).toBe(true)
+      expect(profile).toHaveBeenCalledTimes(area === "profile" ? 2 : 1)
+      expect(points).toHaveBeenCalledTimes(area === "points" ? 2 : 1)
+    } finally {
+      profile.mockRestore(); points.mockRestore(); vi.unstubAllGlobals()
+    }
+  })
+
   it("keeps refresh disabled while its independent account projections are pending", () => {
     expect(accountRefreshIsDisabled(true)).toBe(true)
     expect(accountRefreshIsDisabled(false)).toBe(false)
@@ -829,7 +861,9 @@ describe("manager page state", () => {
     expect(details).toContain('id="jadense-chat-sources"')
     expect(xhtml.indexOf('id="jadense-chat-source-panel"')).toBeGreaterThan(xhtml.indexOf("</form>"))
     expect(xhtml).not.toContain("jadense-chat-analyze-paper")
-    expect(xhtml).not.toContain("解析文献")
+    const chat = new JSDOM(xhtml).window.document.getElementById("jadense-manager-section-chat")
+    expect(chat).not.toBeNull()
+    expect(chat!.textContent).not.toContain("解析文献")
     expect(xhtml).not.toContain("主窗口选中")
   })
 
@@ -992,6 +1026,30 @@ describe("manager page state", () => {
         "请先在 Zotero 主窗口选中文献条目或收藏夹。",
       ],
     })
+  })
+
+  it("updates the primary upload, visible scope and enabled actions as the main-window selection changes", () => {
+    const items = [{ id: 42 }]
+    const zotero = fakeZotero({ token: "test", defaultFolderId: "folder-test", includePdf: true, selectedItems: items, selectedCollection: { name: "Shelf" } })
+    const doc = new JSDOM().window.document
+    const elements = {
+      collectionSummary: doc.createElement("dd"), itemSummary: doc.createElement("dd"), uploadIssues: doc.createElement("ul"),
+      uploadScope: doc.createElement("p"), previewCollection: doc.createElement("button"), exportItems: doc.createElement("button"), exportCollection: doc.createElement("button"),
+    }
+    refreshUploadSelection(elements, zotero)
+    expect(elements.exportItems.textContent).toContain("1")
+    expect(elements.exportItems.classList.contains("jdx-manager-primary")).toBe(true)
+    expect(elements.exportCollection.classList.contains("jdx-manager-primary")).toBe(false)
+    expect(elements.uploadScope.textContent).toContain("folder-test")
+    expect(elements.uploadScope.textContent).toContain("PDF")
+    items.pop()
+    refreshUploadSelection(elements, zotero)
+    expect(elements.exportItems.disabled).toBe(true)
+    expect(elements.exportCollection.classList.contains("jdx-manager-primary")).toBe(true)
+    expect(elements.uploadScope.textContent).toContain("Shelf")
+    refreshUploadSelection(elements, fakeZotero({}))
+    expect(elements.exportCollection.disabled).toBe(true)
+    expect(elements.previewCollection.disabled).toBe(true)
   })
 
   it("enables collection export when connection and collection context are ready", () => {

@@ -7,6 +7,7 @@ import { openOriginalPDF, openSavedPDFTranslation } from './pdf-translation-read
 import { sameAttachment } from './document-results'
 import { translationLanguageDisplayLabel } from '@/chat/translation-languages'
 import { action, badge, element, notice } from './ui/controls'
+import { createChevron } from './ui/chevron'
 import { uiText } from './ui-preferences'
 
 export function pdfFileStatus(task: PDFTranslationTask) {
@@ -19,7 +20,7 @@ export function pdfFileStatus(task: PDFTranslationTask) {
 export function mountPDFTranslationFiles(root: HTMLElement, host: ZoteroLike, source: DocumentIdentity, selectedID?: string) {
   const doc = root.ownerDocument, jobs = pdfTranslationJobs(host), status = notice(doc), list = element(doc, 'div')
   root.append(status, list)
-  let disposed = false, signature = '', busy = false
+  let disposed = false, signature = '', busy = false, selectedVisible = false
   const perform = async (button: HTMLButtonElement, work: () => Promise<unknown>) => {
     if (busy) return
     const enabled = Array.from(list.querySelectorAll<HTMLButtonElement>('button')).filter(control => !control.disabled)
@@ -38,23 +39,37 @@ export function mountPDFTranslationFiles(root: HTMLElement, host: ZoteroLike, so
       row.dataset.pdfTaskId = task.id
       if (task.id === selectedID) row.setAttribute('aria-current', 'true')
       heading.append(element(doc, 'strong', '', `${translationLanguageDisplayLabel(task.languages.sourceLanguage)} → ${translationLanguageDisplayLabel(task.languages.targetLanguage)}`), badge(doc, pdfFileStatus(task), task.status === 'complete' ? 'complete' : 'neutral'))
+      if (task.status === 'waiting') heading.append(action(doc, uiText('取消', 'Cancel'), () => jobs.cancel(task.id)))
+      else if (task.status !== 'complete') {
+        const retry = action(doc, uiText('补译未完成部分', 'Translate remaining passages'), () => jobs.retry(task.id))
+        retry.disabled = jobs.isActive(task.id); heading.append(retry)
+      }
       const date = task.createdAt && Number.isFinite(Date.parse(task.createdAt)) ? new Date(task.createdAt).toLocaleString() : uiText('历史记录（时间未知）', 'Historical record (date unknown)')
       row.append(heading, element(doc, 'p', 'jdx-literature-meta', `${date} · ${task.pages} ${uiText('页', 'pages')}`))
       row.append(element(doc, 'p', 'jdx-literature-meta', `${pdfModeLabel(task.mode ?? 'full')} · ${pdfCoverageText(task.artifact?.coverage ?? task.coverage)}`))
       if (task.error) row.append(element(doc, 'p', 'jdx-notice', task.error))
       const controls = element(doc, 'div', 'jdx-actions')
       const original = action(doc, uiText('打开原文 PDF', 'Open original PDF'), () => { void perform(original, () => openOriginalPDF(host, task.source)) })
-      const open = action(doc, uiText('打开双语对照阅读', 'Open bilingual PDF'), () => { void perform(open, () => openSavedPDFTranslation(host, task.id)) })
-      controls.append(original, open)
+      const open = action(doc, uiText('打开双语对照阅读', 'Open bilingual PDF'), () => { void perform(open, () => openSavedPDFTranslation(host, task.id)) }, 'primary')
+      controls.append(open, original)
+      const exports = element(doc, 'details', 'jdx-pdf-exports'), trigger = element(doc, 'summary', '', uiText('导出 PDF', 'Export PDF'))
+      trigger.append(createChevron(doc, 'jdx-export-chevron', 'down', 14))
+      const exportOptions = element(doc, 'div', 'jdx-pdf-export-options')
+      exports.append(trigger, exportOptions)
       for (const [kind, label] of [['mono', uiText('导出译文 PDF', 'Export translated PDF')], ['dual', uiText('导出双语 PDF', 'Export bilingual PDF')]] as const) {
-        const save = action(doc, label, () => { void perform(save, () => jobs.export(task.id, kind, doc.defaultView!)) })
-        save.disabled = !jobs.hasOutput(task); controls.append(save)
+        const save = action(doc, label, () => { exports.open = false; trigger.focus(); void perform(save, () => jobs.export(task.id, kind, doc.defaultView!)) })
+        save.disabled = !jobs.hasOutput(task); exportOptions.append(save)
       }
-      if (task.status === 'waiting') controls.append(action(doc, uiText('取消', 'Cancel'), () => jobs.cancel(task.id)))
-      else if (task.status !== 'complete') { const retry = action(doc, uiText('补译未完成部分', 'Translate remaining passages'), () => jobs.retry(task.id)); retry.disabled = jobs.isActive(task.id); controls.append(retry) }
+      exports.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && exports.open) { event.preventDefault(); exports.open = false; trigger.focus() }
+      })
+      exports.addEventListener('focusout', event => { if (!exports.contains(event.relatedTarget as Node | null)) exports.open = false })
+      if (jobs.hasOutput(task)) controls.append(exports)
       open.disabled = !jobs.hasOutput(task); row.append(controls); list.append(row)
     }
     if (!tasks.length) list.append(element(doc, 'p', 'jdx-result-empty', uiText('暂无对照翻译。请在 PDF 阅读器工具条中使用“对照翻译”，完成后会自动显示在这里。', 'No bilingual PDFs yet. Use Bilingual PDF in the PDF reader toolbar. Completed files appear here automatically.')))
+    const current = selectedID && list.querySelector<HTMLElement>('[aria-current=true]')
+    if (current && !selectedVisible) { current.scrollIntoView?.({ block: 'nearest' }); selectedVisible = true }
   }
   refresh()
   return { refresh, remove() { disposed = true } }
