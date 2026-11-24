@@ -1,9 +1,20 @@
-/** 静默检查覆盖跨窗口并发、失败恢复和正式版筛选后的展示条件。 */
+/** 静默检查与自动更新弹窗测试：覆盖跨窗口并发、失败恢复、三大下载渠道与状态反馈。 */
+import { JSDOM } from 'jsdom'
 import { afterEach, expect, it, vi } from 'vitest'
-import { silentlyCheckForUpdates } from './update-notification'
-import { checkLatestRelease, installedPluginVersion } from './manager-help'
+import { showUpdateDialog, silentlyCheckForUpdates } from './update-notification'
+import { checkLatestRelease, installedPluginVersion, openHelpLink } from './manager-help'
+import { BAIDU_NETDISK_URL, QUARK_DRIVE_URL } from './update-channels'
 
-vi.mock('./manager-help', () => ({ installedPluginVersion: vi.fn(), checkLatestRelease: vi.fn(), compareGeckoVersions: vi.fn(), openHelpLink: vi.fn() }))
+vi.mock('./manager-help', async importOriginal => {
+  const actual = await importOriginal<typeof import('./manager-help')>()
+  return {
+    ...actual,
+    installedPluginVersion: vi.fn(),
+    checkLatestRelease: vi.fn(),
+    compareGeckoVersions: vi.fn(),
+    openHelpLink: vi.fn(),
+  }
+})
 afterEach(() => { vi.resetAllMocks(); vi.useRealTimers() })
 
 function fixture() {
@@ -45,4 +56,52 @@ it('defers an available release in an inactive window, and never repeats a shown
   win.addEventListener.mockClear()
   await silentlyCheckForUpdates(document, host, 'id')
   expect(win.addEventListener).not.toHaveBeenCalled()
+})
+
+it('renders three channels with domestic guidance in showUpdateDialog and opens each link cleanly', () => {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>')
+  const doc = dom.window.document
+  const proto = dom.window.HTMLDialogElement?.prototype ?? dom.window.HTMLElement.prototype
+  const showModal = vi.fn(function (this: HTMLElement) { this.setAttribute('open', '') })
+  const close = vi.fn(function (this: HTMLElement) {
+    this.removeAttribute('open')
+    this.dispatchEvent(new dom.window.Event('close'))
+  })
+  Object.defineProperty(proto, 'showModal', { value: showModal, configurable: true })
+  Object.defineProperty(proto, 'close', { value: close, configurable: true })
+
+  const releaseUrl = 'https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20'
+  const host = { launchURL: vi.fn() }
+  const opened = showUpdateDialog(doc, host, {
+    current: '0.6.19',
+    latest: '0.6.20',
+    state: 'available',
+    url: releaseUrl,
+    notes: { zhCN: ['支持多渠道更新下载。'], enUS: ['Support multi-channel update downloads.'] },
+  })
+  expect(opened).toBe(true)
+
+  const dialog = doc.getElementById('jadense-update-dialog')!
+  expect(dialog).toBeTruthy()
+  expect(dialog.querySelectorAll('.jdx-update-channel-row')).toHaveLength(3)
+  expect(dialog.querySelector('.jdx-update-channels-tip')?.textContent).toContain('网盘')
+
+  dialog.querySelector<HTMLButtonElement>('[data-channel-open="baidu"]')!.click()
+  expect(openHelpLink).toHaveBeenCalledWith(host, BAIDU_NETDISK_URL)
+  expect(dialog.querySelector('[role="status"]')?.textContent).toContain('4sci')
+  // 打开某个渠道后不立即关闭弹窗，方便用户复制提取码或切换其他镜像。
+  expect(doc.getElementById('jadense-update-dialog')).toBe(dialog)
+
+  dialog.querySelector<HTMLButtonElement>('[data-channel-open="quark"]')!.click()
+  expect(openHelpLink).toHaveBeenCalledWith(host, QUARK_DRIVE_URL)
+
+  dialog.querySelector<HTMLButtonElement>('[data-channel-open="github"]')!.click()
+  expect(openHelpLink).toHaveBeenCalledWith(host, releaseUrl)
+
+  vi.mocked(openHelpLink).mockImplementationOnce(() => { throw new Error('browser unavailable') })
+  dialog.querySelector<HTMLButtonElement>('[data-channel-open="baidu"]')!.click()
+  expect(dialog.querySelector<HTMLElement>('[role="status"]')?.dataset.kind).toBe('error')
+
+  dialog.querySelector<HTMLButtonElement>('footer button')!.click()
+  expect(doc.getElementById('jadense-update-dialog')).toBeNull()
 })

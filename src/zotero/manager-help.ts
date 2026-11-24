@@ -1,5 +1,6 @@
 /** 工作台帮助与手动 Release 检查；仅显示信息，不参与业务请求或自动更新渠道。 */
 import { getUiLocale, uiText, type UiLocale } from "./ui-preferences"
+import { channelOpenedMessage, createDownloadChannelsPanel, UPDATE_CHANNELS_STYLES } from "./update-channels"
 
 export const REPOSITORY_URL = "https://github.com/jadense-ai/jadense-in-zotero"
 export const RELEASES_URL = `${REPOSITORY_URL}/releases`
@@ -104,7 +105,7 @@ export function openHelpLink(host: { launchURL?: (url: string) => void } | null,
   host.launchURL(url)
 }
 
-/** 原生 dialog 管理模态焦点和 Escape，关闭后返回帮助按钮。 */
+/** 原生 dialog 管理模态焦点和 Escape，关闭后返回帮助按钮；发现更新或检查失败时呈现三大下载渠道。 */
 export function wireManagerHelp(document: Document, host: { launchURL?: (url: string) => void } | null, pluginID: string) {
   const win = document.defaultView!
   const get = <T extends HTMLElement>(id: string) => document.getElementById(`jadense-${id}`) as T
@@ -118,12 +119,28 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
   const notes = document.createElementNS("http://www.w3.org/1999/xhtml", "section")
   notes.className = "jdx-help-release-notes"
   notes.hidden = true
-  status.after(notes)
+  const channels = document.createElementNS("http://www.w3.org/1999/xhtml", "div")
+  channels.className = "jdx-help-channels"
+  channels.hidden = true
+  if (!document.getElementById("jadense-update-channels-style")) {
+    const channelStyle = document.createElementNS("http://www.w3.org/1999/xhtml", "style")
+    channelStyle.id = "jadense-update-channels-style"
+    channelStyle.textContent = UPDATE_CHANNELS_STYLES
+    ;(document.head ?? document.documentElement).append(channelStyle)
+  }
+  status.after(notes, channels)
   const retry = get<HTMLButtonElement>("help-retry")
   const releaseButton = get<HTMLButtonElement>("help-release")
   const website = get<HTMLButtonElement>("help-website")
   let releaseURL = RELEASES_URL
   let pending: AbortController | undefined
+  let cleanupChannels: (() => void) | undefined
+  const clearChannels = () => {
+    cleanupChannels?.()
+    cleanupChannels = undefined
+    channels.hidden = true
+    channels.replaceChildren()
+  }
   const closeMenu = (focus = false) => {
     menu.hidden = true
     trigger.setAttribute("aria-expanded", "false")
@@ -175,13 +192,39 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
     version.textContent = ""
     notes.hidden = true
     notes.replaceChildren()
+    clearChannels()
     if (!dialog.open) dialog.showModal()
     if (!update) void loadVersion().then(value => { version.textContent = uiText(`安装版本：${value}`, `Installed version: ${value}`) }).catch(() => { version.textContent = uiText("安装版本暂不可用", "Installed version unavailable") })
+  }
+  const showChannels = (options: { version?: string; githubUrl: string }) => {
+    clearChannels()
+    const panel = createDownloadChannelsPanel(document, {
+      version: options.version,
+      githubUrl: options.githubUrl,
+      onOpen: channel => {
+        try {
+          openHelpLink(host, channel.url)
+          status.textContent = channelOpenedMessage(channel)
+        } catch {
+          status.textContent = uiText("无法打开默认浏览器，请重试。", "Unable to open the default browser. Please retry.")
+        }
+      },
+      onCopyPasscode: (channel, copied) => {
+        status.textContent = copied
+          ? uiText(`已复制${channel.name}提取码：${channel.passcode}`, `Copied ${channel.name} code: ${channel.passcode}`)
+          : uiText(`未能写入剪贴板，请手动输入提取码：${channel.passcode}`, `Could not copy automatically. Code: ${channel.passcode}`)
+      },
+    })
+    cleanupChannels = panel.cleanup
+    channels.replaceChildren(panel.element)
+    channels.hidden = false
+    releaseButton.hidden = true
   }
   const check = async () => {
     pending?.abort()
     const operation = new AbortController(); pending = operation
     show(true); releaseURL = RELEASES_URL
+    releaseButton.hidden = true
     status.textContent = uiText("检查中…", "Checking…")
     retry.disabled = true
     try {
@@ -206,8 +249,17 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
         notes.replaceChildren(heading, list)
         notes.hidden = false
       }
+      if (result.state === "available") {
+        showChannels({ version: result.latest, githubUrl: result.url })
+      } else {
+        clearChannels()
+        releaseButton.hidden = false
+      }
     } catch {
-      if (!operation.signal.aborted) status.textContent = uiText("检查失败：网络超时、请求受限或暂无可读取的正式版本。请重试或打开发布页。", "Check failed: the network timed out, requests are limited, or no readable stable release is available. Retry or open releases.")
+      if (!operation.signal.aborted) {
+        status.textContent = uiText("检查失败：网络超时、请求受限或暂无可读取的正式版本。可重试，或直接通过下方网盘／发布页下载。", "Check failed: the network timed out, requests are limited, or no readable stable release is available. Retry or download directly below.")
+        showChannels({ githubUrl: RELEASES_URL })
+      }
     } finally { if (pending === operation) retry.disabled = false }
   }
   get("help-about").addEventListener("click", () => { status.textContent = ""; show(false) })
@@ -219,6 +271,6 @@ export function wireManagerHelp(document: Document, host: { launchURL?: (url: st
   get("github").addEventListener("click", () => open(REPOSITORY_URL))
   get("check-in").addEventListener("click", () => open(JADENSE_WORKBENCH_URL))
   get("help-close").addEventListener("click", () => dialog.close())
-  dialog.addEventListener("close", () => { pending?.abort(); trigger.focus() })
-  win.addEventListener("unload", () => pending?.abort(), { once: true })
+  dialog.addEventListener("close", () => { pending?.abort(); clearChannels(); trigger.focus() })
+  win.addEventListener("unload", () => { pending?.abort(); clearChannels() }, { once: true })
 }

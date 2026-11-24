@@ -1,5 +1,13 @@
 # 更新说明 / Changelog
 
+## 0.6.21 — 2026-11-25
+
+- 新版提示展示当前版本、可用版本、更新内容，以及百度网盘、夸克网盘和 GitHub 下载入口。中文界面优先显示网盘。
+- 工作台手动检查失败时仍可打开下载渠道，网盘提取码可一键复制。
+
+- The new-version prompt shows your current version, the available version, release highlights, and download links for Baidu Netdisk, Quark Drive, and GitHub. The Chinese interface lists the mirrors first.
+- Download links remain available when a manual update check fails. Copy either mirror’s access code directly.
+
 ## 0.6.20 — 2026-11-25
 
 - 在 Zotero 发起连接，在浏览器核对账号并确认。使用同一 Zotero 配置升级或重启后继续登录。旧版手工令牌继续按原权限和期限使用，也可切换到账号授权。

@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.21 更新提示与下载渠道](#update-0621)
 - [0.6.20 浏览器账号授权与模型配置](#update-0620)
 - [0.6.19 证据引用与阅读工作区](#update-0619)
 - [0.6.18 免密钥机器翻译](#update-0618)
@@ -14,6 +15,16 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0621"></a>
+
+## 0.6.21 更新提示与下载渠道 / Update prompts and download channels
+
+在工作台打开「帮助 → 检查更新」。发现新版时可查看当前版本、可用版本和更新要点，并选择百度网盘、夸克网盘或 GitHub。手动检查失败时，也可以从同一窗口打开这些渠道或重试。中文界面优先显示网盘，可点击提取码复制。进入网盘后选择对应版本目录，下载 XPI 后在 Zotero 中覆盖安装。
+
+In the workbench, open **Help → Check for updates**. When a newer version is available, review the versions and release highlights, then choose Baidu Netdisk, Quark Drive, or GitHub. If a manual check fails, use the same dialog to retry or open a download channel. The Chinese interface lists the mirrors first. Click a mirror’s access code to copy it, open the matching version folder, and install the XPI in Zotero over the existing version.
+
+[下载 XPI / Download XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.21/jadense-in-zotero-v0.6.21.xpi) · [Windows x64 完整离线 ZIP / Complete offline ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.21/jadense-in-zotero-v0.6.21-windows-x64-offline.zip) · [发布说明 / Release notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.21)
 
 <a id="update-0620"></a>
 
@@ -233,7 +244,7 @@ Reading/PDF translation better preserves partial results and reports stopped or 
   - [4.1 语言、主题与快捷键](#appearance)
   - [4.2 上传到攻玉](#upload)
 
-本指南包含 0.6.20 的当前操作与往期版本说明；各版变化按版本分别列出。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
+本指南包含 0.6.21 的当前操作与往期版本说明；各版变化按版本分别列出。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
 
 <a id="install"></a>
 
@@ -243,7 +254,7 @@ Reading/PDF translation better preserves partial results and reports stopped or 
 
 ### 1.1 下载与安装
 
-下载 [v0.6.20 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20.xpi)，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
+下载 [v0.6.21 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.21/jadense-in-zotero-v0.6.21.xpi)，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
 
 <a id="windows-x64-zip-离线安装"></a>
 <a id="windows-x64-zip-offline-installation"></a>
@@ -252,11 +263,11 @@ Reading/PDF translation better preserves partial results and reports stopped or 
 
 完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 PDF 安装指南。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-下载 [v0.6.20 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20-windows-x64-offline.zip)。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
+下载 [v0.6.21 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.21/jadense-in-zotero-v0.6.21-windows-x64-offline.zip)。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
 
-1. 下载 `jadense-in-zotero-v0.6.20-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
+1. 下载 `jadense-in-zotero-v0.6.21-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
 2. 保留解压目录中的两个引擎 ZIP 原样，不要再次解压。
-3. 打开 Zotero「工具 → 插件」，点插件管理器齿轮菜单中的「从文件安装插件」，选择解压目录中的 `jadense-in-zotero-v0.6.20.xpi`，然后重启 Zotero。
+3. 打开 Zotero「工具 → 插件」，点插件管理器齿轮菜单中的「从文件安装插件」，选择解压目录中的 `jadense-in-zotero-v0.6.21.xpi`，然后重启 Zotero。
 4. 打开「设置 → 外置依赖配置 → 版面解析引擎 → 导入离线包」，选择该目录中的 `jadense-pdf-engine-*.zip`，等待状态显示引擎已就绪。PDF 排版引擎是全文翻译所需的可选组件。
 5. 在同一设置页「本机 OCR → 导入离线包」，选择 `jadense-ocr-engine-*.zip`，等待验证完成并显示 OCR 已就绪。PDF 与 OCR 可以分别安装；全文 OCR 模型包含在套装中。选文公式增强使用额外的 CodeFormulaV2 模型，首次启用仍需下载。
 
@@ -278,9 +289,9 @@ If the PDF engine check reports a missing Microsoft Visual C++ Redistributable, 
 
 <a id="release-062"></a>
 
-从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；没有可用摘要或网络请求失败时仍可按提示打开 Release 页面。提示只展示说明，不会自动安装插件。0.6.9 的「对照翻译」保持顶部入口，窄窗缩为带提示的图标；简阅等操作可从「•••」菜单进入。收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。
+从 0.6.2 起，工作台「帮助 → 检查更新」和新版本提示会显示最新 GitHub Release 的更新要点，并提供下载入口；从 0.6.21 起，检查失败也可通过百度网盘、夸克网盘或 GitHub 下载，下载 XPI 后在 Zotero 中安装。0.6.9 的「对照翻译」保持顶部入口，窄窗缩为带提示的图标；简阅等操作可从「•••」菜单进入。收起 Zotero 原生侧栏时，插件侧栏同步收起，需要时再次点击阅读操作打开。
 
-From 0.6.2 onward, **Help → Check for updates** and the new-version prompt show highlights from the latest GitHub Release with a download link. If notes are unavailable, open the Release page from the prompt; checking does not install the plugin. In 0.6.9, Bilingual PDF retains a top toolbar entry that becomes a labelled icon in narrow windows; Reading mode and other actions remain in the **•••** menu. Closing Zotero's native pane also closes the plugin sidebar; use a reading action to open it again.
+From 0.6.2 onward, **Help → Check for updates** and the new-version prompt show highlights from the latest GitHub Release with a download link. From 0.6.21, use Baidu Netdisk, Quark Drive, or GitHub when a check fails, then install the XPI in Zotero. In 0.6.9, Bilingual PDF retains a top toolbar entry that becomes a labelled icon in narrow windows; Reading mode and other actions remain in the **•••** menu. Closing Zotero's native pane also closes the plugin sidebar; use a reading action to open it again.
 
 <a id="open-workbench"></a>
 
