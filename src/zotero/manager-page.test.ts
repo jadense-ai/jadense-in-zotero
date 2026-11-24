@@ -167,7 +167,7 @@ describe("Jadense chat model selector", () => {
     expect(message).toContain("当前订阅不支持")
     expect(message).toContain("设置 → 功能配置")
     expect(message).toContain("充值积分不会解除")
-    expect(message).not.toContain("重新生成 Zotero 令牌")
+    expect(message).not.toContain("改用账号授权")
   })
 })
 
@@ -499,7 +499,7 @@ describe("manager connection indicator", () => {
   it.each([
     ["idle", "未连接攻玉"],
     ["checking", "正在检查服务器连接…"],
-    ["success", "服务器连接正常（最近检查成功）"],
+    ["success", "已连接攻玉账号"],
     ["error", "服务器连接检查失败，请在「连接攻玉」查看详情"],
   ] as const)("exposes the %s state through matching tooltip and accessible text", (kind, label) => {
     const attributes = new Map<string, string>()
@@ -573,11 +573,15 @@ describe("manager connection indicator", () => {
     })
     const failed = area === "profile" ? profile : points
     const retry = area === "profile" ? elements.profileRetry : elements.pointsRetry
-    failed.mockRejectedValueOnce(new Error("offline"))
-    vi.stubGlobal("window", { fetch: vi.fn() })
+    failed.mockRejectedValueOnce(new JadenseApiError({ status: 401, code: "unauthorized", body: "", message: "unauthorized" }))
+    const checkIdentity = vi.fn().mockResolvedValue(Response.json({ source: "jadense-in-zotero", sub: "reader", link_id: "link", site: "cn" }))
+    vi.stubGlobal("window", { fetch: checkIdentity })
     try {
       const zotero = fakeZotero({ token: "test" })
       await refreshJadenseAccount(elements, zotero)
+      expect(checkIdentity).toHaveBeenCalledTimes(1)
+      expect(elements.connectionStatus.dataset.reason).not.toBe("invalid-token")
+      expect(buildManagerState(zotero).connected).toBe(true)
       expect(retry.hidden).toBe(false)
       expect(area === "profile" ? elements.accountBalance.textContent : elements.accountName.textContent).toMatch(/16|Reader/)
       await refreshJadenseAccount(elements, zotero, area)
@@ -604,12 +608,12 @@ describe("manager connection indicator", () => {
     expect(jadenseAppUrl("https://jadense.cn/", "/")).toBe("https://jadense.cn/")
     expect(jadenseAppUrl("https://jadense.cn/", "/app/check-in")).toBe("https://jadense.cn/app/check-in")
     expect(jadenseAppUrl("http://localhost:3000", "/app?settings=billing")).toBe("http://localhost:3000/app?settings=billing")
-    expect(jadenseAppUrl("https://jadense.cn", "/app?settings=integrations")).toBe("https://jadense.cn/app?settings=integrations")
+    expect(jadenseAppUrl("https://jadense.cn", "/app?settings=integrations.zotero")).toBe("https://jadense.cn/app?settings=integrations.zotero")
   })
 
   it.each([
     [402, "POINTS_INSUFFICIENT", "打开签到页领取积分"],
-    [403, "insufficient_scope", "重新生成 Zotero 令牌"],
+    [403, "insufficient_scope", "改用账号授权"],
   ] as const)("uses typed %s errors for actionable chat recovery", (status, code, expected) => {
     expect(friendlyChatError(new JadenseApiError({
       status, code, body: "{}", message: "request rejected",
@@ -715,7 +719,7 @@ describe("manager page state", () => {
     const dialog = xhtml.match(/<dialog id="jadense-quick-start-dialog"[\s\S]*?<\/dialog>/)?.[0] ?? ""
 
     expect(dialog).toContain("快速开始")
-    expect(dialog).toContain("连接攻玉令牌")
+    expect(dialog).toContain("连接攻玉账号")
     expect(dialog).toContain("BYOK 配置")
     expect(dialog).toContain("设置 → 功能配置")
     expect(dialog).toContain('id="jadense-quick-start-settings"')
@@ -901,15 +905,11 @@ describe("manager page state", () => {
     const xhtml = readFileSync(new URL("../../content/manager.xhtml", import.meta.url), "utf8")
     const settingsStart = xhtml.indexOf('id="jadense-manager-section-settings"')
 
-    expect(xhtml).toContain('id="jadense-manager-token-mask"')
-    expect(xhtml).toContain('id="jadense-manager-token-copy"')
-    expect(xhtml).toContain('id="jadense-manager-token-edit"')
-    expect(xhtml).toContain('id="jadense-manager-token-input"')
     expect(xhtml).not.toContain('id="jadense-manager-base-url"')
     expect(xhtml).not.toContain('id="jadense-manager-folder-id"')
     expect(xhtml).not.toContain('id="jadense-manager-save"')
     expect(xhtml).not.toContain('id="jadense-manager-load-folders"')
-    expect(xhtml.indexOf('id="jadense-manager-token-mask"')).toBeGreaterThan(settingsStart)
+    expect(xhtml.indexOf('id="jadense-manager-authorize"')).toBeGreaterThan(settingsStart)
   })
 
   it("groups AI and shortcut settings while connection owns account, points, and upload", () => {
@@ -998,7 +998,7 @@ describe("manager page state", () => {
       connected: false,
       aiReady: false,
       canExportItems: false,
-      uploadIssues: expect.arrayContaining(["攻玉令牌无效或已过期，请在「设置 → 连接攻玉」中更新令牌。"]),
+      uploadIssues: expect.arrayContaining(["授权已失效，请在「设置 → 连接攻玉」中重新连接账号。"]),
     })
     expect(jadense.Prefs?.get("extensions.jadenseInZotero.token")).toBe(token)
 
@@ -1021,7 +1021,7 @@ describe("manager page state", () => {
       canExportItems: false,
       canExportCollection: false,
       uploadIssues: [
-        "尚未配置攻玉令牌，请先在「设置 → 连接攻玉」中粘贴并保存令牌。",
+        "请先在「设置 → 连接攻玉」中连接攻玉账号。",
         "尚未选择攻玉收藏夹，请先在上方「保存到攻玉收藏夹」中选择。",
         "请先在 Zotero 主窗口选中文献条目或收藏夹。",
       ],

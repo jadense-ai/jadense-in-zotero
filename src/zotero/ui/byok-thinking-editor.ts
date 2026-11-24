@@ -1,5 +1,6 @@
 import { BYOK_THINKING_PRESETS, DEFAULT_BYOK_THINKING_EFFORTS, normalizeByokThinkingEfforts } from '../ai-settings'
 import { uiText } from '../ui-preferences'
+import { createChevron } from './chevron'
 
 /** Manager HTML 与原生 Preferences XUL 共用的 BYOK 模型档位编辑控件。 */
 export type ByokThinkingEditor = {
@@ -21,6 +22,9 @@ export function createByokThinkingEditor(host: HTMLElement): ByokThinkingEditor 
   trigger.className = 'jdx-byok-thinking-trigger'
   trigger.setAttribute('aria-haspopup', 'true')
   trigger.setAttribute('aria-expanded', 'false')
+  const triggerValue = make<HTMLSpanElement>('span')
+  triggerValue.className = 'jdx-byok-thinking-value'
+  trigger.append(triggerValue, createChevron(doc, 'jdx-select-chevron', 'down', 14))
   const control = make<HTMLDivElement>('div')
   control.className = 'jdx-byok-thinking-control'
   const popup = make<HTMLDivElement>('div')
@@ -69,13 +73,22 @@ export function createByokThinkingEditor(host: HTMLElement): ByokThinkingEditor 
   }
   const render = () => {
     const values = orderedValues()
-    trigger.textContent = values.length ? `${values.join(', ')}${customized ? '' : uiText('（默认）', ' (default)')}`
+    const summary = values.length ? `${values.join(', ')}${customized ? '' : uiText('（默认）', ' (default)')}`
       : uiText('未选档位（保存后恢复默认）', 'No efforts selected (saving restores defaults)')
-    trigger.title = trigger.textContent
-    trigger.setAttribute('aria-label', `${label.textContent}: ${trigger.textContent}`)
+    triggerValue.textContent = summary
+    trigger.title = summary
+    trigger.setAttribute('aria-label', `${label.textContent}: ${summary}`)
     const query = search.value.trim().toLowerCase()
     const candidates = [...BYOK_THINKING_PRESETS, ...values.filter(value => !BYOK_THINKING_PRESETS.includes(value as typeof BYOK_THINKING_PRESETS[number]))]
-    choices.replaceChildren(...candidates.filter(value => value.toLowerCase().includes(query)).map(value => {
+    const matched = candidates.filter(value => value.toLowerCase().includes(query))
+    if (!matched.length) {
+      const empty = make<HTMLParagraphElement>('p')
+      empty.className = 'jdx-byok-thinking-empty'
+      empty.textContent = uiText('无匹配档位，可在下方直接添加自定义档位。', 'No matching efforts. Add a custom one below.')
+      choices.replaceChildren(empty)
+      return
+    }
+    choices.replaceChildren(...matched.map(value => {
       const row = make<HTMLLabelElement>('label')
       row.className = 'jdx-byok-thinking-option'
       const checkbox = make<HTMLInputElement>('input')

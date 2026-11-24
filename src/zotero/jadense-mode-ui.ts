@@ -57,7 +57,7 @@ export function wireJadenseMode(host: ZoteroLike, root: HTMLElement, openConnect
     checking = true; const current = revision
     try {
       const catalog = await jadenseAiClient(host).getZoteroAiCapabilities()
-      if (!catalog.decision?.authorized || !catalog.ocr?.authorized) throw new Error(uiText('请生成包含 Jev/OCR 权限的新令牌并连接。', 'Connect a new token with Jev/OCR permissions.'))
+      if (!catalog.decision?.authorized || !catalog.ocr?.authorized) throw new Error(uiText('请在「连接攻玉」中改用账号授权，以使用 Jev 和 OCR。', 'Switch to account authorization in Connect Jadense to use Jev and OCR.'))
       const ready = await localOCRReadiness(host)
       if (disposed || current !== revision || !pending) return
       saveJadenseMode(host, true, ready); pending = false

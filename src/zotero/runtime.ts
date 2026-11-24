@@ -1,4 +1,5 @@
 import { initializeFeatureModelSelections } from './ai-settings'
+import { ACCOUNT_TOKEN_PREF, accountDataOwner, readAccountCredential, type AccountIdentity } from './account-credential'
 import { uiText } from "./ui-preferences"
 import { JadenseApiClient, JadenseApiError, type JadenseFavoriteFolder, type JadenseZoteroImportResult } from "@/jadense/api"
 import { PdfUploadAttempts, pdfUploadScope, pdfUploadInputFingerprint } from "@/sync/pdf-upload-attempts"
@@ -12,7 +13,7 @@ import {
 import type { ZoteroItemDraft, ZoteroItemSnapshot, ZoteroPdfAttachmentFile } from "./types"
 
 const PREF_BASE_URL = "extensions.jadenseInZotero.baseUrl"
-const PREF_TOKEN = "extensions.jadenseInZotero.token"
+const PREF_TOKEN = ACCOUNT_TOKEN_PREF
 const PREF_DEFAULT_FOLDER_ID = "extensions.jadenseInZotero.defaultFolderId"
 const PREF_SYNC_MAPPINGS = "extensions.jadenseInZotero.syncMappings"
 const PREF_COLLECTION_UPLOAD_INCLUDE_PDF = "extensions.jadenseInZotero.collectionUploadIncludePdf"
@@ -44,6 +45,7 @@ export type FavoriteFoldersCache = {
 
 export type FavoriteFoldersRefreshResult = {
   ok: boolean
+  httpStatus?: number
   reason: "ok" | "no-token" | "request-failed"
   folders: FavoriteFolderOption[]
   selectedFolderId: string
@@ -239,13 +241,33 @@ export type ZoteroCollectionUploadPreview = {
   skippedCount: number
 }
 
+const ACCOUNT_DATA_KEYS = [PREF_DEFAULT_FOLDER_ID, PREF_SYNC_MAPPINGS, PREF_COLLECTION_UPLOAD_INCLUDE_PDF, PREF_FAVORITE_FOLDERS_CACHE]
+const SCOPED_ACCOUNT_PREF = 'jadense-account-data:v1:'
+
+function preferenceValue(zotero: ZoteroLike, key: string) {
+  const raw = zotero.Prefs?.get(key)
+  if (!ACCOUNT_DATA_KEYS.includes(key)) return raw
+  const owner = accountDataOwner(zotero)
+  if (typeof raw !== 'string' || !raw.startsWith(SCOPED_ACCOUNT_PREF)) return owner ? undefined : raw
+  try {
+    const [savedOwner, value] = JSON.parse(raw.slice(SCOPED_ACCOUNT_PREF.length))
+    return owner && owner === savedOwner ? value : undefined
+  } catch { return undefined }
+}
+
+/** 复用原键及其观察者；带归属的值只有原账号可见，包括切换凭据触发同步观察者的时刻。 */
+function setAccountPreference(zotero: ZoteroLike, key: string, value: string | boolean) {
+  const owner = accountDataOwner(zotero)
+  zotero.Prefs?.set(key, owner ? SCOPED_ACCOUNT_PREF + JSON.stringify([owner, value]) : value)
+}
+
 function prefString(zotero: ZoteroLike, key: string) {
-  const value = zotero.Prefs?.get(key)
+  const value = preferenceValue(zotero, key)
   return typeof value === "string" ? value.trim() : ""
 }
 
 function prefBoolean(zotero: ZoteroLike, key: string) {
-  const value = zotero.Prefs?.get(key)
+  const value = preferenceValue(zotero, key)
   return value === true || value === "true"
 }
 
@@ -286,7 +308,7 @@ function readSyncMappings(zotero: ZoteroLike): SyncMappingState {
 }
 
 function saveSyncMappings(zotero: ZoteroLike, state: SyncMappingState) {
-  try { zotero.Prefs?.set(PREF_SYNC_MAPPINGS, JSON.stringify(state)) } catch { /* 本机映射不是服务端导入的准入条件。 */ }
+  try { setAccountPreference(zotero, PREF_SYNC_MAPPINGS, JSON.stringify(state)) } catch { /* 本机映射不是服务端导入的准入条件。 */ }
 }
 
 function nonEmptyText(value: unknown) {
@@ -314,12 +336,23 @@ function sourceIdentityKey(source: unknown, id: unknown) {
 
 function assertClient(zotero: ZoteroLike) {
   const { baseUrl, token } = readConnection(zotero)
-  if (!token) throw new Error(uiText("未配置攻玉令牌，请先在「连接攻玉」中完成连接。", "No Jadense token is configured. Connect your account in Connect Jadense first."))
+  if (!token) throw new Error(uiText("请先在「连接攻玉」中连接账号。", "Connect your account in Connect Jadense first."))
   const win = zotero.getMainWindow?.()
-  const fetchImpl = win?.fetch ? win.fetch.bind(win) : undefined
+  const network = win?.fetch ? win.fetch.bind(win) : globalThis.fetch.bind(globalThis)
+  const check = () => {
+    const current = readConnection(zotero)
+    if (current.baseUrl !== baseUrl || current.token !== token) throw new Error(uiText('账号连接已更改，请重新选择本次操作。', 'The connected account changed. Start this action again.'))
+  }
+  const fetchImpl: typeof fetch = async (input, init) => {
+    check()
+    const result = await network(input, init)
+    check()
+    return result
+  }
   const formDataFactory = win?.FormData ? () => new win.FormData() : undefined
-  return new JadenseApiClient({ baseUrl, token, fetchImpl, formDataFactory,
+  const client = new JadenseApiClient({ baseUrl, token, fetchImpl, formDataFactory,
     computeSha256: file => uploadFileSha256(file, win ?? globalThis), requestIdFactory: () => uploadRequestId(win ?? globalThis) })
+  return Object.assign(client, { checkAccount: check })
 }
 
 function readField(item: Record<string, unknown>, name: string) {
@@ -954,7 +987,9 @@ async function uploadPdfForEntry(input: {
   if (!input.includePdf) return { status: "not_requested" as const, reason: "未请求上传 PDF。" }
 
   const attempts = new PdfUploadAttempts(input.zotero)
-  const scopeKey = pdfUploadScope(readConnection(input.zotero), input.importItem.clientItemId, input.folderId)
+  const connection = readConnection(input.zotero)
+  const identity = readAccountCredential(input.zotero, connection.baseUrl)?.identity
+  const scopeKey = pdfUploadScope(uploadOwner(connection, identity), input.importItem.clientItemId, input.folderId)
   if (!attempts.lock(scopeKey)) return { status: "failed", error: uiText("该条目正在另一个窗口上传，请等待当前请求完成。", "This item is uploading in another window. Wait for the current request.") }
   try {
     const previous = attempts.get(scopeKey)
@@ -1003,18 +1038,19 @@ async function uploadPdfForEntry(input: {
       retryAssociationOnly: attempts.get(scopeKey)?.retryAssociationOnly,
       ...(!attempts.persistent ? {warning:uiText("恢复状态仅保留在当前运行中，请暂勿退出 Zotero。", "Recovery state is retained only in this session. Keep Zotero open.")} : {}),
       error: error instanceof JadenseApiError && error.code === "insufficient_scope"
-        ? "PDF 上传需要重新生成带 favorites:write 权限的攻玉插件令牌。"
+        ? uiText("请在「连接攻玉」中授权收藏夹写入权限以继续上传 PDF。", "Authorize favorites access in Connect Jadense to upload PDFs.")
         : message,
     }
   } finally { attempts.unlock(scopeKey) }
 }
 
 /** 带 PDF 的新条目一次导入；避免先写元数据后把同一次导入误判为收藏冲突。 */
-async function importEntriesWithPdf(client: JadenseApiClient, folderId: string, zotero: ZoteroLike, entries: CollectionItemEntry[], importItems: JadenseZoteroImportItem[], includePdf: boolean, signal?: AbortSignal) {
+async function importEntriesWithPdf(client: ReturnType<typeof assertClient>, folderId: string, zotero: ZoteroLike, entries: CollectionItemEntry[], importItems: JadenseZoteroImportItem[], includePdf: boolean, signal?: AbortSignal) {
   const pdfs = new Map<string,ZoteroUploadPdfStatus>()
   const results: JadenseZoteroImportResult["results"] = []
   const metadataOnly: JadenseZoteroImportItem[] = []
   for (const [index,entry] of entries.entries()) {
+    client.checkAccount()
     signal?.throwIfAborted()
     const item = importItems[index]!
     const pdf = await uploadPdfForEntry({ client,folderId,zotero,entry,importItem: item,includePdf,signal })
@@ -1023,6 +1059,7 @@ async function importEntriesWithPdf(client: JadenseApiClient, folderId: string, 
     else if (pdf.status === "failed") results.push({ clientItemId: item.clientItemId,status: "failed",error: pdf.error })
     else metadataOnly.push(item)
     if (pdf.status === "uploaded" || pdf.status === "failed") {
+      client.checkAccount()
       // 逐项发布映射；关窗/取消不能丢失先前完成条目的结果。
       const state=readSyncMappings(zotero)
       savePushMapping(state,{folderId,entry,importItem:item,metadataResult:results[results.length-1]!,pdfStatus:pdf})
@@ -1078,7 +1115,7 @@ export function readConnection(zotero: ZoteroLike): JadenseConnection {
   }
   return {
     baseUrl,
-    token: prefString(zotero, PREF_TOKEN),
+    token: readAccountCredential(zotero, baseUrl)?.token ?? '',
     defaultFolderId: prefString(zotero, PREF_DEFAULT_FOLDER_ID),
   }
 }
@@ -1087,7 +1124,7 @@ export function readConnection(zotero: ZoteroLike): JadenseConnection {
 // 存量的 baseUrl pref 仍由 readConnection() 读取并迁移。baseUrl 入参仅保留给
 // 测试/开发环境手动覆盖,UI 一律不传。
 export function saveConnection(zotero: ZoteroLike, input: { token: string; defaultFolderId?: string | null; baseUrl?: string }) {
-  if (!input.token.trim()) throw new Error(uiText("请填写攻玉插件令牌。", "Enter a Jadense plugin token."))
+  if (!input.token.trim()) throw new Error(uiText("请先连接攻玉账号。", "Connect your Jadense account first."))
 
   if (input.baseUrl !== undefined) {
     const baseUrl = migrateBaseUrl(input.baseUrl)
@@ -1095,37 +1132,59 @@ export function saveConnection(zotero: ZoteroLike, input: { token: string; defau
     zotero.Prefs?.set(PREF_BASE_URL, baseUrl)
   }
   zotero.Prefs?.set(PREF_TOKEN, input.token.trim())
-  // 首次完成连接时记录配置顺序；该偏好只用于初始化功能模型，写入失败不能阻断令牌保存。
-  try {
-    if (!prefString(zotero, AI_INITIAL_MODEL_PREF_KEY)) zotero.Prefs?.set(AI_INITIAL_MODEL_PREF_KEY, JSON.stringify({ route: "jadense" }))
-  } catch { /* 功能模型仍可由用户在设置中手动选择。 */ }
-  initializeFeatureModelSelections(zotero)
+  initializeAccountConnection(zotero)
   // defaultFolderId 缺省(undefined)表示不改动已有选择;显式传空(含 null)则清除。
   if (input.defaultFolderId === undefined) return
   const folderId = input.defaultFolderId?.trim() ?? ""
   if (folderId) {
-    zotero.Prefs?.set(PREF_DEFAULT_FOLDER_ID, folderId)
+    setAccountPreference(zotero, PREF_DEFAULT_FOLDER_ID, folderId)
   } else {
     zotero.Prefs?.clear(PREF_DEFAULT_FOLDER_ID)
   }
 }
 
+export function initializeAccountConnection(zotero: ZoteroLike) {
+  try {
+    if (!prefString(zotero, AI_INITIAL_MODEL_PREF_KEY)) zotero.Prefs?.set(AI_INITIAL_MODEL_PREF_KEY, JSON.stringify({ route: 'jadense' }))
+    initializeFeatureModelSelections(zotero)
+  } catch { /* 可选模型初始化失败不改变账号连接。 */ }
+}
+
 export function saveDefaultFolderId(zotero: ZoteroLike, folderId: string) {
   if (folderId.trim()) {
-    zotero.Prefs?.set(PREF_DEFAULT_FOLDER_ID, folderId.trim())
+    setAccountPreference(zotero, PREF_DEFAULT_FOLDER_ID, folderId.trim())
   } else {
     zotero.Prefs?.clear(PREF_DEFAULT_FOLDER_ID)
   }
 }
 
 export function clearConnection(zotero: ZoteroLike) {
-  new PdfUploadAttempts(zotero).clear()
-  zotero.Prefs?.clear(PREF_BASE_URL)
   zotero.Prefs?.clear(PREF_TOKEN)
-  zotero.Prefs?.clear(PREF_DEFAULT_FOLDER_ID)
-  zotero.Prefs?.clear(PREF_SYNC_MAPPINGS)
-  zotero.Prefs?.clear(PREF_COLLECTION_UPLOAD_INCLUDE_PDF)
-  zotero.Prefs?.clear(PREF_FAVORITE_FOLDERS_CACHE)
+  zotero.Prefs?.clear(PREF_BASE_URL)
+  clearAccountData(zotero)
+}
+
+/** 默认目录、映射和待上传身份只属于上一账号；本机文献及 BYOK 设置独立保留。 */
+export function clearAccountData(zotero: ZoteroLike, onlyStale = false) {
+  new PdfUploadAttempts(zotero).clear()
+  for (const key of ACCOUNT_DATA_KEYS) {
+    if (!onlyStale || preferenceValue(zotero, key) === undefined) zotero.Prefs?.clear(key)
+  }
+}
+
+function uploadOwner(connection: Pick<JadenseConnection, 'baseUrl' | 'token'>, identity?: AccountIdentity) {
+  return identity ? { baseUrl: connection.baseUrl, token: JSON.stringify([identity.site, identity.sub]) } : connection
+}
+
+/** 已确认同账号时，把历史 PDF 请求的幂等标识迁到稳定身份。 */
+export function rekeyAccountUploadAttempts(zotero: ZoteroLike, old: JadenseConnection, next: AccountIdentity, previousIdentity?: AccountIdentity) {
+  const attempts = new PdfUploadAttempts(zotero)
+  const previousOwner = uploadOwner(old, previousIdentity)
+  const nextOwner = uploadOwner(old, next)
+  for (const push of Object.values(readSyncMappings(zotero).pushes)) {
+    if (!push?.clientItemId || !push.folderId) continue
+    attempts.rekey(pdfUploadScope(previousOwner, push.clientItemId, push.folderId), pdfUploadScope(nextOwner, push.clientItemId, push.folderId))
+  }
 }
 
 export function readCollectionUploadIncludePdfDefault(zotero: ZoteroLike) {
@@ -1133,7 +1192,7 @@ export function readCollectionUploadIncludePdfDefault(zotero: ZoteroLike) {
 }
 
 export function saveCollectionUploadIncludePdfDefault(zotero: ZoteroLike, includePdf: boolean) {
-  zotero.Prefs?.set(PREF_COLLECTION_UPLOAD_INCLUDE_PDF, includePdf)
+  setAccountPreference(zotero, PREF_COLLECTION_UPLOAD_INCLUDE_PDF, includePdf)
 }
 
 export async function listFavoriteFoldersForConnection(
@@ -1143,7 +1202,7 @@ export async function listFavoriteFoldersForConnection(
   const baseUrl = normalizeBaseUrl(input.baseUrl)
   const token = input.token.trim()
   if (!baseUrl) throw new Error(uiText("请填写攻玉 Webapp 地址。", "Enter the Jadense web app URL."))
-  if (!token) throw new Error(uiText("请先配置攻玉插件令牌再加载收藏夹。", "Configure a Jadense plugin token before loading folders."))
+  if (!token) throw new Error(uiText("请先连接攻玉账号再加载收藏夹。", "Connect your Jadense account before loading folders."))
   return new JadenseApiClient({ baseUrl, token, fetchImpl }).listFavoriteFolders()
 }
 
@@ -1187,7 +1246,7 @@ export function readFavoriteFoldersCache(zotero: ZoteroLike): FavoriteFoldersCac
 }
 
 function writeFavoriteFoldersCache(zotero: ZoteroLike, cache: FavoriteFoldersCache) {
-  zotero.Prefs?.set(PREF_FAVORITE_FOLDERS_CACHE, JSON.stringify(cache))
+  setAccountPreference(zotero, PREF_FAVORITE_FOLDERS_CACHE, JSON.stringify(cache))
 }
 
 function toFavoriteFolderOption(folder: JadenseFavoriteFolder): FavoriteFolderOption {
@@ -1200,15 +1259,15 @@ function toFavoriteFolderOption(folder: JadenseFavoriteFolder): FavoriteFolderOp
 }
 
 // 同一时刻只放行一个收藏夹请求:面板/Manager/启动预热共享结果,避免并发重复打 API。
-let favoriteFoldersRefreshInFlight: Promise<FavoriteFoldersRefreshResult> | null = null
+const favoriteFoldersRefreshes = new WeakMap<ZoteroLike, { baseUrl: string; token: string; request: Promise<FavoriteFoldersRefreshResult> }>()
 
 export function refreshFavoriteFoldersCache(
   zotero: ZoteroLike,
   fetchImpl?: typeof fetch,
 ): Promise<FavoriteFoldersRefreshResult> {
-  if (favoriteFoldersRefreshInFlight) return favoriteFoldersRefreshInFlight
-
   const connection = readConnection(zotero)
+  const previous = favoriteFoldersRefreshes.get(zotero)
+  if (previous && previous.baseUrl === connection.baseUrl && previous.token === connection.token) return previous.request
   if (!connection.token) {
     return Promise.resolve({
       ok: false,
@@ -1216,7 +1275,7 @@ export function refreshFavoriteFoldersCache(
       folders: [],
       selectedFolderId: connection.defaultFolderId,
       fetchedAt: readFavoriteFoldersCache(zotero)?.fetchedAt ?? "",
-      message: uiText("请先配置攻玉插件令牌再加载收藏夹。", "Configure a Jadense plugin token before loading folders."),
+      message: uiText("请先连接攻玉账号再加载收藏夹。", "Connect your Jadense account before loading folders."),
     })
   }
 
@@ -1226,6 +1285,8 @@ export function refreshFavoriteFoldersCache(
         baseUrl: connection.baseUrl,
         token: connection.token,
       }, fetchImpl)
+      const current = readConnection(zotero)
+      if (current.token !== connection.token || current.baseUrl !== connection.baseUrl) throw new Error(uiText('账号连接已更改。', 'The connected account changed.'))
       const folders = result.folders.map(toFavoriteFolderOption)
       const selectedFolderId = resolveSelectedFavoriteFolderId({
         folders,
@@ -1236,7 +1297,7 @@ export function refreshFavoriteFoldersCache(
       writeFavoriteFoldersCache(zotero, { fetchedAt, defaultFolderId: result.defaultFolderId, folders })
       // 服务端默认收藏夹/列表第一个会在用户从未选择时自动落盘,保证上传流程始终有可用 folderId。
       if (selectedFolderId && selectedFolderId !== connection.defaultFolderId) {
-        zotero.Prefs?.set(PREF_DEFAULT_FOLDER_ID, selectedFolderId)
+        setAccountPreference(zotero, PREF_DEFAULT_FOLDER_ID, selectedFolderId)
       }
       return {
         ok: true,
@@ -1251,16 +1312,17 @@ export function refreshFavoriteFoldersCache(
       return {
         ok: false,
         reason: "request-failed",
+        ...(error instanceof JadenseApiError ? { httpStatus: error.status } : {}),
         folders: cached?.folders ?? [],
         selectedFolderId: connection.defaultFolderId,
         fetchedAt: cached?.fetchedAt ?? "",
         message: error instanceof Error ? error.message : uiText("收藏夹加载失败。", "Could not load favorite folders."),
       }
-    } finally {
-      favoriteFoldersRefreshInFlight = null
     }
-  })()
-  favoriteFoldersRefreshInFlight = request
+  })().finally(() => {
+    if (favoriteFoldersRefreshes.get(zotero)?.request === request) favoriteFoldersRefreshes.delete(zotero)
+  })
+  favoriteFoldersRefreshes.set(zotero, { ...connection, request })
   return request
 }
 
@@ -1277,6 +1339,7 @@ export async function pushSelectedItemsToJadense(
   if (items.length === 0) throw new Error(uiText("未选中可上传的 Zotero 条目。", "No uploadable Zotero items are selected."))
 
   const imported = await importEntriesWithPdf(client,folderId,zotero,entries,items,Boolean(options.includePdf),options.signal)
+  client.checkAccount()
   const result = imported.metadata
   const resultsById = resultByClientItemId(result.results)
   const mappingState = readSyncMappings(zotero)
@@ -1361,6 +1424,7 @@ export async function pushSelectedCollectionToJadense(
 
   const importItems = collected.entries.map((entry) => zoteroItemToJadenseImportItem(entry.snapshot))
   const imported = await importEntriesWithPdf(client,folderId,zotero,collected.entries,importItems,Boolean(options.includePdf),options.signal)
+  client.checkAccount()
   const metadataResult = imported.metadata
   const resultsById = resultByClientItemId(metadataResult.results)
   const mappingState = readSyncMappings(zotero)
@@ -1410,8 +1474,10 @@ export async function pullFavoriteFolderToZotero(zotero: ZoteroLike) {
   if (!folderId) throw new Error(uiText("未设置默认攻玉收藏夹。", "No default Jadense folder is selected."))
 
   const payload = await client.listFavoriteItems(folderId)
+  client.checkAccount()
   const mappingState = readSyncMappings(zotero)
   const folderName = await resolveFavoriteFolderName(client, folderId)
+  client.checkAccount()
   const previousFolderMapping = JSON.stringify(mappingState.folders[folderId] ?? null)
   const collectionRef = await ensureFavoriteFolderCollection(zotero, mappingState, {
     folderId,
@@ -1422,6 +1488,7 @@ export async function pullFavoriteFolderToZotero(zotero: ZoteroLike) {
   let mappingChanged = previousFolderMapping !== JSON.stringify(mappingState.folders[folderId] ?? null)
 
   for (const item of payload.items) {
+    client.checkAccount()
     const favoriteItem = item as JadenseFavoriteExportItem
     const draft = jadenseFavoriteToZoteroDraft(favoriteItem)
     const jadenseKey = jadenseStableKey(favoriteItem)
@@ -1456,6 +1523,7 @@ export async function pullFavoriteFolderToZotero(zotero: ZoteroLike) {
     importedCount += 1
   }
 
+  client.checkAccount()
   if (mappingChanged) saveSyncMappings(zotero, mappingState)
   return {
     importedCount,

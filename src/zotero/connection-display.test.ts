@@ -77,7 +77,7 @@ describe("applyStrings", () => {
     applyStrings(root, selectPreferencesStrings("zh-CN") as PreferencesStrings)
 
     expect(first.textContent).toBe("复制")
-    expect(second.textContent).toBe("如何获取令牌")
+    expect(second.textContent).toBe("如何连接账号")
     // 数组/函数型文案不由 applyStrings 填充,helpSteps 由页面单独渲染。
     expect(skipped.textContent).toBe("")
   })

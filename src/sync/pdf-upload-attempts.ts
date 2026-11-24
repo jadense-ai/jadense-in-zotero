@@ -42,6 +42,13 @@ export class PdfUploadAttempts {
     const row=this.get(scopeKey); if(row){Object.assign(row,patch,{updatedAt:new Date().toISOString()});this.persist()}
   }
   finish(scopeKey:string) { delete this.shared.records[scopeKey]; this.persist() }
+  rekey(from: string, to: string) {
+    const old = this.get(from)
+    if (!old || from === to || this.get(to)) return
+    this.shared.records[to] = { ...old, scopeKey: to }
+    delete this.shared.records[from]
+    this.persist()
+  }
   clear() { this.shared.records={}; this.persist() }
   get persistent() { return this.shared.persistent }
   private persist() {

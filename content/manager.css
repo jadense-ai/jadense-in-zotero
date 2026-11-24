@@ -751,7 +751,7 @@ textarea {
 }
 
 .jdx-manager-byok-provider-list button,
-.jdx-manager-byok-model-list button {
+.jdx-manager-byok-model-list > button[data-model-id] {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -765,12 +765,11 @@ textarea {
 }
 
 .jdx-manager-byok-provider-list button:hover,
-.jdx-manager-byok-model-list button:hover {
+.jdx-manager-byok-model-list > button[data-model-id]:hover {
   background: var(--jdx-subtle);
 }
 
-.jdx-manager-byok-provider-list button[aria-selected="true"],
-.jdx-manager-byok-model-list button[aria-current="true"] {
+.jdx-manager-byok-provider-list button[aria-selected="true"] {
   border-color: rgb(22 207 140 / 0.4);
   color: var(--jdx-active-text);
   background: var(--jdx-active-bg);
@@ -883,18 +882,6 @@ textarea {
 .jdx-manager-byok-model-fields {
   display: grid;
   gap: 10px;
-  padding-top: 10px;
-}
-
-.jdx-manager-byok-model-list:empty::after {
-  content: "尚未添加模型";
-  padding: 8px 9px;
-  color: var(--jdx-muted);
-  font-size: calc(12px * var(--jdx-font-scale,1));
-}
-
-[lang="en-US"] .jdx-manager-byok-model-list:empty::after {
-  content: "No models added";
 }
 
 .jdx-manager-field {
@@ -1475,10 +1462,9 @@ textarea {
 }
 
 @media (max-width: 720px) {
-  .jdx-manager-byok-panel-header { align-items: stretch; flex-direction: column; }
   .jdx-manager-byok-layout { grid-template-columns: minmax(0, 1fr); }
-  .jdx-manager-byok-sidebar { border-right: 0; border-bottom: 1px solid var(--jdx-line); padding: 0 0 12px; }
-  .jdx-manager-byok-provider-list { max-height: 160px; }
+  .jdx-manager-byok-sidebar { border-right: 0; border-bottom: 1px solid var(--jdx-line); padding: 12px; }
+  .jdx-manager-byok-provider-list { max-height: 180px; }
 }
 
 /* 小屏详情使用可关闭的侧面板，不把消息和输入挤成窄条。 */

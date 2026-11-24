@@ -234,7 +234,7 @@ describe("reader translation runtime", () => {
   })
 
   it.each([
-    [403, "insufficient_scope", /重新生成 Zotero 令牌/],
+    [403, "insufficient_scope", /改用账号授权/],
     [402, "POINTS_INSUFFICIENT", /攻玉学术主页.*签到领积分或补充积分/],
   ] as const)("turns structured %s failures into actionable translation guidance", async (status, code, expected) => {
     const values = new Map<string, unknown>([

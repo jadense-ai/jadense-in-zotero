@@ -47,7 +47,7 @@ function friendlyTranslationError(error: unknown) {
     return uiText("当前可用积分不足。请前往攻玉学术主页签到领积分或补充积分后重试。", "Insufficient points. Visit the Jadense academic homepage to check in or add points, then try again.")
   }
   return error instanceof JadenseApiError && error.code?.toLowerCase() === "insufficient_scope"
-    ? uiText("当前令牌缺少翻译所需的对话权限，请在「连接攻玉」中重新生成 Zotero 令牌。", "This token lacks the chat permission required for translation. Generate a new Zotero token in “Connect Jadense”.")
+    ? uiText("当前令牌缺少翻译所需的对话权限，请在「连接攻玉」中改用账号授权。", "This token lacks the chat permission required for translation. Switch to account authorization in “Connect Jadense”.")
     : message
 }
 

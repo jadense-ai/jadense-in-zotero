@@ -28,12 +28,9 @@ describe("preferences pane markup", () => {
       }
     }
   })
-  it("keeps token display and editing as separate rows", () => {
-    expect(xhtml).toContain('id="jadense-in-zotero-token-mask"')
-    expect(xhtml).toContain('id="jadense-in-zotero-token-copy"')
-    expect(xhtml).toContain('id="jadense-in-zotero-token-edit"')
-    expect(xhtml).toContain('id="jadense-in-zotero-token-edit-row"')
-    expect(xhtml).toContain('id="jadense-in-zotero-token-input"')
+  it("opens account authorization without a token input", () => {
+    expect(xhtml).toContain('id="jadense-in-zotero-authorize"')
+    expect(xhtml).not.toContain('id="jadense-in-zotero-token-input"')
     expect(xhtml).toContain('id="jadense-in-zotero-connection-status"')
   })
 
