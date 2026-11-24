@@ -1,0 +1,64 @@
+name: Copy verified v0.6.20 release assets
+on:
+  push:
+    branches: [codex/zotero-0.6.20-asset-transfer]
+permissions:
+  contents: write
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: be7e336175261b10952ec76a38ce15e251433942
+          persist-credentials: false
+      - name: Transfer only missing assets to the existing release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          from pathlib import Path
+          from hashlib import file_digest
+          import json, shutil, subprocess as sp, zipfile, os
+          repo='jadense-ai/jadense-in-zotero'
+          tag='v0.6.20'
+          dst=Path(os.environ['RUNNER_TEMP'])/'verified-assets'
+          dst.mkdir()
+          entries=[{'name': 'jadense-in-zotero-v0.6.20.xpi', 'date': [2026, 11, 25, 2, 14, 34], 'system': 0, 'attr': 2176188416, 'size': 4286273, 'sha': '87a8182b810e08c49f15b9295169b75f3d477cabcc06bf8e11c87b17855acdbc'}, {'name': 'jadense-pdf-engine-0.6.4-1-windows-x64.zip', 'date': [2026, 11, 23, 23, 56, 52], 'system': 0, 'attr': 2176188416, 'size': 454424663, 'sha': '579e19fc3e09ff1532f739aa0ab2c715a9047396daca23fb427bb82f4c7c9ebd'}, {'name': 'jadense-ocr-engine-2.126.0-3.9.2-1-windows-x64.zip', 'date': [2026, 11, 23, 23, 56, 52], 'system': 0, 'attr': 2176188416, 'size': 856821566, 'sha': '775db6909dece9aef9b1a0a5f17de79638ab50f42efc1da298d2b93e2af66901'}, {'name': 'jadense-in-zotero 离线安装详细流程.pdf', 'date': [2026, 11, 25, 2, 15, 4], 'system': 0, 'attr': 25165824, 'size': 1121219, 'sha': 'c57dc59a15c40274b23db3823e6fa4ba5aa5992c3659ddbba7c1ff5118435dfb'}]
+          def sha(path):
+              with path.open('rb') as f: return file_digest(f,'sha256').hexdigest()
+          def github(*args):
+              return sp.check_output(['gh',*args],text=True)
+          def draft():
+              obj=json.loads(github('api','repos/'+repo+'/releases/457161300'))
+              assert obj['tag_name']==tag and obj['draft']
+              return {a['name']:a for a in obj['assets']}
+          draft()
+          for entry in entries:
+              n=entry['name']
+              if n.endswith('.pdf'):
+                  p=Path('docs')/n
+              else:
+                  p=dst/n
+                  github('release','download',tag if n.endswith('.xpi') else 'v0.6.19','-R',repo,'-p',n,'-D',str(dst))
+              assert p.stat().st_size==entry['size'] and sha(p)==entry['sha'],n
+              entry['p']=p
+          offline=dst/'jadense-in-zotero-v0.6.20-windows-x64-offline.zip'
+          with zipfile.ZipFile(offline,'x',compression=zipfile.ZIP_STORED) as archive:
+              for entry in entries:
+                  info=zipfile.ZipInfo(entry['name'],tuple(entry['date']))
+                  info.file_size=entry['size']
+                  info.create_system=entry['system']
+                  info.external_attr=entry['attr']
+                  with entry['p'].open('rb') as src, archive.open(info,'w') as target:
+                      shutil.copyfileobj(src,target,1024*1024)
+          assert sha(offline)=='0f5a88021779406530f3362b56bb93f36cf6f437a5628939536b9cb4393fb802'
+          print('Verified all four input files and the exact original offline ZIP digest.',flush=True)
+          for p,digest in [(e['p'],e['sha']) for e in entries if e['name'].endswith('.zip')]+[(offline,'0f5a88021779406530f3362b56bb93f36cf6f437a5628939536b9cb4393fb802')]:
+              current=draft().get(p.name)
+              if current is None:
+                  github('release','upload',tag,'-R',repo,str(p))
+                  current=draft().get(p.name)
+              assert current and current['state']=='uploaded' and current['size']==p.stat().st_size and current['digest']=='sha256:'+digest,p.name
+              print('Verified release asset:',p.name,flush=True)
