@@ -1,6 +1,8 @@
 /** 帮助更新边界测试：真实版本委托 Gecko，网络失败不进入业务流程。 */
+import { JSDOM } from "jsdom"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, JADENSE_WORKBENCH_URL, LATEST_RELEASE_API, openHelpLink, releaseNotes, releaseSummary, REPOSITORY_URL, visibleReleaseNotes } from "./manager-help"
+import { checkLatestRelease, compareGeckoVersions, installedPluginVersion, JADENSE_WORKBENCH_URL, LATEST_RELEASE_API, openHelpLink, releaseNotes, releaseSummary, RELEASES_URL, REPOSITORY_URL, visibleReleaseNotes, wireManagerHelp } from "./manager-help"
+import { BAIDU_NETDISK_URL, QUARK_DRIVE_URL } from "./update-channels"
 import { supportsIntegratedTitlebar } from "./manager-titlebar"
 
 afterEach(() => vi.useRealTimers())
@@ -72,5 +74,85 @@ describe("manual release checks", () => {
     for (const [version, build] of [["10.0.2", "26200"], ["10.0.3", "26200"], ["10.0.4", "22631"], ["9.0", "26100"]]) expect(supportsIntegratedTitlebar("WINNT", version, build)).toBe(true)
     expect(supportsIntegratedTitlebar("WINNT")).toBe(true)
     for (const os of ["Darwin", "Linux"]) expect(supportsIntegratedTitlebar(os)).toBe(false)
+  })
+
+  it("shows three download channels in manual update checks when an update is available or check fails", async () => {
+    const dom = new JSDOM(`<!doctype html><html><head></head><body>
+      <button id="jadense-github"></button>
+      <button id="jadense-check-in"></button>
+      <button id="jadense-help-toggle"></button>
+      <div id="jadense-help-menu" hidden>
+        <button id="jadense-manager-nav-guide"></button>
+        <button id="jadense-help-about"></button>
+        <button id="jadense-help-update"></button>
+      </div>
+      <section id="jadense-manager-section-guide"></section>
+      <dialog id="jadense-help-dialog">
+        <h2 id="jadense-help-title"></h2>
+        <div id="jadense-help-description"></div>
+        <p id="jadense-help-version"></p>
+        <p id="jadense-help-status"></p>
+        <button id="jadense-help-website"></button>
+        <button id="jadense-help-repository"></button>
+        <button id="jadense-help-retry"></button>
+        <button id="jadense-help-release"></button>
+        <button id="jadense-help-close"></button>
+      </dialog>
+    </body></html>`)
+    const win = dom.window as unknown as Window & {
+      ChromeUtils: { importESModule: (url: string) => Record<string, unknown> }
+      Services: { vc: { compare: (a: string, b: string) => number } }
+      fetch: typeof fetch
+    }
+    const dialogProto = dom.window.HTMLDialogElement?.prototype ?? dom.window.HTMLElement.prototype
+    Object.defineProperty(dialogProto, "showModal", { value() { this.setAttribute("open", "") }, configurable: true })
+    Object.defineProperty(dialogProto, "close", { value() { this.removeAttribute("open"); this.dispatchEvent(new dom.window.Event("close")) }, configurable: true })
+
+    let mode: "available" | "latest" | "failure" = "available"
+    win.ChromeUtils = {
+      importESModule: () => ({ AddonManager: { getAddonByID: vi.fn().mockResolvedValue({ version: "0.6.19" }) } }),
+    }
+    win.Services = {
+      vc: { compare: (a: string, b: string) => (a === b ? 0 : a < b ? -1 : 1) },
+    }
+    win.fetch = vi.fn(async () => {
+      if (mode === "failure") return { ok: false, status: 503 } as Response
+      const tag = mode === "available" ? "v0.6.20" : "v0.6.19"
+      return { ok: true, json: async () => ({ tag_name: tag, draft: false, prerelease: false, body: "## 本次更新\n- 支持多渠道更新。" }) } as Response
+    })
+
+    const launchURL = vi.fn()
+    wireManagerHelp(dom.window.document, { launchURL }, "jadense-in-zotero@jadense.cn")
+    const retry = dom.window.document.getElementById("jadense-help-retry") as HTMLButtonElement
+    const releaseBtn = dom.window.document.getElementById("jadense-help-release") as HTMLButtonElement
+    const channels = dom.window.document.querySelector(".jdx-help-channels") as HTMLElement
+
+    dom.window.document.getElementById("jadense-help-update")!.click()
+    await vi.waitFor(() => expect(retry.disabled).toBe(false))
+    expect(channels.hidden).toBe(false)
+    expect(channels.querySelectorAll(".jdx-update-channel-row")).toHaveLength(3)
+    expect(releaseBtn.hidden).toBe(true)
+
+    channels.querySelector<HTMLButtonElement>('[data-channel-open="baidu"]')!.click()
+    channels.querySelector<HTMLButtonElement>('[data-channel-open="quark"]')!.click()
+    channels.querySelector<HTMLButtonElement>('[data-channel-open="github"]')!.click()
+    expect(launchURL.mock.calls.map(([u]) => u)).toEqual([
+      BAIDU_NETDISK_URL,
+      QUARK_DRIVE_URL,
+      `${RELEASES_URL}/tag/v0.6.20`,
+    ])
+
+    mode = "latest"
+    retry.click()
+    await vi.waitFor(() => expect(retry.disabled).toBe(false))
+    expect(channels.hidden).toBe(true)
+    expect(releaseBtn.hidden).toBe(false)
+
+    mode = "failure"
+    retry.click()
+    await vi.waitFor(() => expect(retry.disabled).toBe(false))
+    expect(channels.hidden).toBe(false)
+    expect(channels.querySelectorAll(".jdx-update-channel-row")).toHaveLength(3)
+    expect(releaseBtn.hidden).toBe(true)
   })
 })

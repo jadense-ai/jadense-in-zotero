@@ -1648,6 +1648,8 @@ textarea {
 .jdx-help-release-notes h3 { margin: 0 0 6px; font-size: 14px; }
 .jdx-help-release-notes ul { margin: 0; padding-inline-start: 20px; line-height: 1.6; }
 .jdx-help-release-notes li + li { margin-top: 6px; }
+.jdx-help-channels[hidden] { display: none; }
+.jdx-help-channels { margin: 14px 0 16px; }
 .jdx-help-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .jdx-help-actions button[hidden] { display: none; }
 .jdx-help-actions button:disabled { opacity: .5; cursor: default; }
