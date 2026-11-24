@@ -165,13 +165,11 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
   doc.getElementById('jadense-shortcut-capture-save').click()
   assert(Zotero.Prefs.get(shortcutPref) === 'Mod+Alt+S', 'Restore default did not save')
   doc.getElementById('jadense-settings-tab-connection').click()
-  const token = doc.getElementById('jadense-manager-token-input')
-  doc.getElementById('jadense-manager-token-edit').click()
-  assert(doc.activeElement === token && token.labels.length === 1 && token.type === 'password', 'Token edit lacks focus, label or masking')
-  token.value = 'synthetic-cancelled-draft'
-  doc.getElementById('jadense-manager-token-cancel').click()
-  assert(token.value === '' && doc.getElementById('jadense-manager-token-edit-row').hidden, 'Cancel left token draft visible')
-  report.checks.push('settings-shortcut-connection-shared-layout', 'settings-shortcut-save-disable-reset', 'settings-token-labelled-edit-cancel')
+  const authorize = doc.getElementById('jadense-manager-authorize')
+  assert(authorize?.textContent.trim() && !authorize.disabled, 'Account authorization button is unavailable')
+  authorize.focus()
+  assert(doc.activeElement === authorize, 'Account authorization button did not receive focus')
+  report.checks.push('settings-shortcut-connection-shared-layout', 'settings-shortcut-save-disable-reset', 'settings-account-authorization-focus')
   doc.getElementById('jadense-settings-tab-features').click()
   const openGroup = (scope, key) => { scope.querySelector(`[data-settings-target="${key}"]`).click() }
   const choose = async (win, container, text) => {
@@ -343,9 +341,6 @@ export async function verifyFeatureSettings({ Zotero, assert, waitFor, screensho
     assert(byok.scrollWidth <= byok.clientWidth + 2, 'BYOK settings overflow')
     await screenshot(`settings-byok-${english ? 'en' : 'zh'}-${theme}`, manager)
     doc.getElementById('jadense-settings-tab-connection').click()
-    doc.getElementById('jadense-manager-token-edit').click(); await pause()
-    await screenshot(`settings-token-edit-${english ? 'en' : 'zh'}-${theme}`, manager)
-    doc.getElementById('jadense-manager-token-cancel').click()
     doc.getElementById('jadense-settings-tab-features').click()
   }
   manager.resizeTo(720, 800); set('theme', 'light'); await pause()

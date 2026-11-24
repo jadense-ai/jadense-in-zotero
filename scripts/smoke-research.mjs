@@ -2432,9 +2432,9 @@ async function runHarness(config, verifyAnalysisDetails, verifyTranslationSideba
     "Native Preferences lost feature, connection, or BYOK sections")
     assert(preferencesWindow.document.getElementById("jadense-in-zotero-byok-endpoint").textContent.endsWith("/chat/completions"),
       "Native Preferences did not share the saved BYOK endpoint")
-    assert(preferencesWindow.document.getElementById("jadense-in-zotero-token-edit-row").hidden
+    assert(preferencesWindow.document.getElementById("jadense-in-zotero-authorize").textContent.trim()
       && preferencesWindow.document.querySelector(".jdx-pref-checkbox span").textContent.trim(),
-    "Native Preferences did not preserve hidden edit state or option copy")
+    "Native Preferences did not render account authorization or option copy")
     await screenshot("native-preferences-jadense", preferencesWindow)
     preferencesWindow.document.getElementById('jadense-in-zotero-settings-tab-byok').click()
     preferenceSections[4].scrollIntoView({ block: "start" })

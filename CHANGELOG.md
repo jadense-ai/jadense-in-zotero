@@ -1,5 +1,15 @@
 # 更新说明 / Changelog
 
+## 0.6.20 — 2026-11-25
+
+- 在 Zotero 发起连接，在浏览器核对账号并确认。使用同一 Zotero 配置升级或重启后继续登录。旧版手工令牌继续按原权限和期限使用，也可切换到账号授权。
+- 在攻玉网站查看已连接的 Zotero 设备、最近使用时间，并单独断开设备。
+- 工作台和 Zotero 原生设置改进自带 API Key 的提供商和模型编辑，可在列表查看模型能力摘要。
+
+- Connect from Zotero, confirm your Jadense account in the browser, and stay signed in across upgrades and restarts in the same Zotero profile. Existing manual tokens retain their original permissions and expiry and can be switched to account authorization.
+- View connected Zotero devices and recent activity on the Jadense website, and disconnect devices individually.
+- Edit BYOK providers and models in the workbench or Zotero preferences and see model capabilities in the list.
+
 ## 0.6.19 — 2026-11-24
 
 - 开启证据溯源后，每处可定位的 PDF 引用显示原文角标。鼠标悬停或聚焦角标可预览原文，点击可跳回 PDF。已有回复中紧挨有效角标的旧来源和页码标签也会收起。

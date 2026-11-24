@@ -1,3 +1,5 @@
+import { authorizeJadenseAccount, cancelJadenseAuthorization } from "./zotero/account-authorization"
+import { disconnectWithStatus } from "./zotero/ui/account-connection"
 import { startOptionalFeatures, stopOptionalFeatures } from '@/zotero/optional-features'
 import { migrateTranslationConfiguration } from './zotero/translation-config-migration'
 import { migrateChatDefault0610 } from './zotero/ai-settings'
@@ -13,7 +15,6 @@ import { chatRuntime, stopChatRuntime } from "@/zotero/chat-runtime"
 /** 插件生命周期与原生入口；就绪后固定会话语言，停止时清理窗口和宿主注册。 */
 import { initializeUiLocale, uiText } from "@/zotero/ui-preferences"
 import {
-  clearConnection,
   previewSelectedCollectionUpload,
   pushSelectedCollectionToJadense,
   pushSelectedItemsToJadense,
@@ -21,7 +22,6 @@ import {
   readConnection,
   refreshFavoriteFoldersCache,
   saveCollectionUploadIncludePdfDefault,
-  saveConnection,
   type ZoteroLike,
 } from "@/zotero/runtime"
 import {
@@ -230,19 +230,6 @@ async function runCollectionUploadFlow(win: Window & typeof globalThis) {
   }
 }
 
-function runPromptConnectionFlow(win: Window & typeof globalThis) {
-  // 兜底链路同样不暴露攻玉地址与收藏夹 ID:地址由插件固定,收藏夹由首次自动加载解析落盘。
-  const token = win.prompt(uiText("请输入攻玉插件令牌", "Enter your Jadense plugin token"))?.trim()
-  if (!token) return
-  try {
-    saveConnection(Zotero, { token })
-    alertUser(uiText("攻玉账号已保存。", "Jadense account saved."))
-    warmFavoriteFoldersCache()
-  } catch (error) {
-    alertUser(error instanceof Error ? error.message : uiText("攻玉账号保存失败。", "Could not save the Jadense account."))
-  }
-}
-
 // 启动/配置完成后静默预热收藏夹缓存:面板打开即有数据,失败只进日志不打断用户。
 function warmFavoriteFoldersCache() {
   try {
@@ -278,8 +265,8 @@ function configureConnection() {
   }
   if (openManager("settings-connection")) return
   if (openPreferencesPane(Zotero, win)) return
-  alertUser(uiText("请打开 Zotero 设置并选择 Jadense in Zotero；将改用输入框完成配置。", "Open Zotero Settings and select Jadense in Zotero. A token prompt will open as a fallback."))
-  runPromptConnectionFlow(win)
+  void authorizeJadenseAccount(Zotero).then(warmFavoriteFoldersCache).catch(error =>
+    alertUser(error instanceof Error ? error.message : uiText("授权未完成。", "Authorization did not finish.")))
 }
 
 function registerMenus() {
@@ -305,8 +292,8 @@ function registerMenus() {
         if (win) void runCollectionUploadFlow(win)
       },
       disconnect: () => {
-        clearConnection(Zotero)
-        alertUser(uiText("已从当前 Zotero 配置中移除攻玉账号。", "Jadense account removed from this Zotero profile."))
+        void disconnectWithStatus(Zotero).then(alertUser).catch(error =>
+          alertUser(error instanceof Error ? error.message : uiText("断开失败。", "Disconnect failed.")))
       },
     })
     if (registeredMenuIDs.length === 0) {
@@ -444,6 +431,7 @@ async function shutdown() {
   stopped = true; lifecycleGeneration++; cancelStartupWait?.(); cancelStartupWait = undefined
   const trace = lifecycleTrace(Zotero, 'initialization', 'shutdown')
   const cleanups: Array<[string, () => unknown]> = [
+    ['authorization', () => cancelJadenseAuthorization(Zotero)],
     ['optional', () => stopOptionalFeatures(Zotero)],
     ['analysis', () => stopAnalysisRuntime(Zotero)], ['chat', () => stopChatRuntime(Zotero)], ['documents', () => stopDocumentJobs(Zotero)],
     ['pdf', () => stopPDFTranslationJobs(Zotero)],

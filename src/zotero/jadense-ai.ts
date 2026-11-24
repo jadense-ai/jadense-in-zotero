@@ -9,12 +9,12 @@ export type AiCapabilities = { userId: string; decision: AiCapability; ocr: AiCa
 export type JadenseOcrResult = { text: string; markdown: string; blocks: { text: string; kind?: string; box?: { coordinates: [number, number, number, number]; system: string } }[]; warnings: string[]; modelId: string; revision: number; operationId: string; billingStatus: string }
 export function jadenseAiClient(host: ZoteroLike) {
   const connection = readConnection(host)
-  if (!connection.token) throw new Error(uiText('请在连接攻玉页面生成并保存包含 Jev 和 OCR 权限的令牌。', 'Generate and save a token with Jev and OCR permissions in Connect Jadense.'))
+  if (!connection.token) throw new Error(uiText('请在「连接攻玉」中连接攻玉账号。', 'Connect your Jadense account in Connect Jadense.'))
   const win = host.getMainWindow?.()
   return new JadenseApiClient({ ...connection, fetchImpl: win?.fetch.bind(win) })
 }
 export function requireAiCapability(value: AiCapability) {
-  if (!value?.authorized) throw new Error(uiText('请重新生成包含 Jev/OCR 权限的攻玉令牌并连接。', 'Reconnect with a new Jadense token granting Jev/OCR permissions.'))
+  if (!value?.authorized) throw new Error(uiText('请在「连接攻玉」中改用账号授权，以使用 Jev 和 OCR。', 'Switch to account authorization to use Jev and OCR.'))
   if (!value.available || !value.modelId) throw new Error(uiText('此项攻玉服务当前不可用，请检查订阅或联系管理员配置模型。', 'This Jadense service is unavailable. Check your subscription or ask an administrator to configure it.'))
 }
 export async function snapshotJadenseAi(host: ZoteroLike, capability: 'decision' | 'ocr', signal?: AbortSignal) {

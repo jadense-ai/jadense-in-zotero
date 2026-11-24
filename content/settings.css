@@ -105,7 +105,11 @@
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-settings-directory { flex-direction: row; flex-wrap: wrap; border-radius: 7px 7px 0 0; }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-layout, .jdx-pref-byok-layout) { grid-template-columns: minmax(0, 1fr); }
-  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) { border-right: 0; border-bottom: 1px solid var(--settings-line); padding: 0 0 12px; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) {
+    border-right: 0; border-bottom: 1px solid var(--settings-line); border-radius: 7px 7px 0 0; padding: 12px;
+  }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) { max-height: 180px; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) { padding: 14px; }
   :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) { flex-wrap: wrap; gap: 8px; }
 }
 
@@ -114,15 +118,198 @@
 #jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"] { color: var(--settings-green); }
 #jadense-manager-section-settings #jadense-settings-tabs button[aria-selected="true"]::after { top: auto; bottom: 0; left: 4px; right: 4px; }
 
+/* BYOK 双宿主统一贴边 Rail 主从架构、模型行展开态与危险底栏。 */
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-settings-card, .jdx-pref-card)[data-settings-section="byok"] {
+  padding: 0; gap: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-layout, .jdx-pref-byok-layout) {
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0; min-width: 0; align-items: stretch;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) {
+  display: flex; flex-direction: column; align-self: stretch; gap: 8px; min-width: 0;
+  padding: 12px 8px; border-right: 1px solid var(--settings-line); border-radius: 7px 0 0 7px;
+  background: var(--settings-rail);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) h4 {
+  margin: 0; font-size: calc(13px * var(--jdx-font-scale, 1)); font-weight: 600; color: var(--settings-text);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-byok-add-provider {
+  display: inline-flex; align-items: center; gap: 4px; width: auto; height: auto; min-width: 0; min-height: 28px;
+  padding: 4px 8px; border: 1px solid var(--settings-line); border-radius: 6px;
+  background: var(--settings-surface); color: var(--settings-text);
+  font-size: calc(12px * var(--jdx-font-scale, 1)); font-weight: 500; line-height: 1.3; cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-byok-add-provider:hover {
+  border-color: var(--settings-green); color: var(--settings-green); background: var(--settings-active);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button.jdx-byok-add-provider svg {
+  flex: 0 0 13px; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; max-height: none; overflow-y: auto; padding-right: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button {
+  display: grid; gap: 3px; width: 100%; min-width: 0; min-height: 46px; height: auto;
+  border: 1px solid transparent; border-radius: 6px; padding: 8px 10px;
+  background: transparent; color: var(--settings-text); text-align: start; cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button:hover {
+  background: var(--settings-surface);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button[aria-selected="true"] {
+  border-color: rgb(22 207 140 / 0.35); background: var(--settings-active); color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-provider-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button strong {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: calc(13px * var(--jdx-font-scale, 1));
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button small {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--settings-muted); font-size: calc(11px * var(--jdx-font-scale, 1)); line-height: 1.4;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) button[aria-selected="true"] small {
+  color: var(--settings-text); opacity: 0.78;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-provider-badge {
+  flex: 0 0 auto; border-radius: 4px; padding: 1px 5px;
+  font-size: calc(10px * var(--jdx-font-scale, 1)); font-weight: 500; line-height: 1.4;
+  background: var(--settings-surface); color: var(--settings-muted); border: 1px solid var(--settings-line);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button[aria-selected="true"] .jdx-byok-provider-badge {
+  border-color: rgb(22 207 140 / 0.35); color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) {
+  display: grid; align-content: start; gap: 14px; min-width: 0; padding: 18px 20px; container-type: inline-size;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-intro-note {
+  margin: 0; font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; color: var(--settings-muted);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) h4 {
+  margin: 0; font-size: calc(15px * var(--jdx-font-scale, 1)); font-weight: 600; color: var(--settings-text); line-height: 1.4;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) p {
+  margin: 3px 0 0; font-size: calc(12px * var(--jdx-font-scale, 1)); color: var(--settings-muted); line-height: 1.5;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-endpoint-row, .jdx-pref-endpoint) {
+  display: grid; gap: 4px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-endpoint-row, .jdx-pref-endpoint) > span {
+  font-size: calc(12px * var(--jdx-font-scale, 1)); font-weight: 500; color: var(--settings-muted);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-endpoint-row, .jdx-pref-endpoint) code {
+  display: block; min-width: 0; border: 1px solid var(--settings-line); border-radius: 6px; padding: 6px 10px;
+  background: var(--settings-rail); color: var(--settings-text);
+  font-size: calc(12px * var(--jdx-font-scale, 1)); font-weight: 400; line-height: 1.5;
+  white-space: normal; overflow-wrap: anywhere; user-select: all;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-secret-toggle, .jdx-pref-secret-toggle) {
+  border: 1px solid var(--settings-line); border-left: 0; background: var(--settings-rail); color: var(--settings-muted);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-panel, .jdx-pref-byok-panel) {
+  display: grid; gap: 12px; min-width: 0; border-top: 1px solid var(--settings-line); padding: 18px 0 0; margin-top: 4px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-list, .jdx-pref-model-list) {
+  display: grid; gap: 6px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-list > button[data-model-id], .jdx-pref-model-list > .jdx-pref-model-item) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px;
+  width: 100%; min-width: 0; min-height: 46px; height: auto; max-height: none;
+  border: 1px solid var(--settings-line); border-radius: 6px; padding: 8px 12px;
+  background: var(--settings-surface); color: var(--settings-text); text-align: start; cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-list > button[data-model-id]:hover, .jdx-pref-model-list > .jdx-pref-model-item:hover) {
+  background: var(--settings-rail);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-list > button[data-model-id][aria-expanded="true"], .jdx-pref-model-list > .jdx-pref-model-item[aria-expanded="true"]) {
+  border-color: rgb(22 207 140 / 0.45); background: var(--settings-active); color: var(--settings-green);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-model-row-main {
+  display: grid; gap: 2px; min-width: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-model-chevron {
+  flex: 0 0 auto; color: var(--settings-muted); transition: transform 180ms ease;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) button[aria-expanded="true"] .jdx-byok-model-chevron {
+  transform: rotate(180deg); color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-editor, .jdx-pref-model-editor) {
+  display: grid; gap: 12px; min-width: 0; padding: 14px;
+  border: 1px solid var(--settings-line); border-radius: 6px; background: var(--settings-rail);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-editor, .jdx-pref-model-editor)[data-mode="edit"] {
+  margin-top: -6px; border-top: 0; border-color: rgb(22 207 140 / 0.35);
+  border-top-left-radius: 0; border-top-right-radius: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-model-fields, .jdx-pref-model-fields) {
+  display: grid; gap: 12px; padding-top: 0;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-metrics, .jdx-pref-model-metrics) {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
+}
+@container (min-width: 480px) {
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-metrics, .jdx-pref-model-metrics) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-editor-actions {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-editor-actions > :is(.jdx-manager-danger, .jdx-pref-danger) {
+  margin-inline-start: auto;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-empty-state {
+  margin: 0; padding: 16px 14px; border: 1px dashed var(--settings-line); border-radius: 6px;
+  color: var(--settings-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.6; text-align: center;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-danger-zone {
+  display: grid; gap: 8px; min-width: 0; border-top: 1px solid var(--settings-line); padding-top: 16px; margin-top: 6px;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-danger-zone p {
+  margin: 0; font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.5; color: var(--settings-muted);
+}
+@container (max-width: 700px) {
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-layout, .jdx-pref-byok-layout) { grid-template-columns: minmax(0, 1fr); }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-sidebar, .jdx-pref-byok-sidebar) {
+    border-right: 0; border-bottom: 1px solid var(--settings-line); border-radius: 7px 7px 0 0; padding: 12px;
+  }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-provider-list, .jdx-pref-provider-list) { max-height: 180px; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-editor, .jdx-pref-byok-editor) { padding: 14px; }
+  :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) :is(.jdx-manager-byok-panel-header, .jdx-pref-byok-panel-header) { flex-wrap: wrap; gap: 8px; }
+}
+
 /* BYOK 模型编辑器在所选目录条目下展开；档位多选沿用设置页的浅深主题变量。 */
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-editor {
   display: grid; gap: 7px; min-width: 0;
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-control { position: relative; min-width: 0; }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   min-height: 34px; width: 100%; border: 1px solid var(--settings-line); border-radius: 6px;
   padding: 7px 10px; background: var(--settings-surface); color: var(--settings-text);
   font: inherit; text-align: start; overflow-wrap: anywhere; cursor: pointer;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-value {
+  min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger .jdx-select-chevron {
+  flex: 0 0 auto; color: var(--settings-muted); transition: transform 180ms ease;
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger[aria-expanded="true"] .jdx-select-chevron {
+  transform: rotate(180deg); color: var(--settings-green);
+}
+:is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-empty {
+  margin: 0; padding: 8px 6px; color: var(--settings-muted); font-size: calc(12px * var(--jdx-font-scale, 1)); line-height: 1.5;
 }
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-trigger:hover,
 :is(#jadense-manager-section-settings, #jadense-in-zotero-preferences-pane) .jdx-byok-thinking-option:hover {

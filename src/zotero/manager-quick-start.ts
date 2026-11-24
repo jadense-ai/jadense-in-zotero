@@ -177,7 +177,7 @@ export function wireManagerQuickStart(document: Document, zotero: ZoteroLike | n
   }
   function verifyConfig() {
     const ready = readChat()
-    if (!ready.ready) { note(ready.issue || uiText("请先保存令牌或 BYOK 配置，并选择可用的对话模型。", "Save your token or BYOK setup and select an available Chat model.")); return }
+    if (!ready.ready) { note(ready.issue || uiText("请先连接攻玉账号或保存 BYOK 配置，并选择可用的对话模型。", "Connect your account or save your BYOK setup and select an available Chat model.")); return }
     if (!matchesRoute(ready.route)) return
     step("hello")
   }
@@ -294,7 +294,7 @@ export function wireManagerQuickStart(document: Document, zotero: ZoteroLike | n
       panel.append(options)
     } else if (progress.stage === "configure") {
       heading(uiText("保存配置并选择对话模型", "Save your setup and choose a Chat model"), progress.route === "jadense" ? uiText("在「连接攻玉」保存令牌，再到「功能配置」选择可用的对话模型。保存后返回此教学检查配置。", "Save your token in Connect to Jadense, then select an available Chat model in Feature settings. Return here after saving.") : uiText("在「BYOK」保存服务商与模型，再到「功能配置」将对话设为该模型。保存后返回此教学检查配置。", "Save a provider and model in BYOK, then select that model for Chat in Feature settings. Return here after saving."))
-      controls().append(button("open-config", progress.route === "jadense" ? uiText("配置攻玉令牌", "Set up Jadense token") : uiText("配置 BYOK", "Set up BYOK"), () => openSettings(progress.route === "jadense" ? "connection" : "ai")), button("open-models", uiText("选择对话模型", "Choose Chat model"), () => openSettings("features")))
+      controls().append(button("open-config", progress.route === "jadense" ? uiText("连接攻玉账号", "Connect Jadense account") : uiText("配置 BYOK", "Set up BYOK"), () => openSettings(progress.route === "jadense" ? "connection" : "ai")), button("open-models", uiText("选择对话模型", "Choose Chat model"), () => openSettings("features")))
       controls().append(button("verify-config", uiText("已保存，检查并继续", "Saved — check and continue"), verifyConfig, true), button("change-route", uiText("更换配置方式", "Change setup method"), () => step("choose")))
     } else if (progress.stage === "hello") {
       heading(uiText("发起第一条「你好」对话", "Send your first hello"), uiText("点击后，会使用当前对话模型发送「你好」。这是真实模型请求，可能消耗攻玉积分或产生服务商费用；收到完整回复后才进入下一步。", "Click to send “你好” using your current Chat model. This is a real model request and may use Jadense credits or incur provider charges. A complete reply is required to continue."))

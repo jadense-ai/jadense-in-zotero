@@ -252,8 +252,7 @@
   background: var(--jdx-pref-subtle);
 }
 
-:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button[aria-selected="true"],
-:where(#jadense-in-zotero-preferences-pane) .jdx-pref-model-list .jdx-pref-model-item[aria-current="true"] {
+:where(#jadense-in-zotero-preferences-pane) .jdx-pref-provider-list button[aria-selected="true"] {
   border-color: rgb(22 207 140 / 0.4);
   color: var(--jdx-pref-green-text);
   background: var(--jdx-pref-active);

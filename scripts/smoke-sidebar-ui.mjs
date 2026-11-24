@@ -155,12 +155,11 @@ export async function verifySidebarUI({ Zotero, reader, parent, attachment, asse
   action('connect').click()
   const settings = manager.document
   await waitFor(() => visible(settings.getElementById('jadense-settings-panel-connection')), 'connect destination')
-  const token = settings.getElementById('jadense-manager-token-input')
-  if (!visible(token)) settings.getElementById('jadense-manager-token-edit').click()
-  token.value = config.token
-  token.dispatchEvent(new manager.Event('input', { bubbles: true }))
-  settings.getElementById('jadense-manager-token-save').click()
-  await waitFor(() => Zotero.Prefs.get(pref('token')) === config.token && !settings.getElementById('jadense-manager-token-save').disabled, 'synthetic connection saved')
+  const authorize = settings.getElementById('jadense-manager-authorize')
+  assert(visible(authorize) && !authorize.disabled, 'Account authorization action unavailable')
+  // 此专项覆盖侧栏状态；真实浏览器确认和持久化由 smoke-account-upgrade 单独验证。
+  Zotero.Prefs.set(pref('token'), config.token)
+  await waitFor(() => Zotero.Prefs.get(pref('defaultFolderId')), 'connected account folder projection')
   // 连接成功后，某些配置会自动选择服务器默认收藏夹；独立核验缺失目标的入口。
   Zotero.Prefs.clear(pref('defaultFolderId'))
   await waitFor(() => visible(action('folder')), 'choose-folder action', 7000)

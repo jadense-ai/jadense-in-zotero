@@ -1,6 +1,17 @@
+import { checkJadenseCredential } from "./account-authorization"
+import { disconnectWithStatus, renderAccountButton, wireAccountButton } from "./ui/account-connection"
 import { createModelSelect } from './ui/model-select'
 import { createByokThinkingEditor, type ByokThinkingEditor } from './ui/byok-thinking-editor'
-import { placeByokModelEditor, readByokModelEditorMode, setByokModelEditorMode } from './ui/byok-model-editor'
+import { createChevron } from './ui/chevron'
+import {
+  formatByokModelSummary,
+  formatByokProtocolLabel,
+  handleByokProviderListKeydown,
+  placeByokModelEditor,
+  readByokModelEditorMode,
+  setByokModelEditorMode,
+  setByokSecretToggleIcon,
+} from './ui/byok-model-editor'
 import { wireFeatureSettings } from './feature-settings'
 import { diagnostics } from "./diagnostics"
 import { wireOCRSettings } from './ocr-settings'
@@ -8,14 +19,12 @@ import { wirePreferencesNavigation } from './settings-navigation'
 /** 原生设置后备入口：共享功能模型偏好，并独立管理攻玉连接与 BYOK 目录。 */
 import { getUiLocale, initializeUiLocale, observeDisplayLanguage, observeTheme, readDisplayLanguage, readTheme, saveDisplayLanguage, saveTheme, uiText, wireReadingPreferences } from "./ui-preferences"
 import {
-  clearConnection,
   favoriteFolderOptionLabel,
   readCollectionUploadIncludePdfDefault,
   readConnection,
   readFavoriteFoldersCache,
   refreshFavoriteFoldersCache,
   saveCollectionUploadIncludePdfDefault,
-  saveConnection,
   saveDefaultFolderId,
   type FavoriteFolderOption,
   type FavoriteFoldersRefreshResult,
@@ -54,7 +63,6 @@ import { rememberModelCatalog } from "./model-catalog"
 import { createJdxSelect, type JdxSelect } from "./custom-select"
 import {
   applyStrings,
-  copyTextToClipboard,
   formatRelativeTime,
   maskToken,
   selectPreferencesStrings,
@@ -68,14 +76,7 @@ const IDS = {
   connectionStatus: "jadense-in-zotero-connection-status",
   connectionStatusText: "jadense-in-zotero-connection-status-text",
   connectionUpdated: "jadense-in-zotero-connection-updated",
-  tokenDisplay: "jadense-in-zotero-token-display",
-  tokenMask: "jadense-in-zotero-token-mask",
-  tokenCopy: "jadense-in-zotero-token-copy",
-  tokenEdit: "jadense-in-zotero-token-edit",
-  tokenEditRow: "jadense-in-zotero-token-edit-row",
-  tokenInput: "jadense-in-zotero-token-input",
-  tokenSave: "jadense-in-zotero-token-save",
-  tokenCancel: "jadense-in-zotero-token-cancel",
+  authorize: "jadense-in-zotero-authorize",
   folderSelect: "jadense-in-zotero-folder-select",
   folderStatus: "jadense-in-zotero-folder-status",
   folderRetry: "jadense-in-zotero-folder-retry",
@@ -102,7 +103,9 @@ const IDS = {
   byokMaxOutputTokens: "jadense-in-zotero-byok-max-output-tokens",
   byokThinkingLevels: "jadense-in-zotero-byok-thinking-levels",
   byokModelNew: "jadense-in-zotero-byok-model-new",
+  byokModelCancel: "jadense-in-zotero-byok-model-cancel",
   byokModelDelete: "jadense-in-zotero-byok-model-delete",
+  byokProviderStatus: "jadense-in-zotero-byok-provider-status",
   byokStatus: "jadense-in-zotero-byok-status",
   byokClear: "jadense-in-zotero-byok-clear",
   byokTest: "jadense-in-zotero-byok-test",
@@ -118,14 +121,7 @@ type PreferenceElements = {
   connectionStatus: HTMLElement
   connectionStatusText: HTMLElement
   connectionUpdated: HTMLElement
-  tokenDisplay: HTMLElement
-  tokenMask: HTMLElement
-  tokenCopy: HTMLButtonElement
-  tokenEdit: HTMLButtonElement
-  tokenEditRow: HTMLElement
-  tokenInput: HTMLInputElement
-  tokenSave: HTMLButtonElement
-  tokenCancel: HTMLButtonElement
+  authorize: HTMLButtonElement
   folderSelect: JdxSelect
   folderStatus: HTMLElement
   folderRetry: HTMLButtonElement
@@ -152,7 +148,9 @@ type PreferenceElements = {
   byokMaxOutputTokens: HTMLInputElement
   byokThinkingLevels: ByokThinkingEditor
   byokModelNew: HTMLButtonElement
+  byokModelCancel: HTMLButtonElement
   byokModelDelete: HTMLButtonElement
+  byokProviderStatus: HTMLElement
   byokStatus: HTMLElement
   byokClear: HTMLButtonElement
   byokTest: HTMLButtonElement
@@ -175,14 +173,7 @@ function readElements(): PreferenceElements {
     connectionStatus: element(IDS.connectionStatus),
     connectionStatusText: element(IDS.connectionStatusText),
     connectionUpdated: element(IDS.connectionUpdated),
-    tokenDisplay: element(IDS.tokenDisplay),
-    tokenMask: element(IDS.tokenMask),
-    tokenCopy: element<HTMLButtonElement>(IDS.tokenCopy),
-    tokenEdit: element<HTMLButtonElement>(IDS.tokenEdit),
-    tokenEditRow: element(IDS.tokenEditRow),
-    tokenInput: element<HTMLInputElement>(IDS.tokenInput),
-    tokenSave: element<HTMLButtonElement>(IDS.tokenSave),
-    tokenCancel: element<HTMLButtonElement>(IDS.tokenCancel),
+    authorize: element<HTMLButtonElement>(IDS.authorize),
     folderSelect: createJdxSelect(element(IDS.folderSelect)),
     folderStatus: element(IDS.folderStatus),
     folderRetry: element<HTMLButtonElement>(IDS.folderRetry),
@@ -209,7 +200,9 @@ function readElements(): PreferenceElements {
     byokMaxOutputTokens: element<HTMLInputElement>(IDS.byokMaxOutputTokens),
     byokThinkingLevels: createByokThinkingEditor(element(IDS.byokThinkingLevels)),
     byokModelNew: element<HTMLButtonElement>(IDS.byokModelNew),
+    byokModelCancel: element<HTMLButtonElement>(IDS.byokModelCancel),
     byokModelDelete: element<HTMLButtonElement>(IDS.byokModelDelete),
+    byokProviderStatus: element(IDS.byokProviderStatus),
     byokStatus: element(IDS.byokStatus),
     byokClear: element<HTMLButtonElement>(IDS.byokClear),
     byokTest: element<HTMLButtonElement>(IDS.byokTest),
@@ -245,13 +238,6 @@ function renderConnectionStatus(
   elements.connectionUpdated.textContent = relative ? strings.updatedAgo(relative) : ""
 }
 
-function renderTokenDisplay(elements: PreferenceElements, strings: PreferencesStrings) {
-  const token = readConnection(Zotero).token
-  elements.tokenMask.textContent = token ? maskToken(token) : strings.tokenNotConfigured
-  elements.tokenMask.dataset.empty = String(!token)
-  elements.tokenCopy.disabled = !token
-}
-
 function renderFolderOptions(
   elements: PreferenceElements,
   strings: PreferencesStrings,
@@ -273,44 +259,6 @@ function renderHelpSteps(elements: PreferenceElements, strings: PreferencesStrin
   }))
 }
 
-function enterTokenEdit(elements: PreferenceElements, strings: PreferencesStrings) {
-  elements.tokenDisplay.hidden = true
-  elements.tokenEditRow.hidden = false
-  elements.tokenInput.value = ""
-  elements.tokenInput.placeholder = strings.tokenInputPlaceholder
-  elements.tokenInput.focus()
-}
-
-function exitTokenEdit(elements: PreferenceElements) {
-  elements.tokenEditRow.hidden = true
-  elements.tokenDisplay.hidden = false
-  elements.tokenInput.value = ""
-}
-
-async function saveTokenFromEdit(elements: PreferenceElements, strings: PreferencesStrings) {
-  const token = elements.tokenInput.value.trim()
-  if (!token) {
-    // 留空 = 不修改已有令牌,直接回到显示态。
-    exitTokenEdit(elements)
-    return
-  }
-  elements.tokenSave.disabled = true
-  try {
-    saveConnection(Zotero, { token })
-    void refreshFeatureModelCatalog(elements)
-    exitTokenEdit(elements)
-    renderTokenDisplay(elements, strings)
-    setStatus(elements.status, strings.tokenSaved, "success")
-    // 保存后立即用新令牌拉取收藏夹,顺带完成连接验证。
-    await refreshFolders(elements, strings)
-  } catch (error) {
-    diagnostics()?.record("preferences", "operation_error", error)
-    setStatus(elements.status, error instanceof Error ? error.message : strings.unexpectedError, "error")
-  } finally {
-    elements.tokenSave.disabled = false
-  }
-}
-
 function applyRefreshResult(
   elements: PreferenceElements,
   strings: PreferencesStrings,
@@ -330,7 +278,6 @@ function applyRefreshResult(
     setStatus(elements.folderStatus, result.folders.length === 0 ? strings.folderEmpty : "")
     elements.folderRetry.hidden = true
   } else {
-    renderConnectionStatus(elements, strings, "failed", result.fetchedAt)
     setStatus(elements.folderStatus, result.message, "error")
     elements.folderRetry.hidden = false
   }
@@ -340,10 +287,15 @@ async function refreshFolders(elements: PreferenceElements, strings: Preferences
   elements.folderSelect.setDisabled(true)
   elements.folderRetry.hidden = true
   setStatus(elements.folderStatus, strings.folderLoading)
-  renderConnectionStatus(elements, strings, "checking")
+  const snapshot = readConnection(Zotero)
   const result = await refreshFavoriteFoldersCache(Zotero)
-  if (preferencesDisposed) return
+  const isCurrent = () => !preferencesDisposed && readConnection(Zotero).token === snapshot.token && readConnection(Zotero).baseUrl === snapshot.baseUrl
+  if (!isCurrent()) return
   applyRefreshResult(elements, strings, result)
+  if (result.httpStatus === 401) {
+    const credential = await checkJadenseCredential(snapshot)
+    if (credential === "invalid" && isCurrent()) renderConnectionStatus(elements, strings, "failed")
+  }
 }
 
 const BYOK_PROTOCOL_OPTIONS: Array<{ value: ByokProtocol; label: string }> = [
@@ -370,23 +322,46 @@ function createHtmlElement<T extends HTMLElement>(tagName: string) {
   return document.createElementNS("http://www.w3.org/1999/xhtml", tagName) as T
 }
 
-function renderByokProviderList(target: HTMLElement, providers: ByokProvider[], activeProviderId: string) {
+function renderByokProviderList(target: HTMLElement, providers: ByokProvider[], allModels: ByokModel[], activeProviderId: string) {
   target.replaceChildren(...providers.map((provider) => {
     const button = createHtmlElement<HTMLButtonElement>("button")
     button.type = "button"
     button.role = "option"
     button.dataset.providerId = provider.id
     button.setAttribute("aria-selected", String(provider.id === activeProviderId))
+    const head = createHtmlElement("span")
+    head.className = "jdx-byok-provider-head"
     const name = createHtmlElement("strong")
     name.textContent = provider.name
+    head.append(name)
+    const count = allModels.filter((model) => model.providerId === provider.id).length
+    const incomplete = !provider.baseUrl.trim() || !provider.apiKey.trim()
+    if (incomplete || count > 0) {
+      const badge = createHtmlElement("span")
+      badge.className = "jdx-byok-provider-badge"
+      badge.textContent = incomplete ? uiText("待配置", "Setup") : String(count)
+      head.append(badge)
+    }
     const meta = createHtmlElement("small")
-    meta.textContent = provider.protocol
-    button.append(name, meta)
+    const countText = uiText(`${count} 个模型`, `${count} ${count === 1 ? "model" : "models"}`)
+    meta.textContent = `${formatByokProtocolLabel(provider.protocol)} · ${countText}`
+    button.append(head, meta)
     return button
   }))
 }
 
-function renderByokModelList(target: HTMLElement, models: ByokModel[], activeModelId: string, editModelId: string, strings: PreferencesStrings) {
+function renderByokModelList(target: HTMLElement, models: ByokModel[], activeModelId: string, editModelId: string, isNewMode: boolean, strings: PreferencesStrings) {
+  if (!models.length) {
+    if (isNewMode) {
+      target.replaceChildren()
+      return
+    }
+    const empty = createHtmlElement<HTMLParagraphElement>("p")
+    empty.className = "jdx-byok-empty-state"
+    empty.textContent = uiText("尚未添加模型；点击上方「添加模型」开始配置。", "No models added yet. Choose Add model above to create one.")
+    target.replaceChildren(empty)
+    return
+  }
   target.replaceChildren(...models.map((model) => {
     const button = createHtmlElement<HTMLButtonElement>("button")
     button.type = "button"
@@ -395,13 +370,16 @@ function renderByokModelList(target: HTMLElement, models: ByokModel[], activeMod
     button.setAttribute("aria-current", String(model.id === activeModelId))
     button.setAttribute("aria-expanded", String(model.id === editModelId))
     button.setAttribute("aria-controls", IDS.byokModelEditor)
+    const main = createHtmlElement("span")
+    main.className = "jdx-byok-model-row-main"
     const name = createHtmlElement("strong")
     name.className = "jdx-pref-model-item-name"
     name.textContent = model.name
     const meta = createHtmlElement("small")
     meta.className = "jdx-pref-model-item-meta"
-    meta.textContent = model.model || strings.byokModelEmpty
-    button.append(name, meta)
+    meta.textContent = formatByokModelSummary(model, strings.byokModelEmpty)
+    main.append(name, meta)
+    button.append(main, createChevron(document, "jdx-byok-model-chevron", "down", 16))
     return button
   }))
 }
@@ -471,7 +449,7 @@ function renderByokConfig(elements: PreferenceElements, strings: PreferencesStri
     setByokModelEditorMode(elements.byokModelEditor, null)
     mode = null
   }
-  renderByokProviderList(elements.byokProviderSelect, settings.providers, provider.id)
+  renderByokProviderList(elements.byokProviderSelect, settings.providers, settings.models, provider.id)
   elements.byokProviderName.value = provider.name
   elements.byokProtocol.setOptions(BYOK_PROTOCOL_OPTIONS, provider.protocol)
   elements.byokBaseUrl.value = provider.baseUrl
@@ -481,9 +459,10 @@ function renderByokConfig(elements: PreferenceElements, strings: PreferencesStri
   elements.byokKeyToggle.setAttribute("aria-pressed", "false")
   elements.byokKeyToggle.setAttribute("aria-label", strings.byokShowKey)
   elements.byokKeyToggle.title = strings.byokShowKey
+  setByokSecretToggleIcon(elements.byokKeyToggle, false)
   elements.byokKeyMask.textContent = provider.apiKey ? maskToken(provider.apiKey) : strings.tokenNotConfigured
   elements.byokKeyMask.dataset.empty = String(!provider.apiKey)
-  renderByokModelList(elements.byokModelSelect, models, settings.activeModelId, editModelId, strings)
+  renderByokModelList(elements.byokModelSelect, models, settings.activeModelId, editModelId, mode?.kind === "new", strings)
   elements.byokModelName.value = mode?.kind === "edit" ? model?.name ?? "" : ""
   elements.byokModel.value = mode?.kind === "edit" ? model?.model ?? "" : ""
   elements.byokModel.placeholder = strings.byokModelPlaceholder
@@ -492,6 +471,7 @@ function renderByokConfig(elements: PreferenceElements, strings: PreferencesStri
   elements.byokThinkingLevels.setValues(mode?.kind === "edit" ? model?.thinkingEfforts : undefined)
   elements.byokModelEditor.setAttribute("aria-label", mode?.kind === "new" ? uiText("添加模型", "Add model") : strings.byokModelEditorTitle)
   placeByokModelEditor(elements.byokModelEditor, elements.byokModelSelect, mode)
+  elements.byokModelDelete.hidden = mode?.kind !== "edit"
   elements.byokModelDelete.disabled = !model
   elements.byokTest.disabled = !mode
   elements.byokSave.disabled = !mode
@@ -664,7 +644,7 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
   }
   own(() => modelObservers.forEach(id => Zotero.Prefs?.unregisterObserver?.(id)))
   renderHelpSteps(elements, strings)
-  renderTokenDisplay(elements, strings)
+  renderAccountButton(elements.authorize, Zotero)
   void refreshFeatureModelCatalog(elements)
   renderByokConfig(elements, strings)
   elements.includePdf.checked = readCollectionUploadIncludePdfDefault(Zotero)
@@ -684,7 +664,7 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
     setStatus(elements.folderStatus, "")
   } else {
     renderFolderOptions(elements, strings, [], "")
-    renderConnectionStatus(elements, strings, connection.token ? "checking" : "unconfigured")
+    renderConnectionStatus(elements, strings, connection.token ? "connected" : "unconfigured")
     setStatus(elements.folderStatus, connection.token ? strings.folderLoading : strings.folderEmpty)
   }
 
@@ -693,24 +673,18 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
     void refreshFolders(elements, strings)
   }
 
-  elements.tokenEdit.addEventListener("click", () => enterTokenEdit(elements, strings))
-  elements.tokenCancel.addEventListener("click", () => exitTokenEdit(elements))
-  elements.tokenSave.addEventListener("click", () => void saveTokenFromEdit(elements, strings))
-  elements.tokenInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault()
-      void saveTokenFromEdit(elements, strings)
-    } else if (event.key === "Escape") {
-      exitTokenEdit(elements)
-    }
+  wireAccountButton(elements.authorize, Zotero, (message, kind) => setStatus(elements.status, message, kind), () => {
+    renderConnectionStatus(elements, strings, "connected")
+    void refreshFolders(elements, strings)
+    void refreshFeatureModelCatalog(elements)
   })
-  elements.tokenCopy.addEventListener("click", () => {
-    void (async () => {
-      const token = readConnection(Zotero).token
-      const copied = token ? await copyTextToClipboard(Zotero, token) : false
-      setStatus(elements.status, copied ? strings.copied : strings.copyFailed, copied ? "success" : "error")
-    })()
+  const connectionObserver = Zotero.Prefs?.registerObserver?.("extensions.jadenseInZotero.token", () => {
+    renderAccountButton(elements.authorize, Zotero)
+    renderConnectionStatus(elements, strings, readConnection(Zotero).token ? "connected" : "unconfigured")
+    void refreshFolders(elements, strings)
+    void refreshFeatureModelCatalog(elements)
   })
+  if (connectionObserver !== undefined) own(() => Zotero.Prefs?.unregisterObserver?.(connectionObserver))
 
   elements.folderSelect.onChange((value) => {
     // 选中即保存;选回占位项时不改动已有选择。
@@ -725,17 +699,19 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
     setStatus(elements.status, strings.optionSaved, "success")
   })
 
-  elements.disconnect.addEventListener("click", () => {
-    clearConnection(Zotero)
+  elements.disconnect.addEventListener("click", async () => {
+    let message: string
+    try { message = await disconnectWithStatus(Zotero) }
+    catch (error) { setStatus(elements.status, error instanceof Error ? error.message : strings.unexpectedError, "error"); return }
+    if (readConnection(Zotero).token) return
     void refreshFeatureModelCatalog(elements)
-    exitTokenEdit(elements)
-    renderTokenDisplay(elements, strings)
+    renderAccountButton(elements.authorize, Zotero)
     renderConnectionStatus(elements, strings, "unconfigured")
     renderFolderOptions(elements, strings, [], "")
     setStatus(elements.folderStatus, strings.folderEmpty)
     elements.folderRetry.hidden = true
     elements.includePdf.checked = false
-    setStatus(elements.status, strings.disconnected, "success")
+    setStatus(elements.status, message, "success")
   })
 
   for (const feature of AI_FEATURES) elements.featureModels[feature].onChange(value => {
@@ -758,9 +734,15 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
       ? strings.autoFollowChatModelEnabled
       : strings.autoFollowChatModelDisabled, "success")
   })
+  const providerChanged = () => setStatus(elements.byokProviderStatus, uiText("尚未保存。点击「保存提供商」应用修改。", "Unsaved. Choose Save provider to apply your edits."))
+  for (const field of [elements.byokProviderName, elements.byokBaseUrl, elements.byokKeyInput]) field.addEventListener("input", providerChanged)
+  elements.byokModelEditor.addEventListener("input", () => {
+    setStatus(elements.byokStatus, uiText("尚未保存。点击「保存模型」应用修改。", "Unsaved. Choose Save model to apply your edits."))
+  })
   elements.byokProtocol.onChange((value) => {
     if (!BYOK_PROTOCOL_OPTIONS.some((option) => option.value === value)) return
     updateByokEndpoint(elements)
+    providerChanged()
   })
   elements.byokBaseUrl.addEventListener("input", () => updateByokEndpoint(elements))
   elements.byokKeyToggle.addEventListener("click", () => {
@@ -769,18 +751,46 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
     elements.byokKeyToggle.setAttribute("aria-pressed", String(!revealed))
     elements.byokKeyToggle.setAttribute("aria-label", revealed ? strings.byokShowKey : strings.byokHideKey)
     elements.byokKeyToggle.title = revealed ? strings.byokShowKey : strings.byokHideKey
+    setByokSecretToggleIcon(elements.byokKeyToggle, !revealed)
   })
+  const activateByokProvider = (providerId: string) => {
+    setByokModelEditorMode(elements.byokModelEditor, null)
+    setStatus(elements.byokProviderStatus, "")
+    setStatus(elements.byokStatus, "")
+    selectByokProvider(Zotero, providerId)
+    renderByokConfig(elements, strings)
+  }
   elements.byokProviderSelect.addEventListener("click", (event) => {
     const target = (event.target as Element).closest<HTMLButtonElement>("[data-provider-id]")
     if (!target) return
+    activateByokProvider(target.dataset.providerId ?? "")
+  })
+  elements.byokProviderSelect.addEventListener("keydown", (event) => {
+    handleByokProviderListKeydown(elements.byokProviderSelect, event, activateByokProvider)
+  })
+  const closeByokModelEditor = () => {
+    const mode = readByokModelEditorMode(elements.byokModelEditor)
+    if (!mode) return
     setByokModelEditorMode(elements.byokModelEditor, null)
-    selectByokProvider(Zotero, target.dataset.providerId ?? "")
+    setStatus(elements.byokStatus, "")
     renderByokConfig(elements, strings)
+    if (mode.kind === "edit") {
+      elements.byokModelSelect.querySelector<HTMLButtonElement>(`button[data-model-id="${mode.modelId}"]`)?.focus()
+    } else {
+      elements.byokModelNew.focus()
+    }
+  }
+  elements.byokModelCancel.addEventListener("click", closeByokModelEditor)
+  elements.byokModelEditor.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return
+    event.preventDefault()
+    closeByokModelEditor()
   })
   elements.byokModelSelect.addEventListener("click", (event) => {
     const target = (event.target as Element).closest<HTMLButtonElement>("button[data-model-id]")
     if (!target) return
     const modelId = target.dataset.modelId ?? ""
+    setStatus(elements.byokStatus, "")
     const current = readByokModelEditorMode(elements.byokModelEditor)
     setByokModelEditorMode(elements.byokModelEditor, current?.kind === "edit" && current.modelId === modelId ? null : { kind: "edit", modelId })
     selectByokModel(Zotero, modelId)
@@ -793,21 +803,21 @@ function mountJadensePreferencesPage(root: HTMLElement, own: (stop: () => void) 
       protocol: "openai-chat-completions", baseUrl: "", apiKey: "",
     })
     renderByokConfig(elements, strings)
-    setStatus(elements.byokStatus, strings.byokProviderAdded, "success")
+    setStatus(elements.byokProviderStatus, strings.byokProviderAdded, "success")
   })
   elements.byokProviderDelete.addEventListener("click", () => {
     setByokModelEditorMode(elements.byokModelEditor, null)
     deleteByokProvider(Zotero, readByokSettings(Zotero).activeProviderId)
     renderByokConfig(elements, strings)
-    setStatus(elements.byokStatus, strings.byokProviderDeleted, "success")
+    setStatus(elements.byokProviderStatus, strings.byokProviderDeleted, "success")
   })
   elements.byokProviderSave.addEventListener("click", () => {
     try {
       saveByokProvider(Zotero, byokProviderDraft(elements))
       renderByokConfig(elements, strings)
-      setStatus(elements.byokStatus, strings.byokProviderSaved, "success")
+      setStatus(elements.byokProviderStatus, strings.byokProviderSaved, "success")
     } catch (error) {
-      setStatus(elements.byokStatus, error instanceof Error ? error.message : strings.unexpectedError, "error")
+      setStatus(elements.byokProviderStatus, error instanceof Error ? error.message : strings.unexpectedError, "error")
     }
   })
   elements.byokModelNew.addEventListener("click", () => {

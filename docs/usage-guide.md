@@ -2,6 +2,7 @@
 
 [返回 README](../README.md) · [Zotero 入门](zotero-guide.md) · [FAQ](faq.md)
 
+- [0.6.20 浏览器账号授权与模型配置](#update-0620)
 - [0.6.19 证据引用与阅读工作区](#update-0619)
 - [0.6.18 免密钥机器翻译](#update-0618)
 - [0.6.17 长文批注与引擎安装](#update-0617)
@@ -13,6 +14,20 @@
 - [0.6.2 更新提示与阅读入口](#release-062)
 - [0.6.10 引擎存储、BYOK 档位与升级](#update-0610)
 - [0.6.9 简阅、模型与翻译反馈](#simple-reading-069)
+
+<a id="update-0620"></a>
+
+## 0.6.20 浏览器账号授权与模型配置 / Browser authorization and model settings
+
+在 Zotero 的「设置 → 连接攻玉」点击「连接攻玉账号」，在浏览器核对账号后点击「授权并连接」。返回 Zotero，在「攻玉学术 → 用户信息」确认账号。同一 Zotero 配置覆盖安装或重启后可继续使用原连接。旧手工令牌沿用原权限和有效期，可在方便时点击「改用账号授权」。在攻玉网站的「设置 → 集成 → Zotero 插件」可查看和单独断开设备。
+
+在工作台或 Zotero 原生设置打开「BYOK」，选择提供商后可在同一列表添加或编辑模型，并查看上下文、输出上限、图像与思考能力摘要。
+
+Open **Settings → Connect Jadense** in Zotero and choose **Connect Jadense account**. Check your account in the browser, choose **Authorize and connect**, then return to Zotero and confirm the account under **Jadense → Your account**. The same Zotero profile retains its connection after an upgrade or restart. Existing manual tokens keep their original permissions and expiry. Switch to account authorization when you are ready, and manage individual devices in **Settings → Integrations → Zotero** on the Jadense website.
+
+Open **BYOK** in the workbench or Zotero preferences to add and edit models for a provider and review context, output limits, image support and thinking capabilities in the model list.
+
+[下载 XPI / Download XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20.xpi) · [Windows x64 完整离线 ZIP / Complete offline ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20-windows-x64-offline.zip) · [发布说明 / Release notes](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20)
 
 <a id="update-0619"></a>
 
@@ -218,7 +233,7 @@ Reading/PDF translation better preserves partial results and reports stopped or 
   - [4.1 语言、主题与快捷键](#appearance)
   - [4.2 上传到攻玉](#upload)
 
-本指南包含 0.6.13 及之前的正式版操作；各版变化按版本分别列出。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
+本指南包含 0.6.20 的当前操作与往期版本说明；各版变化按版本分别列出。部分配图沿用 0.4.4 构建与合成数据：配置表单与解析历史来自真实 Manager 的浏览器预览，阅读器和功能配置来自 Windows / Zotero 10.0.2 隔离环境；0.6.9 简阅图来自 Windows / Zotero 10.0.3 隔离环境。示例 URL、模型 ID、输出量及模拟结果仅说明操作位置，不是推荐配置或真实模型效果；不含真实凭据。
 
 <a id="install"></a>
 
@@ -228,7 +243,7 @@ Reading/PDF translation better preserves partial results and reports stopped or 
 
 ### 1.1 下载与安装
 
-下载 [v0.6.13 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.13/jadense-in-zotero-v0.6.13.xpi)，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
+下载 [v0.6.20 XPI](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20.xpi)，不要下载 Source code 压缩包。在 Zotero 的「工具 → 插件」打开插件管理器，通过齿轮菜单「从文件安装插件」选择 XPI，按提示重启。
 
 <a id="windows-x64-zip-离线安装"></a>
 <a id="windows-x64-zip-offline-installation"></a>
@@ -237,11 +252,11 @@ Reading/PDF translation better preserves partial results and reports stopped or 
 
 完整离线 ZIP 适用于 Windows x64，包含同一版本的插件 XPI、PDF 版面解析引擎 ZIP、本机 OCR 引擎 ZIP 和 PDF 安装指南。可在有网络的电脑下载后复制到目标电脑；该套装可离线安装两种引擎，无需预装系统 Python/uv 或管理员权限。建议先预留约 6 GiB 磁盘空间，以容纳下载包、解压目录及安装时的临时文件。
 
-下载 [v0.6.13 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.13/jadense-in-zotero-v0.6.13-windows-x64-offline.zip)。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
+下载 [v0.6.20 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20-windows-x64-offline.zip)。使用套装内的 XPI 与引擎 ZIP，避免混淆版本。
 
-1. 下载 `jadense-in-zotero-v0.6.13-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
+1. 下载 `jadense-in-zotero-v0.6.20-windows-x64-offline.zip`，解压到本地文件夹。不要把外层 ZIP 或 Source code ZIP 直接交给 Zotero 安装。
 2. 保留解压目录中的两个引擎 ZIP 原样，不要再次解压。
-3. 打开 Zotero「工具 → 插件」，点插件管理器齿轮菜单中的「从文件安装插件」，选择解压目录中的 `jadense-in-zotero-v0.6.13.xpi`，然后重启 Zotero。
+3. 打开 Zotero「工具 → 插件」，点插件管理器齿轮菜单中的「从文件安装插件」，选择解压目录中的 `jadense-in-zotero-v0.6.20.xpi`，然后重启 Zotero。
 4. 打开「设置 → 外置依赖配置 → 版面解析引擎 → 导入离线包」，选择该目录中的 `jadense-pdf-engine-*.zip`，等待状态显示引擎已就绪。PDF 排版引擎是全文翻译所需的可选组件。
 5. 在同一设置页「本机 OCR → 导入离线包」，选择 `jadense-ocr-engine-*.zip`，等待验证完成并显示 OCR 已就绪。PDF 与 OCR 可以分别安装；全文 OCR 模型包含在套装中。选文公式增强使用额外的 CodeFormulaV2 模型，首次启用仍需下载。
 
@@ -329,14 +344,12 @@ BYOK 是 Bring Your Own Key：使用自己在模型服务商处申请的 API 密
 
 ### 2.4 连接攻玉
 
-1. 登录[攻玉学术](https://jadense.cn/)，在「设置 → 集成 → 连接 Jadense in Zotero」创建插件令牌。
-2. 在插件「设置 → 连接攻玉」粘贴并保存令牌。
+1. 在 Zotero 的「设置 → 连接攻玉」点击「连接攻玉账号」。旧版手工令牌仍可继续使用，也可点击「改用账号授权」。
+2. 在浏览器核对攻玉账号，点击「授权并连接」后返回 Zotero。
 3. 在「设置 → 功能配置」选择账号可用的模型；默认自动跟随对话模型的规则与 BYOK 相同。
 4. 到「攻玉学术 → 用户信息」查看账号、订阅和积分。签到通过网页完成，再刷新插件中的状态。
 
-![设置中的连接攻玉令牌输入框](images/guide-connect-jadense.png)
-
-令牌来自攻玉网页端「设置 → 集成」，粘贴后点击「保存」。已有令牌时先点击「编辑」；上图展示的是编辑状态。
+在攻玉网站的「设置 → 集成 → Zotero 插件」查看每台设备的最近使用时间，并按需断开。插件离线退出后，可以在这里确认远端连接是否已断开。
 
 模型可用性、费用和积分以账号页面为准；赞助本项目不会自动充值积分或开通订阅。
 
@@ -585,7 +598,7 @@ Configure the translation service, model, target language and concise/full scope
 <a id="jadense-mode"></a>
 ## 攻玉模式 / Jadense mode（0.6.8）
 
-工作台顶栏的攻玉 logo 滑块控制此模式，初次使用默认关闭。先在「设置 → 连接攻玉」保存具备相应权限的插件令牌，再开启模式。开启后，文献分类的 Jev 判断走攻玉账号，无需单独配置 TypeSafe 密钥；本机 OCR 未就绪时可选择攻玉 OCR；前沿雷达可从 arXiv 扩展到 13 个公开来源。模式不会自动发送收费任务，实际使用模型时可能消耗积分。关闭后可继续用自备 TypeSafe 密钥进行文献分类和 arXiv 追踪；原有历史和收藏保留。
+工作台顶栏的攻玉 logo 滑块控制此模式，初次使用默认关闭。先在「设置 → 连接攻玉」[连接具备所需权限的攻玉账号](#connect)，再开启模式。开启后，文献分类的 Jev 判断走攻玉账号，无需单独配置 TypeSafe 密钥；本机 OCR 未就绪时可选择攻玉 OCR；前沿雷达可从 arXiv 扩展到 13 个公开来源。模式不会自动发送收费任务，实际使用模型时可能消耗积分。关闭后可继续用自备 TypeSafe 密钥进行文献分类和 arXiv 追踪；原有历史和收藏保留。
 
 Jadense mode is controlled by the logo switch in the workspace top bar and is off by default. Connect an account with the required plugin permissions under **Settings → Connect to Jadense** before enabling it. The mode routes Jev classification through your Jadense account, offers Jadense OCR when local OCR is unavailable, and unlocks 13 public literature sources in Frontier Radar. Switching it on does not itself start a paid request; actual model use may consume points. With the mode off, your own TypeSafe key can still power classification and arXiv tracking, while history and saved papers remain available.
 

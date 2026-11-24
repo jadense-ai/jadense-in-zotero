@@ -20,12 +20,12 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 
 **非商业自用免费 · 禁止商用 · 支持自带 API Key（BYOK）· 攻玉账号可选**
 
-**[下载 v0.6.19 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.19/jadense-in-zotero-v0.6.19.xpi)** · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.19/jadense-in-zotero-v0.6.19-windows-x64-offline.zip) · [先看依赖与安装方式](#requirements) · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
+**[下载 v0.6.20 插件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20.xpi)** · [Windows x64 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20-windows-x64-offline.zip) · [先看依赖与安装方式](#requirements) · [快速开始](#quick-start) · [了解攻玉学术](#continue-research)
 
 插件源码公开，使用须遵守[非商业许可证](LICENSE)；模型调用费用由所选服务商或攻玉账号的订阅、积分规则决定。
 
 
-**v0.6.19** 修复证据角标旁的重复页码，阅读器可切换解析版本，工作台上传前可核对条目与 PDF。 [升级说明](docs/usage-guide.md#update-0619)
+**v0.6.20** 在浏览器中确认一次即可连接攻玉账号，同一 Zotero 配置在升级或重启后继续使用。新版也改进了 BYOK 提供商和模型配置。 [升级说明](docs/usage-guide.md#update-0620)
 
 **攻玉模式有什么用？** 在工作台顶栏开启后，文献分类的 Jev 判断可走攻玉账号，无需另配 TypeSafe 密钥；本机 OCR 未就绪时，可选择攻玉 OCR 接力；前沿雷达还可从 arXiv 扩展到 13 个公开文献来源。模式默认关闭，需先连接具备相应权限的攻玉账号；模型调用可能消耗积分。关闭时仍可通过自备密钥使用通用功能。[查看配置步骤](docs/usage-guide.md#jadense-mode)
 
@@ -34,16 +34,16 @@ Jadense in Zotero 是[攻玉学术（Jadense）](https://jadense.cn/)推出的�
 <!-- release-summary:start -->
 ## 最近版本
 
+- [v0.6.20](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20) — 在浏览器中确认一次即可连接攻玉账号，同一 Zotero 配置在升级或重启后继续使用。新版也改进了 BYOK 提供商和模型配置。
 - [v0.6.19](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.19) — 修复证据角标旁的重复页码，阅读器可切换解析版本，工作台上传前可核对条目与 PDF。
 - [v0.6.18](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.18) — 免密钥机器翻译扩展至六种服务，选文与对照翻译可分别配置。
 - [v0.6.17](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.17) — 最后汇总失败仍可交付完整分段笔记；支持建议批注数量，改善 Windows 引擎安装诊断。
 - [v0.6.16](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.16) — 主动重新解析卡住任务，明确区分继续解析，保留已有成果。
-- [v0.6.15](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.15) — 按模型容量规划输入，完整保留本地长正文，修复原生设置并统一 Logo。
 
 [完整版本历史](CHANGELOG.md)
 <!-- release-summary:end -->
 
-开发验证与兼容范围见 [v0.6.19 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.19)。正式附件使用 production/full 包，完整离线套装仅适用于 Windows x64。
+开发验证与兼容范围见 [v0.6.20 Release](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20)。正式附件使用 production/full 包，完整离线套装仅适用于 Windows x64。
 
 <a id="api-recommendation"></a>
 
@@ -104,7 +104,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 ### 插件依赖
 
 - **宿主程序**：需要 [Zotero 桌面版 8.0–10.0.*](https://www.zotero.org/download/)。自动识别 PDF 图片需要 Zotero 10.0.1 及以上版本的兼容 PDF 阅读器。
-- **AI 接入**：要使用 AI 功能，需要配置一种 AI 服务。可以使用 [BYOK 自带 API Key](docs/usage-guide.md#byok-provider)（Provider 的 API Key、Base URL 和模型 ID，不需要攻玉账号），也可以[连接攻玉学术](docs/usage-guide.md#connect)（攻玉账号和插件令牌）。模型调用费用按所选服务商或攻玉账号规则计算。
+- **AI 接入**：要使用 AI 功能，需要配置一种 AI 服务。可以使用 [BYOK 自带 API Key](docs/usage-guide.md#byok-provider)（Provider 的 API Key、Base URL 和模型 ID，不需要攻玉账号），也可以[连接攻玉学术](docs/usage-guide.md#connect)（在浏览器中确认账号）。模型调用费用按所选服务商或攻玉账号规则计算。
 - **本机 OCR**：问答和默认选文翻译不需要 Python；全文 Markdown、翻译和参考文献提取默认使用 PDF 文字层，无需 Python；仅在启用[可选 OCR](docs/local-ocr.md)识别扫描页时需要本机运行环境、Python 依赖和模型。首次安装需要联网并预留数 GB 磁盘空间。
 - **插件之外的文献工具**：Zotero Connector 不是本插件的依赖；它只负责从浏览器收集文献，是否安装不影响本插件在 Zotero 中阅读本地文献和 PDF。
 
@@ -113,9 +113,9 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | 安装方式 | 操作 | 说明 |
 | --- | --- | --- |
 | [官网插件详情页](https://jadense.cn/plugin/zotero) | 在页面的下载入口获取 `.xpi`，再按 [Zotero 官方插件安装说明](https://www.zotero.org/support/plugins) 导入 | 以官网页面当前显示的版本、兼容范围和下载状态为准 |
-| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.13](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13)，同时提供元数据和 SHA-256 校验和 |
+| [GitHub Release](https://github.com/jadense-ai/jadense-in-zotero/releases/latest) | 下载当前正式版 XPI，在 Zotero「工具 → 插件 → 齿轮 → 从文件安装插件」中打开 | 最近正式版为 [v0.6.20](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20)，同时提供元数据和 SHA-256 校验和 |
 | Zotero 自动更新 | 在 Zotero「工具 → 插件 → 齿轮 → Check for Updates」中检查 | 使用[攻玉官方更新清单](https://jadense.cn/plugins/zotero/jadense-in-zotero/updates.json)；该渠道与 GitHub Release 独立维护，若未出现新版本请使用上面的手动安装方式 |
-| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.13/jadense-in-zotero-v0.6.13.xpi` | 当前源码构建为 0.6.13 基础版；前沿雷达仅随官方完整安装包提供 |
+| 从源码构建 | 按[贡献指南](CONTRIBUTING.md#开发与本机验证)使用 Node 24、pnpm 10.19.0 构建，再安装 `release/zotero/v0.6.20/jadense-in-zotero-v0.6.20.xpi` | 当前源码构建为 0.6.20 基础版；前沿雷达仅随官方完整安装包提供 |
 
 以上渠道最终安装的都是 Zotero `.xpi` 插件：不要把 GitHub 的 **Source code** 压缩包当作安装包，也不要同时启用旧的 `.com` 插件身份。旧版本升级和身份迁移见[升级说明](#upgrade)。
 
@@ -133,14 +133,14 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 ## 版面解析引擎安装（0.6.0）
 
 1. **系统自动安装**：进入 **设置 → 外置依赖配置 → 版面解析引擎 → 准备 PDF 翻译引擎**。v0.6.5 正式 XPI 在 Windows x64 优先下载匹配的完整引擎包；其他平台按库内安装器准备独立 Python、锁定依赖、模型和字体。
-2. **手动/离线安装**：取得与所装 XPI 版本匹配的 Windows x64 完整 ZIP 后点击 **导入离线包**，无需预装 Python 或管理员权限。本版完整套装及匹配的单独引擎包见 [v0.6.13 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13)。
+2. **手动/离线安装**：取得与所装 XPI 版本匹配的 Windows x64 完整 ZIP 后点击 **导入离线包**，无需预装 Python 或管理员权限。本版完整套装及匹配的单独引擎包见 [v0.6.20 附件](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20)。
 3. **库内备用源**：使用[仓库内安装器与锁定源码](content/pdf-translation/)手动安装，再点击 **检测已安装引擎**。此备用路径仍需下载依赖与资产，不是离线二进制镜像。
 
 [查看完整安装指南、平台限制与故障处理](docs/pdf-engine.md)。版面解析引擎与 OCR 独立，不影响普通文字层阅读。
 
 ### 安装环境与网络设置
 
-- **Windows x64 推荐完整离线包**：网络受限时，下载 [v0.6.13 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.13/jadense-in-zotero-v0.6.13-windows-x64-offline.zip)，按[安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并分别导入两个引擎 ZIP；也可单独下载约 433 MiB 的匹配 PDF 引擎 ZIP。无需预装 Python/uv 或管理员权限，完整套装建议预留 6 GiB。不要混用旧版同名引擎包，安装时以 XPI 内清单摘要为准。
+- **Windows x64 推荐完整离线包**：网络受限时，下载 [v0.6.20 完整离线 ZIP](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20-windows-x64-offline.zip)，按[安装指南](docs/usage-guide.md#windows-x64-zip-离线安装)安装 XPI 并分别导入两个引擎 ZIP；也可单独下载约 433 MiB 的匹配 PDF 引擎 ZIP。无需预装 Python/uv 或管理员权限，完整套装建议预留 6 GiB。不要混用旧版同名引擎包，安装时以 XPI 内清单摘要为准。
 - **网络必须覆盖下载链路**：自动安装不仅要能打开 GitHub 首页，还需要访问 Release 附件重定向地址；旧式逐项安装还会访问 Python、PyPI 和模型资源。AI 服务可用、浏览器能上网或修改 OCR 下载源，都不保证 PDF 引擎安装器可联网。
 - **代理应覆盖安装进程**：浏览器代理扩展不会自动配置 Windows PowerShell。使用单位或网络允许的 HTTP 代理；手动安装时在同一 PowerShell 窗口设置 .NET 代理及 `HTTPS_PROXY` / `HTTP_PROXY`，详见[代理操作步骤](docs/pdf-engine.md#network-environment)。只在终端设置变量后从桌面打开已有 Zotero，不保证它能继承这些设置。
 - **受管电脑**：安装需要允许当前用户写入 profile、启动 PowerShell 和 Python。遇到明确策略拦截时联系管理员；不要通过关闭证书/哈希校验、防火墙或反复提升管理员权限排查普通下载错误。macOS、Linux、Windows ARM64 暂无已验收的完整离线包。
@@ -180,13 +180,13 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 **安装插件 → 配置一种 AI 接入方式 → 选择模型 → 打开 PDF 开始阅读。** 问答与默认选文翻译无需 Python；文字层全文任务无需 Python；扫描页需要 OCR 时，在「设置 → 外置依赖配置」准备依赖与模型，首次预留数 GB 空间。BYOK 需要能访问所配置的模型 API。[OCR 安装与故障处理](docs/local-ocr.md)。
 
-下面给出最短上手步骤。[完整图文使用指南](docs/usage-guide.md)逐步说明提供商、模型、攻玉令牌和阅读操作。新接触 Zotero 的用户可先读 [Zotero 入门](docs/zotero-guide.md)。
+下面给出最短上手步骤。[完整图文使用指南](docs/usage-guide.md)逐步说明提供商、模型、攻玉账号授权和阅读操作。新接触 Zotero 的用户可先读 [Zotero 入门](docs/zotero-guide.md)。
 
 <a id="安装"></a>
 
 ### 1. 安装与打开工作台
 
-1. 下载 [v0.6.13 XPI 插件文件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.13/jadense-in-zotero-v0.6.13.xpi)，当前正式版为 **0.6.13**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
+1. 下载 [v0.6.20 XPI 插件文件](https://github.com/jadense-ai/jadense-in-zotero/releases/download/v0.6.20/jadense-in-zotero-v0.6.20.xpi)，当前正式版为 **0.6.20**。安装过旧版的用户请先查看下方[升级说明](#upgrade)。
 2. 在 Zotero 插件管理器中选择「从文件安装插件」，选中下载的 XPI。
 3. 从 Zotero 的 Jadense 入口打开工作台，按自己的需要选择一种接入方式。
 
@@ -199,7 +199,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 | 接入方式 | 适合你，如果…… | 准备什么 |
 | --- | --- | --- |
 | 自带 API Key（BYOK） | 已有模型服务，希望自己选择提供商和模型 | 服务商的 API Key、Base URL 和模型 ID，无需攻玉账号 |
-| 连接攻玉 | 希望使用攻玉账号的模型服务，并把文献用于后续研究 | 攻玉账号与插件令牌 |
+| 连接攻玉 | 希望使用攻玉账号的模型服务，并把文献用于后续研究 | 攻玉账号及浏览器授权 |
 
 攻玉 AI 请求需要服务端支持临时执行 V1 协议；旧服务端会提示升级。待确认请求可在「恢复结果」中读取已有结果，打开历史不会自动重发。BYOK 可独立使用，未确认的第三方请求不会自动重发。参考文献批量 AI 默认关闭，可在功能配置中显式开启。
 
@@ -221,8 +221,8 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 #### 2.2 连接攻玉
 
-1. 在[攻玉学术](https://jadense.cn/)的「设置 → 集成 → 连接 Jadense in Zotero」创建令牌。
-2. 在插件「设置 → 连接攻玉」粘贴插件令牌并保存。
+1. 在 Zotero 打开「设置 → 连接攻玉」，点击「连接攻玉账号」。已有手工令牌的用户可继续使用原连接，也可点击「改用账号授权」。
+2. 在浏览器核对攻玉账号，点击「授权并连接」，再返回 Zotero。可在攻玉网站的「设置 → 集成 → Zotero 插件」断开单台设备。
 3. 在「设置 → 功能配置」选择账号可用的模型。「攻玉学术 → 用户信息」的「你的攻玉」集中显示账号、订阅、可用积分及来源，以及签到奖励和连续天数。
 
 「用户信息」顶部提供「前往攻玉 / 打开签到页 / 订阅与用量」三个网页入口，未连接时也可打开。签到在网页完成后，可在「你的攻玉」标题右侧刷新状态；账号和积分分别加载，单项失败不影响另一项显示。
@@ -344,7 +344,7 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 使用 BYOK 无需攻玉账号；插件免费下载，允许个人非商业自用、学习与研究，不要求赞助。商业用途须另行取得书面授权。第三方模型费用由对应服务商收取，攻玉服务按账号权限、订阅与积分规则提供。
 
-攻玉受限模型会标注「需升级」和所需档位。遇到限制时，可更换可用模型或升级订阅；充值积分不会解锁受限模型。旧插件令牌缺少积分权限时，账号卡片会提示更新令牌，其他已获授权功能仍可使用。
+攻玉受限模型会标注「需升级」和所需档位。遇到限制时，可更换可用模型或升级订阅；充值积分不会解锁受限模型。旧插件令牌缺少积分权限时，账号卡片会提示改用账号授权，其他已获授权功能仍可使用。
 
 ### 数据与凭据
 
@@ -352,11 +352,11 @@ Toodoo AI 主打**低价、正品模型、稳定接入**：这是平台的服务
 
 | 操作 | 数据去向 |
 | --- | --- |
-| 保存设置、对话、图片附件、翻译和解析历史 | 本机 Zotero profile；API Key 和攻玉令牌也保存在此处，请勿公开分享 profile |
+| 保存设置、对话、图片附件、翻译和解析历史 | 本机 Zotero profile；API Key 和攻玉登录凭据也保存在此处，请勿公开分享 profile |
 | 云 OCR | 确认上传及费用后，将相应 PDF 或页面图片直接发送到所选服务；凭证使用 Zotero 登录管理器，无法持久化时仅当前会话保存 |
 | BYOK 模型请求 | 插件直接发送给所选 Provider，包含请求所需的文字、文献上下文及图片；API Key 用于该 Provider 认证 |
 | 参考文献识别、核验与导入 | 不确定片段可交给所选解析模型；DOI/书目信息通过 Zotero 检索与 Crossref 核验，精确匹配或标记「已选首条」的候选经用户核对后导入本机资料库 |
-| 攻玉 AI 功能 | 攻玉接收临时请求及所需上下文，使用插件令牌鉴权，并接收插件版本和功能类型供问题定位；服务端按其规则处理请求、计费和运行记录 |
+| 攻玉 AI 功能 | 攻玉接收临时请求及所需上下文，使用插件连接凭据鉴权，并接收插件版本和功能类型供问题定位；服务端按其规则处理请求、计费和运行记录 |
 | 文献同步 | 主动上传所选文献元数据，仅在选择包含 PDF 时上传本地 PDF |
 | 插件自动更新 | Zotero 请求攻玉官网的更新清单及安装包 |
 
@@ -372,7 +372,9 @@ Manifest 声明兼容 Zotero **8.0 至 10.0.\***。部分旧截图来自 **Windo
 
 ### 从旧版怎样升级？
 
-可从同一 `.cn` 插件身份的旧 GitHub 版本安装升级到正式版 0.6.13；本版升级验收范围见 [Release 验证记录](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.13)。已有设置与本地历史保留，旧译文不会自动重译。首次运行 0.6.10 会一次性把攻玉对话模型设为 `qwen-3.8-flash`；BYOK 对话目的地不变，此后手动选择不再被覆盖。
+在原 Zotero 配置中，用 v0.6.20 XPI 覆盖安装同一 `.cn` 插件身份的旧版。已有连接、设置和本地历史会保留，旧译文不会自动重译。已配置的手工令牌继续沿用原权限和有效期。升级验证见[发布说明](https://github.com/jadense-ai/jadense-in-zotero/releases/tag/v0.6.20)。
+
+0.6.10 的历史迁移会一次性把攻玉对话模型设为 `qwen-3.8-flash`，保留 BYOK 对话目的地及此后的手动选择。
 
 安装过使用 `jadense-in-zotero@jadense.com` 身份的版本（包括官网 0.3.2）时，**先禁用旧 Jadense 插件，再从文件手动安装最新正式版**。新版身份为 `jadense-in-zotero@jadense.cn`，不同身份不会自动覆盖升级，请勿同时启用。
 

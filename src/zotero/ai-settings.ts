@@ -478,8 +478,8 @@ export function featureModelState(zotero: ZoteroLike, feature: AiFeature, invali
     const token = readConnection(zotero).token
     const invalid = Boolean(token && token === invalidToken)
     return { selection, route: selection.route, ready: Boolean(token) && !invalid, label: uiText("攻玉", "Jadense"), issue: token
-      ? invalid ? uiText("攻玉令牌无效或已过期，请在「连接攻玉」中更新令牌。", "Your Jadense token is invalid or expired. Update it in Connect Jadense.") : ""
-      : uiText("请先在「连接攻玉」中配置攻玉令牌。", "Configure a token in Connect Jadense first.") }
+      ? invalid ? uiText("授权已失效，请在「连接攻玉」中重新连接账号。", "Your Jadense token is invalid or expired. Reconnect in Connect Jadense.") : ""
+      : uiText("请先在「连接攻玉」中连接账号。", "Connect your account in Connect Jadense first.") }
   }
   const config = readByokConfigForSelection(zotero, selection)
   return { selection, route: selection.route, ready: Boolean(config), label: config ? `BYOK · ${config.model}` : uiText("BYOK · 已失效模型", "BYOK · Unavailable model"),

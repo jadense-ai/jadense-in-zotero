@@ -159,7 +159,7 @@
             <div class="jdx-guide-content">
               <div class="jdx-guide-setup">
                 <strong data-ui-en="Before you start">开始之前</strong>
-                <p data-ui-en="Open Tools → Jadense → Open Jadense Workbench in Zotero. In Settings → Feature settings, choose a Jadense model or your own model for each feature. To use Jadense, first generate and save a token in Settings → Connect Jadense. To use your own model (BYOK), add its provider, API key, and model in Settings → BYOK, then choose it in Feature settings.">从 Zotero「工具 → Jadense → 打开攻玉工作台」进入，在「设置 → 功能配置」为各项功能选择攻玉模型或自己的模型。使用攻玉模型前，先到「设置 → 连接攻玉」生成并保存令牌；使用自己的模型（BYOK）时，先到「设置 → BYOK」添加服务商、API 密钥和模型，再回到功能配置选择它。</p>
+                <p data-ui-en="Open Tools → Jadense → Open Jadense Workbench in Zotero. In Settings → Feature settings, choose a Jadense model or your own model for each feature. To use Jadense, first connect your account in Settings → Connect Jadense. To use your own model (BYOK), add its provider, API key, and model in Settings → BYOK, then choose it in Feature settings.">从 Zotero「工具 → Jadense → 打开攻玉工作台」进入，在「设置 → 功能配置」为各项功能选择攻玉模型或自己的模型。使用攻玉模型前，先到「设置 → 连接攻玉」连接攻玉账号；使用自己的模型（BYOK）时，先到「设置 → BYOK」添加服务商、API 密钥和模型，再回到功能配置选择它。</p>
               </div>
               <article id="jadense-guide-panel-analysis" class="jdx-guide-chapter" role="tabpanel" aria-labelledby="jadense-guide-tab-analysis" tabindex="0">
                 <p class="jdx-guide-eyebrow" data-ui-en="01 / Read a paper">01 / 阅读文献</p>
@@ -341,7 +341,7 @@
           <section id="jadense-connection-panel-account" class="jdx-connection-panel" role="tabpanel" aria-labelledby="jadense-connection-tab-account" hidden="hidden">
             <div id="jadense-manager-account-empty" class="jdx-manager-settings-card" hidden="hidden">
               <h3 data-ui-en="Connect your Jadense account">连接你的攻玉账号</h3>
-              <p data-ui-en="Save a token on this computer to see your subscription, available points, and check-in rewards.">在这台电脑保存令牌后，即可查看订阅方案、可用积分与签到奖励。</p>
+              <p data-ui-en="Connect your account to see your subscription, available points, and check-in rewards.">连接攻玉账号后，即可查看订阅方案、可用积分与签到奖励。</p>
               <div class="jdx-manager-actions"><button id="jadense-manager-account-connect" type="button" class="jdx-manager-primary" data-ui-en="Connect Jadense">连接攻玉</button></div>
             </div>
             <div id="jadense-manager-account-details" class="jdx-manager-connection-grid">
@@ -531,28 +531,24 @@
           <section id="jadense-settings-panel-ai" role="tabpanel" aria-labelledby="jadense-settings-tab-ai" hidden="hidden">
           <div class="jdx-manager-settings-grid">
             <section class="jdx-manager-settings-card" data-settings-section="byok">
-              <div class="jdx-manager-settings-card-header">
-                <h3 data-ui-en="BYOK settings">BYOK 配置</h3>
-                <p data-ui-en="Configure a provider first, then manage its model catalog. Keys, messages, and linked papers go directly from this computer to the provider, without passing through Jadense servers.">先配置提供商，再为它维护模型目录。密钥、消息与关联文献会从本机直接发送到提供商，不经过攻玉服务器。</p>
-              </div>
               <div class="jdx-manager-byok-layout">
                 <aside class="jdx-manager-byok-sidebar" aria-labelledby="jadense-manager-provider-heading">
                   <div class="jdx-manager-byok-panel-header">
-                    <div>
-                      <h4 id="jadense-manager-provider-heading" data-ui-en="Providers">提供商</h4>
-                      <p data-ui-en="Switch or edit a saved provider">切换或编辑已保存的提供商</p>
-                    </div>
-                    <button id="jadense-manager-byok-provider-new" type="button" class="jdx-manager-icon-button" title="新增提供商" data-ui-en-title="Add provider" aria-label="新增提供商" data-ui-en-aria-label="Add provider">+</button>
+                    <h4 id="jadense-manager-provider-heading" data-ui-en="Providers">提供商</h4>
+                    <button id="jadense-manager-byok-provider-new" type="button" class="jdx-byok-add-provider" title="新增提供商" data-ui-en-title="Add provider" aria-label="新增提供商" data-ui-en-aria-label="Add provider">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.25v9.5M3.25 8h9.5"/></svg>
+                      <span data-ui-en="Add">新增</span>
+                    </button>
                   </div>
                   <div id="jadense-manager-byok-provider-select" class="jdx-manager-byok-provider-list" role="listbox" aria-label="提供商" data-ui-en-aria-label="Providers"></div>
                 </aside>
                 <div class="jdx-manager-byok-editor">
+                  <p class="jdx-byok-intro-note" data-ui-en="Configure a provider first, then manage its models. Keys, messages, and linked papers go directly from this computer to the provider.">先配置提供商，再维护模型目录。密钥、消息与关联文献由本机直连提供商，不经过攻玉服务器。</p>
                   <div class="jdx-manager-byok-panel-header">
                     <div>
                       <h4 data-ui-en="Provider connection">提供商连接</h4>
-                    <p data-ui-en="Save changes to apply this provider’s address and key.">地址和密钥在点击「保存提供商」后生效。</p>
                     </div>
-                    <button id="jadense-manager-byok-provider-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
+                    <button id="jadense-manager-byok-provider-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete provider">删除提供商</button>
                   </div>
                   <label class="jdx-manager-field">
                     <span data-ui-en="Display name">显示名称</span>
@@ -575,12 +571,12 @@
                     <div class="jdx-manager-secret-input">
                       <input id="jadense-manager-byok-key-input" type="password" autocomplete="new-password" placeholder="输入或替换 API 密钥" data-ui-en-placeholder="Enter or replace the API key" />
                       <button id="jadense-manager-byok-key-toggle" type="button" class="jdx-manager-secret-toggle" aria-label="显示 API 密钥" data-ui-en-aria-label="Show API key" title="显示 API 密钥" data-ui-en-title="Show API key" aria-pressed="false">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>
                       </button>
                     </div>
                   </label>
                   <span id="jadense-manager-byok-key-mask" hidden="hidden" aria-hidden="true"></span>
-                  <div class="jdx-manager-actions jdx-manager-actions-end">
+                  <div class="jdx-manager-actions">
                     <button id="jadense-manager-byok-provider-save" type="button" class="jdx-manager-primary" data-ui-en="Save provider">保存提供商</button>
                   </div>
                   <p class="jdx-manager-settings-note" data-ui-en="Changing the protocol or base URL reuses the saved key. Verify the destination before saving.">更改协议或基础地址会继续使用已保存的密钥，请确认目标可信。</p>
@@ -593,7 +589,6 @@
                       </div>
                       <div class="jdx-manager-actions">
                         <button id="jadense-manager-byok-model-new" type="button" data-ui-en="Add model">添加模型</button>
-                        <button id="jadense-manager-byok-model-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete">删除</button>
                       </div>
                     </div>
                     <div id="jadense-manager-byok-model-editor" class="jdx-manager-byok-model-editor" hidden="hidden" role="group" aria-label="编辑当前模型" data-ui-en-aria-label="Edit current model">
@@ -618,19 +613,24 @@
                         </div>
                         <div id="jadense-manager-byok-thinking-levels"></div>
                         <p class="jdx-manager-settings-note" data-ui-en="Testing sends a real request with the unsaved form, up to 3000 tokens, and may incur charges. Choose Save model to apply your edits.">测试会使用未保存表单发起一次最多 3000 个词元的真实请求，可能计费。点击「保存模型」后应用修改。</p>
-                        <div class="jdx-manager-actions jdx-manager-actions-end">
-                          <button id="jadense-manager-byok-test" type="button" data-ui-en="Test current form">测试当前表单</button>
+                        <div class="jdx-manager-actions jdx-byok-editor-actions">
                           <button id="jadense-manager-byok-save" type="button" class="jdx-manager-primary" data-ui-en="Save model">保存模型</button>
+                          <button id="jadense-manager-byok-test" type="button" data-ui-en="Test current form">测试当前表单</button>
+                          <button id="jadense-manager-byok-model-cancel" type="button" data-ui-en="Cancel">取消</button>
+                          <button id="jadense-manager-byok-model-delete" type="button" class="jdx-manager-danger" data-ui-en="Delete model">删除模型</button>
                         </div>
                       </div>
                     </div>
                     <div id="jadense-manager-byok-model-select" class="jdx-manager-byok-model-list" role="group" aria-label="模型" data-ui-en-aria-label="Models for this provider"></div>
                     <div id="jadense-manager-byok-status" class="jdx-manager-inline-status" role="status"></div>
                   </div>
+                  <div class="jdx-byok-danger-zone">
+                    <p data-ui-en="Clears all local BYOK providers and models. Your Jadense connection and feature model selections stay unchanged.">清除本机全部 BYOK 提供商与模型；不会影响攻玉账号连接与各项功能的模型选择。</p>
+                    <div class="jdx-manager-actions">
+                      <button id="jadense-manager-byok-clear" type="button" class="jdx-manager-danger" data-ui-en="Clear BYOK">清除 BYOK</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="jdx-manager-actions jdx-manager-actions-end">
-                <button id="jadense-manager-byok-clear" type="button" class="jdx-manager-danger" data-ui-en="Clear BYOK">清除 BYOK</button>
               </div>
             </section>
           </div>
@@ -673,34 +673,21 @@
             <section class="jdx-manager-settings-card jdx-connection-config-card jdx-settings-list" data-connection-section="configuration">
               <div class="jdx-feature-model-row">
                 <div>
-                  <h3><label id="jadense-manager-token-label" for="jadense-manager-token-input" data-ui-en="Jadense token">攻玉令牌</label></h3>
-                  <p id="jadense-manager-token-help" data-ui-en="Paste a Jadense token to connect. It is stored only in this computer&#x27;s Zotero settings and used for AI Chat, Jev/OCR in Jadense mode, account information, and literature sync.">粘贴攻玉令牌即可完成连接。令牌只保存在这台电脑的 Zotero 设置中，用于 AI 对话、攻玉模式 Jev/OCR、账号信息和文献同步。</p>
+                  <h3 id="jadense-manager-account-label" data-ui-en="Jadense account">攻玉账号</h3>
+                  <p data-ui-en="Confirm in your browser to use AI and sync literature on this device.">在浏览器确认后，即可在这台设备使用攻玉 AI 和文献同步。</p>
                 </div>
                 <div class="jdx-settings-controls">
-                  <div id="jadense-manager-token-display" class="jdx-manager-token-row" role="group" aria-labelledby="jadense-manager-token-label">
-                    <code id="jadense-manager-token-mask" class="jdx-manager-token-mask" aria-describedby="jadense-manager-token-help"></code>
-                    <span class="jdx-manager-token-actions jdx-manager-actions">
-                      <button id="jadense-manager-token-copy" type="button" data-ui-en="Copy">复制</button>
-                      <button id="jadense-manager-token-edit" type="button" data-ui-en="Edit">编辑</button>
-                    </span>
-                  </div>
-                  <div id="jadense-manager-token-edit-row" class="jdx-manager-token-row" hidden="hidden">
-                    <input id="jadense-manager-token-input" type="password" autocomplete="off" aria-describedby="jadense-manager-token-help" placeholder="粘贴新的攻玉令牌" data-ui-en-placeholder="Paste a new Jadense token" />
-                    <span class="jdx-manager-token-actions jdx-manager-actions">
-                      <button id="jadense-manager-token-save" type="button" class="jdx-manager-primary" data-ui-en="Save">保存</button>
-                      <button id="jadense-manager-token-cancel" type="button" data-ui-en="Cancel">取消</button>
-                    </span>
-                  </div>
+                  <button id="jadense-manager-authorize" type="button" class="jdx-manager-primary" data-ui-en="Connect Jadense account">连接攻玉账号</button>
                   <div id="jadense-manager-settings-status" class="jdx-manager-inline-status" role="status"></div>
                 </div>
               </div>
               <div class="jdx-feature-model-row">
                 <div>
-                  <h3 data-ui-en="Token access and permissions">令牌获取与权限</h3>
-                  <p class="jdx-manager-settings-note" data-ui-en="Click Generate / update token to create a Zotero token in Settings → Integrations on Jadense, then paste it above. Include Chat, account, points and upload permissions. Jadense mode additionally requires Jev (ai:decision) and OCR (ai:ocr); older tokens need to be regenerated.">点击「生成 / 更新令牌」，在攻玉网页端「设置 → 集成」中创建 Zotero 专用令牌并粘贴到上方。请选择对话、账号、积分与上传权限。攻玉模式还需要 Jev（ai:decision）与 OCR（ai:ocr）权限，旧令牌需重新生成。</p>
+                  <h3 data-ui-en="Connected devices">已连接的设备</h3>
+                  <p class="jdx-manager-settings-note" data-ui-en="Manage devices linked to your account on the Jadense website.">在攻玉网站查看和断开已授权的设备。</p>
                 </div>
                 <div class="jdx-manager-actions">
-                  <button id="jadense-manager-open-integrations" type="button" data-ui-en="Generate / update token">生成 / 更新令牌</button>
+                  <button id="jadense-manager-open-integrations" type="button" data-ui-en="Manage devices">管理设备</button>
                 </div>
               </div>
               <div class="jdx-feature-model-row">
@@ -740,8 +727,8 @@
       <p data-ui-en="Before using AI features, choose one of the following configuration methods:">开始使用 AI 功能前，请先选择一种配置方式：</p>
       <ol class="jdx-quick-start-options">
         <li>
-          <strong data-ui-en="Connect a Jadense token">连接攻玉令牌</strong>
-          <p data-ui-en="Generate a Zotero token in Jadense Settings → Integrations → Connect Jadense in Zotero, then paste and save it under Settings → Connect Jadense.">在攻玉学术「设置 → 集成 → 连接 Jadense in Zotero」生成 Zotero 令牌，然后在「设置 → 连接攻玉」中粘贴并保存。</p>
+          <strong data-ui-en="Connect your Jadense account">连接攻玉账号</strong>
+          <p data-ui-en="Choose Connect Jadense account in Settings → Connect Jadense, then confirm in your browser.">在「设置 → 连接攻玉」点击「连接攻玉账号」，然后在浏览器中确认。</p>
         </li>
         <li>
           <strong data-ui-en="Configure BYOK">BYOK 配置</strong>

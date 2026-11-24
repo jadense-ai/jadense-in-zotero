@@ -11,6 +11,7 @@ describe('BYOK thinking editor', () => {
     const trigger = host.querySelector<HTMLButtonElement>('.jdx-byok-thinking-trigger')!
     expect(editor.getValues()).toBeUndefined()
     expect(trigger.textContent).toContain('low, medium, high')
+    expect(trigger.querySelector('svg.jdx-select-chevron')).not.toBeNull()
     trigger.click()
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
     expect(host.querySelectorAll<HTMLInputElement>('.jdx-byok-thinking-option input')).toHaveLength(8)
@@ -24,6 +25,10 @@ describe('BYOK thinking editor', () => {
     custom.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     expect(editor.getValues()).toEqual(['low', 'high', 'custom-level'])
     const search = host.querySelector<HTMLInputElement>('input[type=search]')!
+    search.value = 'no-such-effort'
+    search.dispatchEvent(new dom.window.Event('input'))
+    expect(host.querySelectorAll('.jdx-byok-thinking-option')).toHaveLength(0)
+    expect(host.querySelector('.jdx-byok-thinking-empty')).not.toBeNull()
     search.value = 'custom'
     search.dispatchEvent(new dom.window.Event('input'))
     expect(host.querySelectorAll('.jdx-byok-thinking-option')).toHaveLength(1)
